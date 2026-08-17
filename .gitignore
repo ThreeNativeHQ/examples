@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.packages/
+.pnpm-store/
+*.tgz
+.DS_Store
+
+# Sealed benchmark reference images. They are third-party screenshots used as a visual target,
+# so they stay on disk and out of a public repository. The brief describes them in words.
+reference.png
