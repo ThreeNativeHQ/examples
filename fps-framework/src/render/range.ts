@@ -33,7 +33,7 @@ export type Range = {
 
 const TARGETS: readonly TargetSpec[] = [
   { position: { x: -11.4, y: 2.2, z: -1.0 }, value: 150, width: 1.0, height: 1.4 },
-  { position: { x: 0.2, y: 1.62, z: -2.6 }, value: 100, width: 0.9, height: 1.3 },
+  { position: { x: 0.2, y: 1.76, z: -2.6 }, value: 100, width: 0.9, height: 1.3 },
   { position: { x: 3.9, y: 2.15, z: -8.4 }, value: 250, width: 0.52, height: 0.72 },
   { position: { x: 10.6, y: 4.9, z: -8.6 }, value: 300, width: 0.9, height: 1.28 },
   { position: { x: -6.4, y: 1.5, z: -9.2 }, value: 150 },
@@ -126,7 +126,7 @@ export function buildRange(materials: RangeMaterials): Range {
   colliders.push({ min: [-15.1, 0, -3.1], max: [-7.7, 1.55, 4.3] });
 
   // Concrete barricades down the centre lane.
-  addBox(group, colliders, materials.concrete, [5.2, 1.5, 1.5], [0.3, 0.75, 1.2], { hittable });
+  addBox(group, colliders, materials.concrete, [5.2, 1.2, 1.5], [0.3, 0.6, 1.2], { hittable });
   addBox(group, colliders, materials.concrete, [4.4, 1.1, 1.2], [2.6, 0.55, -4.6], { hittable });
   addBox(group, colliders, materials.concrete, [3.0, 0.9, 1.2], [-5.2, 0.45, -6.0], { hittable });
 

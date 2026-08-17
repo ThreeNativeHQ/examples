@@ -117,7 +117,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
 
     const player = new FpsPlayer(ctx, camera);
     ctx.entities.add("player", player);
-    const rifle = new Rifle(camera, assets.viewmodel.scene as Object3D);
+    const rifle = new Rifle(camera, assets.viewmodel.scene as Object3D, assets.viewmodel.animations);
     ctx.entities.add("rifle", rifle);
 
     const enemy = new Enemy(

@@ -27,7 +27,7 @@ const VIEW_HALF_ANGLE = MathUtils.degToRad(46);
 const ENGAGE_RANGE = 13;
 const BURST_ROUNDS = 3;
 const BURST_SPACING = 0.11;
-const BURST_COOLDOWN = 1.5;
+const BURST_COOLDOWN = 2.6;
 const ROUND_DAMAGE = 9;
 const RESPAWN_SECONDS = 4.5;
 
@@ -266,7 +266,7 @@ export class Enemy {
         break;
       }
       case "engage": {
-        this.#engage(dt, playerEye, hooks, sees);
+        this.#engage(ctx, dt, playerEye, hooks, sees);
         break;
       }
       case "search": {
@@ -294,7 +294,7 @@ export class Enemy {
     this.#animation?.update(dt);
   }
 
-  #engage(dt: number, playerEye: Vector3, hooks: EnemyHooks, sees: boolean): void {
+  #engage(ctx: GameCtx, dt: number, playerEye: Vector3, hooks: EnemyHooks, sees: boolean): void {
     const chest = this.chest;
     const wanted = Math.atan2(playerEye.x - chest.x, playerEye.z - chest.z);
     this.group.rotation.y = this.#turn(this.group.rotation.y, wanted, dt * 6);
@@ -326,7 +326,10 @@ export class Enemy {
       if (this.#burstTimer <= 0) {
         this.#burstLeft -= 1;
         this.#burstTimer = BURST_SPACING;
-        hooks.damagePlayer(ROUND_DAMAGE);
+        // A round that connects costs the full 9; the ones that go wide do not.
+        // Seeded, so a replay of the same run takes the same damage.
+        const accuracy = MathUtils.clamp(0.9 - flatDistance * 0.028, 0.2, 0.9);
+        if (ctx.random() < accuracy) hooks.damagePlayer(ROUND_DAMAGE);
         hooks.onMuzzleFlash(chest);
         this.#play("FiringRifle", 0.04);
         if (this.#burstLeft === 0) this.#cooldown = BURST_COOLDOWN;

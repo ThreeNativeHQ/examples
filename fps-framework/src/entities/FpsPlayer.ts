@@ -80,6 +80,8 @@ export class FpsPlayer {
   aiming = false;
   #camera: PerspectiveCamera;
   #fov = FOV_HIP;
+  #lastX: number = SPAWN.x;
+  #lastZ: number = SPAWN.z;
 
   constructor(ctx: GameCtx, camera: PerspectiveCamera) {
     this.#camera = camera;
@@ -98,7 +100,7 @@ export class FpsPlayer {
     });
     // Face down range with the nearest centre-lane plate on the crosshair.
     this.look.yaw = 0;
-    this.look.pitch = MathUtils.degToRad(-1.2);
+    this.look.pitch = 0;
     this.look.attach();
     camera.fov = FOV_HIP;
     camera.near = 0.02;
@@ -154,15 +156,18 @@ export class FpsPlayer {
       vx = 0;
       vz = 0;
     }
-    const beforeX = this.mesh.position.x;
-    const beforeZ = this.mesh.position.z;
+    // The backend writes the solved transform after the step, so measuring the
+    // mesh either side of `moveAndSlide` in one frame always reads zero. Compare
+    // against the previous frame's written position instead.
+    this.distanceMoved += Math.hypot(
+      this.mesh.position.x - this.#lastX,
+      this.mesh.position.z - this.#lastZ,
+    );
+    this.#lastX = this.mesh.position.x;
+    this.#lastZ = this.mesh.position.z;
     this.body.velocity.x = vx;
     this.body.velocity.z = vz;
     this.body.moveAndSlide(dt);
-    this.distanceMoved += Math.hypot(
-      this.mesh.position.x - beforeX,
-      this.mesh.position.z - beforeZ,
-    );
 
     const wanted = this.aiming ? FOV_AIM : FOV_HIP;
     this.#fov = MathUtils.damp(this.#fov, wanted, 14, dt);

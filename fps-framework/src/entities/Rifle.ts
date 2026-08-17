@@ -1,15 +1,14 @@
-import type { ICtx } from "@threenative/core";
+import { AnimationPlayer, type ICtx } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
 import {
   AdditiveBlending,
-  Box3,
+  type AnimationClip,
   Group,
   Mesh,
   MeshBasicMaterial,
   type Object3D,
   type PerspectiveCamera,
   PlaneGeometry,
-  Vector3,
 } from "three";
 import type { GameState } from "../state.js";
 
@@ -19,9 +18,13 @@ export const MAGAZINE = 30;
 export const RESERVE = 90;
 const RELOAD_SECONDS = 0.7;
 
-/** Hip and aimed rest poses for the viewmodel, in camera space. */
-const HIP = { x: 0.29, y: -0.29, z: -0.5, pitch: 0.02, yaw: -0.06, roll: 0.0 };
-const AIM = { x: 0.0, y: -0.145, z: -0.34, pitch: 0.0, yaw: 0.0, roll: 0.0 };
+/**
+ * Hip and aimed rest poses, in camera space. The shipped viewmodel is authored
+ * at life scale pointing +z with its origin at the shoulder, so the only fixed
+ * correction is a half turn; everything else is pose.
+ */
+const HIP = { x: 0.25, y: -0.33, z: -0.12, pitch: -0.03, yaw: 0.13, roll: 0.04 };
+const AIM = { x: 0.006, y: -0.128, z: 0.04, pitch: 0.0, yaw: 0.0, roll: 0.0 };
 
 export class Rifle {
   ammo = MAGAZINE;
@@ -37,7 +40,11 @@ export class Rifle {
   #sway = 0;
   #lowered = 0;
 
-  constructor(camera: PerspectiveCamera, viewmodel: Object3D) {
+  #animation: AnimationPlayer | undefined;
+  #clips: ReadonlySet<string>;
+  #shootFor = 0;
+
+  constructor(camera: PerspectiveCamera, viewmodel: Object3D, clips: readonly AnimationClip[] = []) {
     viewmodel.traverse((object) => {
       object.castShadow = false;
       object.receiveShadow = false;
@@ -49,17 +56,15 @@ export class Rifle {
     // The shipped viewmodel arrives at an unknown scale and orientation, so it is
     // measured and normalised: longest axis 0.9 m, lying down -z, origin at the
     // rear of the receiver where a held rifle pivots.
-    const bounds = new Box3().setFromObject(viewmodel);
-    const size = bounds.getSize(new Vector3());
-    const centre = bounds.getCenter(new Vector3());
-    const longest = Math.max(size.x, size.y, size.z);
     const fit = new Group();
-    viewmodel.position.sub(centre);
+    fit.rotation.y = Math.PI;
     fit.add(viewmodel);
-    fit.scale.setScalar(0.9 / Math.max(longest, 1e-6));
-    if (size.x === longest) fit.rotation.y = Math.PI / 2;
-    else if (size.y === longest) fit.rotation.x = Math.PI / 2;
     this.group.add(fit);
+    this.#clips = new Set(clips.map((clip) => clip.name));
+    if (clips.length > 0) {
+      this.#animation = new AnimationPlayer({ clips, root: fit });
+      this.#play("Idle", 0);
+    }
     this.group.renderOrder = 20;
     this.#flash = new Mesh(
       new PlaneGeometry(0.34, 0.34),
@@ -88,6 +93,8 @@ export class Rifle {
     this.ammo -= 1;
     this.shots += 1;
     this.#kick = 1;
+    this.#shootFor = 0.12;
+    this.#play("Shoot", 0.02);
     this.#flashLife = 0.05;
     this.#flash.visible = true;
     this.#flash.rotation.z = this.shots * 1.7;
@@ -97,6 +104,7 @@ export class Rifle {
   reload(ctx: GameCtx): void {
     if (this.reloading || this.reserve <= 0 || this.ammo >= MAGAZINE) return;
     this.reloading = true;
+    this.#play("Reload", 0.05);
     ctx.after(RELOAD_SECONDS, () => {
       const moved = Math.min(MAGAZINE - this.ammo, this.reserve);
       this.ammo += moved;
@@ -106,7 +114,20 @@ export class Rifle {
     });
   }
 
+  #play(name: string, fade = 0.14): void {
+    if (this.#animation === undefined || !this.#clips.has(name)) return;
+    if (this.#animation.current === name) return;
+    this.#animation.play(name, { fade });
+  }
+
   update(dt: number, aiming: boolean, moving: number): void {
+    this.#shootFor = Math.max(0, this.#shootFor - dt);
+    if (this.reloading) this.#play("Reload");
+    else if (this.#shootFor > 0) this.#play("Shoot", 0.02);
+    else if (moving > 0.6) this.#play("Run");
+    else if (moving > 0.05) this.#play("Walk");
+    else this.#play("Idle");
+    this.#animation?.update(dt);
     this.#flashLife = Math.max(0, this.#flashLife - dt);
     this.#flash.visible = this.#flashLife > 0;
     this.#kick = Math.max(0, this.#kick - dt * 7);
@@ -136,6 +157,7 @@ export class Rifle {
   }
 
   dispose(): void {
+    this.#animation?.dispose();
     this.group.removeFromParent();
   }
 }
