@@ -8,3 +8,11 @@ dist/
 # Sealed benchmark reference images. They are third-party screenshots used as a visual target,
 # so they stay on disk and out of a public repository. The brief describes them in words.
 reference.png
+
+# The sandbox root is scratch for whichever build ran last: pnpm sandbox rewrites these three
+# every run, and ./scaffold.sh copies them into the game folder. Committing the root copies
+# leaves the previous game's brief sitting at the top of the repository, describing nothing.
+# Each game folder keeps its own; these paths are anchored to the root only.
+/brief.md
+/sweep.json
+/scaffold.sh
