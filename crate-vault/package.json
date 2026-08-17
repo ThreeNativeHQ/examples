@@ -1,0 +1,32 @@
+{
+  "name": "crate-vault",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "threenative build",
+    "build:web": "threenative build --target web",
+    "build:desktop": "threenative build --target desktop",
+    "test": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@threenative/core": "^0.2.0",
+    "@threenative/physics": "^0.2.1",
+    "@threenative/ui": "^0.2.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@threenative/playtest": "^0.2.0",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "@types/three": "0.185.3",
+    "@vitejs/plugin-react": "6.0.5",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "8.2.0"
+  }
+}
