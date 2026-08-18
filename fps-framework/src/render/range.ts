@@ -2,10 +2,14 @@
 // props the reference frame shows — a round barrier left, concrete barricades
 // centre, two lockers and a raised walkway on the right.
 import {
+  BufferGeometry,
   BoxGeometry,
   CylinderGeometry,
   DoubleSide,
+  Float32BufferAttribute,
   Group,
+  LineBasicMaterial,
+  LineSegments,
   Mesh,
   MeshStandardMaterial,
   PlaneGeometry,
@@ -90,6 +94,15 @@ function addBox(
   return mesh;
 }
 
+function addWallGrid(group: Group, positions: number[]): void {
+  const grid = new LineSegments(
+    new BufferGeometry().setAttribute("position", new Float32BufferAttribute(positions, 3)),
+    new LineBasicMaterial({ color: 0x202832, opacity: 0.35, transparent: true }),
+  );
+  grid.renderOrder = 1;
+  group.add(grid);
+}
+
 export function buildRange(materials: RangeMaterials): Range {
   const group = new Group();
   group.name = "range";
@@ -128,6 +141,26 @@ export function buildRange(materials: RangeMaterials): Range {
   for (const [sx, sy, sz, px, py, pz] of walls) {
     addBox(group, colliders, materials.wall, [sx, sy, sz], [px, py, pz], { hittable });
   }
+
+  const farGrid: number[] = [];
+  for (let x = -half + 1; x < half; x += 1) {
+    farGrid.push(x, 0.05, -half + 0.31, x, WALL_HEIGHT - 0.05, -half + 0.31);
+  }
+  for (let y = 1; y < WALL_HEIGHT; y += 1) {
+    farGrid.push(-half, y, -half + 0.31, half, y, -half + 0.31);
+  }
+  addWallGrid(group, farGrid);
+
+  const sideGrid: number[] = [];
+  for (const x of [-half + 0.31, half - 0.31]) {
+    for (let z = -half + 1; z < half; z += 1) {
+      sideGrid.push(x, 0.05, z, x, WALL_HEIGHT - 0.05, z);
+    }
+    for (let y = 1; y < WALL_HEIGHT; y += 1) {
+      sideGrid.push(x, y, -half, x, y, half);
+    }
+  }
+  addWallGrid(group, sideGrid);
 
   // Round barrier, left of the lane: an open concrete drum the player can shoot over.
   const drumMap = tiled((materials.floor as MeshStandardMaterial).map as Texture, 9);
