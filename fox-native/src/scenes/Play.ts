@@ -1031,7 +1031,8 @@ export class Play extends Scene<GameState, undefined> {
     camera.updateProjectionMatrix();
     // The HUD is parented to the camera so it renders in the same pass as the world. The DOM
     // HUD in main.ts is web-only; this one is what desktop and Android actually show.
-    const hud = new Hud(camera);
+    const hud = new Hud();
+    ctx.canvasLayer.scene.add(hud.group);
     const pointers = new Pointers(ctx.renderer.domElement);
     if ((globalThis as any).__TN_PROBE_HUD__ === false) hud.group.visible = false;
     ctx.scene.add(camera);
@@ -1182,7 +1183,11 @@ export class Play extends Scene<GameState, undefined> {
       player.invuln = Math.max(0, player.invuln - dt);
 
       fox.group.position.copy(player.pos);
-      const yaw = Math.atan2(player.vel.z, player.facing * Math.max(0.001, Math.abs(player.vel.x)));
+      // `yaw` is the lean away from straight ahead, never the heading itself: the branch below
+      // already owns left vs right. Feeding `player.facing` into the atan2 as well applied the
+      // flip twice, so a pure-left stick gave atan2(0, -|vx|) = PI and a target of 270 degrees --
+      // the model faces +Z, straight at the camera, instead of left.
+      const yaw = Math.atan2(player.vel.z, Math.max(0.001, Math.abs(player.vel.x)));
       fox.group.rotation.y = MathUtils.damp(
         fox.group.rotation.y,
         player.facing > 0 ? -yaw * 0.5 : Math.PI + yaw * 0.5,
@@ -1318,7 +1323,7 @@ export class Play extends Scene<GameState, undefined> {
       gameUpdateMax = Math.max(gameUpdateMax, gameUpdateElapsedMs);
       if (gameUpdateCalls % profile.frameWindow === 0) {
         console.info(
-          `TN_FOX_NATIVE_GAME_UPDATE:calls=${gameUpdateCalls};avgMs=${(gameUpdateElapsed / profile.frameWindow).toFixed(3)};maxMs=${gameUpdateMax.toFixed(3)};pointers=${pointers.active.size};touchEvents=${pointerEventCount};drawCalls=${(ctx.renderer as any).info?.render?.drawCalls ?? -1};renderCalls=${(ctx.renderer as any).info?.render?.calls ?? -1};sceneChildren=${scene.children.length};foxX=${player.pos.x.toFixed(1)}`,
+          `TN_FOX_NATIVE_GAME_UPDATE:calls=${gameUpdateCalls};avgMs=${(gameUpdateElapsed / profile.frameWindow).toFixed(3)};maxMs=${gameUpdateMax.toFixed(3)};pointers=${pointers.active.size};touchEvents=${pointerEventCount};drawCalls=${(ctx.renderer.raw as any)?.info?.render?.drawCalls ?? -1};renderCalls=${(ctx.renderer.raw as any)?.info?.render?.calls ?? -1};sceneChildren=${scene.children.length};foxX=${player.pos.x.toFixed(1)}`,
         );
         gameUpdateElapsed = 0;
         gameUpdateMax = 0;

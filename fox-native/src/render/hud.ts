@@ -229,10 +229,9 @@ export class Hud {
   /** Where the current thumb landed. Undefined between touches. */
   #stickAnchor: { x: number; y: number } | undefined;
 
-  constructor(private readonly camera: THREE.PerspectiveCamera) {
+  constructor() {
     this.group.renderOrder = 1000;
     this.group.frustumCulled = false;
-    camera.add(this.group);
 
     const inkMaterial = flat(INK);
     const goldMaterial = flat(GOLD);
@@ -318,12 +317,11 @@ export class Hud {
   layout(width: number, height: number): void {
     this.#width = Math.max(1, width);
     this.#height = Math.max(1, height);
-    const distance = 1;
-    const halfHeight = Math.tan((this.camera.fov * Math.PI) / 360) * distance;
-    const halfWidth = halfHeight * (this.#width / this.#height);
-    const scale = (halfHeight * 2) / this.#height;
-    this.group.position.set(-halfWidth, halfHeight, -distance);
-    this.group.scale.set(scale, -scale, scale);
+    // The canvas layer's camera is orthographic and already one unit per pixel, centred on the
+    // framebuffer with Y up. Everything below is authored from the top-left with Y down, so the
+    // group carries the whole conversion and no individual position has to know about it.
+    this.group.position.set(-this.#width / 2, this.#height / 2, 0);
+    this.group.scale.set(1, -1, 1);
 
     const right = this.#width;
     this.group.getObjectByName("gemIcon")?.position.set(right - 186, 46, 0);
@@ -445,6 +443,6 @@ export class Hud {
   }
 
   dispose(): void {
-    this.camera.remove(this.group);
+    this.group.removeFromParent();
   }
 }
