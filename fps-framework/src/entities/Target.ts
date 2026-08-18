@@ -15,8 +15,10 @@ export type TargetSpec = {
   readonly value: 100 | 150 | 250 | 300;
   readonly width?: number;
   readonly height?: number;
-  /** Omit the stand when the plate is bolted to a wall or a walkway rail. */
+  /** A standing target has a deck stand; false selects a fixed structural mount. */
   readonly standing?: boolean;
+  /** Surface supporting a mounted target. Deck mounts are freestanding; walkway mounts meet its rail. */
+  readonly mountedTo?: "deck" | "walkway";
 };
 
 export class Target {
@@ -87,16 +89,88 @@ export class Target {
       foot.receiveShadow = true;
       this.group.add(foot);
     } else {
+      const mountSurfaceY = spec.mountedTo === "walkway" ? scale.walkwaySurface : 0;
+      const plateBottom = spec.position.y - height / 2;
+      const supportHeight = Math.max(scale.ankleHeight * 2, plateBottom - mountSurfaceY);
+      const supportX = width / 2 - scale.ankleHeight * 1.4;
+
+      // Mounted plates need a real load path. These twin steel uprights run from the declared
+      // surface to the frame, so the plate cannot read as a floating five-centimetre tab.
+      for (const side of [-1, 1]) {
+        const support = new Mesh(
+          new BoxGeometry(
+            scale.ankleHeight * 3.5,
+            supportHeight,
+            scale.ankleHeight * 3.5,
+          ),
+          materials.steel,
+        );
+        support.name = "target-support";
+        support.position.set(
+          side * supportX,
+          mountSurfaceY + supportHeight / 2 - spec.position.y,
+          -scale.ankleHeight * 1.5,
+        );
+        support.castShadow = true;
+        this.group.add(support);
+      }
+
+      const brace = new Mesh(
+        new BoxGeometry(
+          width + scale.ankleHeight * 4,
+          scale.ankleHeight * 3,
+          scale.ankleHeight * 5,
+        ),
+        materials.steel,
+      );
+      brace.name = "target-mount-brace";
+      brace.position.set(
+        0,
+        plateBottom - scale.ankleHeight * 1.5 - spec.position.y,
+        -scale.ankleHeight * 1.5,
+      );
+      brace.castShadow = true;
+      this.group.add(brace);
+
+      if (mountSurfaceY === 0) {
+        const foot = new Mesh(
+          new BoxGeometry(
+            width + scale.ankleHeight * 18,
+            scale.ankleHeight * 4,
+            scale.ankleHeight * 18,
+          ),
+          materials.steel,
+        );
+        foot.name = "target-mount-foot";
+        foot.position.set(0, scale.ankleHeight * 2 - spec.position.y, -scale.ankleHeight * 1.5);
+        foot.receiveShadow = true;
+        this.group.add(foot);
+      } else {
+        // The high mounted plate is tied into the existing walkway rail as well as its short
+        // deck-side uprights. The carrier remains separate so strike() still hinges in place.
+        const railY =
+          scale.walkwaySurface - scale.walkway.thickness / 2 + scale.handrailHeight + 0.05;
+        const railBracket = new Mesh(
+          new BoxGeometry(width + scale.ankleHeight * 7, scale.ankleHeight * 3, 0.22),
+          materials.steel,
+        );
+        railBracket.name = "target-rail-bracket";
+        railBracket.position.set(0, railY - spec.position.y, -0.1);
+        railBracket.castShadow = true;
+        this.group.add(railBracket);
+      }
+
       const mount = new Mesh(
         new BoxGeometry(
-          width + scale.ankleHeight * 8,
+          width + scale.ankleHeight * 6,
           scale.ankleHeight * 2.5,
-          scale.ankleHeight * 3,
+          scale.ankleHeight * 4,
         ),
         materials.steel,
       );
       mount.name = "target-mount";
-      mount.position.set(0, 0, -scale.ankleHeight * 2);
+      mount.position.set(0, -scale.ankleHeight * 1.25, -scale.ankleHeight * 2);
+      mount.castShadow = true;
       this.group.add(mount);
     }
   }

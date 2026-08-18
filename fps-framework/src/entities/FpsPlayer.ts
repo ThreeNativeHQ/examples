@@ -54,6 +54,7 @@ export class FpsPlayer {
   #lastX: number = SPAWN.x;
   #lastZ: number = SPAWN.z;
   #shake = 0;
+  #shakePeak = 0;
   #shakePhase = 0;
   #lastFiringDirection: Vector3 | undefined;
   #lastFiringCameraDirection: Vector3 | undefined;
@@ -172,9 +173,19 @@ export class FpsPlayer {
   hurt(amount: number): void {
     this.health = Math.max(0, this.health - amount);
     this.#shake = Math.min(1, this.#shake + 0.55);
+    this.#shakePeak = Math.max(this.#shakePeak, this.#shake);
   }
 
-  debug(): { health: number; position: number[]; positionY: number; yaw: number; aimDivergenceDeg: number } {
+  debug(): {
+    health: number;
+    position: number[];
+    positionY: number;
+    yaw: number;
+    pitch: number;
+    aimDivergenceDeg: number;
+    damageShake: number;
+    damageShakePeak: number;
+  } {
     const firingDirection = this.#lastFiringDirection;
     const cameraDirection = this.#lastFiringCameraDirection;
     return {
@@ -182,6 +193,9 @@ export class FpsPlayer {
       position: this.mesh.position.toArray(),
       positionY: this.mesh.position.y,
       yaw: this.look.yaw,
+      pitch: this.look.pitch,
+      damageShake: this.#shake,
+      damageShakePeak: this.#shakePeak,
       // A shot is required before this metric can pass. Comparing `aimRay()` to the camera
       // here would compare the camera to itself and make the negative control meaningless.
       aimDivergenceDeg:

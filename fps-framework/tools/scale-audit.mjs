@@ -201,6 +201,7 @@ try {
   for (const check of measured.expectations) {
     const found = measured.subjects.filter((item) => item.subject === check.subject);
     if (found.length === 0) {
+      if (check.optional !== true) exitCode = 1;
       rows.push({
         subject: check.subject,
         axis: check.axis,

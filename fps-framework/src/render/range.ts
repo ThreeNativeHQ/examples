@@ -43,6 +43,7 @@ const TARGETS: readonly TargetSpec[] = [
     width: scale.targets.wideWidth,
     height: scale.targets.tallHeight,
     standing: false,
+    mountedTo: "deck",
   },
   {
     position: { x: 0.2, y: 1.95, z: -2.6 },
@@ -56,6 +57,7 @@ const TARGETS: readonly TargetSpec[] = [
     width: scale.targets.narrowWidth,
     height: scale.targets.shortHeight,
     standing: false,
+    mountedTo: "deck",
   },
   {
     position: { x: 8.9, y: 4.6, z: -5.8 },
@@ -63,6 +65,7 @@ const TARGETS: readonly TargetSpec[] = [
     width: scale.targets.standardWidth,
     height: scale.targets.almostHighHeight,
     standing: false,
+    mountedTo: "walkway",
   },
   {
     position: { x: -1.0, y: 0.85, z: -1.5 },

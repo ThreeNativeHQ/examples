@@ -5,20 +5,41 @@
   "viewport": { "width": 1280, "height": 720 },
   "warmupFrames": 30,
   "subject": "player",
+  "setup": {
+    "entities": [
+      { "entity": "player", "position": [-6.3, 0.89, -10.4] },
+      { "entity": "enemy", "position": [-4.5, 0, -9.5] }
+    ]
+  },
   "steps": [
-    { "kind": "wait", "label": "spawn-grace", "waitTicks": 180, "release": true },
-    { "kind": "input", "label": "aim", "press": "KeyF", "holdTicks": 10, "release": false },
-    { "kind": "input", "label": "actual-shot", "press": "Space", "holdTicks": 3, "release": true },
-    { "kind": "wait", "label": "settled-aim", "waitTicks": 30, "release": true }
+    { "kind": "wait", "label": "enemy-damage", "waitTicks": 180, "release": true },
+    {
+      "kind": "input",
+      "label": "damage-shake-shot",
+      "press": ["KeyF", "Space"],
+      "holdTicks": 3,
+      "release": true
+    },
+    { "kind": "wait", "label": "shot-recorded", "waitTicks": 1, "release": true }
   ],
   "assert": {
     "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
     "resources": [
+      {
+        "id": "state",
+        "path": "health",
+        "lte": 99,
+        "changed": true,
+        "atSteps": [
+          { "label": "enemy-damage", "equals": 73 }
+        ]
+      },
       { "id": "state", "path": "shots", "gte": 1, "changed": true }
     ],
     "components": [
       { "entity": "rifle", "component": "barrelAxisErrorDeg", "lte": 1, "allowTrivial": true },
-      { "entity": "player", "component": "aimDivergenceDeg", "lte": 0.05 }
+      { "entity": "player", "component": "aimDivergenceDeg", "lte": 0.05 },
+      { "entity": "player", "component": "damageShakePeak", "gte": 0.5 }
     ]
   }
 }

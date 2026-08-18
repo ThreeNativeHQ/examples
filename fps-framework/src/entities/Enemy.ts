@@ -836,7 +836,6 @@ export class Enemy {
       this.#bodyClearance = null;
       this.#footClearance = null;
       this.#deathAnkleDelta = 0;
-      this.#lastAnkles = null;
       this.#play("DeathFront", 0.06, "once");
       this.#detachWeapon(ctx, "DeathFront");
       ctx.after(RESPAWN_SECONDS, () => this.#respawn());
@@ -859,6 +858,7 @@ export class Enemy {
     this.#reattachWeapon();
     this.#bodyClearance = null;
     this.#footClearance = null;
+    this.#lastAnkles = null;
     this.#groundInitialised = false;
     this.#setOpacity(0);
     this.#reaction = 0;
@@ -1009,6 +1009,17 @@ export class Enemy {
       : correction;
     this.group.position.y += applied;
     this.group.updateWorldMatrix(true, true);
+    // Skinned bounds can settle one pose sample behind the group transform. Re-read once and
+    // close that residual so a walking frame cannot report a false airborne clearance.
+    const firstSettled = this.#measureBodyPose().bounds?.min[1];
+    if (firstSettled !== undefined) {
+      const residual = deckY - firstSettled;
+      const refined = this.phase === "dead"
+        ? MathUtils.clamp(residual, -1 * dt, 1 * dt)
+        : residual;
+      this.group.position.y += refined;
+      this.group.updateWorldMatrix(true, true);
+    }
     const settled = this.#measureBodyPose().bounds?.min[1];
     this.#bodyClearance = settled === undefined ? null : Math.abs(settled - deckY);
     this.#footClearance = settled === undefined ? null : Math.max(0, settled - deckY);

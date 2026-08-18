@@ -8,20 +8,64 @@
   "setup": {
     "entities": [
       { "entity": "player", "position": [-4.5, 0.89, -5.0] },
-      { "entity": "enemy", "position": [-4.5, 0, -6.8] }
+      { "entity": "enemy", "position": [-4.5, 0, -9.5] }
     ]
   },
   "steps": [
-    { "kind": "wait", "label": "body-measured", "waitTicks": 5, "release": true },
-    { "kind": "input", "label": "head-shot", "press": "Space", "holdTicks": 3, "release": true },
-    { "kind": "wait", "label": "hit-registered", "waitTicks": 8, "release": true }
+    {
+      "kind": "input",
+      "label": "head-shot",
+      "pointerPosition": { "x": 0.5, "y": 0.5, "buttons": 1 },
+      "holdTicks": 3,
+      "release": false
+    },
+    { "kind": "wait", "label": "head-hit-registered", "waitTicks": 8, "release": false },
+    {
+      "kind": "input",
+      "label": "release-pointer",
+      "pointerPosition": { "x": 0.5, "y": 0.5, "buttons": 0 },
+      "holdTicks": 1,
+      "release": true
+    },
+    { "kind": "wait", "label": "enemy-respawned", "waitTicks": 300, "release": true },
+    {
+      "kind": "input",
+      "label": "lower-to-navel",
+      "pointerPosition": { "x": 0.5, "y": 0.58 },
+      "holdTicks": 3,
+      "release": true
+    },
+    { "kind": "wait", "label": "body-aim-settled", "waitTicks": 2, "release": true },
+    {
+      "kind": "input",
+      "label": "body-shot",
+      "press": "Space",
+      "holdTicks": 3,
+      "release": true
+    },
+    { "kind": "wait", "label": "body-hit-registered", "waitTicks": 8, "release": true }
   ],
   "assert": {
     "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
     "components": [
       { "entity": "enemy", "component": "headZoneMinY", "gte": 1.3, "allowTrivial": true },
       { "entity": "enemy", "component": "hitboxHeight", "gte": 1.73, "lte": 1.83, "allowTrivial": true },
-      { "entity": "enemy", "component": "lastHitMultiplier", "equals": 4, "allowTrivial": true }
+      {
+        "entity": "enemy",
+        "component": "lastHitMultiplier",
+        "atSteps": [
+          { "label": "head-shot", "equals": 4 },
+          { "label": "body-shot", "equals": 1 }
+        ]
+      },
+      {
+        "entity": "enemy",
+        "component": "health",
+        "atSteps": [
+          { "label": "head-shot", "equals": 0 },
+          { "label": "body-shot", "equals": 26 }
+        ]
+      }
     ]
   }
 }
