@@ -82,6 +82,8 @@ export class FpsPlayer {
   #fov = FOV_HIP;
   #lastX: number = SPAWN.x;
   #lastZ: number = SPAWN.z;
+  #shake = 0;
+  #shakePhase = 0;
 
   constructor(ctx: GameCtx, camera: PerspectiveCamera) {
     this.#camera = camera;
@@ -129,8 +131,16 @@ export class FpsPlayer {
 
   syncCamera(): void {
     const eye = this.eye;
+    // A hit shoves the view; it decays back to the aim within about a third of
+    // a second, so the shake never fights the player for control.
+    const kick = this.#shake * this.#shake;
     this.#camera.position.set(eye.x, eye.y, eye.z);
-    this.#camera.rotation.set(this.look.pitch, this.look.yaw, 0, "YXZ");
+    this.#camera.rotation.set(
+      this.look.pitch + Math.sin(this.#shakePhase * 37) * 0.05 * kick,
+      this.look.yaw + Math.sin(this.#shakePhase * 23) * 0.05 * kick,
+      Math.sin(this.#shakePhase * 17) * 0.04 * kick,
+      "YXZ",
+    );
   }
 
   update(ctx: GameCtx, dt: number, canAim: boolean): void {
@@ -169,6 +179,9 @@ export class FpsPlayer {
     this.body.velocity.z = vz;
     this.body.moveAndSlide(dt);
 
+    this.#shake = Math.max(0, this.#shake - dt * 3.2);
+    this.#shakePhase += dt;
+
     const wanted = this.aiming ? FOV_AIM : FOV_HIP;
     this.#fov = MathUtils.damp(this.#fov, wanted, 14, dt);
     if (Math.abs(this.#camera.fov - this.#fov) > 0.01) {
@@ -180,6 +193,7 @@ export class FpsPlayer {
 
   hurt(amount: number): void {
     this.health = Math.max(0, this.health - amount);
+    this.#shake = Math.min(1, this.#shake + 0.55);
   }
 
   debug(): { health: number; position: number[]; yaw: number } {

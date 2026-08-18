@@ -160,6 +160,33 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       return true;
     };
 
+    // Impact puffs: a small ring of additive quads reused round-robin, so a
+    // shot that lands on concrete reads as a hit even at 30 m.
+    const impactMaterial = new MeshBasicMaterial({
+      blending: AdditiveBlending,
+      color: 0xdfe4ea,
+      depthWrite: false,
+      opacity: 0.85,
+      transparent: true,
+    });
+    const impacts = Array.from({ length: 8 }, () => {
+      const puff = new MeshClass(new PlaneGeometry(0.26, 0.26), impactMaterial);
+      puff.visible = false;
+      ctx.add(puff);
+      return { life: 0, mesh: puff };
+    });
+    let impactCursor = 0;
+    const spawnImpact = (at: Vector3, normal: Vector3): void => {
+      const slot = impacts[impactCursor % impacts.length];
+      if (slot === undefined) return;
+      impactCursor += 1;
+      slot.mesh.position.copy(at).addScaledVector(normal, 0.02);
+      slot.mesh.lookAt(at.clone().add(normal));
+      slot.mesh.scale.setScalar(0.6);
+      slot.mesh.visible = true;
+      slot.life = 0.18;
+    };
+
     let elapsed = 0;
     let hitFlash = 0;
     const eye = new Vector3();
@@ -188,6 +215,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         }
         return;
       }
+      spawnImpact(hit.point, hit.face?.normal ?? new Vector3(0, 1, 0));
       const struck = hit.object.userData.enemy as Enemy | undefined;
       if (struck !== undefined) {
         const local = (hit.point.y - struck.bodyBase) / struck.bodyHeight;
@@ -255,6 +283,12 @@ export class Play extends Scene<GameState, IPhysicsContext> {
 
       elapsed += dt;
       hitFlash = Math.max(0, hitFlash - dt * 2.4);
+      for (const slot of impacts) {
+        if (slot.life <= 0) continue;
+        slot.life -= dt;
+        slot.mesh.scale.setScalar(0.6 + (0.18 - slot.life) * 4);
+        if (slot.life <= 0) slot.mesh.visible = false;
+      }
       if (enemyFlash.visible) enemyFlash.lookAt(eye.x, eye.y, eye.z);
       const timeRemaining = Math.max(0, RUN_SECONDS - elapsed);
 

@@ -61,7 +61,7 @@ export function createMaterials(textures: RangeTextures): RangeMaterials {
     targetFace: new MeshStandardMaterial({
       color: palette.accent,
       emissive: palette.accent,
-      emissiveIntensity: 0.1,
+      emissiveIntensity: 0.06,
       roughness: 0.9,
       side: DoubleSide,
     }),

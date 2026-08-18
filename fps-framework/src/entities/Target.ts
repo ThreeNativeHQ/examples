@@ -28,8 +28,8 @@ export class Target {
   #hitMaterial: RangeMaterials["targetHit"];
 
   constructor(materials: RangeMaterials, spec: TargetSpec) {
-    const width = spec.width ?? 0.86;
-    const height = spec.height ?? 1.24;
+    const width = spec.width ?? 1.3;
+    const height = spec.height ?? 1.85;
     this.value = spec.value;
     this.#faceMaterial = materials.targetFace;
     this.#hitMaterial = materials.targetHit;

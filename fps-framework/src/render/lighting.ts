@@ -16,7 +16,7 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
     renderer.shadowMap.type = PCFSoftShadowMap;
   }
 
-  const sun = new DirectionalLight(0xfff6e8, 2.55);
+  const sun = new DirectionalLight(0xfff6e8, 1.65);
   sun.position.set(-16, 30, 16);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -37,7 +37,7 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
 
   // Cloudy days fill the shadows: a strong sky/ground hemisphere keeps the
   // near-black blocks from crushing to pure black on their shaded faces.
-  scene.add(new HemisphereLight(0xbcd4ec, 0x8f9294, 0.62));
-  scene.add(new AmbientLight(0xffffff, 0.12));
+  scene.add(new HemisphereLight(0xcfe0f0, 0xa9adaf, 1.15));
+  scene.add(new AmbientLight(0xffffff, 0.3));
   return sun;
 }

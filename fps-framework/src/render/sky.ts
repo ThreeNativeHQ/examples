@@ -10,7 +10,7 @@ export function setupSky(scene: Scene, environment?: Texture): void {
     scene.background = environment;
     scene.environment = environment;
     scene.environmentIntensity = 0.3;
-    scene.backgroundIntensity = 0.36;
+    scene.backgroundIntensity = 0.3;
     return;
   }
   scene.background = null;
