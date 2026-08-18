@@ -6,7 +6,7 @@
  * paths, and a game can pass the first while being unplayable on the second — which is exactly
  * what a proof is supposed to catch and did not.
  *
- *   node real-input-probe.mjs <url> <label>
+ *   node probe.mjs <url> <label>
  */
 import { chromium } from "playwright";
 
@@ -39,11 +39,11 @@ try {
 
   // Read whatever state the page exposes, without assuming which shape it uses.
   const readState = async () =>
-    page.evaluate(() => {
+    page.evaluate(async () => {
       const b = window.__THREENATIVE_PLAYTEST_BRIDGE__;
       if (b?.sample === undefined) return { via: ["no-bridge"], state: null };
       try {
-        const s = b.sample({ entities: [], resources: ["state"] });
+        const s = await b.sample({ entities: [], resources: ["state"] });
         const res = s?.resources ?? s?.observations?.resources ?? null;
         const state = res?.state ?? res?.GameState ?? null;
         return { via: ["bridge.sample"], state: state ? JSON.parse(JSON.stringify(state)) : null,

@@ -16,7 +16,14 @@
       "noRuntimeDiagnostics": true,
       "runtimeReady": true
     },
-    "movement": { "entity": "player", "minDistance": 0.5 },
+    "resources": [
+      {
+        "id": "state",
+        "path": "distanceMoved",
+        "gte": 0.5,
+        "changed": true
+      }
+    ],
     "visual": [
       {
         "region": {
