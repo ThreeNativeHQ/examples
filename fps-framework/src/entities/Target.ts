@@ -118,16 +118,16 @@ export class Target {
     return this.plate.parent as Group;
   }
 
-  /** Drops the plate below its stand and schedules the swing back up. */
+  /** Drops a standing plate below its stand; mounted plates hinge in place. */
   strike(ctx: GameCtx): number {
     if (!this.#up) return 0;
     this.#up = false;
     this.plate.material = this.#hitMaterial;
     const carrier = this.carrier;
     void ctx.tween(carrier.rotation, { x: -Math.PI / 2 }, 0.12);
-    void ctx.tween(carrier.position, { y: this.#dropY }, 0.16);
+    if (!this.#mounted) void ctx.tween(carrier.position, { y: this.#dropY }, 0.16);
     ctx.after(RESET_SECONDS, () => {
-      void ctx.tween(carrier.position, { y: 0 }, 0.22);
+      if (!this.#mounted) void ctx.tween(carrier.position, { y: 0 }, 0.22);
       void ctx.tween(carrier.rotation, { x: 0 }, 0.26);
       this.plate.material = this.#faceMaterial;
       this.#up = true;

@@ -6,14 +6,19 @@
   "warmupFrames": 30,
   "subject": "player",
   "steps": [
-    { "kind": "input", "label": "damage-and-aim", "press": "KeyF", "holdTicks": 30, "release": false },
+    { "kind": "wait", "label": "spawn-grace", "waitTicks": 180, "release": true },
+    { "kind": "input", "label": "aim", "press": "KeyF", "holdTicks": 10, "release": false },
+    { "kind": "input", "label": "actual-shot", "press": "Space", "holdTicks": 3, "release": true },
     { "kind": "wait", "label": "settled-aim", "waitTicks": 30, "release": true }
   ],
   "assert": {
     "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
+    "resources": [
+      { "id": "state", "path": "shots", "gte": 1, "changed": true }
+    ],
     "components": [
       { "entity": "rifle", "component": "barrelAxisErrorDeg", "lte": 1, "allowTrivial": true },
-      { "entity": "player", "component": "aimDivergenceDeg", "lte": 0.05, "allowTrivial": true }
+      { "entity": "player", "component": "aimDivergenceDeg", "lte": 0.05 }
     ]
   }
 }

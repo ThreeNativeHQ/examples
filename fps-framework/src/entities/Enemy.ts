@@ -503,7 +503,16 @@ export class Enemy {
     const grip = this.#grip;
     const parent = holder?.parent;
     const hand = this.#rightHand;
-    if (holder === undefined || grip === undefined || parent === null || parent === undefined || hand === undefined) return;
+    if (
+      this.#weaponDetached ||
+      holder === undefined ||
+      grip === undefined ||
+      parent === null ||
+      parent === undefined ||
+      hand === undefined
+    ) {
+      return;
+    }
     holder.updateWorldMatrix(true, true);
     const gripWorld = grip.getWorldPosition(new Vector3());
     const desiredLocal = parent.worldToLocal(hand.getWorldPosition(new Vector3()));

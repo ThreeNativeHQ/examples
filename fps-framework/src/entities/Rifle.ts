@@ -64,12 +64,12 @@ export class Rifle {
   #shootFor = 0;
   #camera: PerspectiveCamera;
   #barrelTipLocal = new Vector3();
+  #geometryTipLocal = new Vector3();
   #barrelAxisLocal = new Vector3(0, 0, -1);
   #opticLocal = new Vector3();
   #aimOrigin = new Vector3();
   #aimDirection = new Vector3(0, 0, -1);
   #hasAimRay = false;
-  #tipGapToGeometry = 0;
   #viewmodelLength = 0;
 
   constructor(
@@ -172,7 +172,8 @@ export class Rifle {
       (fitBounds.min.y + fitBounds.max.y) / 2,
       fitBounds.max.z,
     );
-    this.#barrelTipLocal.copy(tipInFit).applyMatrix4(fit.matrix);
+    this.#geometryTipLocal.copy(tipInFit).applyMatrix4(fit.matrix);
+    this.#barrelTipLocal.copy(this.#geometryTipLocal);
     // The asset's forward +z transformed through the fit's half-turn is the visible -z barrel
     // axis. Object3D's +z convention makes this less error-prone than a hand-typed direction.
     this.#barrelAxisLocal
@@ -181,8 +182,6 @@ export class Rifle {
       .normalize();
     const size = fitBounds.getSize(new Vector3());
     this.#viewmodelLength = Math.max(size.x, size.y, size.z);
-    this.#tipGapToGeometry = 0;
-
     let namedOptic: Object3D | undefined;
     viewmodel.traverse((object) => {
       if (namedOptic === undefined && /sight|optic|rail|dot/i.test(object.name)) namedOptic = object;
@@ -383,7 +382,7 @@ export class Rifle {
     return {
       barrelAxisErrorDeg: MathUtils.radToDeg(ray.direction.angleTo(cameraDirection)),
       muzzleLocal: this.#barrelTipLocal.toArray(),
-      tipGapToGeometry: this.#tipGapToGeometry,
+      tipGapToGeometry: this.#flash.position.distanceTo(this.#geometryTipLocal),
       opticScreen: { x: (optic.x + 1) / 2, y: (1 - optic.y) / 2 },
       viewmodelLength: this.#viewmodelLength,
     };

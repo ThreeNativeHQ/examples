@@ -231,6 +231,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       if (!rifle.fire()) return;
       eye.copy(aimRay.origin);
       const direction = aimRay.direction.clone().normalize();
+      player.recordFiringDirection(direction);
       const hit = frameCtx.raycast({
         direction,
         far: RANGE_METRES,

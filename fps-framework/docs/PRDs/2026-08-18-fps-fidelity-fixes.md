@@ -214,18 +214,18 @@ flowchart TD
 
 | # | New thing | Live caller (`file:line`, non-test) | Replaces | Old path removed? | Negative control |
 |---|---|---|---|---|---|
-| 1 | `Rifle.#measureBarrel()` | `Rifle.ts` constructor — TBD | hardcoded `flash.position.set(-0.14,0.16,-0.92)` `Rifle.ts:100` | deleted in Phase 1 | forcing the measured tip to the old literal re-opens the 0.17 m gap and reddens `aim-alignment` |
-| 2 | `Rifle.converge(origin, direction)` | `Play.ts:392` `rifle.update(...)` — TBD | none (new) | n/a | disabling convergence pushes `barrelAxisErrorDeg` back over 7° |
-| 3 | `Rifle.barrelRay()` | `Play.ts:227` tracer spawn — TBD | `muzzleWorld()` + eye-ray endpoint | `muzzleWorld()` deleted in Phase 1 | spawning from the eye instead reddens `tracer-follows-barrel` |
-| 4 | `FpsPlayer.aimRay()` | `Play.ts:211-212` and `FpsPlayer.syncCamera` — TBD | `get forward()` | deleted in Phase 2 | applying shake with the old getter reddens `shot-tracks-crosshair` |
-| 5 | `Enemy.#groundToDeck()` | `Enemy.ts` `update()` both branches — TBD | `#groundDeathPose()` (death-only) | folded into the new method, Phase 3 | pinning `group.y = 0` reddens `enemy-foot-contact` |
-| 6 | `Enemy.#settleDeath(dt)` | `Enemy.ts` dead branch — TBD | `#lowerLegToGround` one-shot | converted to a damped target, Phase 4 | restoring the one-shot reddens `death-no-snap` (frame-to-frame ankle delta) |
-| 7 | measured `Enemy.#modelHeight` | hitbox construction + `Play.ts:246-247` zones — TBD | `BODY_HEIGHT = 1.8` `Enemy.ts:24` | constant deleted, Phase 5 | a head-height ray missing the hitbox reddens `headshot-hits-head` |
-| 8 | `playtests/aim-alignment.playtest.json` + 3 more | `package.json` `test` script — TBD | n/a | n/a | each is run once against `HEAD~` and must fail there |
-| 9 | `tools/scale-audit.mjs` | `package.json:9` (`scale`), `package.json:18` (`test`, last gate) | ad-hoc root probes `measure.mjs`, `shape.mjs`, `closeup.mjs`, `grip-sweep.mjs` | still present — folded in when Phase 4 lands | ✅ observed: setting `humanHeight` to 2.678 turns the enemy row green |
-| 10 | `src/render/scale.ts:12` `scale`, `:68` `SCALE_EXPECTATIONS` | `tools/scale-audit.mjs:118` imports both | `RIFLE_LENGTH = 1.25`, plate literals in `TARGETS`, `BODY_HEIGHT = 1.8` | **still live — Phases 4 and 7 delete them** | ✅ observed: editing the table moves the verdict |
-| 11 | `normaliseHeight` / `normaliseLongestAxis` | `Enemy.ts` + `Rifle.ts` constructors — **Phase 4, not yet written** | nothing (the normalisation was only ever a comment) | n/a | skipping the call reddens `pnpm scale` on 4 rows |
-| 12 | `Enemy.modelHeight` (bone-accurate) | `Enemy.ts:872` in `debug()`; `tools/scale-audit.mjs:141` | `Box3` over a skinned mesh, which reports the bind pose | n/a — the bind-box path was never a public API | ✅ observed: renaming the crown bone pattern drops the row to `not measurable`, a FAIL |
+| 1 | `Rifle.#measureBarrel()` | `Rifle.ts:103` constructor | hardcoded `flash.position.set(-0.14,0.16,-0.92)` `Rifle.ts:100` | deleted in Phase 1 | forcing the measured tip to the old literal re-opens the 0.17 m gap and reddens `aim-alignment` |
+| 2 | `Rifle.converge(origin, direction)` | `Play.ts:410` `rifle.converge(...)` | none (new) | n/a | disabling convergence pushes `barrelAxisErrorDeg` back over 7° |
+| 3 | `Rifle.barrelRay()` | `Play.ts:245` tracer spawn | `muzzleWorld()` + eye-ray endpoint | `muzzleWorld()` deleted in Phase 1 | spawning from the eye instead reddens `tracer-follows-barrel` |
+| 4 | `FpsPlayer.aimRay()` | `Play.ts:408` | `get forward()` | deleted in Phase 2 | applying shake with the old getter reddens `shot-tracks-crosshair` |
+| 5 | `Enemy.#groundToDeck()` | `Enemy.ts:896,986` update branches | `#groundDeathPose()` (death-only) | folded into the new method, Phase 3 | pinning `group.y = 0` reddens `enemy-foot-contact` |
+| 6 | `Enemy.#settleDeath(dt)` | `Enemy.ts:892` dead branch | `#lowerLegToGround` one-shot | converted to a damped target, Phase 4 | restoring the one-shot reddens `death-no-snap` (frame-to-frame ankle delta) |
+| 7 | measured `Enemy.#modelHeight` | `Enemy.ts:272-276`; `Play.ts:264-267` | `BODY_HEIGHT = 1.8` `Enemy.ts:24` | constant deleted, Phase 5 | a head-height ray missing the hitbox reddens `headshot-hits-head` |
+| 8 | `playtests/aim-alignment.playtest.json` + 3 more | `package.json:17` test script | n/a | n/a | each is run once against `HEAD~` and must fail there |
+| 9 | `tools/scale-audit.mjs` | `package.json:9` (`scale`), `package.json:17` (`test`, last gate) | ad-hoc root probes `measure.mjs`, `shape.mjs`, `closeup.mjs`, `grip-sweep.mjs` | still present — folded in when Phase 4 lands | ✅ observed: setting `humanHeight` to 2.678 turns the enemy row green |
+| 10 | `src/render/scale.ts:14` `scale`, `:122` `SCALE_EXPECTATIONS` | `tools/scale-audit.mjs:90` imports both | `RIFLE_LENGTH = 1.25`, plate literals in `TARGETS`, `BODY_HEIGHT = 1.8` | **deleted in Phases 4 and 7** | ✅ observed: editing the table moves the verdict |
+| 11 | `normaliseHeight` / `normaliseLongestAxis` | `Enemy.ts:245,425,433` + `Rifle.ts:88` constructors | nothing (the normalisation was only ever a comment) | n/a | skipping the call reddens `pnpm scale` on 4 rows |
+| 12 | `Enemy.modelHeight` (bone-accurate) | `Enemy.ts:1186` in `debug()`; `tools/scale-audit.mjs:120` | `Box3` over a skinned mesh, which reports the bind pose | n/a — the bind-box path was never a public API | ✅ observed: renaming the crown bone pattern drops the row to `not measurable`, a FAIL |
 
 ### Reachability
 

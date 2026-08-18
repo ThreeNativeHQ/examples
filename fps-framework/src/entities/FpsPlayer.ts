@@ -55,6 +55,8 @@ export class FpsPlayer {
   #lastZ: number = SPAWN.z;
   #shake = 0;
   #shakePhase = 0;
+  #lastFiringDirection: Vector3 | undefined;
+  #lastFiringCameraDirection: Vector3 | undefined;
 
   constructor(ctx: GameCtx, camera: PerspectiveCamera) {
     this.#camera = camera;
@@ -96,6 +98,13 @@ export class FpsPlayer {
       origin: this.#camera.getWorldPosition(new Vector3()),
       direction: this.#camera.getWorldDirection(new Vector3()).normalize(),
     };
+  }
+
+  /** Capture the direction actually used for a shot and the camera basis at that same instant. */
+  recordFiringDirection(direction: Vector3): void {
+    this.#camera.updateMatrixWorld(true);
+    this.#lastFiringDirection = direction.clone().normalize();
+    this.#lastFiringCameraDirection = this.#camera.getWorldDirection(new Vector3()).normalize();
   }
 
   syncCamera(): void {
@@ -166,14 +175,19 @@ export class FpsPlayer {
   }
 
   debug(): { health: number; position: number[]; positionY: number; yaw: number; aimDivergenceDeg: number } {
-    const aim = this.aimRay();
-    const cameraDirection = this.#camera.getWorldDirection(new Vector3()).normalize();
+    const firingDirection = this.#lastFiringDirection;
+    const cameraDirection = this.#lastFiringCameraDirection;
     return {
       health: this.health,
       position: this.mesh.position.toArray(),
       positionY: this.mesh.position.y,
       yaw: this.look.yaw,
-      aimDivergenceDeg: MathUtils.radToDeg(aim.direction.angleTo(cameraDirection)),
+      // A shot is required before this metric can pass. Comparing `aimRay()` to the camera
+      // here would compare the camera to itself and make the negative control meaningless.
+      aimDivergenceDeg:
+        firingDirection === undefined || cameraDirection === undefined
+          ? 180
+          : MathUtils.radToDeg(firingDirection.angleTo(cameraDirection)),
     };
   }
 
