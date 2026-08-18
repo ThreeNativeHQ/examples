@@ -39,7 +39,7 @@ const TARGETS: readonly TargetSpec[] = [
   { position: { x: -6.4, y: 1.95, z: -9.2 }, value: 150, width: 1.4, height: 1.95 },
   { position: { x: -2.6, y: 1.75, z: -13.4 }, value: 250, width: 1.0, height: 1.45 },
   { position: { x: 6.2, y: 1.8, z: -13.8 }, value: 250, width: 1.0, height: 1.45 },
-  { position: { x: 13.6, y: 2.1, z: -11.6 }, value: 300, width: 1.4, height: 1.95 },
+  { position: { x: 13.2, y: 2.1, z: -14.4 }, value: 300, width: 1.4, height: 1.95 },
   { position: { x: -13.4, y: 1.95, z: -6.4 }, value: 150, width: 1.4, height: 1.95 },
   { position: { x: 8.6, y: 1.8, z: -2.2 }, value: 100, width: 1.15, height: 1.6 },
 ];

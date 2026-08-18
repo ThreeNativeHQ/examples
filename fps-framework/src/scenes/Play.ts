@@ -1,6 +1,6 @@
 import { type ICtx, Scene, type SceneFrame } from "@threenative/core";
 import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
-import type { AnimationClip, Group, Mesh, Object3D, PerspectiveCamera, Texture } from "three";
+import type { AnimationClip, Group, Object3D, PerspectiveCamera, Texture } from "three";
 import {
   AdditiveBlending,
   Mesh as MeshClass,
@@ -321,5 +321,3 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     };
   }
 }
-
-export type { Mesh };
