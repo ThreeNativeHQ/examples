@@ -32,16 +32,39 @@ export type Range = {
 };
 
 const TARGETS: readonly TargetSpec[] = [
-  { position: { x: -11.4, y: 2.45, z: -1.0 }, value: 150, width: 1.4, height: 1.95 },
-  { position: { x: 0.2, y: 1.95, z: -2.6 }, value: 100, width: 1.3, height: 1.85 },
-  { position: { x: 3.9, y: 2.3, z: -8.4 }, value: 250, width: 0.75, height: 1.05 },
-  { position: { x: 10.6, y: 5.15, z: -8.6 }, value: 300, width: 1.3, height: 1.8 },
-  { position: { x: -6.4, y: 1.95, z: -9.2 }, value: 150, width: 1.4, height: 1.95 },
-  { position: { x: -2.6, y: 1.75, z: -13.4 }, value: 250, width: 1.0, height: 1.45 },
-  { position: { x: 6.2, y: 1.8, z: -13.8 }, value: 250, width: 1.0, height: 1.45 },
-  { position: { x: 15.0, y: 2.1, z: -2.8 }, value: 300, width: 1.4, height: 1.95 },
-  { position: { x: -13.4, y: 1.95, z: -6.4 }, value: 150, width: 1.4, height: 1.95 },
-  { position: { x: 8.6, y: 1.8, z: -2.2 }, value: 100, width: 1.15, height: 1.6 },
+  {
+    position: { x: -11.7, y: 2.68, z: -1.0 },
+    value: 150,
+    width: 1.6,
+    height: 2.05,
+    standing: false,
+  },
+  {
+    position: { x: 0.2, y: 1.95, z: -2.6 },
+    value: 100,
+    width: 1.05,
+    height: 1.85,
+  },
+  {
+    position: { x: 2.5, y: 3.65, z: -8.4 },
+    value: 250,
+    width: 0.9,
+    height: 1.15,
+    standing: false,
+  },
+  {
+    position: { x: 8.9, y: 4.6, z: -5.8 },
+    value: 300,
+    width: 1.3,
+    height: 1.7,
+    standing: false,
+  },
+  { position: { x: -1.0, y: 0.85, z: -1.5 }, value: 150, width: 1.4, height: 1.0 },
+  { position: { x: 13.0, y: 1.2, z: 3.0 }, value: 250, width: 1.0, height: 1.45 },
+  { position: { x: 6.4, y: 1.2, z: -6.2 }, value: 250, width: 1.0, height: 1.45 },
+  { position: { x: 13.5, y: 1.2, z: 3.0 }, value: 300, width: 1.4, height: 1.45 },
+  { position: { x: -11.4, y: 0.7, z: 0.6 }, value: 150, width: 1.4, height: 0.8 },
+  { position: { x: 8.0, y: 1.2, z: -5.8 }, value: 100, width: 1.15, height: 1.6 },
 ];
 
 function addBox(

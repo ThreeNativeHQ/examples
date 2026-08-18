@@ -41,6 +41,12 @@ export class Target {
     this.plate.position.set(0, 0, 0.03);
 
     const carrier = new Group();
+    const frame = new Mesh(
+      new PlaneGeometry(width + 0.1, height + 0.1),
+      materials.block,
+    );
+    frame.castShadow = true;
+    carrier.add(frame);
     carrier.add(this.plate);
     carrier.name = "target-carrier";
     this.group.add(carrier);
