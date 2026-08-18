@@ -38,8 +38,8 @@ const PLAYER_RADIUS = 0.35;
 const FIXED_DT = 1 / 60;
 
 // viewmodel placement, tuned against reference.png
-const VIEWMODEL_SCALE = 0.62;
-const VIEWMODEL_POS = new THREE.Vector3(0.14, -0.2, -0.34);
+const VIEWMODEL_SCALE = 0.56;
+const VIEWMODEL_POS = new THREE.Vector3(0.17, -0.21, -0.33);
 const VIEWMODEL_EULER = new THREE.Euler(0, Math.PI, 0);
 const VIEWMODEL_AIM_POS = new THREE.Vector3(0.0, -0.115, -0.28);
 
@@ -53,7 +53,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.9;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.domElement.style.cssText = "position:fixed;inset:0;display:block;";
 root.appendChild(renderer.domElement);
@@ -83,8 +83,8 @@ textureLoader.load(skyUrl, (texture) => {
   texture.colorSpace = THREE.SRGBColorSpace;
   scene.background = texture;
   scene.environment = texture;
-  scene.environmentIntensity = 0.55;
-  scene.backgroundIntensity = 1.0;
+  scene.environmentIntensity = 0.32;
+  scene.backgroundIntensity = 0.78;
 });
 
 const random = makeRandom(0x5eed1234);
@@ -133,8 +133,10 @@ const player = {
 const keys = new Set<string>();
 let firePressed = false;
 let fireLatch = false;
-let reloadLatch = false;
-let retryLatch = false;
+// edge-triggered intents: a synthetic press shorter than one tick must still register
+let pendingFire = 0;
+let pendingReload = 0;
+let pendingRetry = 0;
 let pointerLocked = false;
 let muzzleTimer = 0;
 let hitMarker = 0;
@@ -147,6 +149,9 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   keys.add(event.code);
+  if (event.code === "Space" || event.code === "KeyF") pendingFire += 1;
+  if (event.code === "KeyR") pendingReload += 1;
+  if (event.code === "Enter" || event.code === "NumpadEnter") pendingRetry += 1;
   if (event.code === "Space" || event.code === "Enter" || event.code.startsWith("Arrow")) event.preventDefault();
 });
 window.addEventListener("keyup", (event) => {
@@ -158,6 +163,7 @@ renderer.domElement.addEventListener("mousedown", (event) => {
   if (event.button === 0) {
     if (!pointerLocked) void renderer.domElement.requestPointerLock();
     firePressed = true;
+    pendingFire += 1;
   }
   if (event.button === 2) player.aiming = true;
 });
@@ -363,9 +369,10 @@ function tick(dt: number = FIXED_DT): void {
   frame += 1;
   elapsed += dt;
 
-  const wantsRetry = keys.has("Enter") || keys.has("NumpadEnter");
-  if (wantsRetry && !retryLatch) restart();
-  retryLatch = wantsRetry;
+  if (pendingRetry > 0) {
+    pendingRetry = 0;
+    restart();
+  }
 
   const aimKey = keys.has("KeyE") || keys.has("ControlLeft");
   const aiming = player.aiming || aimKey;
@@ -412,13 +419,18 @@ function tick(dt: number = FIXED_DT): void {
     }
   }
 
-  const wantsFire = firePressed || keys.has("Space") || keys.has("KeyF");
-  if (wantsFire && !fireLatch) fire();
-  fireLatch = wantsFire;
+  if (pendingFire > 0) {
+    pendingFire = 0;
+    fire();
+  } else if (firePressed && !fireLatch) {
+    fire();
+  }
+  fireLatch = firePressed;
 
-  const wantsReload = keys.has("KeyR");
-  if (wantsReload && !reloadLatch) beginReload();
-  reloadLatch = wantsReload;
+  if (pendingReload > 0) {
+    pendingReload = 0;
+    beginReload();
+  }
 
   // ---- enemy
   const eye = new THREE.Vector3(player.position.x, player.feet + EYE_HEIGHT, player.position.z);

@@ -45,8 +45,8 @@ export interface World {
 }
 
 const concrete = new THREE.MeshStandardMaterial({ color: 0xb9bbbc, roughness: 0.95, metalness: 0 });
-const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x1b1f26, roughness: 0.9, metalness: 0.05 });
-const darkBlock = new THREE.MeshStandardMaterial({ color: 0x14181e, roughness: 0.8, metalness: 0.05 });
+const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x4d545f, roughness: 0.9, metalness: 0.05 });
+const darkBlock = new THREE.MeshStandardMaterial({ color: 0x21262d, roughness: 0.8, metalness: 0.05 });
 const steel = new THREE.MeshStandardMaterial({ color: 0x8d9094, roughness: 0.6, metalness: 0.3 });
 
 function addBox(
@@ -91,13 +91,13 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
     blockers: [],
     ramps: [],
     occluders: [],
-    sun: new THREE.DirectionalLight(0xfff4e2, 3.1),
+    sun: new THREE.DirectionalLight(0xfff4e2, 3.7),
   };
 
   // ---- lighting: one high sun throwing long soft shadows, plus a cool sky fill.
   const sun = world.sun;
-  sun.position.set(21, 34, 19);
-  sun.target.position.set(-2, 0, -8);
+  sun.position.set(28, 32, -15);
+  sun.target.position.set(-1, 0, 1);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -26;
@@ -111,16 +111,16 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
   sun.shadow.radius = 3;
   scene.add(sun);
   scene.add(sun.target);
-  scene.add(new THREE.HemisphereLight(0xbcd6f2, 0x8c8e8e, 1.15));
+  scene.add(new THREE.HemisphereLight(0xbcd6f2, 0x8c8e8e, 0.9));
 
   // ---- floor: the shipped tiling concrete surface, ~1.9 m to a slab
   floorMap.wrapS = THREE.RepeatWrapping;
   floorMap.wrapT = THREE.RepeatWrapping;
-  floorMap.repeat.set(3, 3);
+  floorMap.repeat.set(3.4, 3.4);
   floorMap.anisotropy = 8;
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(ARENA_HALF * 2, ARENA_HALF * 2),
-    new THREE.MeshStandardMaterial({ map: floorMap, roughness: 0.94, metalness: 0 }),
+    new THREE.MeshStandardMaterial({ map: floorMap, color: 0xdcdedd, roughness: 0.94, metalness: 0 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -137,7 +137,7 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
   };
   laneStripe(-5.6);
   laneStripe(5.6);
-  for (const z of [12.6, 2.0]) {
+  for (const z of [11.2, 2.0]) {
     const line = new THREE.Mesh(new THREE.PlaneGeometry(ARENA_HALF * 2 - 0.4, 0.2), stripe);
     line.rotation.x = -Math.PI / 2;
     line.position.set(0, 0.012, z);
@@ -167,19 +167,19 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
   propMap.repeat.set(4, 1);
   propMap.anisotropy = 8;
   const barrier = new THREE.Mesh(
-    new THREE.CylinderGeometry(3.4, 3.4, 1.5, 40, 1, true),
+    new THREE.CylinderGeometry(3.0, 3.0, 1.45, 44, 1, true),
     new THREE.MeshStandardMaterial({ map: propMap, color: 0xd6d8d8, roughness: 0.95, side: THREE.DoubleSide }),
   );
-  barrier.position.set(-9.4, 0.75, 0.6);
+  barrier.position.set(-10.2, 0.725, 0.2);
   barrier.castShadow = true;
   barrier.receiveShadow = true;
   scene.add(barrier);
   world.occluders.push(barrier);
-  world.blockers.push({ minX: -12.8, maxX: -6, minZ: -2.8, maxZ: 4, top: Number.POSITIVE_INFINITY });
+  world.blockers.push({ minX: -13.2, maxX: -7.2, minZ: -2.8, maxZ: 3.2, top: Number.POSITIVE_INFINITY });
 
   // ---- concrete barricades down the centre
-  addBox(scene, world, [4.6, 1.35, 1.5], [0.1, 0, -5.2], concrete, false);
-  addBox(scene, world, [3.4, 1.1, 1.3], [3.6, 0, -9.4], concrete, false);
+  addBox(scene, world, [4.8, 1.72, 1.6], [0.1, 0, -5.0], concrete, false);
+  addBox(scene, world, [3.4, 1.35, 1.3], [3.9, 0, -9.4], concrete, false);
   addBox(scene, world, [2.4, 1.0, 1.2], [-6.6, 0, -9.0], concrete, false);
 
   // ---- two dark lockers
@@ -226,6 +226,7 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
   // ---- targets
   const plateMaterial = new THREE.MeshStandardMaterial({
     color: 0xf4645c,
+    emissive: 0x3a100c,
     roughness: 0.9,
     side: THREE.DoubleSide,
   });
