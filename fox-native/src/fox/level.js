@@ -27,6 +27,7 @@ export class Level {
     // Safe again now that the HUD lives on `ctx.canvasLayer` rather than sharing this pass:
     // bundled draws execute last within a pass, so anything drawn beside them loses.
     this.renderRoot = new BundleGroup();
+    this.renderRoot.static = false;
     scene.add(this.renderRoot);
   }
 

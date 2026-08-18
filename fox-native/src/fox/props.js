@@ -126,7 +126,7 @@ export function waterfall(width, height, scene) {
       streaks.add(streak);
     }
     g.add(streaks);
-    g.userData.streaks = streaks;
+    (g.userData.streaks ??= []).push(streaks);
   }
 
   // white water where the fall leaves the lip
@@ -155,19 +155,14 @@ export function waterfall(width, height, scene) {
   return g;
 }
 
-let __wfAt = 0;
 export function updateWaterfall(g, dt) {
-  const streaks = g.userData.streaks;
-  if (!streaks) return;
-  for (const s of streaks.children) {
-    s.position.y -= s.userData.speed * dt;
-    if (s.position.y < -g.userData.height) s.position.y = 0;
-  }
-  const now = performance.now();
-  if (now - __wfAt > 1000) {
-    __wfAt = now;
-    const s = streaks.children[0];
-    console.info(`TN_PRD155_WATERFALL:worldY=${s.matrixWorld.elements[13].toFixed(3)};${__ancestry(s)}`);
+  const groups = g.userData.streaks;
+  if (!groups) return;
+  for (const streaks of groups) {
+    for (const s of streaks.children) {
+      s.position.y -= s.userData.speed * dt;
+      if (s.position.y < -g.userData.height) s.position.y = 0;
+    }
   }
 }
 
@@ -255,33 +250,8 @@ export function windmill() {
   return g;
 }
 
-let __wmAt = 0;
-let __wmCalls = 0;
-/** Walk to the top and report what we reach: an object the renderer never visits is never drawn. */
-function __ancestry(node) {
-  let depth = 0;
-  let current = node;
-  const chain = [];
-  while (current) {
-    chain.push(`${current.type}[mAU=${current.matrixAutoUpdate ? 1 : 0},mWAU=${current.matrixWorldAutoUpdate ? 1 : 0},mWNU=${current.matrixWorldNeedsUpdate ? 1 : 0}]`);
-    if (!current.parent) break;
-    current = current.parent;
-    depth += 1;
-  }
-  return `depth=${depth};rootIsScene=${current?.isScene === true};chain=${chain.join('<')}`;
-}
 export function updateWindmill(g, dt) {
   if (g.userData.hub) g.userData.hub.rotation.z += dt * 0.55;
-  __wmCalls += 1;
-  const now = performance.now();
-  if (now - __wmAt > 1000) {
-    __wmAt = now;
-    const hub = g.userData.hub;
-    const sail = hub?.children?.[0]?.children?.[1];
-    console.info(
-      `TN_PRD155_WINDMILL:calls=${__wmCalls};rotZ=${hub ? hub.rotation.z.toFixed(3) : 'n/a'};${__ancestry(sail ?? hub)};sailWorldY=${sail ? sail.matrixWorld.elements[13].toFixed(3) : 'n/a'}`,
-    );
-  }
 }
 
 /** Zeppelin drifting across the sky. */
