@@ -1,12 +1,13 @@
 import type { ICtx } from "@threenative/core";
 import { CharacterBody3D, CollisionShape3D, type IPhysicsContext } from "@threenative/physics";
-import { BoxGeometry, MathUtils, Mesh, MeshBasicMaterial, type PerspectiveCamera } from "three";
+import { BoxGeometry, MathUtils, Mesh, MeshBasicMaterial, type PerspectiveCamera, Vector3 } from "three";
 import { FIRING_LINE_Z } from "../render/range.js";
+import { scale } from "../render/scale.js";
 import type { GameState } from "../state.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
 
-export const EYE_HEIGHT = 1.66;
+export const EYE_HEIGHT = scale.eyeHeight;
 const WALK_SPEED = 5.6;
 const SPRINT_SPEED = 8.2;
 const FOV_HIP = 70;
@@ -14,9 +15,9 @@ const FOV_AIM = 22;
 const PITCH_MIN = MathUtils.degToRad(-66);
 const PITCH_MAX = MathUtils.degToRad(72);
 const LOOK_SENSITIVITY = 0.0022;
-const CAPSULE_RADIUS = 0.34;
-const CAPSULE_HALF = 0.49;
-const BODY_Y = CAPSULE_RADIUS + CAPSULE_HALF;
+const CAPSULE_RADIUS = scale.shoulderWidth / 2;
+const CAPSULE_HALF = (scale.humanHeight - CAPSULE_RADIUS * 2) / 2;
+const BODY_Y = scale.humanHeight / 2;
 const SPAWN = { x: 0.2, y: BODY_Y, z: FIRING_LINE_Z } as const;
 
 /**
@@ -80,21 +81,20 @@ export class FpsPlayer {
     this.syncCamera();
   }
 
-  /** Camera forward, normalised — the exact axis the rifle traces. */
-  get forward(): { x: number; y: number; z: number } {
-    const cp = Math.cos(this.look.pitch);
-    return {
-      x: -Math.sin(this.look.yaw) * cp,
-      y: Math.sin(this.look.pitch),
-      z: -Math.cos(this.look.yaw) * cp,
-    };
-  }
-
   get eye(): { x: number; y: number; z: number } {
     return {
       x: this.mesh.position.x,
-      y: this.mesh.position.y + EYE_HEIGHT - BODY_Y,
+      y: this.mesh.position.y + scale.eyeHeight - BODY_Y,
       z: this.mesh.position.z,
+    };
+  }
+
+  /** The camera basis is the single source of aim truth, including hit shake. */
+  aimRay(): { origin: Vector3; direction: Vector3 } {
+    this.#camera.updateMatrixWorld(true);
+    return {
+      origin: this.#camera.getWorldPosition(new Vector3()),
+      direction: this.#camera.getWorldDirection(new Vector3()).normalize(),
     };
   }
 
@@ -165,11 +165,15 @@ export class FpsPlayer {
     this.#shake = Math.min(1, this.#shake + 0.55);
   }
 
-  debug(): { health: number; position: number[]; yaw: number } {
+  debug(): { health: number; position: number[]; positionY: number; yaw: number; aimDivergenceDeg: number } {
+    const aim = this.aimRay();
+    const cameraDirection = this.#camera.getWorldDirection(new Vector3()).normalize();
     return {
       health: this.health,
       position: this.mesh.position.toArray(),
+      positionY: this.mesh.position.y,
       yaw: this.look.yaw,
+      aimDivergenceDeg: MathUtils.radToDeg(aim.direction.angleTo(cameraDirection)),
     };
   }
 

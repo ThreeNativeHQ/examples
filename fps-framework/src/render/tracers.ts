@@ -54,15 +54,13 @@ export class Tracers {
     });
   }
 
-  /** Draw one round travelling from `from` to `to`. */
-  spawn(from: Vector3, to: Vector3): void {
+  /** Draw one round travelling from `from` along `direction` for `distance` metres. */
+  spawn(from: Vector3, direction: Vector3, distance: number): void {
     const slot = this.#pool[this.#cursor % this.#pool.length];
     this.#cursor += 1;
     if (slot === undefined) return;
-    this.#direction.subVectors(to, from);
-    const distance = this.#direction.length();
     if (distance < 0.05) return;
-    this.#direction.divideScalar(distance);
+    this.#direction.copy(direction).normalize();
     this.#quaternion.setFromUnitVectors(UP, this.#direction);
     // A short travelling streak reads as a round leaving the barrel. Stretching
     // one cylinder all the way to the target looked like a laser and hid the

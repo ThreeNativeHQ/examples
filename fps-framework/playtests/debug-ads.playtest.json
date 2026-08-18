@@ -11,6 +11,10 @@
   ],
   "assert": {
     "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
-    "resources": [{ "id": "state", "path": "timeRemaining", "changed": true }]
+    "resources": [{ "id": "state", "path": "timeRemaining", "changed": true }],
+    "components": [
+      { "entity": "rifle", "component": "opticScreen", "path": "x", "gte": 0.48, "lte": 0.52, "allowTrivial": true },
+      { "entity": "rifle", "component": "opticScreen", "path": "y", "gte": 0.48, "lte": 0.52, "allowTrivial": true }
+    ]
   }
 }

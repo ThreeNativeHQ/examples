@@ -19,18 +19,15 @@ import { setupPost } from "../render/postprocessing.js";
 import { buildRange, type Range } from "../render/range.js";
 import { setupSky } from "../render/sky.js";
 import { softCircleTexture } from "../render/particles.js";
+import { scale } from "../render/scale.js";
 import { Tracers } from "../render/tracers.js";
-import type { GameState } from "../state.js";
+import { TARGET_GOAL, type GameState } from "../state.js";
 
 export type GameCtx = ICtx<GameState, IPhysicsContext>;
 
 const RUN_SECONDS = 60;
-const TARGET_GOAL = 12;
 const RANGE_METRES = 60;
 const ROUND_DAMAGE = 10;
-/** 4x in the top 12% of a body, 0.7x below a third of it. */
-const HEAD_FRACTION = 0.88;
-const LEG_FRACTION = 1 / 3;
 
 type LoadedModel = { scene: Group; animations: AnimationClip[] };
 
@@ -95,6 +92,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     });
     const range: Range = buildRange(materials);
     ctx.add(range.group);
+    range.targets.forEach((target, index) => {
+      const entity = `target-${index}`;
+      ctx.entities.remove(entity);
+      ctx.entities.add(entity, target);
+    });
 
     // One fixed body per solid so the player slides along the yard properly. These
     // colliders have no visual, so they take a bare `position` and never allocate a
@@ -126,7 +128,17 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     }
     staticBody(0, -0.5, 0, 40, 1, 40);
 
+    const playerSetup = ctx.entities.get<{
+      readonly isObject3D?: boolean;
+      readonly position: Vector3;
+    }>("player");
+    ctx.entities.remove("player");
     const player = new FpsPlayer(ctx, camera);
+    if (playerSetup?.isObject3D === true && playerSetup.position.lengthSq() > 1e-6) {
+      player.mesh.position.copy(playerSetup.position);
+      player.body.teleport(player.mesh.position);
+      player.syncCamera();
+    }
     ctx.entities.add("player", player);
     const rifle = new Rifle(
       camera,
@@ -136,12 +148,22 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     );
     ctx.entities.add("rifle", rifle);
 
+    const enemySetup = ctx.entities.get<{
+      readonly isObject3D?: boolean;
+      readonly position: Vector3;
+    }>("enemy");
+    ctx.entities.remove("enemy");
     const enemy = new Enemy(
+      ctx,
       assets.enemy.scene as Object3D,
       assets.enemy.animations,
       range.colliders,
       assets.weapon.scene as Object3D,
     );
+    if (enemySetup?.isObject3D === true && enemySetup.position.lengthSq() > 1e-6) {
+      enemy.group.position.copy(enemySetup.position);
+      enemy.group.updateWorldMatrix(true, true);
+    }
     ctx.add(enemy.group);
     ctx.entities.add("enemy", enemy);
 
@@ -205,11 +227,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     let hitFlash = 0;
     const eye = new Vector3();
 
-    const fire = (frameCtx: GameCtx): void => {
+    const fire = (frameCtx: GameCtx, aimRay: { origin: Vector3; direction: Vector3 }): void => {
       if (!rifle.fire()) return;
-      const forward = player.forward;
-      eye.set(player.eye.x, player.eye.y, player.eye.z);
-      const direction = new Vector3(forward.x, forward.y, forward.z).normalize();
+      eye.copy(aimRay.origin);
+      const direction = aimRay.direction.clone().normalize();
       const hit = frameCtx.raycast({
         direction,
         far: RANGE_METRES,
@@ -219,12 +240,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       enemy.hearShot(eye.clone());
       // The trail is drawn whether or not the round connects — a miss you cannot see is a
       // miss you cannot correct.
-      const muzzle = rifle.muzzleWorld();
-      const end =
-        hit === undefined
-          ? new Vector3().copy(eye).addScaledVector(direction, RANGE_METRES)
-          : hit.point.clone();
-      playerTracers.spawn(muzzle, end);
+      const barrel = rifle.barrelRay();
+      const distance = hit === undefined ? RANGE_METRES : hit.point.distanceTo(eye);
+      playerTracers.spawn(barrel.origin, barrel.direction, distance);
       if (hit === undefined) return;
 
       const target = hit.object.userData.target as Target | undefined;
@@ -243,8 +261,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       spawnImpact(hit.point, hit.face?.normal ?? new Vector3(0, 1, 0));
       const struck = hit.object.userData.enemy as Enemy | undefined;
       if (struck !== undefined) {
-        const local = (hit.point.y - struck.bodyBase) / struck.bodyHeight;
-        const multiplier = local >= HEAD_FRACTION ? 4 : local < LEG_FRACTION ? 0.7 : 1;
+        const multiplier =
+          hit.point.y >= struck.headZoneMinY ? 4 : hit.point.y < struck.legZoneMaxY ? 0.7 : 1;
+        struck.recordHit(multiplier);
         const earned = struck.hurt(frameCtx, ROUND_DAMAGE * multiplier);
         if (earned > 0) {
           frameCtx.state.set((state) => ({
@@ -267,7 +286,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       map: flashSprite,
       transparent: true,
     });
-    const enemyFlash = new MeshClass(new PlaneGeometry(0.72, 0.72), flashMaterial);
+    const enemyFlash = new MeshClass(
+      new PlaneGeometry(scale.muzzleFlash, scale.muzzleFlash),
+      flashMaterial,
+    );
+    enemyFlash.name = "muzzle-flash";
     enemyFlash.visible = false;
     ctx.add(enemyFlash);
     let enemyFlashLife = 0;
@@ -314,21 +337,16 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const hooks = {
       lineOfSight,
       damagePlayer: (amount: number): void => player.hurt(amount),
-      onMuzzleFlash: (at: Vector3): void => {
-        const forward = new Vector3(
-          Math.sin(enemy.group.rotation.y),
-          0,
-          Math.cos(enemy.group.rotation.y),
-        );
-        enemyFlash.position.copy(at).addScaledVector(forward, 0.22);
+      onMuzzleFlash: (at: Vector3, direction: Vector3, distance: number): void => {
+        enemyFlash.position.copy(at).addScaledVector(direction, 0.22);
         enemyFlash.scale.setScalar(0.85 + ctx.random() * 0.5);
         enemyFlash.rotation.z = ctx.random() * Math.PI;
         enemyFlash.visible = true;
         enemyFlashLife = 0.075;
         enemyLight.position.copy(enemyFlash.position);
         enemyLight.intensity = 26;
-        enemyTracers.spawn(enemyFlash.position, new Vector3(eye.x, eye.y - 0.12, eye.z));
-        spawnSmoke(enemyFlash.position, forward, ctx);
+        enemyTracers.spawn(enemyFlash.position, direction, distance);
+        spawnSmoke(enemyFlash.position, direction, ctx);
       },
     };
 
@@ -386,13 +404,15 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       if (pointer.down && !pointer.captured) frameCtx.input.captureMouse();
 
       player.update(frameCtx, dt, !rifle.reloading);
-      if (frameCtx.input.justPressed("fire")) fire(frameCtx);
-      if (frameCtx.input.justPressed("reload")) rifle.reload(frameCtx);
       const moveVector = frameCtx.input.vector("move");
+      const aimRay = player.aimRay();
+      rifle.converge(aimRay.origin, aimRay.direction);
       rifle.update(dt, player.aiming, Math.min(1, Math.hypot(moveVector.x, moveVector.y)));
+      if (frameCtx.input.justPressed("fire")) fire(frameCtx, aimRay);
+      if (frameCtx.input.justPressed("reload")) rifle.reload(frameCtx);
 
       eye.set(player.eye.x, player.eye.y, player.eye.z);
-      enemy.update(frameCtx, dt, eye, hooks);
+      enemy.update(frameCtx, dt, eye, 0, hooks);
 
       const hitCount = frameCtx.state.getState().targetsHit;
       let phase: GameState["phase"] = "playing";

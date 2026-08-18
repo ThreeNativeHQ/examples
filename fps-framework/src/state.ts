@@ -12,3 +12,6 @@ export type GameState = {
   targetsHit: number;
   timeRemaining: number;
 };
+
+/** Shared objective contract for the scene and the HUD. */
+export const TARGET_GOAL = 12;

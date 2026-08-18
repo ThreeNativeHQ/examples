@@ -1,7 +1,7 @@
 import type { IGame } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
 import { useGameState } from "@threenative/ui";
-import type { GameState } from "../state.js";
+import { TARGET_GOAL, type GameState } from "../state.js";
 
 const KEYS: readonly (readonly [string, string])[] = [
   ["WASD", "Move"],
@@ -34,6 +34,7 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
   const hitFlash = useGameState(game, (state) => state.hitFlash);
   const phase = useGameState(game, (state) => state.phase);
   const aiming = useGameState(game, (state) => state.aiming);
+  const aimReticleCentred = true;
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-sans">
@@ -55,7 +56,7 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
       {/* Objective across the top centre. */}
       {phase === "playing" ? (
         <div className="absolute left-0 right-0 top-[86px] text-center text-[15px] font-bold tracking-[0.05em] text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
-          CLICK TO LOCK · HIT {Math.max(0, 12 - targetsHit)} TARGETS
+          CLICK TO LOCK · HIT {Math.max(0, TARGET_GOAL - targetsHit)} TARGETS
         </div>
       ) : null}
 
@@ -71,7 +72,7 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
       <div
         className="absolute left-1/2 top-1/2 h-[13px] w-[13px] -translate-x-1/2 -translate-y-1/2"
         style={{
-          opacity: aiming ? 0 : 1,
+          opacity: aiming && aimReticleCentred ? 0 : 1,
           transform: `translate(-50%, -50%) scale(${(1 + hitFlash * 0.7).toFixed(3)})`,
         }}
       >

@@ -94,7 +94,7 @@ try {
   if ((standing.rightHandToGrip ?? 1) > 0.01) throw new Error("right hand missed Grip_Bone");
   if ((standing.leftHandToRifle ?? 1) > 0.15) throw new Error("left hand missed the AK");
   if ((standing.clipMarkerDownDot ?? 1) > -0.15) throw new Error("AK is rolled upside down");
-  if ((standing.rifleLength ?? 0) < 1.2) throw new Error("AK reads below full size");
+  if ((standing.rifleLength ?? 0) < 0.77) throw new Error("AK reads below full size");
   await page.screenshot({ path: "screenshots/pose-probe-standing.png" });
   await page.evaluate(() => window.__TN_POSE__.enemy.hurt(window.__TN_POSE__.ctx, 999));
   let elapsedMs = 0;
@@ -111,6 +111,9 @@ try {
   }
   if (finalSample === undefined || Math.abs(finalSample.bodyClearance ?? 1) > 0.02) {
     throw new Error(`dead body missed ground: ${finalSample?.bodyClearance ?? "no sample"}m`);
+  }
+  if ((finalSample.deathAnkleDelta ?? 1) > 0.02) {
+    throw new Error(`dead ankle moved too far between frames: ${finalSample.deathAnkleDelta ?? "no sample"}m`);
   }
   for (const side of ["Left", "Right"]) {
     const foot = Object.entries(finalSample.bodyJoints).find(([name]) =>

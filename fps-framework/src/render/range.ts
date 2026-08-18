@@ -17,6 +17,7 @@ import {
 } from "three";
 import { Target, type TargetSpec } from "../entities/Target.js";
 import { type RangeMaterials, tiled } from "./materials.js";
+import { scale } from "./scale.js";
 
 export const YARD = 34;
 export const WALL_HEIGHT = 5.5;
@@ -39,36 +40,66 @@ const TARGETS: readonly TargetSpec[] = [
   {
     position: { x: -11.7, y: 2.68, z: -1.0 },
     value: 150,
-    width: 1.6,
-    height: 2.05,
+    width: scale.targets.wideWidth,
+    height: scale.targets.tallHeight,
     standing: false,
   },
   {
     position: { x: 0.2, y: 1.95, z: -2.6 },
     value: 100,
-    width: 1.05,
-    height: 1.85,
+    width: scale.targets.standardWidth,
+    height: scale.targets.highHeight,
   },
   {
     position: { x: 2.5, y: 3.65, z: -8.4 },
     value: 250,
-    width: 0.9,
-    height: 1.15,
+    width: scale.targets.narrowWidth,
+    height: scale.targets.shortHeight,
     standing: false,
   },
   {
     position: { x: 8.9, y: 4.6, z: -5.8 },
     value: 300,
-    width: 1.3,
-    height: 1.7,
+    width: scale.targets.standardWidth,
+    height: scale.targets.almostHighHeight,
     standing: false,
   },
-  { position: { x: -1.0, y: 0.85, z: -1.5 }, value: 150, width: 1.4, height: 1.0 },
-  { position: { x: 13.0, y: 1.2, z: 3.0 }, value: 250, width: 1.0, height: 1.45 },
-  { position: { x: 6.4, y: 1.2, z: -6.2 }, value: 250, width: 1.0, height: 1.45 },
-  { position: { x: 13.5, y: 1.2, z: 3.0 }, value: 300, width: 1.4, height: 1.45 },
-  { position: { x: -11.4, y: 0.7, z: 0.6 }, value: 150, width: 1.4, height: 0.8 },
-  { position: { x: 8.0, y: 1.2, z: -5.8 }, value: 100, width: 1.15, height: 1.6 },
+  {
+    position: { x: -1.0, y: 0.85, z: -1.5 },
+    value: 150,
+    width: scale.targets.standardWidth,
+    height: scale.targets.halfHeight,
+  },
+  {
+    position: { x: 13.0, y: 1.2, z: 3.0 },
+    value: 250,
+    width: scale.targets.standardWidth,
+    height: scale.targets.lowHeight,
+  },
+  {
+    position: { x: 6.4, y: 1.2, z: -6.2 },
+    value: 250,
+    width: scale.targets.standardWidth,
+    height: scale.targets.lowHeight,
+  },
+  {
+    position: { x: 13.5, y: 1.2, z: 3.0 },
+    value: 300,
+    width: scale.targets.extraWideWidth,
+    height: scale.targets.lowHeight,
+  },
+  {
+    position: { x: -11.4, y: 0.7, z: 0.6 },
+    value: 150,
+    width: scale.targets.extraWideWidth,
+    height: scale.targets.quarterHeight,
+  },
+  {
+    position: { x: 8.0, y: 1.2, z: -5.8 },
+    value: 100,
+    width: scale.targets.standardWidth,
+    height: scale.targets.mediumHeight,
+  },
 ];
 
 function addBox(
@@ -178,7 +209,16 @@ export function buildRange(materials: RangeMaterials): Range {
   // Round barrier, left of the lane: an open concrete drum the player can shoot over.
   const drumMap = tiled((materials.floor as MeshStandardMaterial).map as Texture, 9);
   const drum = new Mesh(
-    new CylinderGeometry(3.7, 3.7, 1.55, 40, 1, true, Math.PI * 0.15, Math.PI * 1.7),
+    new CylinderGeometry(
+      scale.drum.radius,
+      scale.drum.radius,
+      scale.drum.height,
+      40,
+      1,
+      true,
+      Math.PI * 0.15,
+      Math.PI * 1.7,
+    ),
     new MeshStandardMaterial({
       color: 0xffffff,
       emissive: 0x1c1e1f,
@@ -188,36 +228,66 @@ export function buildRange(materials: RangeMaterials): Range {
     }),
   );
   drum.name = "drum";
-  drum.position.set(-11.4, 0.78, 0.6);
+  drum.position.set(-11.4, scale.drum.height / 2 + scale.ankleHeight * 0.5, 0.6);
   drum.castShadow = true;
   drum.receiveShadow = true;
   group.add(drum);
   hittable.push(drum);
-  colliders.push({ min: [-15.1, 0, -3.1], max: [-7.7, 1.55, 4.3] });
+  // The visual is an open arc, so its collision must be an arc too. The old enclosing box
+  // turned the drum's empty centre into an invisible solid that both the player and the enemy
+  // could never enter.
+  const drumCentreX = -11.4;
+  const drumCentreZ = 0.6;
+  const arcStart = Math.PI * 0.15;
+  const arcSpan = Math.PI * 1.7;
+  for (let index = 0; index < 22; index += 1) {
+    const angle = arcStart + (arcSpan * (index + 0.5)) / 22;
+    const x = drumCentreX + Math.cos(angle) * scale.drum.radius;
+    const z = drumCentreZ + Math.sin(angle) * scale.drum.radius;
+    const thickness = scale.ankleHeight * 18;
+    colliders.push({
+      min: [x - thickness, 0, z - thickness],
+      max: [x + thickness, scale.drum.height, z + thickness],
+    });
+  }
 
   // Concrete barricades down the centre lane.
-  addBox(group, colliders, materials.concrete, [4.15, 1.5, 1.5], [0.2, 0.75, 0.3], {
+  addBox(
+    group,
+    colliders,
+    materials.concrete,
+    [scale.silhouette.width * 8.3, scale.humanHeight * 0.84, scale.barricade.depth],
+    [0.2, scale.humanHeight * 0.42, 0.3],
+    {
     hittable,
     name: "barricade",
-  });
-  addBox(group, colliders, materials.concrete, [4.4, 1.1, 1.2], [2.6, 0.55, -4.6], {
+    },
+  );
+  addBox(
+    group,
+    colliders,
+    materials.concrete,
+    [scale.silhouette.width * 8.8, scale.humanHeight * 0.62, scale.barricade.depth],
+    [2.6, scale.humanHeight * 0.31, -4.6],
+    {
     hittable,
     name: "barricade",
-  });
+    },
+  );
 
   // Two dark lockers, right of centre.
-  addBox(group, colliders, materials.block, [1.5, 2.5, 0.95], [6.4, 1.25, -5.4], {
+  addBox(group, colliders, materials.block, [scale.locker.width, scale.locker.height, scale.locker.depth], [6.4, scale.locker.height / 2, -5.4], {
     hittable,
     name: "locker",
   });
-  addBox(group, colliders, materials.block, [1.5, 2.5, 0.95], [8.0, 1.25, -5.4], {
+  addBox(group, colliders, materials.block, [scale.locker.width, scale.locker.height, scale.locker.depth], [8.0, scale.locker.height / 2, -5.4], {
     hittable,
     name: "locker",
   });
 
   // Raised walkway on the right, with a ramp up to it from the firing side.
-  const deckY = 3.5;
-  addBox(group, colliders, materials.block, [9.4, 0.36, 5.6], [11.6, deckY, -8.6], {
+  const deckY = scale.walkwaySurface - scale.walkway.thickness / 2;
+  addBox(group, colliders, materials.block, [scale.walkway.width, scale.walkway.thickness, scale.walkway.depth], [11.6, deckY, -8.6], {
     hittable,
     name: "walkway-deck",
   });
@@ -234,14 +304,29 @@ export function buildRange(materials: RangeMaterials): Range {
   rail.position.set(11.6, deckY + 1.05, -5.9);
   rail.castShadow = true;
   group.add(rail);
-  const ramp = new Mesh(new BoxGeometry(2.6, 0.3, 7.4), materials.concrete);
+  const ramp = new Mesh(new BoxGeometry(scale.ramp.width, scale.ramp.length * 0.04, scale.ramp.length), materials.concrete);
   ramp.name = "ramp";
-  ramp.position.set(11.6, deckY / 2 - 0.2, -2.1);
-  ramp.rotation.x = -Math.atan2(deckY - 0.2, 7.0);
+  ramp.position.set(11.6, scale.walkwaySurface / 2 - scale.ramp.length * 0.04 / 2, -2.1);
+  ramp.rotation.x = -Math.atan2(scale.walkwaySurface - scale.ankleHeight * 10, scale.ramp.length - scale.ankleHeight * 20);
   ramp.castShadow = true;
   ramp.receiveShadow = true;
   group.add(ramp);
   hittable.push(ramp);
+
+  // A stepped proxy gives CharacterBody3D a climbable surface. The sloped render mesh alone is
+  // not a collider, and one rotated box makes the player either float or fail autostep.
+  const rampStartZ = 1.6;
+  const rampEndZ = rampStartZ - scale.ramp.length;
+  for (let index = 0; index < scale.ramp.steps; index += 1) {
+    const progress = (index + 0.5) / scale.ramp.steps;
+    const height = scale.walkwaySurface * progress;
+    const depth = scale.ramp.length / scale.ramp.steps + scale.ankleHeight * 1.5;
+    const centreZ = rampStartZ - scale.ramp.length * progress;
+    colliders.push({
+      min: [11.6 - scale.ramp.width / 2, 0, centreZ - depth / 2],
+      max: [11.6 + scale.ramp.width / 2, height, centreZ + depth / 2],
+    });
+  }
 
   // Solid dark blocks: one hard right, one squat pair mid-right.
   addBox(group, colliders, materials.block, [4.2, 3.2, 4.2], [14.4, 1.6, 1.6], {

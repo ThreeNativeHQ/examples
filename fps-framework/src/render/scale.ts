@@ -8,6 +8,8 @@
 // This file is why the 2.68 m soldier, the 1.19 m AK and the 1.43 m viewmodel cannot
 // come back: there is no second place to write a size.
 
+import { Box3, type Object3D, Vector3 } from "three";
+
 /** Real-world sizes, in metres. */
 export const scale = {
   /** Adult soldier, boots to head-top. */
@@ -22,6 +24,21 @@ export const scale = {
   rifleLength: 0.88,
   /** Man-size range silhouette. */
   silhouette: { width: 0.5, height: 1.8 },
+  /** Plate dimensions used by every target in the range. */
+  targets: {
+    wideWidth: 0.625,
+    standardWidth: 0.5,
+    narrowWidth: 0.45,
+    extraWideWidth: 0.55,
+    tallHeight: 1.8,
+    highHeight: 1.62,
+    almostHighHeight: 1.584,
+    mediumHeight: 1.548,
+    lowHeight: 1.44,
+    shortHeight: 1.152,
+    halfHeight: 1.008,
+    quarterHeight: 0.81,
+  },
   /** Steel personnel locker. */
   locker: { width: 0.9, height: 1.85, depth: 0.5 },
   /** Jersey-type concrete barricade. */
@@ -32,7 +49,44 @@ export const scale = {
   handrailHeight: 1.0,
   /** Visible muzzle flame. */
   muzzleFlash: 0.3,
+  /** Small sole-to-ankle allowance used by the grounding solver. */
+  ankleHeight: 0.02,
+  /** Radius used to turn the head bone centre into a hit-zone boundary. */
+  headRadius: 0.11,
+  /** Fallback leg-zone fraction for rigs without named knee bones. */
+  legZoneFraction: 0.36,
+  /** Walking surface at the top of the raised range walkway. */
+  walkwaySurface: 3.68,
+  /** Raised walkway and ramp envelope. */
+  walkway: { width: 9.4, depth: 5.6, thickness: 0.36 },
+  ramp: { width: 2.6, length: 7.4, steps: 24 },
+  /** Open drum dimensions used by the range shell and its arc colliders. */
+  drum: { radius: 3.7, height: 1.55 },
 } as const;
+
+/** Scale an object from a measured bone or bounding-box height to a world-space height. */
+export function normaliseHeight(object: Object3D, metres: number, top?: Object3D): number {
+  object.updateWorldMatrix(true, true);
+  const origin = object.getWorldPosition(new Vector3());
+  const measuredTop = top?.getWorldPosition(new Vector3()).y;
+  const bounds = measuredTop === undefined ? new Box3().setFromObject(object) : undefined;
+  const current = measuredTop === undefined ? bounds?.getSize(new Vector3()).y ?? 0 : measuredTop - origin.y;
+  const factor = current > 0 ? metres / current : 1;
+  object.scale.multiplyScalar(factor);
+  object.updateWorldMatrix(true, true);
+  return factor;
+}
+
+/** Scale an asset's longest measured world-space axis to a real-world length. */
+export function normaliseLongestAxis(object: Object3D, metres: number): number {
+  object.updateWorldMatrix(true, true);
+  const size = new Box3().setFromObject(object).getSize(new Vector3());
+  const current = Math.max(size.x, size.y, size.z);
+  const factor = current > 0 ? metres / current : 1;
+  object.scale.multiplyScalar(factor);
+  object.updateWorldMatrix(true, true);
+  return factor;
+}
 
 /** Which measured dimension a check reads. */
 export type SizeAxis = "height" | "width" | "depth" | "longest";

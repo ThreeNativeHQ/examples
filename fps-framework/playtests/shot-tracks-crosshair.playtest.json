@@ -1,0 +1,19 @@
+{
+  "name": "shot-tracks-crosshair",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 30,
+  "subject": "player",
+  "steps": [
+    { "kind": "input", "label": "damage-and-aim", "press": "KeyF", "holdTicks": 30, "release": false },
+    { "kind": "wait", "label": "settled-aim", "waitTicks": 30, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
+    "components": [
+      { "entity": "rifle", "component": "barrelAxisErrorDeg", "lte": 1, "allowTrivial": true },
+      { "entity": "player", "component": "aimDivergenceDeg", "lte": 0.05, "allowTrivial": true }
+    ]
+  }
+}

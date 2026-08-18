@@ -177,7 +177,7 @@ try {
         flash === undefined &&
         object.geometry?.type === "PlaneGeometry" &&
         object.material?.blending === THREE.AdditiveBlending &&
-        object.geometry.parameters.width > 0.4
+        (object.name === "muzzle-flash" || object.geometry.parameters.width > 0.4)
       ) {
         flash = object;
       }

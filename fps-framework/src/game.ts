@@ -1,10 +1,37 @@
-import { defineGame, replay } from "@threenative/core";
+import { defineGame, replay, type ICtx, type IGamePluginRuntime } from "@threenative/core";
 import { playtest } from "@threenative/core/playtest";
 import type { IPhysicsContext } from "@threenative/physics";
 import { rapier } from "@threenative/physics";
+import { Object3D } from "three";
 import config from "../threenative.config.js";
 import { Play } from "./scenes/Play.js";
 import type { GameState } from "./state.js";
+
+type GameCtx = ICtx<GameState, IPhysicsContext>;
+
+// Entity-derived component keys do not exist until Play.enter() finishes. Advertising the
+// already-provided runtime observation here keeps the runner from rejecting a component scenario
+// during the asset-loading window; the actual values still come from ctx.entities.snapshot().
+const componentObservationCapability = {
+  setup(_ctx: GameCtx, runtime?: IGamePluginRuntime) {
+    return runtime?.observations.contribute({
+      capabilities: ["runtime.components"],
+      sample: () => ({}),
+    });
+  },
+};
+
+const scenarioSetupPlaceholders = {
+  setup(ctx: GameCtx) {
+    // Scenario setup is delivered before the async scene load finishes. These non-rendered
+    // objects give the bridge a stable transform target; Play.enter() transfers the values to
+    // the real entities and removes the placeholders before the first sample.
+    for (const id of ["player", "enemy"] as const) {
+      if (ctx.entities.get(id) === undefined) ctx.entities.add(id, new Object3D());
+    }
+    return undefined;
+  },
+};
 
 // game.state is the single store: the fixed-step loop writes it, and React/playtests read it.
 const game = defineGame<GameState, IPhysicsContext>({
@@ -26,7 +53,7 @@ const game = defineGame<GameState, IPhysicsContext>({
     aim: { keys: ["KeyF", "ControlLeft"], mouseButtons: [2] },
     restart: { keys: ["Enter", "NumpadEnter"] },
   },
-  plugins: [rapier(), replay(), playtest()],
+  plugins: [rapier(), replay(), scenarioSetupPlaceholders, componentObservationCapability, playtest()],
   render: config.renderer,
   renderer: { antialias: false },
   scenes: { play: Play },

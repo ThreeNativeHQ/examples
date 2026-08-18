@@ -1,5 +1,5 @@
 import { AnimationPlayer, type ICtx } from "@threenative/core";
-import type { IPhysicsContext } from "@threenative/physics";
+import { CharacterBody3D, CollisionShape3D, type IPhysicsContext } from "@threenative/physics";
 import { measureThreePose } from "@threenative/playtest/three";
 import {
   type AnimationClip,
@@ -14,6 +14,7 @@ import {
   Vector3,
 } from "three";
 import type { BoxCollider } from "../render/range.js";
+import { normaliseHeight, normaliseLongestAxis, scale } from "../render/scale.js";
 import type { GameState } from "../state.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
@@ -21,7 +22,6 @@ type GameCtx = ICtx<GameState, IPhysicsContext>;
 export type EnemyPhase = "patrol" | "suspicious" | "engage" | "search" | "return" | "dead";
 
 const MAX_HEALTH = 36;
-const BODY_HEIGHT = 1.8;
 const WALK_SPEED = 2.4;
 const CHASE_SPEED = 3.6;
 const HEAR_RANGE = 26;
@@ -40,25 +40,110 @@ const NAV_MAX = 16;
 const NAV_REPLAN_SECONDS = 0.4;
 /** Seconds between first sighting and the first round, so the player is not shot on sight. */
 const REACTION_SECONDS = 0.45;
-/** Presentation length: large enough to read across the animated two-hand stance. */
-const RIFLE_LENGTH = 1.25;
-const DEATH_SETTLE_SECONDS = 3.3;
-const DEAD_ANKLE_HEIGHT = 0.32;
-
+const SPAWN_GRACE_SECONDS = 2.5;
 const ROUTE: readonly Vector3[] = [
   new Vector3(-4.5, 0, -9.5),
   new Vector3(-11.5, 0, -13.0),
   new Vector3(-1.0, 0, -15.0),
   new Vector3(4.5, 0, -11.0),
+  new Vector3(11.6, 0, -8.6),
   new Vector3(1.5, 0, -6.5),
   new Vector3(-6.0, 0, -4.5),
 ];
+const ROUTE_START = ROUTE[0] ?? new Vector3();
+
+type WeaponPose = {
+  readonly position: readonly [number, number, number];
+  readonly rotation: readonly [number, number, number];
+  readonly scale: readonly [number, number, number];
+};
+
+type WeaponKeyframe = { readonly time: number; readonly transform: WeaponPose };
+type WeaponTrack = {
+  readonly attachment: "attached" | "detached";
+  readonly keyframes: readonly WeaponKeyframe[];
+};
+type WeaponRecipe = {
+  readonly animations: Record<string, WeaponKeyframe | WeaponTrack>;
+  readonly version: 2 | 3;
+};
+const weaponPose = (
+  position: readonly [number, number, number],
+  rotation: readonly [number, number, number],
+  attachment: "attached" | "detached" = "attached",
+): WeaponTrack => ({
+  attachment,
+  keyframes: [{ time: 0, transform: { position, rotation, scale: [1, 1, 1] } }],
+});
+const ENEMY_AK47_RECIPE: WeaponRecipe = {
+  version: 3,
+  animations: {
+    RifleIdle: weaponPose([188.2202, 439.6458, 144.7051], [-111.181, -29.47, -46.122]),
+    RifleWalk: weaponPose([-11.9183, 294.5358, 104.4656], [-99.046, -14.191, -103.546]),
+    RifleCrouchWalk: weaponPose([-23.3305, 274.7849, 53.6152], [-106.891, -21.763, -115.469]),
+    RifleCrouchWalkToIdle: weaponPose(
+      [-23.3305, 274.7849, 53.6152],
+      [-106.673, -21.153, -114.665],
+    ),
+    HitReaction: weaponPose([-23.3305, 274.7849, 53.6152], [-91.054, -11.075, -93.276]),
+    DeathFront: weaponPose(
+      [-23.3305, 274.7849, 53.6152],
+      [-91.054, -11.075, -93.276],
+      "detached",
+    ),
+    DeathBack: weaponPose(
+      [-23.3305, 274.7849, 53.6152],
+      [-91.054, -11.075, -93.276],
+      "detached",
+    ),
+    DeathHeadshot: weaponPose(
+      [-23.3305, 274.7849, 53.6152],
+      [-91.054, -11.075, -93.276],
+      "detached",
+    ),
+    FiringRifle: weaponPose([-23.3305, 274.7849, 53.6152], [-95.123, -0.777, -94.787]),
+  },
+};
+
+function weaponTrack(animation: string): WeaponTrack | undefined {
+  const value = ENEMY_AK47_RECIPE.animations[animation];
+  if (value === undefined) return undefined;
+  if (ENEMY_AK47_RECIPE.version === 3 && "keyframes" in value) return value;
+  if (!("transform" in value)) return undefined;
+  return { attachment: "attached", keyframes: [value] };
+}
+
+function interpolateWeaponPose(track: WeaponTrack, time: number): WeaponPose | undefined {
+  const frames = [...track.keyframes].sort((a, b) => a.time - b.time);
+  const first = frames[0];
+  if (first === undefined) return undefined;
+  const last = frames.at(-1) ?? first;
+  if (time <= first.time) return first.transform;
+  if (time >= last.time) return last.transform;
+  const right = frames.find((frame) => frame.time >= time) ?? last;
+  const left = frames[Math.max(0, frames.indexOf(right) - 1)] ?? first;
+  const alpha = (time - left.time) / Math.max(1e-6, right.time - left.time);
+  const mix = (a: number, b: number): number => MathUtils.lerp(a, b, alpha);
+  const angle = (a: number, b: number): number =>
+    a + ((((b - a + 540) % 360) - 180) * alpha);
+  return {
+    position: left.transform.position.map((value, index) =>
+      mix(value, right.transform.position[index] ?? value),
+    ) as [number, number, number],
+    rotation: left.transform.rotation.map((value, index) =>
+      angle(value, right.transform.rotation[index] ?? value),
+    ) as [number, number, number],
+    scale: left.transform.scale.map((value, index) =>
+      mix(value, right.transform.scale[index] ?? value),
+    ) as [number, number, number],
+  };
+}
 
 export type EnemyHooks = {
   /** True when nothing in the yard blocks the segment. */
   readonly lineOfSight: (from: Vector3, to: Vector3) => boolean;
   readonly damagePlayer: (amount: number) => void;
-  readonly onMuzzleFlash: (at: Vector3) => void;
+  readonly onMuzzleFlash: (at: Vector3, direction: Vector3, distance: number) => void;
 };
 
 /** First bone whose name matches, for models that do not use the Mixamo naming. */
@@ -78,6 +163,8 @@ export class Enemy {
   wounded = false;
   #animation: AnimationPlayer | undefined;
   #clips: ReadonlySet<string>;
+  #clipDurations = new Map<string, number>();
+  #weaponPoseElapsed = 0;
   #routeIndex = 0;
   #target = new Vector3();
   #lastSeen = new Vector3();
@@ -88,17 +175,33 @@ export class Enemy {
   #strafe = 1;
   #strafeTimer = 0;
   #deadFor = 0;
-  #deathGrounded = false;
+  #deathSettleReady = false;
+  #fade = 1;
   #bodyClearance: number | null = null;
+  #footClearance: number | null = null;
+  #deathObserved = false;
+  #deathAnkleDelta = 0;
+  #lastAnkles: [number, number] | null = null;
+  #lastHitMultiplier = 1;
+  #modelHeightMeasured: number = scale.humanHeight;
+  #hitboxWidth: number = scale.shoulderWidth;
+  #hitboxHeight: number = scale.humanHeight;
+  #hitboxDepth: number = scale.bodyDepth;
   #crown: Object3D | undefined;
+  #head: Object3D | undefined;
+  #leftKnee: Object3D | undefined;
+  #rightKnee: Object3D | undefined;
   #colliders: readonly BoxCollider[];
   #bodyMeshes: Object3D[] = [];
   #poseBones: Object3D[] = [];
+  #bodyProxy: Object3D | undefined;
+  #body: CharacterBody3D | undefined;
   #weapon: Object3D | undefined;
   #weaponModel: Object3D | undefined;
-  #weaponBaseRotation = new Quaternion();
-  #rifleLocalMinZ = -RIFLE_LENGTH * 0.35;
-  #rifleLocalMaxZ = RIFLE_LENGTH * 0.65;
+  #weaponDetached = false;
+  #weaponVelocity = new Vector3();
+  #rifleLocalMinZ = -scale.rifleLength * 0.35;
+  #rifleLocalMaxZ = scale.rifleLength * 0.65;
   #rightHand: Object3D | undefined;
   #leftHand: Object3D | undefined;
   #grip: Object3D | undefined;
@@ -114,18 +217,31 @@ export class Enemy {
   /** Cached A* route. Dynamic combat goals are replanned without changing direction every frame. */
   #path: Vector3[] = [];
   #pathIndex = 0;
-  #pathGoal = new Vector3(Number.POSITIVE_INFINITY, 0, Number.POSITIVE_INFINITY);
+  #pathGoal = ROUTE_START.clone();
   #replanIn = 0;
   #searchAtGoal = 0;
   #patrolPause = 0;
+  #spawnGrace = SPAWN_GRACE_SECONDS;
 
   constructor(
+    ctx: GameCtx,
     model: Object3D,
     clips: readonly AnimationClip[],
     colliders: readonly BoxCollider[],
     weapon?: Object3D,
   ) {
     this.#colliders = colliders;
+    model.removeFromParent();
+    model.position.set(0, 0, 0);
+    model.rotation.set(0, 0, 0);
+    model.scale.setScalar(1);
+    model.updateWorldMatrix(false, true);
+    this.#crown =
+      findBone(model, /headtop|head_end|head.*end/i) ?? findBone(model, /head/i);
+    this.#head = findBone(model, /mixamorigHead$|^head$/i) ?? findBone(model, /head/i);
+    this.#leftKnee = findBone(model, /left.*leg|left.*knee/i);
+    this.#rightKnee = findBone(model, /right.*leg|right.*knee/i);
+    normaliseHeight(model, scale.humanHeight, this.#crown);
     model.traverse((object) => {
       if (/hips|upleg|leg|foot|toe|head/i.test(object.name)) this.#poseBones.push(object);
       const mesh = object as Mesh;
@@ -142,7 +258,7 @@ export class Enemy {
     this.group.add(model);
     if (weapon !== undefined) this.#equip(model, weapon);
     this.group.name = "enemy";
-    this.group.position.copy(ROUTE[0] as Vector3);
+    this.group.position.copy(ROUTE_START);
     this.#target.copy(ROUTE[1] as Vector3);
     this.#routeIndex = 1;
     this.group.rotation.y = Math.atan2(
@@ -152,15 +268,37 @@ export class Enemy {
 
     // Skinned meshes are the slow path for picking, so the rifle traces a plain
     // box proxy that follows the body. Invisible, but still raycastable.
+    this.#modelHeightMeasured = this.modelHeight || scale.humanHeight;
+    const bodyPose = measureThreePose(this.group, { bounds: this.#bodyMeshes });
+    const bodySize = bodyPose.bounds?.size ?? [scale.shoulderWidth, scale.humanHeight, scale.bodyDepth];
+    this.#hitboxWidth = Math.max(scale.shoulderWidth, bodySize[0] * 1.08);
+    this.#hitboxHeight = this.#modelHeightMeasured;
+    this.#hitboxDepth = Math.max(scale.bodyDepth, bodySize[2] * 1.08);
     this.hitbox = new Mesh(
-      new BoxGeometry(0.62, BODY_HEIGHT, 0.44),
+      new BoxGeometry(this.#hitboxWidth, this.#hitboxHeight, this.#hitboxDepth),
       new MeshBasicMaterial({ visible: false }),
     );
-    this.hitbox.position.y = BODY_HEIGHT / 2;
+    this.hitbox.position.y = this.#hitboxHeight / 2;
     this.hitbox.userData.enemy = this;
     this.group.add(this.hitbox);
 
+    const bodyProxy = new Group();
+    bodyProxy.name = "enemy-body";
+    ctx.add(bodyProxy);
+    this.#bodyProxy = bodyProxy;
+    this.#body = new CharacterBody3D({
+      physics: ctx.physics,
+      object: bodyProxy,
+      entity: "enemy-body",
+      shape: CollisionShape3D.box(this.#hitboxWidth, this.#hitboxHeight, this.#hitboxDepth),
+      gravity: 0,
+      collisionLayer: 2,
+      collisionMask: 1,
+    });
+    this.#syncCollisionBody();
+
     this.#clips = new Set(clips.map((clip) => clip.name));
+    this.#clipDurations = new Map(clips.map((clip) => [clip.name, clip.duration]));
     if (clips.length > 0) {
       this.#animation = new AnimationPlayer({ clips, root: this.group });
       this.#play("RifleWalk");
@@ -173,7 +311,11 @@ export class Enemy {
 
   /** Chest height, used as the eye and muzzle origin. */
   get chest(): Vector3 {
-    return new Vector3(this.group.position.x, this.group.position.y + 1.42, this.group.position.z);
+    return new Vector3(
+      this.group.position.x,
+      this.group.position.y + this.bodyHeight * 0.8,
+      this.group.position.z,
+    );
   }
 
   /**
@@ -199,7 +341,21 @@ export class Enemy {
   }
 
   get bodyHeight(): number {
-    return BODY_HEIGHT;
+    return this.modelHeight || this.#modelHeightMeasured;
+  }
+
+  get headZoneMinY(): number {
+    const head = this.#head?.getWorldPosition(new Vector3());
+    return (head?.y ?? this.bodyBase + this.bodyHeight) - scale.headRadius;
+  }
+
+  get legZoneMaxY(): number {
+    const left = this.#leftKnee?.getWorldPosition(new Vector3()).y;
+    const right = this.#rightKnee?.getWorldPosition(new Vector3()).y;
+    const knees = [left, right].filter((value): value is number => value !== undefined);
+    return knees.length > 0
+      ? Math.max(...knees)
+      : this.bodyBase + this.bodyHeight * scale.legZoneFraction;
   }
 
   /**
@@ -228,13 +384,7 @@ export class Enemy {
     weapon.scale.setScalar(1);
     weapon.updateWorldMatrix(false, true);
 
-    // The rifle is authored in centimetres — its raw bounds are 8 x 30 x 112 — so it has to be
-    // normalised to a readable weapon length before attaching it to the hand.
     const bounds = new Box3().setFromObject(weapon);
-    const size = new Vector3();
-    bounds.getSize(size);
-    const longest = Math.max(size.x, size.y, size.z);
-    const normalise = longest > 0 ? RIFLE_LENGTH / longest : 1;
 
     const hand =
       model.getObjectByName("mixamorigRightHand") ??
@@ -263,65 +413,133 @@ export class Enemy {
         this.#weaponNodes.push(object.name);
       }
     });
-    if (grip !== undefined) {
-      weapon.updateWorldMatrix(false, true);
-      const gripPosition = new Vector3().setFromMatrixPosition(grip.matrixWorld);
-      this.#rifleLocalMinZ = bounds.min.z - gripPosition.z;
-      this.#rifleLocalMaxZ = bounds.max.z - gripPosition.z;
-      weapon.position.sub(gripPosition);
-    }
+    this.#rifleLocalMinZ = bounds.min.z;
+    this.#rifleLocalMaxZ = bounds.max.z;
 
     if (hand === undefined) {
-      holder.scale.setScalar(normalise);
       holder.position.set(0.16, 1.24, 0.16);
       holder.rotation.set(0, Math.PI / 2, 0);
       this.group.add(holder);
       this.#weapon = holder;
+      normaliseLongestAxis(holder, scale.rifleLength);
       this.#renderedRifleLength = this.#measureRenderedWeapon(weapon);
       return;
     }
-    // The hand bone carries the model's own scale; undo it so the normalised size survives.
-    const handScale = new Vector3();
-    hand.getWorldScale(handScale);
-    const inverse = handScale.x === 0 ? 1 : 1 / handScale.x;
-    holder.scale.setScalar(normalise * inverse);
-    // This rig's hand axes are not documented. Roll the AK so its receiver sits above the
-    // hands in the real rendered close-up; `Clip_Bone` points opposite the visible magazine,
-    // so treating that marker as "down" produced the upside-down toy pose.
-    holder.rotation.set(-Math.PI / 2, 0, -Math.PI / 2);
-    this.#weaponBaseRotation.copy(holder.quaternion);
-    holder.position.set(0, 0, 0);
     hand.add(holder);
     this.#weapon = holder;
+    this.#applyWeaponPose("RifleWalk");
+    normaliseLongestAxis(holder, scale.rifleLength);
     this.#renderedRifleLength = this.#measureRenderedWeapon(weapon);
   }
 
-  /**
-   * Keep the support hand on the fore-end while the right hand remains locked to Grip_Bone.
-   * A single-bone attachment only constrains the grip position; the rifle may still rotate
-   * around that point and miss the authored left-hand pose by nearly half a metre.
-   */
-  #alignWeaponToHands(): void {
+  #applyWeaponPose(animation: string): void {
     const holder = this.#weapon;
-    const hand = this.#rightHand;
-    const supportHand = this.#leftHand;
-    if (holder === undefined || hand === undefined || supportHand === undefined) return;
-
-    hand.updateWorldMatrix(true, false);
-    supportHand.updateWorldMatrix(true, false);
-    const supportInHand = hand.worldToLocal(supportHand.getWorldPosition(new Vector3()));
-    if (supportInHand.lengthSq() < 1e-6) return;
-
-    const baseForward = new Vector3(0, 0, 1).applyQuaternion(this.#weaponBaseRotation).normalize();
-    const swing = new Quaternion().setFromUnitVectors(baseForward, supportInHand.normalize());
-    holder.quaternion.copy(swing.multiply(this.#weaponBaseRotation));
+    const track = weaponTrack(animation);
+    const duration = this.#clipDurations.get(animation) ?? 1;
+    const normalized = MathUtils.clamp(this.#weaponPoseElapsed / Math.max(duration, 1e-6), 0, 1);
+    const pose = track === undefined ? undefined : interpolateWeaponPose(track, normalized);
+    if (holder === undefined || pose === undefined) return;
+    holder.position.fromArray(pose.position);
+    holder.rotation.set(
+      MathUtils.degToRad(pose.rotation[0]),
+      MathUtils.degToRad(pose.rotation[1]),
+      MathUtils.degToRad(pose.rotation[2]),
+    );
+    holder.scale.fromArray(pose.scale);
     holder.updateWorldMatrix(false, true);
+  }
+
+  #detachWeapon(ctx: GameCtx, animation: string): void {
+    const holder = this.#weapon;
+    if (holder === undefined || weaponTrack(animation)?.attachment !== "detached") return;
+    ctx.scene.attach(holder);
+    this.#weaponDetached = true;
+    this.#weaponVelocity.set(0.45, 1.4, -0.25).applyAxisAngle(
+      new Vector3(0, 1, 0),
+      this.group.rotation.y,
+    );
+  }
+
+  #updateDetachedWeapon(dt: number, deckY: number): void {
+    const holder = this.#weapon;
+    if (holder === undefined || !this.#weaponDetached) return;
+    this.#weaponVelocity.y -= 9.81 * dt;
+    holder.position.addScaledVector(this.#weaponVelocity, dt);
+    holder.rotation.x += dt * 2.7;
+    holder.rotation.z += dt * 1.9;
+    if (holder.position.y < deckY + 0.06) {
+      holder.position.y = deckY + 0.06;
+      this.#weaponVelocity.set(0, 0, 0);
+    }
+    holder.updateWorldMatrix(false, true);
+  }
+
+  #reattachWeapon(): void {
+    const holder = this.#weapon;
+    if (holder === undefined || this.#rightHand === undefined) return;
+    this.#rightHand.add(holder);
+    this.#weaponDetached = false;
+    this.#weaponVelocity.set(0, 0, 0);
+    this.#weaponPoseElapsed = 0;
+    this.#applyWeaponPose("RifleWalk");
   }
 
   #measureRenderedWeapon(weapon: Object3D): number {
     weapon.updateWorldMatrix(true, true);
     const size = new Box3().setFromObject(weapon).getSize(new Vector3());
     return Math.max(size.x, size.y, size.z);
+  }
+
+  #measureBodyPose(): ReturnType<typeof measureThreePose> {
+    for (const object of this.#bodyMeshes) {
+      const mesh = object as Mesh & { isSkinnedMesh?: boolean; skeleton?: { update(): void } };
+      if (mesh.isSkinnedMesh === true) mesh.skeleton?.update();
+    }
+    return measureThreePose(this.group, { bounds: this.#bodyMeshes });
+  }
+
+  #syncCollisionBody(): void {
+    const proxy = this.#bodyProxy;
+    const body = this.#body;
+    if (proxy === undefined || body === undefined) return;
+    proxy.position.set(
+      this.group.position.x,
+      this.group.position.y + this.#hitboxHeight / 2,
+      this.group.position.z,
+    );
+    body.teleport(proxy.position);
+  }
+
+  #recordAnkleMotion(): void {
+    const left = this.#leftFoot?.getWorldPosition(new Vector3()).y;
+    const right = this.#rightFoot?.getWorldPosition(new Vector3()).y;
+    if (left === undefined || right === undefined) return;
+    if (this.#lastAnkles !== null) {
+      this.#deathAnkleDelta = Math.max(
+        this.#deathAnkleDelta,
+        Math.abs(left - this.#lastAnkles[0]),
+        Math.abs(right - this.#lastAnkles[1]),
+      );
+    }
+    this.#lastAnkles = [left, right];
+  }
+
+  #setOpacity(alpha: number): void {
+    const objects = [...this.#bodyMeshes, ...(this.#weaponModel === undefined ? [] : [this.#weaponModel])];
+    for (const object of objects) {
+      object.traverse((child) => {
+        const mesh = child as Mesh;
+        if (mesh.isMesh !== true) return;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const material of materials) {
+          material.transparent = alpha < 0.999;
+          material.opacity = alpha;
+          material.depthWrite = alpha > 0.5;
+          material.needsUpdate = true;
+        }
+      });
+    }
+    this.#fade = alpha;
   }
 
   /** Muzzle point in world space: the weapon tip when equipped, the chest otherwise. */
@@ -335,11 +553,16 @@ export class Enemy {
   #play(name: string, fade = 0.18, mode: "loop" | "once" = "loop"): void {
     if (this.#animation === undefined || !this.#clips.has(name)) return;
     if (this.#animation.current === name) return;
+    this.#weaponPoseElapsed = 0;
+    this.#applyWeaponPose(name);
     this.#animation.play(name, { fade, mode });
   }
 
   #occupied(x: number, z: number, padding: number): boolean {
     for (const box of this.#colliders) {
+      // The raised deck is overhead, not a wall. Keep its supports and the lower range solids
+      // in the navigation map, but let a soldier route through the open space underneath it.
+      if (box.min[1] > scale.humanHeight + scale.ankleHeight * 6) continue;
       if (
         x > box.min[0] - padding &&
         x < box.max[0] + padding &&
@@ -576,13 +799,14 @@ export class Enemy {
       this.health = 0;
       this.phase = "dead";
       this.#deadFor = 0;
-      this.#deathGrounded = false;
+      this.#deathObserved = true;
+      this.#deathSettleReady = false;
       this.#bodyClearance = null;
-      // `mode: "once"` clamps the clip on its last frame, so the body plays the fall
-      // all the way down and stays there. The old hand-rolled version froze the mixer
-      // on a hard-coded 1.1s timer, a third of the way through a 3.4s clip, which left
-      // the corpse stopped mid-fall above the ground.
+      this.#footClearance = null;
+      this.#deathAnkleDelta = 0;
+      this.#lastAnkles = null;
       this.#play("DeathFront", 0.06, "once");
+      this.#detachWeapon(ctx, "DeathFront");
       ctx.after(RESPAWN_SECONDS, () => this.#respawn());
       return earned + 300;
     }
@@ -591,23 +815,32 @@ export class Enemy {
     return earned;
   }
 
+  recordHit(multiplier: number): void {
+    this.#lastHitMultiplier = multiplier;
+  }
+
   #respawn(): void {
     this.health = MAX_HEALTH;
     this.wounded = false;
     this.phase = "patrol";
-    this.#deathGrounded = false;
+    this.#deathSettleReady = false;
+    this.#reattachWeapon();
     this.#bodyClearance = null;
+    this.#footClearance = null;
+    this.#groundInitialised = false;
+    this.#setOpacity(0);
     this.#reaction = 0;
     this.#burstLeft = 0;
     this.#cooldown = 0;
     this.#path = [];
     this.#pathIndex = 0;
-    this.#pathGoal.set(Number.POSITIVE_INFINITY, 0, Number.POSITIVE_INFINITY);
+    this.#pathGoal.copy(ROUTE_START);
     this.#replanIn = 0;
     this.#searchAtGoal = 0;
     this.#patrolPause = 0;
+    this.#spawnGrace = SPAWN_GRACE_SECONDS;
     this.#routeIndex = 0;
-    this.group.position.copy(ROUTE[0] as Vector3);
+    this.group.position.copy(ROUTE_START);
     this.#target.copy(ROUTE[1] as Vector3);
     this.#routeIndex = 1;
     this.group.rotation.set(
@@ -618,22 +851,27 @@ export class Enemy {
     this.#play("RifleWalk", 0.05);
   }
 
-  update(ctx: GameCtx, dt: number, playerEye: Vector3, hooks: EnemyHooks): void {
+  update(ctx: GameCtx, dt: number, playerEye: Vector3, deckY: number, hooks: EnemyHooks): void {
     if (this.phase === "dead") {
       this.#deadFor += dt;
-      // The clip clamps itself; keep driving the mixer so it reaches its last frame.
-      this.#animation?.update(dt);
-      this.#alignWeaponToHands();
-      this.#groundDeathPose();
-      if (!this.#deathGrounded && this.#deadFor >= DEATH_SETTLE_SECONDS) {
-        this.#lowerLegToGround(this.#leftUpLeg, this.#leftFoot);
-        this.#lowerLegToGround(this.#rightUpLeg, this.#rightFoot);
-        this.#groundDeathPose();
-        this.#deathGrounded = true;
+      // The death pose is intentionally settled from the pose at impact. Advancing a long
+      // authored fall clip here moves an ankle by tens of centimetres in one browser frame;
+      // the damped bone target below gives the corpse a readable settle without a snap.
+      this.#settleDeath(dt, deckY);
+      this.#weaponPoseElapsed += dt;
+      if (!this.#weaponDetached) this.#applyWeaponPose(this.#animation?.current ?? "");
+      this.#updateDetachedWeapon(dt, deckY);
+      this.#groundToDeck(deckY, dt);
+      this.#normaliseWeapon();
+      this.#recordAnkleMotion();
+      this.#syncCollisionBody();
+      if (this.#deadFor > RESPAWN_SECONDS - 0.35) {
+        this.#setOpacity(MathUtils.clamp((RESPAWN_SECONDS - this.#deadFor) / 0.35, 0, 1));
       }
       return;
     }
-    const sees = this.#canSee(playerEye, hooks);
+    this.#spawnGrace = Math.max(0, this.#spawnGrace - dt);
+    const sees = this.#spawnGrace <= 0 && this.#canSee(playerEye, hooks);
     if (sees) {
       // Entering combat from anywhere else starts the reaction clock, so the player gets a
       // moment to react rather than taking a burst the instant they step into the open.
@@ -648,6 +886,10 @@ export class Enemy {
 
     switch (this.phase) {
       case "patrol": {
+        if (this.#spawnGrace > 0) {
+          this.#play("RifleIdle");
+          break;
+        }
         if (this.#patrolPause > 0) {
           this.#patrolPause -= dt;
           this.#play("RifleIdle");
@@ -706,45 +948,66 @@ export class Enemy {
       }
     }
     this.#animation?.update(dt);
-    this.#alignWeaponToHands();
+    this.#weaponPoseElapsed += dt;
+    if (!this.#weaponDetached) this.#applyWeaponPose(this.#animation?.current ?? "");
+    this.#groundToDeck(deckY, dt);
+    this.#normaliseWeapon();
+    if (!this.#deathObserved) this.#recordAnkleMotion();
+    this.#syncCollisionBody();
+    if (this.#fade < 1) this.#setOpacity(MathUtils.clamp(this.#fade + dt / 0.35, 0, 1));
   }
 
-  /** Keep the lowest animated body vertex on the floor throughout the fall. */
-  #groundDeathPose(): void {
-    // Bone matrices normally refresh during render. Grounding runs first, so refresh skinned
-    // meshes explicitly or the bounds lag one animation frame behind and visibly bob.
-    for (const object of this.#bodyMeshes) {
-      const mesh = object as Mesh & { isSkinnedMesh?: boolean; skeleton?: { update(): void } };
-      if (mesh.isSkinnedMesh === true) mesh.skeleton?.update();
+  #groundInitialised = false;
+
+  /** Keep the rendered rifle at its declared length after parent-bone animation updates. */
+  #normaliseWeapon(): void {
+    if (this.#weapon !== undefined) normaliseLongestAxis(this.#weapon, scale.rifleLength);
+  }
+
+  /** Keep the lowest posed body vertex on the requested deck with a bounded correction. */
+  #groundToDeck(deckY: number, dt: number): void {
+    const bodyPose = this.#measureBodyPose();
+    const minimum = bodyPose.bounds?.min[1];
+    if (minimum === undefined) return;
+    const correction = deckY - minimum;
+    const applied = this.phase === "dead" && this.#groundInitialised
+      ? MathUtils.clamp(correction, -1 * dt, 1 * dt)
+      : correction;
+    this.group.position.y += applied;
+    this.group.updateWorldMatrix(true, true);
+    const settled = this.#measureBodyPose().bounds?.min[1];
+    this.#bodyClearance = settled === undefined ? null : Math.abs(settled - deckY);
+    this.#footClearance = settled === undefined ? null : Math.max(0, settled - deckY);
+    this.#groundInitialised = true;
+  }
+
+  /** Compute a target leg orientation every frame, then approach it instead of applying a snap. */
+  #settleDeath(dt: number, deckY: number): void {
+    const alpha = 1 - Math.exp(-dt * 2.4);
+    for (const [upLeg, foot] of [
+      [this.#leftUpLeg, this.#leftFoot],
+      [this.#rightUpLeg, this.#rightFoot],
+    ] as const) {
+      if (upLeg === undefined || foot === undefined || upLeg.parent === null) continue;
+      this.group.updateWorldMatrix(true, true);
+      const hip = upLeg.getWorldPosition(new Vector3());
+      const ankle = foot.getWorldPosition(new Vector3());
+      const current = ankle.sub(hip);
+      const length = current.length();
+      if (length < 1e-4) continue;
+      const desiredY = MathUtils.clamp(deckY + scale.ankleHeight - hip.y, -length, length);
+      const horizontal = new Vector3(current.x, 0, current.z);
+      if (horizontal.lengthSq() < 1e-6) horizontal.set(0, 0, 1);
+      horizontal.setLength(Math.sqrt(Math.max(0, length * length - desiredY * desiredY)));
+      const desired = horizontal.setY(desiredY);
+      const worldDelta = new Quaternion().setFromUnitVectors(current.normalize(), desired.normalize());
+      const parentWorld = upLeg.parent.getWorldQuaternion(new Quaternion());
+      const localDelta = parentWorld.clone().invert().multiply(worldDelta).multiply(parentWorld);
+      const target = localDelta.multiply(upLeg.quaternion.clone());
+      upLeg.quaternion.slerp(target, alpha);
+      upLeg.updateWorldMatrix(false, true);
     }
-    const bodyPose = measureThreePose(this.group, { bounds: this.#bodyMeshes });
-    const clearance = bodyPose.bounds?.min[1];
-    if (clearance === undefined) return;
-    this.group.position.y -= clearance;
-    this.group.updateWorldMatrix(true, true);
-    this.#bodyClearance = 0;
-  }
-
-  /** Rotate a settled leg at the hip so the animation's bend survives but its ankle reaches down. */
-  #lowerLegToGround(upLeg: Object3D | undefined, foot: Object3D | undefined): void {
-    if (upLeg === undefined || foot === undefined || upLeg.parent === null) return;
-    this.group.updateWorldMatrix(true, true);
-    const hip = upLeg.getWorldPosition(new Vector3());
-    const ankle = foot.getWorldPosition(new Vector3());
-    const current = ankle.sub(hip);
-    const length = current.length();
-    const desiredY = DEAD_ANKLE_HEIGHT - hip.y;
-    if (length < Math.abs(desiredY) || length < 1e-4) return;
-
-    const horizontal = new Vector3(current.x, 0, current.z);
-    if (horizontal.lengthSq() < 1e-6) horizontal.set(0, 0, 1);
-    horizontal.setLength(Math.sqrt(length * length - desiredY * desiredY));
-    const desired = horizontal.setY(desiredY);
-    const worldDelta = new Quaternion().setFromUnitVectors(current.normalize(), desired.normalize());
-    const parentWorld = upLeg.parent.getWorldQuaternion(new Quaternion());
-    const localDelta = parentWorld.clone().invert().multiply(worldDelta).multiply(parentWorld);
-    upLeg.quaternion.premultiply(localDelta);
-    upLeg.updateWorldMatrix(false, true);
+    this.#deathSettleReady = true;
   }
 
   #engage(ctx: GameCtx, dt: number, playerEye: Vector3, hooks: EnemyHooks, sees: boolean): void {
@@ -800,8 +1063,16 @@ export class Enemy {
         // A round that connects costs the full 9; the ones that go wide do not.
         // Seeded, so a replay of the same run takes the same damage.
         const accuracy = MathUtils.clamp(0.75 - flatDistance * 0.035, 0.12, 0.75);
-        if (clear && ctx.random() < accuracy) hooks.damagePlayer(ROUND_DAMAGE);
-        hooks.onMuzzleFlash(this.muzzle());
+        const muzzle = this.muzzle();
+        const shotDirection = playerEye.clone().sub(muzzle).normalize();
+        const missDirection = shotDirection.clone();
+        if (ctx.random() >= accuracy) {
+          missDirection.x += (ctx.random() - 0.5) * 0.16;
+          missDirection.y += (ctx.random() - 0.5) * 0.1;
+          missDirection.normalize();
+        }
+        if (clear && shotDirection.angleTo(missDirection) < 0.02) hooks.damagePlayer(ROUND_DAMAGE);
+        hooks.onMuzzleFlash(muzzle, missDirection, playerEye.distanceTo(muzzle));
         this.#play("FiringRifle", 0.04);
         if (this.#burstLeft === 0) this.#cooldown = BURST_COOLDOWN;
       }
@@ -830,7 +1101,15 @@ export class Enemy {
     armed: boolean;
     reaction: number;
     bodyClearance: number | null;
+    footClearance: number | null;
     modelHeight: number;
+    hitboxHeight: number;
+    headZoneMinY: number;
+    legZoneMaxY: number;
+    underWalkway: boolean;
+    deathObserved: boolean;
+    deathAnkleDelta: number;
+    lastHitMultiplier: number;
     navigation: { goal: number[]; next: number[] | null; remaining: number };
     rifleForward: number[] | null;
     rifleForwardDot: number | null;
@@ -869,7 +1148,19 @@ export class Enemy {
       armed: this.#weapon !== undefined,
       reaction: this.#reaction,
       bodyClearance: this.#bodyClearance,
+      footClearance: this.#footClearance,
       modelHeight: this.modelHeight,
+      hitboxHeight: this.#hitboxHeight,
+      headZoneMinY: this.headZoneMinY,
+      legZoneMaxY: this.legZoneMaxY,
+      underWalkway:
+        this.group.position.x > 9.8 &&
+        this.group.position.x < 13.4 &&
+        this.group.position.z > -11.4 &&
+        this.group.position.z < -5.8,
+      deathObserved: this.#deathObserved,
+      deathAnkleDelta: this.#deathAnkleDelta,
+      lastHitMultiplier: this.#lastHitMultiplier,
       navigation: {
         goal: this.#pathGoal.toArray(),
         next: this.#path[this.#pathIndex]?.toArray() ?? null,
@@ -905,6 +1196,8 @@ export class Enemy {
 
   dispose(): void {
     this.#animation?.dispose();
+    this.#body?.dispose();
+    this.#bodyProxy?.removeFromParent();
     this.group.removeFromParent();
   }
 }

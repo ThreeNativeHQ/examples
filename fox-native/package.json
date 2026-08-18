@@ -1,0 +1,43 @@
+{
+  "name": "fox-native",
+  "private": true,
+  "type": "module",
+  "threenative": {
+    "nativeEntry": "src/game.ts"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "threenative build",
+    "build:web": "threenative build --target web",
+    "build:desktop": "threenative build --target desktop",
+    "build:android": "threenative build --target android",
+    "build:ios": "threenative build --target ios",
+    "pretest": "playwright install chromium",
+    "test": "vite build && threenative-playtest --scenario playtests/play.playtest.json --url http://127.0.0.1:4173 --server-command \"pnpm dev --host 127.0.0.1 --port 4173 --strictPort\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@threenative/core": "file:/tmp/foxpkg-bypass/threenative-core-0.2.0.tgz",
+    "@threenative/physics": "file:/home/joao/projects/fox-native-packages/threenative-physics-0.1.0.tgz",
+    "three": "0.185.1",
+    "@threenative/ui": "file:/home/joao/projects/fox-native-packages/threenative-ui-0.1.12.tgz"
+  },
+  "devDependencies": {
+    "@types/three": "0.185.3",
+    "@threenative/playtest": "file:/home/joao/projects/fox-native-packages/threenative-playtest-0.1.0.tgz",
+    "create-threenative": "file:/home/joao/projects/fox-native-packages/create-threenative-0.1.0.tgz",
+    "playwright": "1.62.1",
+    "threenative-asset-mcp": "0.4.0",
+    "threenative-sculpt-mcp": "0.1.0",
+    "typescript": "5.9.3",
+    "vite": "8.2.0"
+  },
+  "optionalDependencies": {
+    "@threenative/runtime-native": "file:/home/joao/projects/fox-native-packages/threenative-runtime-native-0.1.13.tgz"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@threenative/runtime-native"
+    ]
+  }
+}
