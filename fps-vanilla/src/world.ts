@@ -35,6 +35,8 @@ export interface RangeTarget {
 }
 
 export interface World {
+  /** the flat salmon face a target wears while it is standing */
+  plateMaterial: THREE.Material;
   targets: RangeTarget[];
   plates: THREE.Mesh[];
   blockers: Blocker[];
@@ -86,6 +88,7 @@ const TARGET_LAYOUT: Array<{ at: [number, number, number]; size: [number, number
 
 export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap: THREE.Texture): World {
   const world: World = {
+    plateMaterial: new THREE.MeshBasicMaterial({ color: 0xff4f42, side: THREE.DoubleSide }),
     targets: [],
     plates: [],
     blockers: [],
@@ -226,7 +229,7 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
   // ---- targets
   // flat salmon, matching reference.png: the plates read the same tone whichever way the
   // sun is behind them
-  const plateMaterial = new THREE.MeshBasicMaterial({ color: 0xff4f42, side: THREE.DoubleSide });
+  const plateMaterial = world.plateMaterial;
   for (const spec of TARGET_LAYOUT) {
     const [x, y, z] = spec.at;
     const [w, h] = spec.size;
@@ -281,6 +284,7 @@ export function stepTargets(world: World, dt: number): void {
       if (target.restore <= 0) target.down = false;
     } else {
       target.swing = Math.max(0, target.swing - dt / 0.22);
+      if (target.plate.material !== world.plateMaterial) target.plate.material = world.plateMaterial;
     }
     target.pivot.rotation.x = -target.swing * 1.75;
   }

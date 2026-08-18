@@ -76,6 +76,7 @@ const propMap = textureLoader.load(surfaceUrl);
 propMap.colorSpace = THREE.SRGBColorSpace;
 
 const world = buildWorld(scene, floorMap, propMap);
+const hitPlateMaterial = new THREE.MeshBasicMaterial({ map: hitFaceMap, side: THREE.DoubleSide });
 
 // sky: the shipped outdoor-cloudy equirectangular panorama
 textureLoader.load(skyUrl, (texture) => {
@@ -201,6 +202,26 @@ const muzzleFlash = new THREE.PointLight(0xffd9a0, 0, 6, 2);
 muzzleFlash.position.set(0.24, -0.06, -0.9);
 camera.add(muzzleFlash);
 
+const puffGeometry = new THREE.SphereGeometry(0.055, 6, 5);
+const puffMaterial = new THREE.MeshBasicMaterial({ color: 0xd8d4cc, transparent: true, opacity: 0 });
+const puffs: Array<{ mesh: THREE.Mesh; life: number }> = [];
+for (let index = 0; index < 6; index += 1) {
+  const mesh = new THREE.Mesh(puffGeometry, puffMaterial.clone());
+  mesh.visible = false;
+  scene.add(mesh);
+  puffs.push({ mesh, life: 0 });
+}
+let puffCursor = 0;
+
+function spawnPuff(at: THREE.Vector3): void {
+  const entry = puffs[puffCursor % puffs.length]!;
+  puffCursor += 1;
+  entry.mesh.position.copy(at);
+  entry.mesh.scale.setScalar(1);
+  entry.mesh.visible = true;
+  entry.life = 0.22;
+}
+
 const tracerMaterial = new THREE.LineBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0 });
 const tracerGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
 const tracer = new THREE.Line(tracerGeometry, tracerMaterial);
@@ -312,11 +333,13 @@ function fire(): void {
   positions.setXYZ(1, end.x, end.y, end.z);
   positions.needsUpdate = true;
   tracerTimer = 0.05;
+  spawnPuff(end);
 
   enemy.hearShot(origin);
 }
 
 function registerTargetHit(target: RangeTarget): void {
+  target.plate.material = hitPlateMaterial;
   target.down = true;
   target.restore = 1.4;
   state.score += target.value;
@@ -488,6 +511,14 @@ function tick(dt: number = FIXED_DT): void {
   } else {
     tracerMaterial.opacity = 0;
   }
+  for (const puff of puffs) {
+    if (puff.life <= 0) continue;
+    puff.life -= dt;
+    const material = puff.mesh.material as THREE.MeshBasicMaterial;
+    material.opacity = Math.max(0, puff.life / 0.22) * 0.8;
+    puff.mesh.scale.setScalar(1 + (0.22 - puff.life) * 5);
+    if (puff.life <= 0) puff.mesh.visible = false;
+  }
   if (hitMarker > 0) hitMarker -= dt;
 }
 
@@ -495,17 +526,25 @@ function tick(dt: number = FIXED_DT): void {
 let last = performance.now();
 let accumulator = 0;
 let fps = 60;
+// While a scenario drives fixedStep the harness owns the clock; the render loop must not
+// advance the simulation a second time. It resumes half a second after the last driven tick
+// so a real-time keyboard scenario still works.
+let externalClockUntil = 0;
 
 function render(now: number): void {
   const delta = Math.min(0.1, (now - last) / 1000);
   last = now;
   fps = fps * 0.9 + (1 / Math.max(delta, 1e-4)) * 0.1;
-  accumulator += delta;
-  let guard = 0;
-  while (accumulator >= FIXED_DT && guard < 6) {
-    tick(FIXED_DT);
-    accumulator -= FIXED_DT;
-    guard += 1;
+  if (now < externalClockUntil) {
+    accumulator = 0;
+  } else {
+    accumulator += delta;
+    let guard = 0;
+    while (accumulator >= FIXED_DT && guard < 6) {
+      tick(FIXED_DT);
+      accumulator -= FIXED_DT;
+      guard += 1;
+    }
   }
   viewmodelMixer?.update(delta);
   hud.update({
@@ -543,6 +582,7 @@ installThreePlaytestBridge({
     })),
   ],
   fixedStep: (ticks) => {
+    externalClockUntil = performance.now() + 500;
     for (let index = 0; index < ticks; index += 1) tick(FIXED_DT);
   },
   tick: () => frame,
@@ -566,7 +606,6 @@ installThreePlaytestBridge({
 });
 
 // keep unused-but-meaningful references honest for the typechecker
-void hitFaceMap;
 void faceMap;
 void elapsed;
 
