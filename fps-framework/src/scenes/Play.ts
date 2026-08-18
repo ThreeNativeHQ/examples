@@ -5,10 +5,8 @@ import {
   AdditiveBlending,
   Mesh as MeshClass,
   MeshBasicMaterial,
-  Object3D as Object3DClass,
   PlaneGeometry,
   PointLight as PointLightClass,
-  Raycaster,
   Vector3,
 } from "three";
 import { Enemy } from "../entities/Enemy.js";
@@ -87,7 +85,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const camera = ctx.camera as PerspectiveCamera;
     setupSky(ctx.scene, assets.sky);
     setupLighting(ctx.scene, ctx.renderer.raw as Parameters<typeof setupLighting>[1]);
-    setupPost(ctx.renderer, ctx.scene, camera);
+    setupPost(ctx.renderer);
     ctx.add(camera);
 
     const materials = createMaterials({
@@ -98,9 +96,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const range: Range = buildRange(materials);
     ctx.add(range.group);
 
-    // One fixed body per solid so the player slides along the yard properly.
-    // `RigidBody3D` has no `position` option — unlike `Area3D` — so each static
-    // body needs a carrier Object3D holding the transform.
+    // One fixed body per solid so the player slides along the yard properly. These
+    // colliders have no visual, so they take a bare `position` and never allocate a
+    // carrier Object3D to hold a transform nothing reads.
     const staticBody = (
       centreX: number,
       centreY: number,
@@ -109,11 +107,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       sy: number,
       sz: number,
     ): void => {
-      const carrier = new Object3DClass();
-      carrier.position.set(centreX, centreY, centreZ);
       new RigidBody3D({
-        object: carrier,
         physics: ctx.physics,
+        position: { x: centreX, y: centreY, z: centreZ },
         shape: CollisionShape3D.box(sx, sy, sz),
         type: "fixed",
       });
@@ -153,18 +149,18 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // proxy. Raycasting the whole scene would also hit the viewmodel welded to
     // the camera and score every shot as a miss at 0.4 m.
     const hittable: Object3D[] = [...range.hittable, enemy.hitbox];
-    const raycaster = new Raycaster();
-    raycaster.far = RANGE_METRES;
-    const losCaster = new Raycaster();
     const occluders: Object3D[] = [...range.hittable];
 
     const lineOfSight = (from: Vector3, to: Vector3): boolean => {
       const direction = new Vector3().subVectors(to, from);
       const distance = direction.length();
       if (distance < 0.001) return true;
-      losCaster.set(from, direction.multiplyScalar(1 / distance));
-      losCaster.far = distance - 0.2;
-      for (const hit of losCaster.intersectObjects(occluders, false)) {
+      for (const hit of ctx.raycastAll({
+        direction: direction.multiplyScalar(1 / distance),
+        far: distance - 0.2,
+        origin: from,
+        targets: occluders,
+      })) {
         // Plates and the paint are thin dressing; only solids block sight.
         if (hit.object.userData.target !== undefined) continue;
         return false;
@@ -211,17 +207,20 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       if (!rifle.fire()) return;
       const forward = player.forward;
       eye.set(player.eye.x, player.eye.y, player.eye.z);
-      raycaster.set(eye, new Vector3(forward.x, forward.y, forward.z).normalize());
-      raycaster.far = RANGE_METRES;
-      const hits = raycaster.intersectObjects(hittable, false);
+      const direction = new Vector3(forward.x, forward.y, forward.z).normalize();
+      const hit = frameCtx.raycast({
+        direction,
+        far: RANGE_METRES,
+        origin: eye,
+        targets: hittable,
+      });
       enemy.hearShot(eye.clone());
-      const hit = hits[0];
       // The trail is drawn whether or not the round connects — a miss you cannot see is a
       // miss you cannot correct.
       const muzzle = rifle.muzzleWorld();
       const end =
         hit === undefined
-          ? new Vector3().copy(eye).addScaledVector(raycaster.ray.direction, RANGE_METRES)
+          ? new Vector3().copy(eye).addScaledVector(direction, RANGE_METRES)
           : hit.point.clone();
       playerTracers.spawn(muzzle, end);
       if (hit === undefined) return;
@@ -374,6 +373,14 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       }
       if (enemyFlash.visible) enemyFlash.lookAt(eye.x, eye.y, eye.z);
       const timeRemaining = Math.max(0, RUN_SECONDS - elapsed);
+
+      // Any press on the surface buys the pointer, which is what makes the mouse steer.
+      // This is deliberately not folded into the `fire` branch: gating it on the fire action
+      // means the view stays stuck until you take a shot, and aiming or simply clicking to
+      // start would leave the camera dead. Keyboard shots never reach here, so the playtests
+      // never ask for a lock they did not earn.
+      const pointer = frameCtx.input.raw.pointer;
+      if (pointer.down && !pointer.captured) frameCtx.input.captureMouse();
 
       player.update(frameCtx, dt, !rifle.reloading);
       if (frameCtx.input.justPressed("fire")) fire(frameCtx);

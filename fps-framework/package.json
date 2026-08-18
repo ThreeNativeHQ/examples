@@ -17,21 +17,21 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz",
-    "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.2.1-d45cd51ee589.tgz",
-    "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.2.1-d78476c56f7a.tgz",
+    "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.2.0.tgz",
+    "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.2.1.tgz",
+    "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.2.1.tgz",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "three": "0.185.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
-    "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.2.0-3e184304e2f1.tgz",
+    "@threenative/playtest": "file:./threenative-playtest-0.2.0.tgz",
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
     "@types/three": "0.185.3",
     "@vitejs/plugin-react": "6.0.5",
-    "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.2-628ef17ddfea.tgz",
+    "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.2.tgz",
     "esbuild": "0.27.0",
     "playwright": "1.62.1",
     "tailwindcss": "4.3.3",

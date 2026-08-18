@@ -16,6 +16,7 @@ reference.png
 # Same call this file already makes for reference.png.
 /fps-kit/
 /fps-framework/assets/
+/fps-framework/screenshots/
 /fps-vanilla/assets/
 
 # The sandbox root is scratch for whichever build ran last: pnpm sandbox rewrites these three

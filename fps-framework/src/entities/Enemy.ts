@@ -1,5 +1,6 @@
 import { AnimationPlayer, type ICtx } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
+import { measureThreePose } from "@threenative/playtest/three";
 import {
   type AnimationClip,
   Box3,
@@ -9,6 +10,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   type Object3D,
+  Quaternion,
   Vector3,
 } from "three";
 import type { BoxCollider } from "../render/range.js";
@@ -42,8 +44,10 @@ const DEVIATIONS: readonly number[] = [
 ];
 /** Seconds between first sighting and the first round, so the player is not shot on sight. */
 const REACTION_SECONDS = 0.45;
-/** A real AK is about this long; the shipped model is in centimetres and must be normalised. */
-const RIFLE_LENGTH = 1.02;
+/** Presentation length: large enough to read across the animated two-hand stance. */
+const RIFLE_LENGTH = 1.25;
+const DEATH_SETTLE_SECONDS = 3.3;
+const DEAD_ANKLE_HEIGHT = 0.32;
 
 const ROUTE: readonly Vector3[] = [
   new Vector3(-4.5, 0, -9.5),
@@ -88,9 +92,23 @@ export class Enemy {
   #strafe = 1;
   #strafeTimer = 0;
   #deadFor = 0;
-  #frozen = false;
+  #deathGrounded = false;
+  #bodyClearance: number | null = null;
   #colliders: readonly BoxCollider[];
+  #bodyMeshes: Object3D[] = [];
+  #poseBones: Object3D[] = [];
   #weapon: Object3D | undefined;
+  #weaponModel: Object3D | undefined;
+  #rightHand: Object3D | undefined;
+  #leftHand: Object3D | undefined;
+  #grip: Object3D | undefined;
+  #magazine: Object3D | undefined;
+  #leftUpLeg: Object3D | undefined;
+  #leftFoot: Object3D | undefined;
+  #rightUpLeg: Object3D | undefined;
+  #rightFoot: Object3D | undefined;
+  #weaponNodes: string[] = [];
+  #renderedRifleLength: number | null = null;
   /** Seconds left before it may fire after first seeing the player — it is not a turret. */
   #reaction = 0;
   /** Which way it prefers to round an obstacle, held for a moment so corners do not oscillate. */
@@ -105,12 +123,18 @@ export class Enemy {
   ) {
     this.#colliders = colliders;
     model.traverse((object) => {
+      if (/hips|upleg|leg|foot|toe|head/i.test(object.name)) this.#poseBones.push(object);
       const mesh = object as Mesh;
       if (mesh.isMesh === true) {
+        this.#bodyMeshes.push(mesh);
         mesh.castShadow = true;
         mesh.receiveShadow = false;
       }
     });
+    this.#leftUpLeg = findBone(model, /leftupleg/i);
+    this.#leftFoot = findBone(model, /leftfoot/i);
+    this.#rightUpLeg = findBone(model, /rightupleg/i);
+    this.#rightFoot = findBone(model, /rightfoot/i);
     this.group.add(model);
     if (weapon !== undefined) this.#equip(model, weapon);
     this.group.name = "enemy";
@@ -173,9 +197,17 @@ export class Enemy {
       }
     });
 
+    // Assets are cached across scene restarts. Detach and restore authored transforms before
+    // measuring, or the second run measures the first run's normalised attachment and scales it
+    // again into a giant AK.
+    weapon.removeFromParent();
+    weapon.position.set(0, 0, 0);
+    weapon.rotation.set(0, 0, 0);
+    weapon.scale.setScalar(1);
+    weapon.updateWorldMatrix(false, true);
+
     // The rifle is authored in centimetres — its raw bounds are 8 x 30 x 112 — so it has to be
-    // normalised to a real weapon length before anything else, or attaching it to a hand makes
-    // a 112 metre AK. Nothing in the asset pipeline states a unit, so it is measured here.
+    // normalised to a readable weapon length before attaching it to the hand.
     const bounds = new Box3().setFromObject(weapon);
     const size = new Vector3();
     bounds.getSize(size);
@@ -186,13 +218,33 @@ export class Enemy {
       model.getObjectByName("mixamorigRightHand") ??
       model.getObjectByName("RightHand") ??
       findBone(model, /right.*hand|hand.*r$|hand_r/i);
+    this.#rightHand = hand;
+    this.#leftHand =
+      model.getObjectByName("mixamorigLeftHand") ??
+      model.getObjectByName("LeftHand") ??
+      findBone(model, /left.*hand|hand.*l$|hand_l/i);
 
     // A holder carries the grip offset so the rifle's own transform stays the measured one.
     const holder = new Group();
-    weapon.position.set(0, 0, 0);
-    weapon.rotation.set(0, 0, 0);
-    weapon.scale.setScalar(1);
     holder.add(weapon);
+
+    // Line the rifle's own `Grip_Bone` up with the holder origin. Hanging it off the model
+    // origin instead puts the fist around the barrel: this AK is authored with its origin
+    // 22 cm behind the receiver, which `create-threenative inspect` reports along with the
+    // bone. The asset declares where it is held, so read that rather than guessing an offset.
+    const grip = weapon.getObjectByName("Grip_Bone");
+    this.#grip = grip;
+    this.#magazine = findBone(weapon, /magazine|mag[_ -]|clip[_ -]/i);
+    this.#weaponModel = weapon;
+    weapon.traverse((object) => {
+      if (object.name !== "" && this.#weaponNodes.length < 40) {
+        this.#weaponNodes.push(object.name);
+      }
+    });
+    if (grip !== undefined) {
+      weapon.updateWorldMatrix(false, true);
+      weapon.position.sub(new Vector3().setFromMatrixPosition(grip.matrixWorld));
+    }
 
     if (hand === undefined) {
       holder.scale.setScalar(normalise);
@@ -200,6 +252,7 @@ export class Enemy {
       holder.rotation.set(0, Math.PI / 2, 0);
       this.group.add(holder);
       this.#weapon = holder;
+      this.#renderedRifleLength = this.#measureRenderedWeapon(weapon);
       return;
     }
     // The hand bone carries the model's own scale; undo it so the normalised size survives.
@@ -207,12 +260,20 @@ export class Enemy {
     hand.getWorldScale(handScale);
     const inverse = handScale.x === 0 ? 1 : 1 / handScale.x;
     holder.scale.setScalar(normalise * inverse);
-    // Mixamo hands point +Y down the fingers with +Z out of the palm; the rifle's long axis is
-    // its own +Z. Rotating -90 degrees about X lays the barrel along the fingers.
-    holder.rotation.set(-Math.PI / 2, 0, 0);
+    // This rig's hand axes are not documented. Roll the AK so its receiver sits above the
+    // hands in the real rendered close-up; `Clip_Bone` points opposite the visible magazine,
+    // so treating that marker as "down" produced the upside-down toy pose.
+    holder.rotation.set(-Math.PI / 2, 0, -Math.PI / 2);
     holder.position.set(0, 0, 0);
     hand.add(holder);
     this.#weapon = holder;
+    this.#renderedRifleLength = this.#measureRenderedWeapon(weapon);
+  }
+
+  #measureRenderedWeapon(weapon: Object3D): number {
+    weapon.updateWorldMatrix(true, true);
+    const size = new Box3().setFromObject(weapon).getSize(new Vector3());
+    return Math.max(size.x, size.y, size.z);
   }
 
   /** Muzzle point in world space: the weapon tip when equipped, the chest otherwise. */
@@ -223,10 +284,10 @@ export class Enemy {
     return weapon.localToWorld(tip);
   }
 
-  #play(name: string, fade = 0.18): void {
+  #play(name: string, fade = 0.18, mode: "loop" | "once" = "loop"): void {
     if (this.#animation === undefined || !this.#clips.has(name)) return;
     if (this.#animation.current === name) return;
-    this.#animation.play(name, { fade });
+    this.#animation.play(name, { fade, mode });
   }
 
   #blocked(x: number, z: number): boolean {
@@ -330,13 +391,13 @@ export class Enemy {
       this.health = 0;
       this.phase = "dead";
       this.#deadFor = 0;
-      this.#frozen = false;
-      this.#play("DeathFront", 0.06);
-      // Nothing in `AnimationPlayer` clamps a one-shot clip at its last frame, so
-      // the ragdoll is held by stopping the mixer updates once it has played out.
-      ctx.after(1.1, () => {
-        this.#frozen = true;
-      });
+      this.#deathGrounded = false;
+      this.#bodyClearance = null;
+      // `mode: "once"` clamps the clip on its last frame, so the body plays the fall
+      // all the way down and stays there. The old hand-rolled version froze the mixer
+      // on a hard-coded 1.1s timer, a third of the way through a 3.4s clip, which left
+      // the corpse stopped mid-fall above the ground.
+      this.#play("DeathFront", 0.06, "once");
       ctx.after(RESPAWN_SECONDS, () => this.#respawn());
       return earned + 300;
     }
@@ -349,7 +410,8 @@ export class Enemy {
     this.health = MAX_HEALTH;
     this.wounded = false;
     this.phase = "patrol";
-    this.#frozen = false;
+    this.#deathGrounded = false;
+    this.#bodyClearance = null;
     this.#reaction = 0;
     this.#burstLeft = 0;
     this.#cooldown = 0;
@@ -369,7 +431,24 @@ export class Enemy {
   update(ctx: GameCtx, dt: number, playerEye: Vector3, hooks: EnemyHooks): void {
     if (this.phase === "dead") {
       this.#deadFor += dt;
-      if (!this.#frozen) this.#animation?.update(dt);
+      // The clip clamps itself; keep driving the mixer so it reaches its last frame.
+      this.#animation?.update(dt);
+      if (!this.#deathGrounded && this.#deadFor >= DEATH_SETTLE_SECONDS) {
+        this.#lowerLegToGround(this.#leftUpLeg, this.#leftFoot);
+        this.#lowerLegToGround(this.#rightUpLeg, this.#rightFoot);
+        // Bone matrices normally refresh during render. The grounding measurement runs first,
+        // so refresh skinned meshes explicitly or it measures the pre-correction leg pose.
+        for (const object of this.#bodyMeshes) {
+          const mesh = object as Mesh & { isSkinnedMesh?: boolean; skeleton?: { update(): void } };
+          if (mesh.isSkinnedMesh === true) mesh.skeleton?.update();
+        }
+        // This is the one precise vertex scan: once, after the clip and leg correction settle.
+        const bodyPose = measureThreePose(this.group, { bounds: this.#bodyMeshes });
+        this.group.position.y -= bodyPose.bounds?.min[1] ?? 0;
+        this.group.updateWorldMatrix(true, true);
+        this.#bodyClearance = 0;
+        this.#deathGrounded = true;
+      }
       return;
     }
     this.#detourHold = Math.max(0, this.#detourHold - dt);
@@ -432,6 +511,28 @@ export class Enemy {
       }
     }
     this.#animation?.update(dt);
+  }
+
+  /** Rotate a settled leg at the hip so the animation's bend survives but its ankle reaches down. */
+  #lowerLegToGround(upLeg: Object3D | undefined, foot: Object3D | undefined): void {
+    if (upLeg === undefined || foot === undefined || upLeg.parent === null) return;
+    this.group.updateWorldMatrix(true, true);
+    const hip = upLeg.getWorldPosition(new Vector3());
+    const ankle = foot.getWorldPosition(new Vector3());
+    const current = ankle.sub(hip);
+    const length = current.length();
+    const desiredY = DEAD_ANKLE_HEIGHT - hip.y;
+    if (length < Math.abs(desiredY) || length < 1e-4) return;
+
+    const horizontal = new Vector3(current.x, 0, current.z);
+    if (horizontal.lengthSq() < 1e-6) horizontal.set(0, 0, 1);
+    horizontal.setLength(Math.sqrt(length * length - desiredY * desiredY));
+    const desired = horizontal.setY(desiredY);
+    const worldDelta = new Quaternion().setFromUnitVectors(current.normalize(), desired.normalize());
+    const parentWorld = upLeg.parent.getWorldQuaternion(new Quaternion());
+    const localDelta = parentWorld.clone().invert().multiply(worldDelta).multiply(parentWorld);
+    upLeg.quaternion.premultiply(localDelta);
+    upLeg.updateWorldMatrix(false, true);
   }
 
   #engage(ctx: GameCtx, dt: number, playerEye: Vector3, hooks: EnemyHooks, sees: boolean): void {
@@ -500,7 +601,36 @@ export class Enemy {
     deadFor: number;
     armed: boolean;
     reaction: number;
+    bodyClearance: number | null;
+    rifleForward: number[] | null;
+    rifleForwardDot: number | null;
+    clipMarkerDownDot: number | null;
+    rifleLength: number | null;
+    rightHandToGrip: number | null;
+    leftHandToRifle: number | null;
+    weaponNodes: string[];
+    bodyJoints: Record<string, number[]>;
   } {
+    this.group.updateWorldMatrix(true, true);
+    const weaponPose =
+      this.#weapon === undefined || this.#weaponModel === undefined
+        ? null
+        : measureThreePose(this.#weapon, { bounds: false });
+    const rifleForward =
+      weaponPose === null ? null : new Vector3().fromArray(weaponPose.axes.z);
+    const enemyForward = new Vector3(0, 0, 1)
+      .applyQuaternion(this.group.getWorldQuaternion(this.group.quaternion.clone()))
+      .normalize();
+    const gripPosition = this.#grip?.getWorldPosition(new Vector3()) ?? null;
+    const rightHandPosition = this.#rightHand?.getWorldPosition(new Vector3()) ?? null;
+    const magazinePosition = this.#magazine?.getWorldPosition(new Vector3()) ?? null;
+    const leftHandPosition = this.#leftHand?.getWorldPosition(new Vector3()) ?? null;
+    const rifleStart = this.#weapon?.localToWorld(new Vector3(0, 0, -RIFLE_LENGTH * 0.35)) ?? null;
+    const rifleEnd = this.#weapon?.localToWorld(new Vector3(0, 0, RIFLE_LENGTH * 0.65)) ?? null;
+    const bodyJoints: Record<string, number[]> = {};
+    for (const bone of this.#poseBones) {
+      bodyJoints[bone.name] = [...measureThreePose(bone, { bounds: false }).position];
+    }
     return {
       health: this.health,
       phase: this.phase,
@@ -508,7 +638,33 @@ export class Enemy {
       deadFor: this.#deadFor,
       armed: this.#weapon !== undefined,
       reaction: this.#reaction,
+      bodyClearance: this.#bodyClearance,
+      rifleForward: rifleForward?.toArray() ?? null,
+      rifleForwardDot: rifleForward?.dot(enemyForward) ?? null,
+      clipMarkerDownDot:
+        magazinePosition === null || gripPosition === null
+          ? null
+          : magazinePosition.clone().sub(gripPosition).normalize().dot(new Vector3(0, -1, 0)),
+      rifleLength: weaponPose === null ? null : this.#renderedRifleLength,
+      rightHandToGrip:
+        rightHandPosition === null || gripPosition === null
+          ? null
+          : rightHandPosition.distanceTo(gripPosition),
+      leftHandToRifle:
+        leftHandPosition === null || rifleStart === null || rifleEnd === null
+          ? null
+          : this.#distanceToSegment(leftHandPosition, rifleStart, rifleEnd),
+      weaponNodes: this.#weaponNodes,
+      bodyJoints,
     };
+  }
+
+  #distanceToSegment(point: Vector3, start: Vector3, end: Vector3): number {
+    const segment = end.clone().sub(start);
+    const lengthSquared = segment.lengthSq();
+    if (lengthSquared === 0) return point.distanceTo(start);
+    const t = MathUtils.clamp(point.clone().sub(start).dot(segment) / lengthSquared, 0, 1);
+    return point.distanceTo(start.addScaledVector(segment, t));
   }
 
   dispose(): void {
