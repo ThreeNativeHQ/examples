@@ -229,6 +229,14 @@ tracer.frustumCulled = false;
 scene.add(tracer);
 let tracerTimer = 0;
 
+// incoming fire needs to be legible: a short tracer from the enemy's muzzle to the player
+const enemyTracerMaterial = new THREE.LineBasicMaterial({ color: 0xffc987, transparent: true, opacity: 0 });
+const enemyTracerGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+const enemyTracer = new THREE.Line(enemyTracerGeometry, enemyTracerMaterial);
+enemyTracer.frustumCulled = false;
+scene.add(enemyTracer);
+let enemyTracerTimer = 0;
+
 const loader = new GLTFLoader();
 
 loader.load(viewmodelUrl, (gltf) => {
@@ -463,6 +471,11 @@ function tick(dt: number = FIXED_DT): void {
     if (!playing) break;
     state.health = Math.max(0, state.health - shot.damage);
     shakeTimer = 0.22;
+    const line = enemyTracerGeometry.getAttribute("position") as THREE.BufferAttribute;
+    line.setXYZ(0, shot.origin.x, shot.origin.y, shot.origin.z);
+    line.setXYZ(1, eye.x, eye.y - 0.12, eye.z);
+    line.needsUpdate = true;
+    enemyTracerTimer = 0.07;
     if (state.health <= 0) state.phase = "failed";
   }
 
@@ -504,6 +517,12 @@ function tick(dt: number = FIXED_DT): void {
     muzzleFlash.intensity = muzzleTimer > 0 ? 18 : 0;
   } else {
     muzzleFlash.intensity = 0;
+  }
+  if (enemyTracerTimer > 0) {
+    enemyTracerTimer -= dt;
+    enemyTracerMaterial.opacity = Math.max(0, enemyTracerTimer / 0.07) * 0.9;
+  } else {
+    enemyTracerMaterial.opacity = 0;
   }
   if (tracerTimer > 0) {
     tracerTimer -= dt;

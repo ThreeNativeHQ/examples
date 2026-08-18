@@ -46,8 +46,8 @@ export interface World {
   sun: THREE.DirectionalLight;
 }
 
-const concrete = new THREE.MeshStandardMaterial({ color: 0xb9bbbc, roughness: 0.95, metalness: 0 });
-const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x4d545f, roughness: 0.9, metalness: 0.05 });
+const concrete = new THREE.MeshStandardMaterial({ color: 0x9a9c9d, roughness: 0.95, metalness: 0 });
+const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x2f353e, roughness: 0.9, metalness: 0.05 });
 const darkBlock = new THREE.MeshStandardMaterial({ color: 0x21262d, roughness: 0.8, metalness: 0.05 });
 const steel = new THREE.MeshStandardMaterial({ color: 0x8d9094, roughness: 0.6, metalness: 0.3 });
 
@@ -99,8 +99,8 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
 
   // ---- lighting: one high sun throwing long soft shadows, plus a cool sky fill.
   const sun = world.sun;
-  sun.position.set(-27, 32, -14);
-  sun.target.position.set(1, 0, 0);
+  sun.position.set(-26, 30, 19);
+  sun.target.position.set(1, 0, -3);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -26;
@@ -171,7 +171,7 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
   propMap.anisotropy = 8;
   const barrier = new THREE.Mesh(
     new THREE.CylinderGeometry(3.0, 3.0, 1.45, 44, 1, true),
-    new THREE.MeshStandardMaterial({ map: propMap, color: 0xd6d8d8, roughness: 0.95, side: THREE.DoubleSide }),
+    new THREE.MeshStandardMaterial({ map: propMap, color: 0xffffff, roughness: 0.95, side: THREE.DoubleSide }),
   );
   barrier.position.set(-10.2, 0.725, 0.2);
   barrier.castShadow = true;
