@@ -15,7 +15,7 @@ import { Target, type TargetSpec } from "../entities/Target.js";
 import { type RangeMaterials, tiled } from "./materials.js";
 
 export const YARD = 34;
-export const WALL_HEIGHT = 4.6;
+export const WALL_HEIGHT = 5.5;
 /** Where the player stands; the yard runs away from here toward -z. */
 export const FIRING_LINE_Z = 13.4;
 
@@ -126,9 +126,8 @@ export function buildRange(materials: RangeMaterials): Range {
   colliders.push({ min: [-15.1, 0, -3.1], max: [-7.7, 1.55, 4.3] });
 
   // Concrete barricades down the centre lane.
-  addBox(group, colliders, materials.concrete, [5.2, 1.2, 1.5], [0.3, 0.6, 1.2], { hittable });
+  addBox(group, colliders, materials.concrete, [4.15, 1.5, 1.5], [0.2, 0.75, 0.3], { hittable });
   addBox(group, colliders, materials.concrete, [4.4, 1.1, 1.2], [2.6, 0.55, -4.6], { hittable });
-  addBox(group, colliders, materials.concrete, [3.0, 0.9, 1.2], [-5.2, 0.45, -6.0], { hittable });
 
   // Two dark lockers, right of centre.
   addBox(group, colliders, materials.block, [1.5, 2.5, 0.95], [6.4, 1.25, -5.4], { hittable });
