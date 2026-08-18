@@ -292,7 +292,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       flashMaterial,
     );
     enemyFlash.name = "muzzle-flash";
-    enemyFlash.visible = false;
+    // Same prewarm as the tracers and the impact puffs: in the scene from the first frame,
+    // driven by opacity. Toggling `visible` rebuilds the pipeline on the first shot.
+    flashMaterial.opacity = 0;
+    enemyFlash.visible = true;
     ctx.add(enemyFlash);
     let enemyFlashLife = 0;
 
@@ -312,7 +315,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     });
     const smoke = Array.from({ length: 10 }, () => {
       const puff = new MeshClass(new PlaneGeometry(0.4, 0.4), smokeMaterial.clone());
-      puff.visible = false;
+      (puff.material as MeshBasicMaterial).opacity = 0;
+      puff.visible = true;
       ctx.add(puff);
       return { life: 0, drift: new Vector3(), mesh: puff };
     });
@@ -330,7 +334,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         );
         slot.mesh.scale.setScalar(0.35);
         (slot.mesh.material as MeshBasicMaterial).opacity = 0.5;
-        slot.mesh.visible = true;
         slot.life = 0.75;
       }
     };
@@ -342,7 +345,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         enemyFlash.position.copy(at).addScaledVector(direction, 0.22);
         enemyFlash.scale.setScalar(0.85 + ctx.random() * 0.5);
         enemyFlash.rotation.z = ctx.random() * Math.PI;
-        enemyFlash.visible = true;
+        flashMaterial.opacity = 1;
         enemyFlashLife = 0.075;
         enemyLight.position.copy(enemyFlash.position);
         enemyLight.intensity = 26;
@@ -362,7 +365,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // The muzzle flash decays outside the phase gate: an early return with the
       // quad still visible leaves it frozen in the world behind the end screen.
       enemyFlashLife = Math.max(0, enemyFlashLife - dt);
-      if (enemyFlashLife <= 0) enemyFlash.visible = false;
+      if (enemyFlashLife <= 0) flashMaterial.opacity = 0;
       enemyLight.intensity = Math.max(0, enemyLight.intensity - dt * 260);
       for (const puff of smoke) {
         if (puff.life <= 0) continue;
@@ -371,7 +374,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         puff.mesh.scale.setScalar(0.35 + (0.75 - puff.life) * 1.5);
         (puff.mesh.material as MeshBasicMaterial).opacity = Math.max(0, puff.life * 0.62);
         puff.mesh.lookAt(eye.x, eye.y, eye.z);
-        if (puff.life <= 0) puff.mesh.visible = false;
+        if (puff.life <= 0) (puff.mesh.material as MeshBasicMaterial).opacity = 0;
       }
       rifle.updateSmoke(dt, eye);
       playerTracers.update(dt);
@@ -393,7 +396,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         (slot.mesh.material as MeshBasicMaterial).opacity = Math.max(0, slot.life * 4.7);
         if (slot.life <= 0) (slot.mesh.material as MeshBasicMaterial).opacity = 0;
       }
-      if (enemyFlash.visible) enemyFlash.lookAt(eye.x, eye.y, eye.z);
+      if (enemyFlashLife > 0) enemyFlash.lookAt(eye.x, eye.y, eye.z);
       const timeRemaining = Math.max(0, RUN_SECONDS - elapsed);
 
       // Any press on the surface buys the pointer, which is what makes the mouse steer.

@@ -145,7 +145,11 @@ export class Rifle {
     });
     this.#smoke = Array.from({ length: 8 }, () => {
       const puff = new Mesh(new PlaneGeometry(0.22, 0.22), this.#smokeMaterial.clone());
-      puff.visible = false;
+      // Present from the first frame at zero opacity, like the tracer pool. Revealing a
+      // hidden mesh on the first shot makes the renderer build its pipeline mid-frame,
+      // which is the hitch you feel exactly once per session and never again.
+      (puff.material as MeshBasicMaterial).opacity = 0;
+      puff.visible = true;
       puff.renderOrder = 29;
       scene.add(puff);
       return { life: 0, drift: new Vector3(), mesh: puff };
@@ -275,7 +279,6 @@ export class Rifle {
       slot.drift.set(Math.sin(spin) * 0.24, 0.5 + ((index * 7) % 3) * 0.1, Math.cos(spin) * 0.24);
       slot.mesh.scale.setScalar(0.2);
       (slot.mesh.material as MeshBasicMaterial).opacity = 0.42;
-      slot.mesh.visible = true;
       slot.life = 0.6;
     }
   }
@@ -289,7 +292,7 @@ export class Rifle {
       puff.mesh.scale.setScalar(0.2 + (0.6 - puff.life) * 1.1);
       (puff.mesh.material as MeshBasicMaterial).opacity = Math.max(0, puff.life * 0.6);
       puff.mesh.lookAt(eye);
-      if (puff.life <= 0) puff.mesh.visible = false;
+      if (puff.life <= 0) (puff.mesh.material as MeshBasicMaterial).opacity = 0;
     }
   }
 

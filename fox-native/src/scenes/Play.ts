@@ -92,9 +92,22 @@ type Enemy = {
 function mergeLevelMeshes(root: any): void {
   root.updateWorldMatrix(true, true);
   const groups = new Map<string, { geometries: any[]; material: any }>();
+  const merged: any[] = [];
   let sourceMeshes = 0;
+  // Merging bakes matrixWorld into the geometry, so anything that moves after the merge must be
+  // left out of it. This check was missing while mergeStaticSceneMeshes below has always had it,
+  // and the omission is what froze the windmill blades and the waterfall streaks: they were baked
+  // at the pose they held when the deferred level revealed, and root.clear() then detached the
+  // originals, so their updaters spent the rest of the run animating objects nothing draws.
+  const isDynamic = (object: any): boolean => {
+    for (let current = object; current !== null && current !== root.parent; current = current.parent) {
+      if (current.isCamera === true || current.userData?.threeNativeDynamic === true) return true;
+    }
+    return false;
+  };
   root.traverse((object: any) => {
     if (object.isMesh !== true || Array.isArray(object.material)) return;
+    if (isDynamic(object)) return;
     sourceMeshes += 1;
     const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
     const attributes = Object.keys(geometry.attributes)
@@ -108,8 +121,10 @@ function mergeLevelMeshes(root: any): void {
     const group = groups.get(key) ?? { geometries: [], material: object.material };
     group.geometries.push(geometry);
     groups.set(key, group);
+    merged.push(object);
   });
-  root.clear();
+  // Only what was actually merged. `root.clear()` took the dynamic subtrees with it.
+  for (const mesh of merged) mesh.parent?.remove(mesh);
   for (const group of groups.values()) {
     const geometry = mergeGeometries(group.geometries, false);
     if (geometry === null) continue;

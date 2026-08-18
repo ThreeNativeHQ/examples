@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/core": "file:/tmp/foxpkg-bypass/threenative-core-0.2.0.tgz",
+    "@threenative/core": "file:/tmp/foxpkg-fix/threenative-core-0.2.0.tgz",
     "@threenative/physics": "file:/home/joao/projects/fox-native-packages/threenative-physics-0.1.0.tgz",
     "three": "0.185.1",
     "@threenative/ui": "file:/home/joao/projects/fox-native-packages/threenative-ui-0.1.12.tgz"

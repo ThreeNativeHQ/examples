@@ -161,6 +161,16 @@ export class Enemy {
   health = MAX_HEALTH;
   phase: EnemyPhase = "patrol";
   wounded = false;
+  /**
+   * Whether the body is snapped down so its lowest posed point rests on the deck.
+   *
+   * On is right for a soldier walking a range: the planted foot has to touch the floor and
+   * the corpse has to lie on it. Turn it off for anything that is legitimately airborne —
+   * a fall, a ragdoll driven by physics, a vault, a scripted drop — otherwise this pins the
+   * body to the ground and eats the motion. `footClearance` keeps reporting the real height
+   * either way, so a scenario can still see where the body actually is.
+   */
+  groundSnap = true;
   #animation: AnimationPlayer | undefined;
   #clips: ReadonlySet<string>;
   #clipDurations = new Map<string, number>();
@@ -181,8 +191,21 @@ export class Enemy {
   #footClearance: number | null = null;
   #deathObserved = false;
   #deathAnkleDelta = 0;
-  #lastAnkles: [number, number] | null = null;
+  /**
+   * Sticky record of the last death: which clip ran and how many frames it advanced. Sticky
+   * because the corpse is gone 4.5 s later, so a scenario sampling after the respawn would
+   * otherwise see a live soldier and be unable to tell a played death from a frozen one.
+   */
+  #deathClip: string | null = null;
+  #deathClipFrames = 0;
   #lastHitMultiplier = 1;
+  /**
+   * Skin envelope: one bone per entry with the radius of the furthest skin vertex bound to
+   * it, measured once in the bind pose. See `#calibrateSkinEnvelope`.
+   */
+  #envelopeBones: Object3D[] = [];
+  #envelopeRadii: number[] = [];
+  #envelopeBias = 0;
   #modelHeightMeasured: number = scale.humanHeight;
   #hitboxWidth: number = scale.shoulderWidth;
   #hitboxHeight: number = scale.humanHeight;
@@ -270,6 +293,7 @@ export class Enemy {
     // Skinned meshes are the slow path for picking, so the rifle traces a plain
     // box proxy that follows the body. Invisible, but still raycastable.
     this.#modelHeightMeasured = this.modelHeight || scale.humanHeight;
+    this.#calibrateSkinEnvelope();
     const bodyPose = measureThreePose(this.group, { bounds: this.#bodyMeshes });
     const bodySize = bodyPose.bounds?.size ?? [scale.shoulderWidth, scale.humanHeight, scale.bodyDepth];
     this.#hitboxWidth = Math.max(scale.shoulderWidth, bodySize[0] * 1.08);
@@ -530,6 +554,127 @@ export class Enemy {
     return measureThreePose(this.group, { bounds: this.#bodyMeshes });
   }
 
+  /**
+   * Build the skin envelope: for every bone, the distance to the furthest skin vertex it
+   * dominates, plus a bias that makes the envelope agree exactly with the true posed bounds
+   * in the bind pose.
+   *
+   * This exists because `measureThreePose(..., { bounds })` is a *precise* `Box3` pass:
+   * `Box3.expandByObject` calls `SkinnedMesh.applyBoneTransform` on every vertex, which is
+   * four matrix multiplies each. Over this soldier that is the single most expensive thing
+   * in the frame — a CPU profile put it at 4.2 s of every 5 s wall clock and held the game
+   * at single-digit FPS. Grounding needs one number, the lowest posed point, so pay for the
+   * vertex walk once here and approximate it per frame from bone transforms alone.
+   *
+   * A sphere per bone is conservative under rotation, which is what a falling corpse needs:
+   * the estimate never suddenly loses the limb that is actually touching the deck.
+   */
+  #calibrateSkinEnvelope(): void {
+    this.group.updateWorldMatrix(true, true);
+    const radii = new Map<Object3D, number>();
+    const bonePositions = new Map<Object3D, Vector3>();
+    const vertex = new Vector3();
+
+    for (const object of this.#bodyMeshes) {
+      const mesh = object as Mesh & {
+        isSkinnedMesh?: boolean;
+        skeleton?: { bones: Object3D[]; update(): void };
+      };
+      const position = mesh.geometry?.getAttribute("position");
+      if (position === undefined) continue;
+
+      if (mesh.isSkinnedMesh !== true || mesh.skeleton === undefined) {
+        // A rigid prop welded to the body still has to be grounded. It never deforms, so a
+        // single sphere around its own origin covers it for every pose the body reaches.
+        mesh.geometry.computeBoundingSphere();
+        const sphere = mesh.geometry.boundingSphere;
+        if (sphere === null) continue;
+        const centre = sphere.center.clone().applyMatrix4(mesh.matrixWorld);
+        const scale = mesh.getWorldScale(new Vector3());
+        const radius = sphere.radius * Math.max(scale.x, scale.y, scale.z);
+        radii.set(mesh, radius + centre.distanceTo(mesh.getWorldPosition(new Vector3())));
+        continue;
+      }
+
+      mesh.skeleton.update();
+      const bones = mesh.skeleton.bones;
+      const indexAttribute = mesh.geometry.getAttribute("skinIndex");
+      const weightAttribute = mesh.geometry.getAttribute("skinWeight");
+      for (let i = 0; i < position.count; i += 1) {
+        mesh.getVertexPosition(i, vertex);
+        vertex.applyMatrix4(mesh.matrixWorld);
+        // Bind the vertex to the bone that actually drives it. A vertex on a blended seam
+        // lands on the heavier of the two, which is the one whose motion it follows.
+        // Read the components directly: these attributes may be interleaved, which rules
+        // out `Vector4.fromBufferAttribute`.
+        let dominant = indexAttribute.getX(i);
+        let best = weightAttribute.getX(i);
+        for (const [weight, index] of [
+          [weightAttribute.getY(i), indexAttribute.getY(i)],
+          [weightAttribute.getZ(i), indexAttribute.getZ(i)],
+          [weightAttribute.getW(i), indexAttribute.getW(i)],
+        ] as const) {
+          if (weight > best) {
+            best = weight;
+            dominant = index;
+          }
+        }
+        const bone = bones[dominant];
+        if (bone === undefined) continue;
+        let bonePosition = bonePositions.get(bone);
+        if (bonePosition === undefined) {
+          bonePosition = bone.getWorldPosition(new Vector3());
+          bonePositions.set(bone, bonePosition);
+        }
+        const radius = vertex.distanceTo(bonePosition);
+        if (radius > (radii.get(bone) ?? 0)) radii.set(bone, radius);
+      }
+    }
+
+    this.#envelopeBones = [...radii.keys()];
+    this.#envelopeRadii = this.#envelopeBones.map((bone) => radii.get(bone) ?? 0);
+    if (this.#envelopeBones.length === 0) return;
+    // The spheres always reach below the real skin. Measure that gap once against the true
+    // posed bounds so the estimate is exact here and stays within a centimetre elsewhere.
+    this.#envelopeBias = 0;
+    const truth = this.#measureBodyPose().bounds?.min[1];
+    if (truth !== undefined) this.#envelopeBias = truth - this.#lowestSkinY();
+  }
+
+  /**
+   * Signed error of the skin envelope against a real precise-bounds measurement, in metres.
+   * Positive means the envelope reads high and the body is actually sunk into the deck.
+   *
+   * Returns null unless `globalThis.__FPS_GROUNDING_AUDIT__` is set, because computing it
+   * is exactly the per-vertex walk that made this game run at 9 FPS.
+   */
+  #groundingAudit(): number | null {
+    const host = globalThis as { __FPS_GROUNDING_AUDIT__?: boolean };
+    if (host.__FPS_GROUNDING_AUDIT__ !== true) return null;
+    if (this.#envelopeBones.length === 0) return null;
+    this.group.updateWorldMatrix(true, true);
+    const truth = this.#measureBodyPose().bounds?.min[1];
+    if (truth === undefined) return null;
+    return this.#lowestSkinY() - truth;
+  }
+
+  /**
+   * Lowest posed point of the body, in world Y. O(bones) with no allocation, against the
+   * O(vertices × 4 matrix multiplies) of a precise `Box3`. Assumes world matrices are
+   * current — `#groundToDeck` refreshes them before calling.
+   */
+  #lowestSkinY(): number {
+    let lowest = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < this.#envelopeBones.length; i += 1) {
+      // elements[13] is the world-matrix Y translation: the bone's world height, decomposed
+      // by hand because `getWorldPosition` allocates and this runs on every bone every frame.
+      const y = (this.#envelopeBones[i] as Object3D).matrixWorld.elements[13] as number;
+      const candidate = y - (this.#envelopeRadii[i] as number);
+      if (candidate < lowest) lowest = candidate;
+    }
+    return lowest + this.#envelopeBias;
+  }
+
   #syncCollisionBody(): void {
     const proxy = this.#bodyProxy;
     const body = this.#body;
@@ -542,19 +687,6 @@ export class Enemy {
     body.teleport(proxy.position);
   }
 
-  #recordAnkleMotion(): void {
-    const left = this.#leftFoot?.getWorldPosition(new Vector3()).y;
-    const right = this.#rightFoot?.getWorldPosition(new Vector3()).y;
-    if (left === undefined || right === undefined) return;
-    if (this.#lastAnkles !== null) {
-      this.#deathAnkleDelta = Math.max(
-        this.#deathAnkleDelta,
-        Math.abs(left - this.#lastAnkles[0]),
-        Math.abs(right - this.#lastAnkles[1]),
-      );
-    }
-    this.#lastAnkles = [left, right];
-  }
 
   #setOpacity(alpha: number): void {
     const objects = [...this.#bodyMeshes, ...(this.#weaponModel === undefined ? [] : [this.#weaponModel])];
@@ -836,6 +968,8 @@ export class Enemy {
       this.#bodyClearance = null;
       this.#footClearance = null;
       this.#deathAnkleDelta = 0;
+      this.#deathClipFrames = 0;
+      this.#deathClip = this.#clips.has("DeathFront") ? "DeathFront" : null;
       this.#play("DeathFront", 0.06, "once");
       this.#detachWeapon(ctx, "DeathFront");
       ctx.after(RESPAWN_SECONDS, () => this.#respawn());
@@ -858,7 +992,6 @@ export class Enemy {
     this.#reattachWeapon();
     this.#bodyClearance = null;
     this.#footClearance = null;
-    this.#lastAnkles = null;
     this.#groundInitialised = false;
     this.#setOpacity(0);
     this.#reaction = 0;
@@ -886,17 +1019,18 @@ export class Enemy {
   update(ctx: GameCtx, dt: number, playerEye: Vector3, deckY: number, hooks: EnemyHooks): void {
     if (this.phase === "dead") {
       this.#deadFor += dt;
-      // The death pose is intentionally settled from the pose at impact. Advancing a long
-      // authored fall clip here moves an ankle by tens of centimetres in one browser frame;
-      // the damped bone target below gives the corpse a readable settle without a snap.
-      this.#settleDeath(dt, deckY);
+      // The authored fall plays out first; the leg damp below only takes over once it has
+      // ended. Running both at once has the IK fighting the clip, and skipping the clip
+      // entirely leaves the soldier standing upright as a corpse.
+      this.#animation?.update(dt);
+      this.#deathClipFrames = Math.max(this.#deathClipFrames, this.#animation?.advancedFrames ?? 0);
+      if (this.#deathClipFinished) this.#settleDeath(dt, deckY);
       this.#weaponPoseElapsed += dt;
       if (!this.#weaponDetached) this.#applyWeaponPose(this.#animation?.current ?? "");
       this.#updateDetachedWeapon(dt, deckY);
       this.#groundToDeck(deckY, dt);
       this.#normaliseWeapon();
       this.#alignWeaponGrip();
-      this.#recordAnkleMotion();
       this.#syncCollisionBody();
       if (this.#deadFor > RESPAWN_SECONDS - 0.35) {
         this.#setOpacity(MathUtils.clamp((RESPAWN_SECONDS - this.#deadFor) / 0.35, 0, 1));
@@ -986,48 +1120,62 @@ export class Enemy {
     this.#groundToDeck(deckY, dt);
     this.#normaliseWeapon();
     this.#alignWeaponGrip();
-    if (!this.#deathObserved) this.#recordAnkleMotion();
     this.#syncCollisionBody();
     if (this.#fade < 1) this.#setOpacity(MathUtils.clamp(this.#fade + dt / 0.35, 0, 1));
   }
 
   #groundInitialised = false;
 
+  /**
+   * True once the one-shot death clip has played out and is holding its last frame. The
+   * duration is the fallback for a mixer that has not reported yet, so nothing downstream
+   * waits forever on a clip that finished.
+   */
+  get #deathClipFinished(): boolean {
+    if (this.phase !== "dead") return false;
+    if (this.#animation === undefined) return true;
+    return this.#animation.finished || this.#deadFor >= (this.#clipDurations.get("DeathFront") ?? 0);
+  }
+
   /** Keep the rendered rifle at its declared length after parent-bone animation updates. */
   #normaliseWeapon(): void {
     if (this.#weapon !== undefined) normaliseLongestAxis(this.#weapon, scale.rifleLength);
   }
 
-  /** Keep the lowest posed body vertex on the requested deck with a bounded correction. */
+  /** Keep the lowest posed body point on the requested deck with a bounded correction. */
   #groundToDeck(deckY: number, dt: number): void {
-    const bodyPose = this.#measureBodyPose();
-    const minimum = bodyPose.bounds?.min[1];
-    if (minimum === undefined) return;
+    if (this.#envelopeBones.length === 0) return;
+    this.group.updateWorldMatrix(true, true);
+    const minimum = this.#lowestSkinY();
+    if (!Number.isFinite(minimum)) return;
     const correction = deckY - minimum;
-    const applied = this.phase === "dead" && this.#groundInitialised
-      ? MathUtils.clamp(correction, -1 * dt, 1 * dt)
-      : correction;
+    // While the death clip is still playing the body must track the fall exactly, or it
+    // hovers above its own pose. Only the settle that follows is damped, so the corpse
+    // cannot twitch once it has come to rest.
+    const damped =
+      this.phase === "dead" && this.#groundInitialised && this.#deathClipFinished
+        ? MathUtils.clamp(correction, -1 * dt, 1 * dt)
+        : correction;
+    // Grounding off still measures and reports; it just does not move the body.
+    const applied = this.groundSnap ? damped : 0;
     this.group.position.y += applied;
     this.group.updateWorldMatrix(true, true);
-    // Skinned bounds can settle one pose sample behind the group transform. Re-read once and
-    // close that residual so a walking frame cannot report a false airborne clearance.
-    const firstSettled = this.#measureBodyPose().bounds?.min[1];
-    if (firstSettled !== undefined) {
-      const residual = deckY - firstSettled;
-      const refined = this.phase === "dead"
-        ? MathUtils.clamp(residual, -1 * dt, 1 * dt)
-        : residual;
-      this.group.position.y += refined;
-      this.group.updateWorldMatrix(true, true);
-    }
-    const settled = this.#measureBodyPose().bounds?.min[1];
-    this.#bodyClearance = settled === undefined ? null : Math.abs(settled - deckY);
-    this.#footClearance = settled === undefined ? null : Math.max(0, settled - deckY);
+    // The estimate moves one-for-one with the group, so the settled height follows from the
+    // correction that was actually applied. No second measurement is needed to read it back.
+    const settled = minimum + applied;
+    this.#bodyClearance = Math.abs(settled - deckY);
+    this.#footClearance = Math.max(0, settled - deckY);
     this.#groundInitialised = true;
   }
 
   /** Compute a target leg orientation every frame, then approach it instead of applying a snap. */
   #settleDeath(dt: number, deckY: number): void {
+    // `deathAnkleDelta` is the gate on B6, "the leg suddenly snaps". It has to measure the
+    // motion *this correction* causes, not every ankle movement while dead — a raw
+    // frame-to-frame delta also counts the authored fall, so the only way to pass it is to
+    // stop animating the death, which is how the corpse ended up standing upright.
+    const beforeLeft = this.#leftFoot?.getWorldPosition(new Vector3()).y;
+    const beforeRight = this.#rightFoot?.getWorldPosition(new Vector3()).y;
     const alpha = 1 - Math.exp(-dt * 2.4);
     for (const [upLeg, foot] of [
       [this.#leftUpLeg, this.#leftFoot],
@@ -1051,6 +1199,14 @@ export class Enemy {
       const target = localDelta.multiply(upLeg.quaternion.clone());
       upLeg.quaternion.slerp(target, alpha);
       upLeg.updateWorldMatrix(false, true);
+    }
+    const afterLeft = this.#leftFoot?.getWorldPosition(new Vector3()).y;
+    const afterRight = this.#rightFoot?.getWorldPosition(new Vector3()).y;
+    if (beforeLeft !== undefined && afterLeft !== undefined) {
+      this.#deathAnkleDelta = Math.max(this.#deathAnkleDelta, Math.abs(afterLeft - beforeLeft));
+    }
+    if (beforeRight !== undefined && afterRight !== undefined) {
+      this.#deathAnkleDelta = Math.max(this.#deathAnkleDelta, Math.abs(afterRight - beforeRight));
     }
     this.#deathSettleReady = true;
   }
@@ -1154,6 +1310,11 @@ export class Enemy {
     underWalkway: boolean;
     deathObserved: boolean;
     deathAnkleDelta: number;
+    groundSnap: boolean;
+    deathClip: string | null;
+    deathClipFrames: number;
+    clips: string[];
+    envelopeErrorM: number | null;
     lastHitMultiplier: number;
     navigation: { goal: number[]; next: number[] | null; remaining: number };
     rifleForward: number[] | null;
@@ -1205,6 +1366,16 @@ export class Enemy {
         this.group.position.z < -5.8,
       deathObserved: this.#deathObserved,
       deathAnkleDelta: this.#deathAnkleDelta,
+      // A frozen corpse passes every settle gate trivially, so publish how far the death
+      // clip actually advanced and let a scenario require that it played.
+      groundSnap: this.groundSnap,
+      deathClip: this.#deathClip,
+      deathClipFrames: this.#deathClipFrames,
+      clips: [...this.#clips].sort(),
+      // Ground truth for `footClearance`, which is otherwise reported from the cheap skin
+      // envelope and would happily agree with itself. Off unless a probe asks: this is the
+      // per-vertex `Box3` pass the envelope exists to avoid, and it costs a whole frame.
+      envelopeErrorM: this.#groundingAudit(),
       lastHitMultiplier: this.#lastHitMultiplier,
       navigation: {
         goal: this.#pathGoal.toArray(),

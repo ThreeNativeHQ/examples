@@ -9,14 +9,14 @@ importers:
   .:
     dependencies:
       '@threenative/core':
-        specifier: file:/tmp/foxpkg-bypass/threenative-core-0.2.0.tgz
-        version: file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz(react@19.2.8)
+        specifier: file:/tmp/foxpkg-fix/threenative-core-0.2.0.tgz
+        version: file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8)
       '@threenative/physics':
         specifier: file:/home/joao/projects/fox-native-packages/threenative-physics-0.1.0.tgz
-        version: file:../../../fox-native-packages/threenative-physics-0.1.0.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz(react@19.2.8))
+        version: file:../../../fox-native-packages/threenative-physics-0.1.0.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8))
       '@threenative/ui':
         specifier: file:/home/joao/projects/fox-native-packages/threenative-ui-0.1.12.tgz
-        version: file:../../../fox-native-packages/threenative-ui-0.1.12.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: file:../../../fox-native-packages/threenative-ui-0.1.12.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       three:
         specifier: 0.185.1
         version: 0.185.1
@@ -333,8 +333,8 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@threenative/core@file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz':
-    resolution: {integrity: sha512-0ppAqgMn2YqDlSmQDTKD1kIaVsz+ziAy0eNaMcQTrMDVa1ZA/QOWfd8oRWq2MSaHnE1dK4Xkr4vUO5NCn9aCYQ==, tarball: file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz}
+  '@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz':
+    resolution: {integrity: sha512-DzqKRxCWE+PJwtg/SHy/cv2hBv3ve4l9la0f4JJTjGq7Tu8OZjy2ZW16GLxUz6WVxdrDLNBXHid032YjMu3VXQ==, tarball: file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz}
     version: 0.2.0
 
   '@threenative/physics@file:../../../fox-native-packages/threenative-physics-0.1.0.tgz':
@@ -1230,7 +1230,7 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@threenative/core@file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz(react@19.2.8)':
+  '@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8)':
     dependencies:
       three: 0.185.1
       three-mesh-bvh: 0.9.14(three@0.185.1)
@@ -1241,10 +1241,10 @@ snapshots:
       - react
       - use-sync-external-store
 
-  '@threenative/physics@file:../../../fox-native-packages/threenative-physics-0.1.0.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz(react@19.2.8))':
+  '@threenative/physics@file:../../../fox-native-packages/threenative-physics-0.1.0.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8))':
     dependencies:
       '@dimforge/rapier3d-compat': 0.19.3
-      '@threenative/core': file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz(react@19.2.8)
+      '@threenative/core': file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8)
       recast-navigation: 0.43.1
 
   '@threenative/playtest@file:../../../fox-native-packages/threenative-playtest-0.1.0.tgz(playwright@1.62.1)(three@0.185.1)':
@@ -1259,9 +1259,9 @@ snapshots:
       pngjs: 7.0.0
     optional: true
 
-  '@threenative/ui@file:../../../fox-native-packages/threenative-ui-0.1.12.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@threenative/ui@file:../../../fox-native-packages/threenative-ui-0.1.12.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@threenative/core': file:../../../../../../tmp/foxpkg-bypass/threenative-core-0.2.0.tgz(react@19.2.8)
+      '@threenative/core': file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8)
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
