@@ -7,7 +7,6 @@ const KEYS: readonly (readonly [string, string])[] = [
   ["WASD", "Move"],
   ["Mouse 1", "Fire"],
   ["R", "Reload"],
-  ["Mouse 2 / F", "Aim"],
   ["Enter", "Retry"],
 ];
 
@@ -45,14 +44,6 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
         </div>
         <div className={`text-[15px] font-bold tracking-[0.04em] drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] transition-colors duration-200 ${health < 35 ? "text-[#ff5f4d]" : "text-[#3ddc6b]"}`}>
           HEALTH {Math.round(health)}
-        </div>
-        {/* The bar, not just the number: damage arrives three rounds at a time and a number
-            that ticks 100 → 91 is easy to miss entirely while you are being shot at. */}
-        <div className="mt-1 h-[7px] w-[168px] bg-black/55 ring-1 ring-black/40">
-          <div
-            className={`h-full transition-[width] duration-200 ${health < 35 ? "bg-[#ff5f4d]" : "bg-[#3ddc6b]"}`}
-            style={{ width: `${Math.max(0, Math.min(100, health))}%` }}
-          />
         </div>
       </div>
 
