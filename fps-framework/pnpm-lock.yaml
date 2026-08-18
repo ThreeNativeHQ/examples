@@ -5,21 +5,21 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  create-threenative: file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.2-8bcd0dee952e.tgz
+  create-threenative: file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.2-628ef17ddfea.tgz
 
 importers:
 
   .:
     dependencies:
       '@threenative/core':
-        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.2.0-6d9da1a8e970.tgz
-        version: file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz(@types/react@19.2.0)(react@19.2.0)
+        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz
+        version: file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz(@types/react@19.2.0)(react@19.2.0)
       '@threenative/physics':
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.2.1-d45cd51ee589.tgz
-        version: file:../.packages/threenative-physics-0.2.1-d45cd51ee589.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz(@types/react@19.2.0)(react@19.2.0))
+        version: file:../.packages/threenative-physics-0.2.1-d45cd51ee589.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz(@types/react@19.2.0)(react@19.2.0))
       '@threenative/ui':
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.2.1-d78476c56f7a.tgz
-        version: file:../.packages/threenative-ui-0.2.1-d78476c56f7a.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+        version: file:../.packages/threenative-ui-0.2.1-d78476c56f7a.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       react:
         specifier: 19.2.0
         version: 19.2.0
@@ -49,8 +49,8 @@ importers:
         specifier: 6.0.5
         version: 6.0.5(vite@8.2.0(esbuild@0.27.0)(jiti@2.7.0))
       create-threenative:
-        specifier: file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.2-8bcd0dee952e.tgz
-        version: file:../.packages/create-threenative-0.2.2-8bcd0dee952e.tgz
+        specifier: file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.2-628ef17ddfea.tgz
+        version: file:../.packages/create-threenative-0.2.2-628ef17ddfea.tgz
       esbuild:
         specifier: 0.27.0
         version: 0.27.0
@@ -622,8 +622,8 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@threenative/core@file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz':
-    resolution: {integrity: sha512-0frup4eCJ/FHxxaEvtuk8YuJ6sutM3WlfOM9RQoFuJrYbB9AvJTSz2wnLmZGCNK8CUBv7oUKKvrI40wMMu2Z7w==, tarball: file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz}
+  '@threenative/core@file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz':
+    resolution: {integrity: sha512-u2X9OHSahhlFSLi7NGqLT/KODYSb9fl+P9hY656ynMsN7s32VxtbWIiM7j8oEJzRHrUxmXmjCckeMgrneE7IRQ==, tarball: file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz}
     version: 0.2.0
 
   '@threenative/physics@file:../.packages/threenative-physics-0.2.1-d45cd51ee589.tgz':
@@ -748,8 +748,8 @@ packages:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
 
-  create-threenative@file:../.packages/create-threenative-0.2.2-8bcd0dee952e.tgz:
-    resolution: {integrity: sha512-+AAIwlRv5muOPVtyb9NiWqWV/fKcLXZiNsaljmV2Q837OIcAKqrqzJBAAaPX55S01vAIaW/2dd/7Z16v1r3IOw==, tarball: file:../.packages/create-threenative-0.2.2-8bcd0dee952e.tgz}
+  create-threenative@file:../.packages/create-threenative-0.2.2-628ef17ddfea.tgz:
+    resolution: {integrity: sha512-2IlNudtTFr4osRK62WH1kuG4P2kZlGMZKF3wGKuMIf/EaUcB4QgGzOAdU68TC8O5cfryoylgfOXgRG/SLMbG6g==, tarball: file:../.packages/create-threenative-0.2.2-628ef17ddfea.tgz}
     version: 0.2.2
     hasBin: true
 
@@ -1803,7 +1803,7 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.2.0(esbuild@0.27.0)(jiti@2.7.0)
 
-  '@threenative/core@file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz(@types/react@19.2.0)(react@19.2.0)':
+  '@threenative/core@file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz(@types/react@19.2.0)(react@19.2.0)':
     dependencies:
       three: 0.185.1
       three-mesh-bvh: 0.9.14(three@0.185.1)
@@ -1814,10 +1814,10 @@ snapshots:
       - react
       - use-sync-external-store
 
-  '@threenative/physics@file:../.packages/threenative-physics-0.2.1-d45cd51ee589.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz(@types/react@19.2.0)(react@19.2.0))':
+  '@threenative/physics@file:../.packages/threenative-physics-0.2.1-d45cd51ee589.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz(@types/react@19.2.0)(react@19.2.0))':
     dependencies:
       '@dimforge/rapier3d-compat': 0.19.3
-      '@threenative/core': file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz(@types/react@19.2.0)(react@19.2.0)
+      '@threenative/core': file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz(@types/react@19.2.0)(react@19.2.0)
       recast-navigation: 0.43.1
 
   '@threenative/playtest@file:../.packages/threenative-playtest-0.2.0-3e184304e2f1.tgz(playwright@1.62.1)(three@0.185.1)':
@@ -1832,9 +1832,9 @@ snapshots:
       pngjs: 7.0.0
     optional: true
 
-  '@threenative/ui@file:../.packages/threenative-ui-0.2.1-d78476c56f7a.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+  '@threenative/ui@file:../.packages/threenative-ui-0.2.1-d78476c56f7a.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
-      '@threenative/core': file:../.packages/threenative-core-0.2.0-6d9da1a8e970.tgz(@types/react@19.2.0)(react@19.2.0)
+      '@threenative/core': file:../.packages/threenative-core-0.2.0-fix2-37fdb3684fa1.tgz(@types/react@19.2.0)(react@19.2.0)
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
 
@@ -1925,7 +1925,7 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  create-threenative@file:../.packages/create-threenative-0.2.2-8bcd0dee952e.tgz: {}
+  create-threenative@file:../.packages/create-threenative-0.2.2-628ef17ddfea.tgz: {}
 
   cross-spawn@7.0.6:
     dependencies:

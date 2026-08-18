@@ -1,4 +1,5 @@
 export type GameState = {
+  aiming: boolean;
   ammo: number;
   distanceMoved: number;
   health: number;

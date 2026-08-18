@@ -7,6 +7,7 @@ import {
   MeshBasicMaterial,
   Object3D as Object3DClass,
   PlaneGeometry,
+  PointLight as PointLightClass,
   Raycaster,
   Vector3,
 } from "three";
@@ -19,6 +20,8 @@ import { createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { buildRange, type Range } from "../render/range.js";
 import { setupSky } from "../render/sky.js";
+import { softCircleTexture } from "../render/particles.js";
+import { Tracers } from "../render/tracers.js";
 import type { GameState } from "../state.js";
 
 export type GameCtx = ICtx<GameState, IPhysicsContext>;
@@ -35,6 +38,7 @@ type LoadedModel = { scene: Group; animations: AnimationClip[] };
 
 export class Play extends Scene<GameState, IPhysicsContext> {
   static override readonly initialState: GameState = {
+    aiming: false,
     ammo: MAGAZINE,
     distanceMoved: 0,
     health: 100,
@@ -52,6 +56,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     | {
         enemy: LoadedModel;
         viewmodel: LoadedModel;
+        weapon: LoadedModel;
         sky: Texture;
         surface: Texture;
         targetFace: Texture;
@@ -60,15 +65,16 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     | undefined;
 
   override async load(ctx: GameCtx): Promise<void> {
-    const [enemy, viewmodel, sky, surface, targetFace, targetHit] = await Promise.all([
+    const [enemy, viewmodel, weapon, sky, surface, targetFace, targetHit] = await Promise.all([
       ctx.assets.model<LoadedModel>("assets/enemy-terrorist.glb"),
       ctx.assets.model<LoadedModel>("assets/player-viewmodel.glb"),
+      ctx.assets.model<LoadedModel>("assets/weapon-ak47.glb"),
       ctx.assets.texture("assets/sky.jpg"),
       ctx.assets.texture("assets/ue-test-surface.jpg"),
       ctx.assets.texture("assets/range-target-face.png"),
       ctx.assets.texture("assets/range-target-face-hit.png"),
     ]);
-    this.#assets = { enemy, viewmodel, sky, surface, targetFace, targetHit };
+    this.#assets = { enemy, viewmodel, weapon, sky, surface, targetFace, targetHit };
     console.info(
       `TN_FPS_ASSETS_LOADED:enemy(${enemy.animations.length} clips),viewmodel,sky,3 textures`,
     );
@@ -126,13 +132,19 @@ export class Play extends Scene<GameState, IPhysicsContext> {
 
     const player = new FpsPlayer(ctx, camera);
     ctx.entities.add("player", player);
-    const rifle = new Rifle(camera, assets.viewmodel.scene as Object3D, assets.viewmodel.animations);
+    const rifle = new Rifle(
+      camera,
+      assets.viewmodel.scene as Object3D,
+      assets.viewmodel.animations,
+      ctx.scene,
+    );
     ctx.entities.add("rifle", rifle);
 
     const enemy = new Enemy(
       assets.enemy.scene as Object3D,
       assets.enemy.animations,
       range.colliders,
+      assets.weapon.scene as Object3D,
     );
     ctx.add(enemy.group);
     ctx.entities.add("enemy", enemy);
@@ -175,6 +187,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       ctx.add(puff);
       return { life: 0, mesh: puff };
     });
+    // Player rounds trail warm white; the enemy's are red so you can tell incoming from
+    // outgoing at a glance, which is the whole point of seeing a trajectory at all.
+    const playerTracers = new Tracers(ctx.scene, 12, 0xffe6b0);
+    const enemyTracers = new Tracers(ctx.scene, 12, 0xff6a4d);
     let impactCursor = 0;
     const spawnImpact = (at: Vector3, normal: Vector3): void => {
       const slot = impacts[impactCursor % impacts.length];
@@ -200,6 +216,14 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       const hits = raycaster.intersectObjects(hittable, false);
       enemy.hearShot(eye.clone());
       const hit = hits[0];
+      // The trail is drawn whether or not the round connects — a miss you cannot see is a
+      // miss you cannot correct.
+      const muzzle = rifle.muzzleWorld();
+      const end =
+        hit === undefined
+          ? new Vector3().copy(eye).addScaledVector(raycaster.ray.direction, RANGE_METRES)
+          : hit.point.clone();
+      playerTracers.spawn(muzzle, end);
       if (hit === undefined) return;
 
       const target = hit.object.userData.target as Target | undefined;
@@ -231,20 +255,60 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       }
     };
 
-    // A soldier firing at you has to read from the far end of a 34 m yard, so the
-    // burst gets its own additive flash at chest height.
-    const enemyFlash = new MeshClass(
-      new PlaneGeometry(0.34, 0.34),
-      new MeshBasicMaterial({
-        blending: AdditiveBlending,
-        color: 0xffdca8,
-        depthWrite: false,
-        transparent: true,
-      }),
-    );
+    // A muzzle flash is three things at once: a bright card, a light that touches the world,
+    // and smoke that outlives both. One card alone reads as a decal pasted on the scene.
+    const flashSprite = softCircleTexture(64, 0.45);
+    const smokeSprite = softCircleTexture(64, 0.05);
+    const flashMaterial = new MeshBasicMaterial({
+      blending: AdditiveBlending,
+      color: 0xffd79a,
+      depthWrite: false,
+      map: flashSprite,
+      transparent: true,
+    });
+    const enemyFlash = new MeshClass(new PlaneGeometry(0.72, 0.72), flashMaterial);
     enemyFlash.visible = false;
     ctx.add(enemyFlash);
     let enemyFlashLife = 0;
+
+    // The light is what makes it read at 30 m: it puts a warm kick on the soldier and the
+    // concrete for two frames, which no additive quad can do on its own.
+    // Always in the scene, intensity driven to zero — see the note in Rifle: toggling a
+    // light's visibility rebuilds pipelines and stalls the frame.
+    const enemyLight = new PointLightClass(0xffc46a, 0, 9, 2);
+    ctx.add(enemyLight);
+
+    const smokeMaterial = new MeshBasicMaterial({
+      color: 0xb9bec6,
+      depthWrite: false,
+      map: smokeSprite,
+      opacity: 0.5,
+      transparent: true,
+    });
+    const smoke = Array.from({ length: 10 }, () => {
+      const puff = new MeshClass(new PlaneGeometry(0.4, 0.4), smokeMaterial.clone());
+      puff.visible = false;
+      ctx.add(puff);
+      return { life: 0, drift: new Vector3(), mesh: puff };
+    });
+    let smokeCursor = 0;
+    const spawnSmoke = (at: Vector3, forward: Vector3, ctxFrame: GameCtx): void => {
+      for (let index = 0; index < 2; index += 1) {
+        const slot = smoke[smokeCursor % smoke.length];
+        smokeCursor += 1;
+        if (slot === undefined) continue;
+        slot.mesh.position.copy(at).addScaledVector(forward, 0.3 + index * 0.16);
+        slot.drift.set(
+          (ctxFrame.random() - 0.5) * 0.5,
+          0.55 + ctxFrame.random() * 0.35,
+          (ctxFrame.random() - 0.5) * 0.5,
+        );
+        slot.mesh.scale.setScalar(0.35);
+        (slot.mesh.material as MeshBasicMaterial).opacity = 0.5;
+        slot.mesh.visible = true;
+        slot.life = 0.75;
+      }
+    };
 
     const hooks = {
       lineOfSight,
@@ -255,9 +319,15 @@ export class Play extends Scene<GameState, IPhysicsContext> {
           0,
           Math.cos(enemy.group.rotation.y),
         );
-        enemyFlash.position.copy(at).addScaledVector(forward, 0.55);
+        enemyFlash.position.copy(at).addScaledVector(forward, 0.22);
+        enemyFlash.scale.setScalar(0.85 + ctx.random() * 0.5);
+        enemyFlash.rotation.z = ctx.random() * Math.PI;
         enemyFlash.visible = true;
-        enemyFlashLife = 0.06;
+        enemyFlashLife = 0.075;
+        enemyLight.position.copy(enemyFlash.position);
+        enemyLight.intensity = 26;
+        enemyTracers.spawn(enemyFlash.position, new Vector3(eye.x, eye.y - 0.12, eye.z));
+        spawnSmoke(enemyFlash.position, forward, ctx);
       },
     };
 
@@ -273,6 +343,19 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // quad still visible leaves it frozen in the world behind the end screen.
       enemyFlashLife = Math.max(0, enemyFlashLife - dt);
       if (enemyFlashLife <= 0) enemyFlash.visible = false;
+      enemyLight.intensity = Math.max(0, enemyLight.intensity - dt * 260);
+      for (const puff of smoke) {
+        if (puff.life <= 0) continue;
+        puff.life -= dt;
+        puff.mesh.position.addScaledVector(puff.drift, dt);
+        puff.mesh.scale.setScalar(0.35 + (0.75 - puff.life) * 1.5);
+        (puff.mesh.material as MeshBasicMaterial).opacity = Math.max(0, puff.life * 0.62);
+        puff.mesh.lookAt(eye.x, eye.y, eye.z);
+        if (puff.life <= 0) puff.mesh.visible = false;
+      }
+      rifle.updateSmoke(dt, eye);
+      playerTracers.update(dt);
+      enemyTracers.update(dt);
 
       const state = frameCtx.state.getState();
       if (state.phase !== "playing") {
@@ -307,6 +390,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       else if (player.health <= 0 || timeRemaining <= 0) phase = "failed";
 
       frameCtx.state.set({
+        aiming: player.aiming,
         ammo: rifle.ammo,
         distanceMoved: player.distanceMoved,
         health: player.health,

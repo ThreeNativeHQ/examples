@@ -9,6 +9,15 @@ dist/
 # so they stay on disk and out of a public repository. The brief describes them in words.
 reference.png
 
+# Third-party game assets handed to a build as source material. Two of the FPS models are not
+# cleared for redistribution — the first-person viewmodel records "user-provided; verify
+# upstream pack terms before redistribution", and the enemy is CC-BY-4.0 carrying retargeted
+# Mixamo clips. They stay on disk, where a build can load them, and out of a public repository.
+# Same call this file already makes for reference.png.
+/fps-kit/
+/fps-framework/assets/
+/fps-vanilla/assets/
+
 # The sandbox root is scratch for whichever build ran last: pnpm sandbox rewrites these three
 # every run, and ./scaffold.sh copies them into the game folder. Committing the root copies
 # leaves the previous game's brief sitting at the top of the repository, describing nothing.

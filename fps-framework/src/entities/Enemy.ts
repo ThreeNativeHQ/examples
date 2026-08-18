@@ -2,6 +2,7 @@ import { AnimationPlayer, type ICtx } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
 import {
   type AnimationClip,
+  Box3,
   BoxGeometry,
   Group,
   MathUtils,
@@ -30,6 +31,19 @@ const BURST_SPACING = 0.11;
 const BURST_COOLDOWN = 3.2;
 const ROUND_DAMAGE = 9;
 const RESPAWN_SECONDS = 4.5;
+/** Steering whiskers: straight on first, then progressively wider detours to either side. */
+const DEVIATIONS: readonly number[] = [
+  0,
+  MathUtils.degToRad(25),
+  MathUtils.degToRad(50),
+  MathUtils.degToRad(75),
+  MathUtils.degToRad(100),
+  MathUtils.degToRad(130),
+];
+/** Seconds between first sighting and the first round, so the player is not shot on sight. */
+const REACTION_SECONDS = 0.45;
+/** A real AK is about this long; the shipped model is in centimetres and must be normalised. */
+const RIFLE_LENGTH = 1.02;
 
 const ROUTE: readonly Vector3[] = [
   new Vector3(-4.5, 0, -9.5),
@@ -46,6 +60,15 @@ export type EnemyHooks = {
   readonly damagePlayer: (amount: number) => void;
   readonly onMuzzleFlash: (at: Vector3) => void;
 };
+
+/** First bone whose name matches, for models that do not use the Mixamo naming. */
+function findBone(root: Object3D, pattern: RegExp): Object3D | undefined {
+  let found: Object3D | undefined;
+  root.traverse((object) => {
+    if (found === undefined && pattern.test(object.name)) found = object;
+  });
+  return found;
+}
 
 export class Enemy {
   readonly group = new Group();
@@ -67,8 +90,19 @@ export class Enemy {
   #deadFor = 0;
   #frozen = false;
   #colliders: readonly BoxCollider[];
+  #weapon: Object3D | undefined;
+  /** Seconds left before it may fire after first seeing the player — it is not a turret. */
+  #reaction = 0;
+  /** Which way it prefers to round an obstacle, held for a moment so corners do not oscillate. */
+  #detour: 1 | -1 = 1;
+  #detourHold = 0;
 
-  constructor(model: Object3D, clips: readonly AnimationClip[], colliders: readonly BoxCollider[]) {
+  constructor(
+    model: Object3D,
+    clips: readonly AnimationClip[],
+    colliders: readonly BoxCollider[],
+    weapon?: Object3D,
+  ) {
     this.#colliders = colliders;
     model.traverse((object) => {
       const mesh = object as Mesh;
@@ -78,6 +112,7 @@ export class Enemy {
       }
     });
     this.group.add(model);
+    if (weapon !== undefined) this.#equip(model, weapon);
     this.group.name = "enemy";
     this.group.position.copy(ROUTE[0] as Vector3);
     this.#target.copy(ROUTE[1] as Vector3);
@@ -121,6 +156,73 @@ export class Enemy {
     return BODY_HEIGHT;
   }
 
+  /**
+   * Put the rifle in the enemy's right hand.
+   *
+   * The animation clips are retargeted Mixamo rifle clips, so the arms are already posed around
+   * a weapon that was not in the file — without this the soldier walks and fires holding air.
+   * The bone is found by name because nothing in the asset pipeline reports a socket, and the
+   * offsets are the grip pose measured against the model's own scale.
+   */
+  #equip(model: Object3D, weapon: Object3D): void {
+    weapon.traverse((object) => {
+      const mesh = object as Mesh;
+      if (mesh.isMesh === true) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = false;
+      }
+    });
+
+    // The rifle is authored in centimetres — its raw bounds are 8 x 30 x 112 — so it has to be
+    // normalised to a real weapon length before anything else, or attaching it to a hand makes
+    // a 112 metre AK. Nothing in the asset pipeline states a unit, so it is measured here.
+    const bounds = new Box3().setFromObject(weapon);
+    const size = new Vector3();
+    bounds.getSize(size);
+    const longest = Math.max(size.x, size.y, size.z);
+    const normalise = longest > 0 ? RIFLE_LENGTH / longest : 1;
+
+    const hand =
+      model.getObjectByName("mixamorigRightHand") ??
+      model.getObjectByName("RightHand") ??
+      findBone(model, /right.*hand|hand.*r$|hand_r/i);
+
+    // A holder carries the grip offset so the rifle's own transform stays the measured one.
+    const holder = new Group();
+    weapon.position.set(0, 0, 0);
+    weapon.rotation.set(0, 0, 0);
+    weapon.scale.setScalar(1);
+    holder.add(weapon);
+
+    if (hand === undefined) {
+      holder.scale.setScalar(normalise);
+      holder.position.set(0.16, 1.24, 0.16);
+      holder.rotation.set(0, Math.PI / 2, 0);
+      this.group.add(holder);
+      this.#weapon = holder;
+      return;
+    }
+    // The hand bone carries the model's own scale; undo it so the normalised size survives.
+    const handScale = new Vector3();
+    hand.getWorldScale(handScale);
+    const inverse = handScale.x === 0 ? 1 : 1 / handScale.x;
+    holder.scale.setScalar(normalise * inverse);
+    // Mixamo hands point +Y down the fingers with +Z out of the palm; the rifle's long axis is
+    // its own +Z. Rotating -90 degrees about X lays the barrel along the fingers.
+    holder.rotation.set(-Math.PI / 2, 0, 0);
+    holder.position.set(0, 0, 0);
+    hand.add(holder);
+    this.#weapon = holder;
+  }
+
+  /** Muzzle point in world space: the weapon tip when equipped, the chest otherwise. */
+  muzzle(): Vector3 {
+    const weapon = this.#weapon;
+    if (weapon === undefined) return this.chest;
+    const tip = new Vector3(0, 0, RIFLE_LENGTH * 0.55);
+    return weapon.localToWorld(tip);
+  }
+
   #play(name: string, fade = 0.18): void {
     if (this.#animation === undefined || !this.#clips.has(name)) return;
     if (this.#animation.current === name) return;
@@ -142,20 +244,50 @@ export class Enemy {
     return Math.abs(x) > 16 || Math.abs(z) > 16;
   }
 
+  /**
+   * Walk toward a point, going *around* what is in the way.
+   *
+   * The previous version moved on each axis independently and simply refused a blocked axis, so
+   * a soldier that met a barricade head-on stopped against it and vibrated for the rest of the
+   * run. This casts a short whisker along the desired heading and, when it is blocked, tries
+   * progressively wider deviations to each side and takes the first that is clear — the cheapest
+   * steering that actually rounds a corner, and no navmesh to carry.
+   */
   #step(dt: number, toX: number, toZ: number, speed: number): void {
     const dx = toX - this.group.position.x;
     const dz = toZ - this.group.position.z;
     const distance = Math.hypot(dx, dz);
     if (distance < 1e-3) return;
-    const stepX = (dx / distance) * speed * dt;
-    const stepZ = (dz / distance) * speed * dt;
+
+    const wanted = Math.atan2(dx, dz);
+    const reach = Math.max(speed * dt, 0.35) + 0.55;
+    let heading: number | undefined;
+    for (const spread of DEVIATIONS) {
+      for (const side of spread === 0 ? [0] : [this.#detour, -this.#detour as 1 | -1]) {
+        const candidate = wanted + spread * side;
+        const probeX = this.group.position.x + Math.sin(candidate) * reach;
+        const probeZ = this.group.position.z + Math.cos(candidate) * reach;
+        if (this.#blocked(probeX, probeZ)) continue;
+        heading = candidate;
+        break;
+      }
+      if (heading !== undefined) break;
+    }
+    if (heading === undefined) {
+      // Boxed in: commit to one side for a while rather than flip-flopping every frame.
+      this.#detour = this.#detour === 1 ? -1 : 1;
+      return;
+    }
+    // Keep rounding the same way while a detour is active, so it does not oscillate at a corner.
+    if (heading !== wanted) this.#detourHold = 0.6;
+
+    const stepX = Math.sin(heading) * speed * dt;
+    const stepZ = Math.cos(heading) * speed * dt;
     const nextX = this.group.position.x + stepX;
     const nextZ = this.group.position.z + stepZ;
     if (!this.#blocked(nextX, this.group.position.z)) this.group.position.x = nextX;
     if (!this.#blocked(this.group.position.x, nextZ)) this.group.position.z = nextZ;
-    // Face the way it walks.
-    const wanted = Math.atan2(stepX, stepZ);
-    this.group.rotation.y = this.#turn(this.group.rotation.y, wanted, dt * 7);
+    this.group.rotation.y = this.#turn(this.group.rotation.y, heading, dt * 7);
   }
 
   #turn(from: number, to: number, rate: number): number {
@@ -218,6 +350,10 @@ export class Enemy {
     this.wounded = false;
     this.phase = "patrol";
     this.#frozen = false;
+    this.#reaction = 0;
+    this.#burstLeft = 0;
+    this.#cooldown = 0;
+    this.#detourHold = 0;
     this.#routeIndex = 0;
     this.group.position.copy(ROUTE[0] as Vector3);
     this.#target.copy(ROUTE[1] as Vector3);
@@ -236,8 +372,12 @@ export class Enemy {
       if (!this.#frozen) this.#animation?.update(dt);
       return;
     }
+    this.#detourHold = Math.max(0, this.#detourHold - dt);
     const sees = this.#canSee(playerEye, hooks);
     if (sees) {
+      // Entering combat from anywhere else starts the reaction clock, so the player gets a
+      // moment to react rather than taking a burst the instant they step into the open.
+      if (this.phase !== "engage") this.#reaction = REACTION_SECONDS;
       this.#lastSeen.copy(playerEye);
       this.phase = "engage";
       this.#alertTimer = 0;
@@ -322,19 +462,23 @@ export class Enemy {
 
     this.#cooldown -= dt;
     this.#burstTimer -= dt;
+    this.#reaction -= dt;
     if (this.#burstLeft > 0) {
       if (this.#burstTimer <= 0) {
         this.#burstLeft -= 1;
         this.#burstTimer = BURST_SPACING;
+        // A round only reaches the player if the shot is actually clear. Firing through a
+        // barricade was the loudest tell that this was a timer and not a soldier.
+        const clear = hooks.lineOfSight(chest, playerEye);
         // A round that connects costs the full 9; the ones that go wide do not.
         // Seeded, so a replay of the same run takes the same damage.
         const accuracy = MathUtils.clamp(0.75 - flatDistance * 0.035, 0.12, 0.75);
-        if (ctx.random() < accuracy) hooks.damagePlayer(ROUND_DAMAGE);
-        hooks.onMuzzleFlash(chest);
+        if (clear && ctx.random() < accuracy) hooks.damagePlayer(ROUND_DAMAGE);
+        hooks.onMuzzleFlash(this.muzzle());
         this.#play("FiringRifle", 0.04);
         if (this.#burstLeft === 0) this.#cooldown = BURST_COOLDOWN;
       }
-    } else if (sees && this.#cooldown <= 0) {
+    } else if (sees && this.#cooldown <= 0 && this.#reaction <= 0) {
       this.#burstLeft = BURST_ROUNDS;
       this.#burstTimer = 0;
     }
@@ -349,12 +493,21 @@ export class Enemy {
     }
   }
 
-  debug(): { health: number; phase: EnemyPhase; position: number[]; deadFor: number } {
+  debug(): {
+    health: number;
+    phase: EnemyPhase;
+    position: number[];
+    deadFor: number;
+    armed: boolean;
+    reaction: number;
+  } {
     return {
       health: this.health,
       phase: this.phase,
       position: this.group.position.toArray(),
       deadFor: this.#deadFor,
+      armed: this.#weapon !== undefined,
+      reaction: this.#reaction,
     };
   }
 

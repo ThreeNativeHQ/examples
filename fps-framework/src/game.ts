@@ -17,10 +17,10 @@ const game = defineGame<GameState, IPhysicsContext>({
       up: ["ArrowUp", "KeyW"],
     },
     // The sealed proof drives the keyboard only: Space fires, KeyR reloads, Enter retries.
-    fire: { buttons: [0], keys: ["Space"] },
+    fire: { keys: ["Space"], mouseButtons: [0] },
     reload: { keys: ["KeyR"] },
     sprint: { keys: ["ShiftLeft", "ShiftRight"] },
-    aim: { buttons: [2], keys: ["KeyF", "ControlLeft"] },
+    aim: { keys: ["KeyF", "ControlLeft"], mouseButtons: [2] },
     restart: { keys: ["Enter", "NumpadEnter"] },
   },
   plugins: [rapier(), replay(), playtest()],

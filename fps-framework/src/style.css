@@ -43,3 +43,14 @@ body {
   font-family: var(--font-mono);
   -webkit-font-smoothing: antialiased;
 }
+
+/*
+ * No mouse cursor over the game. Pointer lock hides it while it is engaged, but the cursor is
+ * visible before the first click and every time the player presses Escape — an arrow sitting on
+ * top of a crosshair in a first-person shooter reads as an unfinished game.
+ */
+html,
+body,
+canvas {
+  cursor: none;
+}

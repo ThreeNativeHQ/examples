@@ -7,7 +7,7 @@ const KEYS: readonly (readonly [string, string])[] = [
   ["WASD", "Move"],
   ["Mouse 1", "Fire"],
   ["R", "Reload"],
-  ["F", "Aim"],
+  ["Mouse 2 / F", "Aim"],
   ["Enter", "Retry"],
 ];
 
@@ -34,6 +34,7 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
   const timeRemaining = useGameState(game, (state) => state.timeRemaining);
   const hitFlash = useGameState(game, (state) => state.hitFlash);
   const phase = useGameState(game, (state) => state.phase);
+  const aiming = useGameState(game, (state) => state.aiming);
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-sans">
@@ -44,6 +45,14 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
         </div>
         <div className={`text-[15px] font-bold tracking-[0.04em] drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] transition-colors duration-200 ${health < 35 ? "text-[#ff5f4d]" : "text-[#3ddc6b]"}`}>
           HEALTH {Math.round(health)}
+        </div>
+        {/* The bar, not just the number: damage arrives three rounds at a time and a number
+            that ticks 100 → 91 is easy to miss entirely while you are being shot at. */}
+        <div className="mt-1 h-[7px] w-[168px] bg-black/55 ring-1 ring-black/40">
+          <div
+            className={`h-full transition-[width] duration-200 ${health < 35 ? "bg-[#ff5f4d]" : "bg-[#3ddc6b]"}`}
+            style={{ width: `${Math.max(0, Math.min(100, health))}%` }}
+          />
         </div>
       </div>
 
@@ -64,10 +73,16 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
         {ammo} / {reserve}
       </div>
 
-      {/* Crosshair, with a hit marker that blooms outward on a scoring hit. */}
+      {/* Crosshair, with a hit marker that blooms outward on a scoring hit.
+
+          It is hidden while aiming down the sights. The weapon's own optic is the aim reference
+          there, and a second reticle floating beside the red dot reads as a misaligned sight. */}
       <div
         className="absolute left-1/2 top-1/2 h-[13px] w-[13px] -translate-x-1/2 -translate-y-1/2"
-        style={{ transform: `translate(-50%, -50%) scale(${(1 + hitFlash * 0.7).toFixed(3)})` }}
+        style={{
+          opacity: aiming ? 0 : 1,
+          transform: `translate(-50%, -50%) scale(${(1 + hitFlash * 0.7).toFixed(3)})`,
+        }}
       >
         <i className="absolute left-1/2 top-0 h-full w-[1.5px] -translate-x-1/2 bg-white/90" />
         <i className="absolute left-0 top-1/2 h-[1.5px] w-full -translate-y-1/2 bg-white/90" />
