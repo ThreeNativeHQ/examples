@@ -25,7 +25,6 @@ export function createFox() {
 
   // ---- body -------------------------------------------------------------
   const body = new THREE.Group();
-  body.userData.threeNativeTransformOwner = true;
   body.position.y = 0.58;
   root.add(body);
 
@@ -54,7 +53,6 @@ export function createFox() {
 
   // ---- head -------------------------------------------------------------
   const head = new THREE.Group();
-  head.userData.threeNativeTransformOwner = true;
   head.position.set(0.02, 0.62, 0);
   body.add(head);
 
@@ -91,7 +89,6 @@ export function createFox() {
   const limbs = { armL: null, armR: null, legL: null, legR: null };
   for (const [name, s] of [['L', 1], ['R', -1]]) {
     const arm = new THREE.Group();
-    arm.userData.threeNativeTransformOwner = true;
     arm.position.set(0, 0.34, 0.29 * s);
     body.add(arm);
     const sleeve = part(new THREE.CapsuleGeometry(0.085, 0.16, 4, 10), jacket, 0, -0.12, 0);
@@ -100,7 +97,6 @@ export function createFox() {
     limbs[`arm${name}`] = arm;
 
     const leg = new THREE.Group();
-    leg.userData.threeNativeTransformOwner = true;
     leg.position.set(0, 0.02, 0.14 * s);
     body.add(leg);
     const thigh = part(new THREE.CapsuleGeometry(0.1, 0.18, 4, 10), cream, 0, -0.16, 0);
@@ -112,7 +108,6 @@ export function createFox() {
 
   // ---- tail (raccoon-striped, the reference fox has one) -----------------
   const tail = new THREE.Group();
-  tail.userData.threeNativeTransformOwner = true;
   tail.position.set(-0.3, 0.18, 0);
   tail.rotation.z = 0.5;
   body.add(tail);
@@ -121,7 +116,6 @@ export function createFox() {
   const radii = [0.17, 0.19, 0.19, 0.17, 0.13];
   for (let i = 0; i < radii.length; i++) {
     const seg = new THREE.Group();
-    seg.userData.threeNativeTransformOwner = true;
     seg.position.x = i === 0 ? -0.12 : -0.19;
     prev.add(seg);
     const c = i >= radii.length - 1 ? cream : (i % 2 === 0 ? fur : cream);
@@ -137,7 +131,6 @@ export function createFox() {
     new THREE.CircleGeometry(0.42, 20),
     new THREE.MeshBasicMaterial({ color: 0x0a2436, transparent: true, opacity: 0.28, depthWrite: false }),
   );
-  blob.userData.threeNativeTransformOwner = true;
   blob.rotation.x = -Math.PI / 2;
   blob.renderOrder = 2;
   root.add(blob);

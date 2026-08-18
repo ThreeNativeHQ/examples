@@ -1,0 +1,15 @@
+{
+  "name": "prd155-windmill",
+  "target": "web",
+  "schemaVersion": 1,
+  "subject": "Do the windmill sails and roof reach the framebuffer?",
+  "viewport": { "width": 1280, "height": 720 },
+  "artifacts": { "screenshots": true },
+  "warmupFrames": 30,
+  "steps": [
+    { "kind": "wait", "label": "settle", "waitFrames": 60, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "runtimeReady": true }
+  }
+}

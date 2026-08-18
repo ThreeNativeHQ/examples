@@ -121,8 +121,6 @@ export function waterfall(width, height, scene) {
         new THREE.PlaneGeometry(width * (0.05 + Math.random() * 0.05), height * (0.12 + Math.random() * 0.2)),
         new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false }),
       );
-      streak.userData.threeNativeTransformOwner = true;
-      streak.userData.threeNativeTransformMode = 'translation';
       streak.position.set((Math.random() - 0.5) * width * 0.7, -Math.random() * height, width * 0.5);
       streak.userData.speed = 8 + Math.random() * 10;
       streaks.add(streak);
@@ -233,7 +231,6 @@ export function windmill() {
   g.add(roof);
 
   const hub = new THREE.Group();
-  hub.userData.threeNativeTransformOwner = true;
   hub.position.set(0, 6.6, 2.0);
   g.add(hub);
   for (let i = 0; i < 4; i++) {

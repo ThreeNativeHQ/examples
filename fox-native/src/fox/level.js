@@ -307,7 +307,6 @@ export class Level {
 
       const wf = waterfall(3 + rng() * 3, c.h * 0.85, scene);
       wf.userData.threeNativeDynamic = true;
-      wf.userData.threeNativeTransformMode = 'translation';
       wf.position.set(c.x + (rng() - 0.5) * c.w * 0.5, c.y + c.h - 0.5, c.z + c.d / 2 + 0.2);
       scene.add(wf);
       this.updaters.push((dt) => updateWaterfall(wf, dt));
@@ -338,7 +337,6 @@ export class Level {
 
     const mill = windmill();
     mill.userData.threeNativeDynamic = true;
-    mill.userData.threeNativeTransformMode = 'translation';
     mill.position.set(74, 12, -66);
     mill.scale.setScalar(1.9);
     scene.add(mill);
@@ -346,7 +344,6 @@ export class Level {
 
     const ship = airship();
     ship.userData.threeNativeDynamic = true;
-    ship.userData.threeNativeTransformMode = 'translation';
     ship.position.set(-10, 34, -52);
     ship.scale.setScalar(2.2);
     scene.add(ship);
@@ -425,7 +422,6 @@ export class Level {
     }
     const qb = questionBlock(1.2);
     qb.userData.threeNativeDynamic = true;
-    qb.userData.threeNativeTransformMode = 'translation';
     qb.position.set(24, 3.6, 2.6);
     this.renderRoot.add(qb);
     this.addCollider(24, 4.2, 2.6, 1.2, 1.2, 1.2);
@@ -433,7 +429,6 @@ export class Level {
 
     const flag = goalFlag();
     flag.userData.threeNativeDynamic = true;
-    flag.userData.threeNativeTransformMode = 'translation';
     flag.position.set(this.goalX, 3, 0);
     this.renderRoot.add(flag);
     this.updaters.push(() => {

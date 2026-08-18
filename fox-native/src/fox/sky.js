@@ -96,7 +96,6 @@ export function createClouds(scene, rng) {
     );
     c.userData.speed = 0.25 + rng() * 0.5;
     c.userData.threeNativeDynamic = true;
-    c.userData.threeNativeTransformMode = 'translation';
     scene.add(c);
     clouds.push(c);
   }
@@ -106,7 +105,6 @@ export function createClouds(scene, rng) {
     c.position.set(-160 + rng() * 460, -22 - rng() * 16, -30 - rng() * 160);
     c.userData.speed = 0.1 + rng() * 0.2;
     c.userData.threeNativeDynamic = true;
-    c.userData.threeNativeTransformMode = 'translation';
     scene.add(c);
     clouds.push(c);
   }
