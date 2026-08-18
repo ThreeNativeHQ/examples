@@ -23,8 +23,11 @@ const RELOAD_SECONDS = 0.7;
  * at life scale pointing +z with its origin at the shoulder, so the only fixed
  * correction is a half turn; everything else is pose.
  */
-const HIP = { x: 0.25, y: -0.33, z: -0.12, pitch: -0.03, yaw: 0.13, roll: 0.04 };
-const AIM = { x: 0.006, y: -0.128, z: 0.04, pitch: 0.0, yaw: 0.0, roll: 0.0 };
+const HIP = { x: 0.3, y: -0.36, z: -0.15, pitch: -0.03, yaw: 0.12, roll: 0.04 };
+// Down the sights the optic has to sit on the camera axis. The optic centre
+// measured off the asset is (-0.06, 0.21, 0.34) in model space, so the pose is
+// that offset negated on x and y; z leaves it 0.34 m in front of the lens.
+const AIM = { x: -0.053, y: -0.238, z: -0.16, pitch: 0.0, yaw: 0.0, roll: 0.0 };
 
 export class Rifle {
   ammo = MAGAZINE;

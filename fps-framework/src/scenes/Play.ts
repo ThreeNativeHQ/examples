@@ -1,7 +1,15 @@
 import { type ICtx, Scene, type SceneFrame } from "@threenative/core";
 import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
 import type { AnimationClip, Group, Mesh, Object3D, PerspectiveCamera, Texture } from "three";
-import { Object3D as Object3DClass, Raycaster, Vector2, Vector3 } from "three";
+import {
+  AdditiveBlending,
+  Mesh as MeshClass,
+  MeshBasicMaterial,
+  Object3D as Object3DClass,
+  PlaneGeometry,
+  Raycaster,
+  Vector3,
+} from "three";
 import { Enemy } from "../entities/Enemy.js";
 import { FpsPlayer } from "../entities/FpsPlayer.js";
 import { MAGAZINE, RESERVE, Rifle } from "../entities/Rifle.js";
@@ -30,6 +38,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     ammo: MAGAZINE,
     distanceMoved: 0,
     health: 100,
+    hitFlash: 0,
     phase: "playing",
     reloads: 0,
     reserve: RESERVE,
@@ -153,7 +162,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
 
     let elapsed = 0;
     let hitFlash = 0;
-    const centre = new Vector2(0, 0);
     const eye = new Vector3();
 
     const fire = (frameCtx: GameCtx): void => {
@@ -162,7 +170,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       eye.set(player.eye.x, player.eye.y, player.eye.z);
       raycaster.set(eye, new Vector3(forward.x, forward.y, forward.z).normalize());
       raycaster.far = RANGE_METRES;
-      void centre;
       const hits = raycaster.intersectObjects(hittable, false);
       enemy.hearShot(eye.clone());
       const hit = hits[0];
@@ -196,10 +203,34 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       }
     };
 
+    // A soldier firing at you has to read from the far end of a 34 m yard, so the
+    // burst gets its own additive flash at chest height.
+    const enemyFlash = new MeshClass(
+      new PlaneGeometry(0.34, 0.34),
+      new MeshBasicMaterial({
+        blending: AdditiveBlending,
+        color: 0xffdca8,
+        depthWrite: false,
+        transparent: true,
+      }),
+    );
+    enemyFlash.visible = false;
+    ctx.add(enemyFlash);
+    let enemyFlashLife = 0;
+
     const hooks = {
       lineOfSight,
       damagePlayer: (amount: number): void => player.hurt(amount),
-      onMuzzleFlash: (): void => undefined,
+      onMuzzleFlash: (at: Vector3): void => {
+        const forward = new Vector3(
+          Math.sin(enemy.group.rotation.y),
+          0,
+          Math.cos(enemy.group.rotation.y),
+        );
+        enemyFlash.position.copy(at).addScaledVector(forward, 0.55);
+        enemyFlash.visible = true;
+        enemyFlashLife = 0.06;
+      },
     };
 
     return (frameCtx, dt) => {
@@ -210,6 +241,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         return;
       }
 
+      // The muzzle flash decays outside the phase gate: an early return with the
+      // quad still visible leaves it frozen in the world behind the end screen.
+      enemyFlashLife = Math.max(0, enemyFlashLife - dt);
+      if (enemyFlashLife <= 0) enemyFlash.visible = false;
+
       const state = frameCtx.state.getState();
       if (state.phase !== "playing") {
         // The run is over: hold the frame, keep looking around, wait for Enter.
@@ -218,7 +254,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       }
 
       elapsed += dt;
-      hitFlash = Math.max(0, hitFlash - dt);
+      hitFlash = Math.max(0, hitFlash - dt * 2.4);
+      if (enemyFlash.visible) enemyFlash.lookAt(eye.x, eye.y, eye.z);
       const timeRemaining = Math.max(0, RUN_SECONDS - elapsed);
 
       player.update(frameCtx, dt, !rifle.reloading);
@@ -239,6 +276,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         ammo: rifle.ammo,
         distanceMoved: player.distanceMoved,
         health: player.health,
+        hitFlash,
         phase,
         reloads: rifle.reloads,
         reserve: rifle.reserve,

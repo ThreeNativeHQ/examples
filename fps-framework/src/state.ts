@@ -2,6 +2,7 @@ export type GameState = {
   ammo: number;
   distanceMoved: number;
   health: number;
+  hitFlash: number;
   phase: "playing" | "complete" | "failed";
   reloads: number;
   reserve: number;

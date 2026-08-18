@@ -27,7 +27,7 @@ const VIEW_HALF_ANGLE = MathUtils.degToRad(46);
 const ENGAGE_RANGE = 13;
 const BURST_ROUNDS = 3;
 const BURST_SPACING = 0.11;
-const BURST_COOLDOWN = 2.6;
+const BURST_COOLDOWN = 3.2;
 const ROUND_DAMAGE = 9;
 const RESPAWN_SECONDS = 4.5;
 
@@ -328,7 +328,7 @@ export class Enemy {
         this.#burstTimer = BURST_SPACING;
         // A round that connects costs the full 9; the ones that go wide do not.
         // Seeded, so a replay of the same run takes the same damage.
-        const accuracy = MathUtils.clamp(0.9 - flatDistance * 0.028, 0.2, 0.9);
+        const accuracy = MathUtils.clamp(0.75 - flatDistance * 0.035, 0.12, 0.75);
         if (ctx.random() < accuracy) hooks.damagePlayer(ROUND_DAMAGE);
         hooks.onMuzzleFlash(chest);
         this.#play("FiringRifle", 0.04);

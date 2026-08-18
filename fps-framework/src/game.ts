@@ -20,7 +20,7 @@ const game = defineGame<GameState, IPhysicsContext>({
     fire: { buttons: [0], keys: ["Space"] },
     reload: { keys: ["KeyR"] },
     sprint: { keys: ["ShiftLeft", "ShiftRight"] },
-    aim: { buttons: [2] },
+    aim: { buttons: [2], keys: ["KeyF", "ControlLeft"] },
     restart: { keys: ["Enter", "NumpadEnter"] },
   },
   plugins: [rapier(), replay(), playtest()],
