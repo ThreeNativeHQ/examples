@@ -104,6 +104,9 @@ try {
     const sample = await page.evaluate(() => window.__TN_POSE__.enemy.debug());
     finalSample = sample;
     console.log(JSON.stringify({ stage: `death-${waitMs}ms`, ...sample }));
+    if (Math.abs(sample.bodyClearance ?? 1) > 0.02) {
+      throw new Error(`dead body floated at ${waitMs}ms: ${sample.bodyClearance ?? "no sample"}m`);
+    }
     elapsedMs = waitMs;
   }
   if (finalSample === undefined || Math.abs(finalSample.bodyClearance ?? 1) > 0.02) {

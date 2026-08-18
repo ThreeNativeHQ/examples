@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "studio": "threenative-studio",
+    "scale": "node tools/scale-audit.mjs",
     "build": "threenative build",
     "build:web": "threenative build --target web",
     "build:desktop": "threenative build --target desktop",
@@ -13,7 +14,7 @@
     "build:ios": "threenative build --target ios",
     "test:native": "pnpm build:desktop && node node_modules/@threenative/runtime-native/scripts/verify-starter-desktop.mjs",
     "pretest": "playwright install chromium",
-    "test": "vite build && threenative-playtest --scenario playtests/survives.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-fire.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-restart.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-ads.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\"",
+    "test": "vite build && threenative-playtest --scenario playtests/survives.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-fire.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-restart.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-ads.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && pnpm scale",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

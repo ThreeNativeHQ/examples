@@ -21,9 +21,14 @@ const UP = new Vector3(0, 1, 0);
  * The pool is allocated once and reused round-robin; nothing is created while firing.
  */
 export class Tracers {
-  readonly #pool: { life: number; mesh: Mesh }[];
+  readonly #pool: {
+    direction: Vector3;
+    life: number;
+    maxTravel: number;
+    mesh: Mesh;
+    travel: number;
+  }[];
   #cursor = 0;
-  readonly #from = new Vector3();
   readonly #direction = new Vector3();
   readonly #quaternion = new Quaternion();
 
@@ -40,10 +45,12 @@ export class Tracers {
     });
     this.#pool = Array.from({ length: count }, () => {
       const mesh = new Mesh(geometry, material.clone());
-      mesh.visible = false;
+      // Zero-opacity pool members prewarm the WebGPU pipeline at load time.
+      (mesh.material as MeshBasicMaterial).opacity = 0;
+      mesh.visible = true;
       mesh.frustumCulled = false;
       parent.add(mesh);
-      return { life: 0, mesh };
+      return { direction: new Vector3(), life: 0, maxTravel: 0, mesh, travel: 0 };
     });
   }
 
@@ -52,26 +59,38 @@ export class Tracers {
     const slot = this.#pool[this.#cursor % this.#pool.length];
     this.#cursor += 1;
     if (slot === undefined) return;
-    this.#from.copy(from);
     this.#direction.subVectors(to, from);
     const distance = this.#direction.length();
     if (distance < 0.05) return;
     this.#direction.divideScalar(distance);
     this.#quaternion.setFromUnitVectors(UP, this.#direction);
-    slot.mesh.position.copy(this.#from);
+    // A short travelling streak reads as a round leaving the barrel. Stretching
+    // one cylinder all the way to the target looked like a laser and hid the
+    // actual muzzle angle.
+    const segmentLength = Math.min(3.2, distance);
+    const lead = Math.min(0.16, Math.max(0, distance - segmentLength));
+    slot.direction.copy(this.#direction);
+    slot.travel = lead;
+    slot.maxTravel = Math.max(lead, distance - segmentLength);
+    slot.mesh.position.copy(from).addScaledVector(this.#direction, lead);
     slot.mesh.quaternion.copy(this.#quaternion);
-    slot.mesh.scale.set(1, distance, 1);
+    slot.mesh.scale.set(1, segmentLength, 1);
     (slot.mesh.material as MeshBasicMaterial).opacity = 0.9;
-    slot.mesh.visible = true;
-    slot.life = 0.055;
+    slot.life = Math.min(0.11, distance / 360);
   }
 
   update(dt: number): void {
     for (const slot of this.#pool) {
       if (slot.life <= 0) continue;
       slot.life -= dt;
-      (slot.mesh.material as MeshBasicMaterial).opacity = Math.max(0, slot.life * 16);
-      if (slot.life <= 0) slot.mesh.visible = false;
+      const movement = Math.min(dt * 360, slot.maxTravel - slot.travel);
+      slot.travel += movement;
+      slot.mesh.position.addScaledVector(slot.direction, movement);
+      (slot.mesh.material as MeshBasicMaterial).opacity = Math.min(0.9, slot.life * 14);
+      if (slot.life <= 0 || slot.travel >= slot.maxTravel) {
+        slot.life = 0;
+        (slot.mesh.material as MeshBasicMaterial).opacity = 0;
+      }
     }
   }
 }

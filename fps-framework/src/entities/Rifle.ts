@@ -3,6 +3,7 @@ import type { IPhysicsContext } from "@threenative/physics";
 import {
   AdditiveBlending,
   type AnimationClip,
+  ConeGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -83,18 +84,24 @@ export class Rifle {
       this.#play("Idle", 0);
     }
     this.group.renderOrder = 20;
+    // A suppressed muzzle makes a tight, forward-pointing flame. The old 60 cm
+    // camera-facing card sat well to the right of the visible suppressor and could
+    // briefly cover most of the frame as an obvious square.
     this.#flash = new Mesh(
-      new PlaneGeometry(0.6, 0.6),
+      new ConeGeometry(0.055, 0.24, 6, 1, true),
       new MeshBasicMaterial({
         blending: AdditiveBlending,
         color: 0xffd9a0,
         depthWrite: false,
-        map: softCircleTexture(64, 0.45),
+        opacity: 0,
         transparent: true,
       }),
     );
-    this.#flash.position.set(0.02, 0.02, -1.35);
-    this.#flash.visible = false;
+    this.#flash.position.set(-0.14, 0.16, -0.92);
+    this.#flash.rotation.x = -Math.PI / 2;
+    // Keep the zero-opacity mesh in the render list so WebGPU compiles this
+    // material during loading instead of stalling on the first trigger pull.
+    this.#flash.visible = true;
     this.#flash.renderOrder = 30;
     this.group.add(this.#flash);
     // The flash has to light the hands and the barrel, not just draw over them.
@@ -136,11 +143,11 @@ export class Rifle {
     this.#kick = 1;
     this.#shootFor = 0.12;
     this.#play("Shoot", 0.02);
-    this.#flashLife = 0.06;
-    this.#flash.visible = true;
+    this.#flashLife = 0.045;
+    (this.#flash.material as MeshBasicMaterial).opacity = 1;
     this.#flash.rotation.z = this.shots * 1.7;
-    this.#flash.scale.setScalar(0.8 + ((this.shots * 37) % 10) / 14);
-    this.#light.intensity = 14;
+    this.#flash.scale.setScalar(0.8 + ((this.shots * 37) % 10) / 25);
+    this.#light.intensity = 3.5;
     this.#spawnSmoke();
     return true;
   }
@@ -208,8 +215,8 @@ export class Rifle {
     else this.#play("Idle");
     this.#animation?.update(dt);
     this.#flashLife = Math.max(0, this.#flashLife - dt);
-    this.#flash.visible = this.#flashLife > 0;
-    this.#light.intensity = Math.max(0, this.#light.intensity - dt * 150);
+    (this.#flash.material as MeshBasicMaterial).opacity = Math.min(1, this.#flashLife / 0.025);
+    this.#light.intensity = Math.max(0, this.#light.intensity - dt * 90);
     this.#kick = Math.max(0, this.#kick - dt * 7);
     // The sights drop while the magazine is out and come back up after.
     const wantLowered = this.reloading ? 1 : 0;

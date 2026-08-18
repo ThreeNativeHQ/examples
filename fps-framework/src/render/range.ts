@@ -77,9 +77,16 @@ function addBox(
   material: Mesh["material"],
   size: readonly [number, number, number],
   at: readonly [number, number, number],
-  options: { readonly collide?: boolean; readonly hittable?: Mesh[] } = {},
+  options: {
+    readonly collide?: boolean;
+    readonly hittable?: Mesh[];
+    /** Audit label. `tools/scale-audit.mjs` measures by name; an unnamed prop is reported
+     *  as unlabelled rather than silently skipped. */
+    readonly name?: string;
+  } = {},
 ): Mesh {
   const mesh = new Mesh(new BoxGeometry(size[0], size[1], size[2]), material);
+  if (options.name !== undefined) mesh.name = options.name;
   mesh.position.set(at[0], at[1], at[2]);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -99,6 +106,7 @@ function addWallGrid(group: Group, positions: number[]): void {
     new BufferGeometry().setAttribute("position", new Float32BufferAttribute(positions, 3)),
     new LineBasicMaterial({ color: 0x202832, opacity: 0.35, transparent: true }),
   );
+  grid.name = "wall-grid";
   grid.renderOrder = 1;
   group.add(grid);
 }
@@ -121,12 +129,14 @@ export function buildRange(materials: RangeMaterials): Range {
   for (const x of [-10.8, -3.6, 3.6, 10.8]) {
     const stripe = new Mesh(new PlaneGeometry(0.22, YARD - 1.6), materials.paint);
     stripe.rotation.x = -Math.PI / 2;
+    stripe.name = "lane-paint";
     stripe.position.set(x, 0.012, 0);
     stripe.receiveShadow = true;
     group.add(stripe);
   }
   const firingLine = new Mesh(new PlaneGeometry(YARD - 1.6, 0.13), materials.paint);
   firingLine.rotation.x = -Math.PI / 2;
+  firingLine.name = "firing-line";
   firingLine.position.set(0, 0.014, FIRING_LINE_Z - 2.8);
   group.add(firingLine);
 
@@ -139,7 +149,10 @@ export function buildRange(materials: RangeMaterials): Range {
     [0.6, WALL_HEIGHT, YARD + 1.2, half, WALL_HEIGHT / 2, 0],
   ];
   for (const [sx, sy, sz, px, py, pz] of walls) {
-    addBox(group, colliders, materials.wall, [sx, sy, sz], [px, py, pz], { hittable });
+    addBox(group, colliders, materials.wall, [sx, sy, sz], [px, py, pz], {
+      hittable,
+      name: "wall",
+    });
   }
 
   const farGrid: number[] = [];
@@ -174,6 +187,7 @@ export function buildRange(materials: RangeMaterials): Range {
       side: DoubleSide,
     }),
   );
+  drum.name = "drum";
   drum.position.set(-11.4, 0.78, 0.6);
   drum.castShadow = true;
   drum.receiveShadow = true;
@@ -182,28 +196,46 @@ export function buildRange(materials: RangeMaterials): Range {
   colliders.push({ min: [-15.1, 0, -3.1], max: [-7.7, 1.55, 4.3] });
 
   // Concrete barricades down the centre lane.
-  addBox(group, colliders, materials.concrete, [4.15, 1.5, 1.5], [0.2, 0.75, 0.3], { hittable });
-  addBox(group, colliders, materials.concrete, [4.4, 1.1, 1.2], [2.6, 0.55, -4.6], { hittable });
+  addBox(group, colliders, materials.concrete, [4.15, 1.5, 1.5], [0.2, 0.75, 0.3], {
+    hittable,
+    name: "barricade",
+  });
+  addBox(group, colliders, materials.concrete, [4.4, 1.1, 1.2], [2.6, 0.55, -4.6], {
+    hittable,
+    name: "barricade",
+  });
 
   // Two dark lockers, right of centre.
-  addBox(group, colliders, materials.block, [1.5, 2.5, 0.95], [6.4, 1.25, -5.4], { hittable });
-  addBox(group, colliders, materials.block, [1.5, 2.5, 0.95], [8.0, 1.25, -5.4], { hittable });
+  addBox(group, colliders, materials.block, [1.5, 2.5, 0.95], [6.4, 1.25, -5.4], {
+    hittable,
+    name: "locker",
+  });
+  addBox(group, colliders, materials.block, [1.5, 2.5, 0.95], [8.0, 1.25, -5.4], {
+    hittable,
+    name: "locker",
+  });
 
   // Raised walkway on the right, with a ramp up to it from the firing side.
   const deckY = 3.5;
-  addBox(group, colliders, materials.block, [9.4, 0.36, 5.6], [11.6, deckY, -8.6], { hittable });
+  addBox(group, colliders, materials.block, [9.4, 0.36, 5.6], [11.6, deckY, -8.6], {
+    hittable,
+    name: "walkway-deck",
+  });
   for (const px of [7.5, 15.6]) {
     for (const pz of [-6.4, -10.8]) {
       addBox(group, colliders, materials.block, [1.0, deckY, 1.0], [px, deckY / 2, pz], {
         hittable,
+        name: "walkway-column",
       });
     }
   }
   const rail = new Mesh(new BoxGeometry(9.6, 0.12, 0.14), materials.paint);
+  rail.name = "walkway-rail";
   rail.position.set(11.6, deckY + 1.05, -5.9);
   rail.castShadow = true;
   group.add(rail);
   const ramp = new Mesh(new BoxGeometry(2.6, 0.3, 7.4), materials.concrete);
+  ramp.name = "ramp";
   ramp.position.set(11.6, deckY / 2 - 0.2, -2.1);
   ramp.rotation.x = -Math.atan2(deckY - 0.2, 7.0);
   ramp.castShadow = true;
@@ -212,9 +244,18 @@ export function buildRange(materials: RangeMaterials): Range {
   hittable.push(ramp);
 
   // Solid dark blocks: one hard right, one squat pair mid-right.
-  addBox(group, colliders, materials.block, [4.2, 3.2, 4.2], [14.4, 1.6, 1.6], { hittable });
-  addBox(group, colliders, materials.block, [2.4, 2.4, 2.4], [7.2, 1.2, -1.6], { hittable });
-  addBox(group, colliders, materials.block, [2.0, 1.6, 2.0], [-8.0, 0.8, -12.4], { hittable });
+  addBox(group, colliders, materials.block, [4.2, 3.2, 4.2], [14.4, 1.6, 1.6], {
+    hittable,
+    name: "block",
+  });
+  addBox(group, colliders, materials.block, [2.4, 2.4, 2.4], [7.2, 1.2, -1.6], {
+    hittable,
+    name: "block",
+  });
+  addBox(group, colliders, materials.block, [2.0, 1.6, 2.0], [-8.0, 0.8, -12.4], {
+    hittable,
+    name: "block",
+  });
 
   const targets = TARGETS.map((spec) => {
     const target = new Target(materials, spec);

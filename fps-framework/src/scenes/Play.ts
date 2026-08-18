@@ -174,12 +174,14 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       blending: AdditiveBlending,
       color: 0xdfe4ea,
       depthWrite: false,
+      map: softCircleTexture(64, 0.18),
       opacity: 0.85,
       transparent: true,
     });
     const impacts = Array.from({ length: 8 }, () => {
-      const puff = new MeshClass(new PlaneGeometry(0.26, 0.26), impactMaterial);
-      puff.visible = false;
+      const puff = new MeshClass(new PlaneGeometry(0.26, 0.26), impactMaterial.clone());
+      (puff.material as MeshBasicMaterial).opacity = 0;
+      puff.visible = true;
       ctx.add(puff);
       return { life: 0, mesh: puff };
     });
@@ -195,7 +197,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       slot.mesh.position.copy(at).addScaledVector(normal, 0.02);
       slot.mesh.lookAt(at.clone().add(normal));
       slot.mesh.scale.setScalar(0.6);
-      slot.mesh.visible = true;
+      (slot.mesh.material as MeshBasicMaterial).opacity = 0.85;
       slot.life = 0.18;
     };
 
@@ -369,7 +371,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         if (slot.life <= 0) continue;
         slot.life -= dt;
         slot.mesh.scale.setScalar(0.6 + (0.18 - slot.life) * 4);
-        if (slot.life <= 0) slot.mesh.visible = false;
+        (slot.mesh.material as MeshBasicMaterial).opacity = Math.max(0, slot.life * 4.7);
+        if (slot.life <= 0) (slot.mesh.material as MeshBasicMaterial).opacity = 0;
       }
       if (enemyFlash.visible) enemyFlash.lookAt(eye.x, eye.y, eye.z);
       const timeRemaining = Math.max(0, RUN_SECONDS - elapsed);
