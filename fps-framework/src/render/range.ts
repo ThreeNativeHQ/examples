@@ -112,9 +112,9 @@ export function buildRange(materials: RangeMaterials): Range {
     stripe.receiveShadow = true;
     group.add(stripe);
   }
-  const firingLine = new Mesh(new PlaneGeometry(YARD - 1.6, 0.26), materials.paint);
+  const firingLine = new Mesh(new PlaneGeometry(YARD - 1.6, 0.13), materials.paint);
   firingLine.rotation.x = -Math.PI / 2;
-  firingLine.position.set(0, 0.014, FIRING_LINE_Z - 0.9);
+  firingLine.position.set(0, 0.014, FIRING_LINE_Z - 2.8);
   group.add(firingLine);
 
   // Perimeter wall, near-black, with a lighter capping course along the top.
