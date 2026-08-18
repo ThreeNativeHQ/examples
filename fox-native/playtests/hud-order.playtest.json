@@ -1,0 +1,13 @@
+{
+  "name": "fox-hud-order",
+  "target": "web",
+  "schemaVersion": 1,
+  "subject": "Does the on-canvas HUD draw over the world, or under it?",
+  "viewport": { "width": 1280, "height": 720 },
+  "artifacts": { "screenshots": true },
+  "warmupFrames": 20,
+  "steps": [{ "kind": "wait", "label": "settle", "waitFrames": 90, "release": true }],
+  "assert": {
+    "diagnostics": { "runtimeReady": true }
+  }
+}

@@ -24,7 +24,12 @@ export class Level {
     this.checkpoints = [];    // x positions with a safe landing spot
     this.spawn = new THREE.Vector3(-5, 1.2, 0);
     this.goalX = 92;
-    this.renderRoot = new BundleGroup();
+    // A plain Group, not a BundleGroup. `three.webgpu.js` encodes bundles, opaque and
+    // transparent draws into one pass, but the WebGPU backend only calls `executeBundles()` in
+    // `finishRender()` — bundled draws therefore execute last in the pass, over the camera-parented
+    // HUD, whatever its renderOrder or depthTest. Measured cost of not bundling on a Pixel 8:
+    // 14.54 ms/frame against 14.09 ms bundled.
+    this.renderRoot = new THREE.Group();
     scene.add(this.renderRoot);
   }
 

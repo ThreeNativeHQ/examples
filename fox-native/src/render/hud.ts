@@ -218,6 +218,8 @@ export class Hud {
   readonly #stickKnob: THREE.Mesh;
   readonly #jumpButton: THREE.Mesh;
   readonly #dashButton: THREE.Mesh;
+  readonly #jumpRing: THREE.Mesh;
+  readonly #dashRing: THREE.Mesh;
   #stickCentre = new THREE.Vector2();
   #jumpCentre = new THREE.Vector2();
   #dashCentre = new THREE.Vector2();
@@ -282,12 +284,27 @@ export class Hud {
 
     // ---- touch controls
     this.group.add(this.#controls);
-    const controlMaterial = flat(PANEL, 0.28);
-    this.#stickBase = ring(this.#stickRadius, 12, controlMaterial);
-    this.#stickKnob = disc(38, flat(PANEL, 0.55));
-    this.#jumpButton = disc(this.#buttonRadius, flat(PANEL, 0.34));
-    this.#dashButton = disc(this.#buttonRadius * 0.72, flat(PANEL, 0.24));
-    this.#controls.add(this.#stickBase, this.#stickKnob, this.#jumpButton, this.#dashButton);
+    // White at a quarter opacity is invisible on this game's art. The scene is bright sky, bright
+    // grass and pale stone almost everywhere the thumbs rest, so a white panel at 0.24 has nothing
+    // to contrast against — the controls were drawing and working, and could not be seen. Each
+    // control is now a dark shape carrying a light one, so it reads against light *and* dark, which
+    // a single-tone overlay cannot do.
+    const baseMaterial = flat(INK, 0.30);
+    this.#stickBase = ring(this.#stickRadius, 14, baseMaterial);
+    this.#stickKnob = disc(38, flat(PANEL, 0.85));
+    this.#jumpButton = disc(this.#buttonRadius, flat(PANEL, 0.62));
+    this.#dashButton = disc(this.#buttonRadius * 0.72, flat(PANEL, 0.52));
+    // A dark ring behind each button, so the pale fill has an edge on a pale background.
+    this.#jumpRing = ring(this.#buttonRadius, 9, flat(INK, 0.34));
+    this.#dashRing = ring(this.#buttonRadius * 0.72, 8, flat(INK, 0.30));
+    this.#controls.add(
+      this.#stickBase,
+      this.#jumpRing,
+      this.#dashRing,
+      this.#stickKnob,
+      this.#jumpButton,
+      this.#dashButton,
+    );
 
     // One render order for the whole overlay, above anything the game draws.
     this.group.traverse((object) => {
@@ -332,6 +349,8 @@ export class Hud {
     this.#stickKnob.position.set(this.#stickCentre.x, this.#stickCentre.y, 1);
     this.#jumpButton.position.set(this.#jumpCentre.x, this.#jumpCentre.y, 0);
     this.#dashButton.position.set(this.#dashCentre.x, this.#dashCentre.y, 0);
+    this.#jumpRing.position.set(this.#jumpCentre.x, this.#jumpCentre.y, 0);
+    this.#dashRing.position.set(this.#dashCentre.x, this.#dashCentre.y, 0);
   }
 
   update(state: HudState): void {
