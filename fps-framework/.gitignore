@@ -1,0 +1,7 @@
+node_modules/
+dist/
+artifacts/
+# Runtime copies of the third-party kit assets. The repository root already keeps
+# `fps-framework/assets/` out for redistribution reasons; these are the same files
+# staged for Vite, so they stay on disk and out of the history too.
+public/assets/
