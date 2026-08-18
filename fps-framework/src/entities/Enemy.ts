@@ -79,7 +79,7 @@ const ENEMY_AK47_RECIPE: WeaponRecipe = {
   version: 3,
   animations: {
     RifleIdle: weaponPose([188.2202, 439.6458, 144.7051], [-111.181, -29.47, -46.122]),
-    RifleWalk: weaponPose([-11.9183, 294.5358, 104.4656], [-99.046, -14.191, -103.546]),
+    RifleWalk: weaponPose([-11.9183, 294.5358, 104.4656], [-90, 0, -90]),
     RifleCrouchWalk: weaponPose([-23.3305, 274.7849, 53.6152], [-106.891, -21.763, -115.469]),
     RifleCrouchWalkToIdle: weaponPose(
       [-23.3305, 274.7849, 53.6152],
@@ -199,6 +199,7 @@ export class Enemy {
   #weapon: Object3D | undefined;
   #weaponModel: Object3D | undefined;
   #weaponDetached = false;
+  #weaponSettled = false;
   #weaponVelocity = new Vector3();
   #rifleLocalMinZ = -scale.rifleLength * 0.35;
   #rifleLocalMaxZ = scale.rifleLength * 0.65;
@@ -422,6 +423,7 @@ export class Enemy {
       this.group.add(holder);
       this.#weapon = holder;
       normaliseLongestAxis(holder, scale.rifleLength);
+      this.#alignWeaponGrip();
       this.#renderedRifleLength = this.#measureRenderedWeapon(weapon);
       return;
     }
@@ -429,6 +431,7 @@ export class Enemy {
     this.#weapon = holder;
     this.#applyWeaponPose("RifleWalk");
     normaliseLongestAxis(holder, scale.rifleLength);
+    this.#alignWeaponGrip();
     this.#renderedRifleLength = this.#measureRenderedWeapon(weapon);
   }
 
@@ -439,7 +442,6 @@ export class Enemy {
     const normalized = MathUtils.clamp(this.#weaponPoseElapsed / Math.max(duration, 1e-6), 0, 1);
     const pose = track === undefined ? undefined : interpolateWeaponPose(track, normalized);
     if (holder === undefined || pose === undefined) return;
-    holder.position.fromArray(pose.position);
     holder.rotation.set(
       MathUtils.degToRad(pose.rotation[0]),
       MathUtils.degToRad(pose.rotation[1]),
@@ -454,6 +456,7 @@ export class Enemy {
     if (holder === undefined || weaponTrack(animation)?.attachment !== "detached") return;
     ctx.scene.attach(holder);
     this.#weaponDetached = true;
+    this.#weaponSettled = false;
     this.#weaponVelocity.set(0.45, 1.4, -0.25).applyAxisAngle(
       new Vector3(0, 1, 0),
       this.group.rotation.y,
@@ -462,14 +465,17 @@ export class Enemy {
 
   #updateDetachedWeapon(dt: number, deckY: number): void {
     const holder = this.#weapon;
-    if (holder === undefined || !this.#weaponDetached) return;
+    if (holder === undefined || !this.#weaponDetached || this.#weaponSettled) return;
     this.#weaponVelocity.y -= 9.81 * dt;
     holder.position.addScaledVector(this.#weaponVelocity, dt);
     holder.rotation.x += dt * 2.7;
     holder.rotation.z += dt * 1.9;
-    if (holder.position.y < deckY + 0.06) {
-      holder.position.y = deckY + 0.06;
+    holder.updateWorldMatrix(false, true);
+    const minimum = new Box3().setFromObject(holder).min.y;
+    if (minimum < deckY) {
+      holder.position.y += deckY - minimum;
       this.#weaponVelocity.set(0, 0, 0);
+      this.#weaponSettled = true;
     }
     holder.updateWorldMatrix(false, true);
   }
@@ -479,6 +485,7 @@ export class Enemy {
     if (holder === undefined || this.#rightHand === undefined) return;
     this.#rightHand.add(holder);
     this.#weaponDetached = false;
+    this.#weaponSettled = false;
     this.#weaponVelocity.set(0, 0, 0);
     this.#weaponPoseElapsed = 0;
     this.#applyWeaponPose("RifleWalk");
@@ -488,6 +495,22 @@ export class Enemy {
     weapon.updateWorldMatrix(true, true);
     const size = new Box3().setFromObject(weapon).getSize(new Vector3());
     return Math.max(size.x, size.y, size.z);
+  }
+
+  /** Re-anchor the measured grip after pose or parent-bone scale changes. */
+  #alignWeaponGrip(): void {
+    const holder = this.#weapon;
+    const grip = this.#grip;
+    const parent = holder?.parent;
+    const hand = this.#rightHand;
+    if (holder === undefined || grip === undefined || parent === null || parent === undefined || hand === undefined) return;
+    holder.updateWorldMatrix(true, true);
+    const gripWorld = grip.getWorldPosition(new Vector3());
+    const desiredLocal = parent.worldToLocal(hand.getWorldPosition(new Vector3()));
+    const gripLocal = holder.worldToLocal(gripWorld);
+    const offset = gripLocal.multiply(holder.scale).applyQuaternion(holder.quaternion);
+    holder.position.copy(desiredLocal.sub(offset));
+    holder.updateWorldMatrix(false, true);
   }
 
   #measureBodyPose(): ReturnType<typeof measureThreePose> {
@@ -863,6 +886,7 @@ export class Enemy {
       this.#updateDetachedWeapon(dt, deckY);
       this.#groundToDeck(deckY, dt);
       this.#normaliseWeapon();
+      this.#alignWeaponGrip();
       this.#recordAnkleMotion();
       this.#syncCollisionBody();
       if (this.#deadFor > RESPAWN_SECONDS - 0.35) {
@@ -952,6 +976,7 @@ export class Enemy {
     if (!this.#weaponDetached) this.#applyWeaponPose(this.#animation?.current ?? "");
     this.#groundToDeck(deckY, dt);
     this.#normaliseWeapon();
+    this.#alignWeaponGrip();
     if (!this.#deathObserved) this.#recordAnkleMotion();
     this.#syncCollisionBody();
     if (this.#fade < 1) this.#setOpacity(MathUtils.clamp(this.#fade + dt / 0.35, 0, 1));
