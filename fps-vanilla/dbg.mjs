@@ -1,0 +1,13 @@
+import { chromium } from "playwright";
+const b = await chromium.launch({ headless:false, args:["--enable-unsafe-webgpu","--enable-features=Vulkan","--disable-gpu-sandbox","--ignore-gpu-blocklist"] });
+const p = await b.newPage({ viewport:{width:800,height:600} });
+await p.goto("http://127.0.0.1:5183", { waitUntil:"load" });
+await p.waitForTimeout(5000);
+const step = async (tag, fn) => { await p.evaluate(fn); await p.waitForTimeout(600); await p.screenshot({path:`/tmp/t-${tag}.png`}); };
+const floor = () => { const g=window.__g; return g.scene.children.find(c=>c.isMesh&&c.geometry.type==="PlaneGeometry"&&c.material.map); };
+await step("a-base", () => {});
+await step("b-clamp", () => { const f=window.__g.scene.children.find(c=>c.isMesh&&c.geometry.type==="PlaneGeometry"&&c.material.map); f.material.map.wrapS=1001; f.material.map.wrapT=1001; f.material.map.repeat.set(1,1); f.material.map.needsUpdate=true; f.material.needsUpdate=true; });
+await step("c-aniso1", () => { const f=window.__g.scene.children.find(c=>c.isMesh&&c.geometry.type==="PlaneGeometry"&&c.material.map); f.material.map.anisotropy=1; f.material.map.needsUpdate=true; f.material.needsUpdate=true; });
+await step("d-nomip", () => { const f=window.__g.scene.children.find(c=>c.isMesh&&c.geometry.type==="PlaneGeometry"&&c.material.map); f.material.map.generateMipmaps=false; f.material.map.minFilter=1006; f.material.map.needsUpdate=true; f.material.needsUpdate=true; });
+await step("e-nocolorspace", () => { const f=window.__g.scene.children.find(c=>c.isMesh&&c.geometry.type==="PlaneGeometry"&&c.material.map); f.material.map.colorSpace=""; f.material.map.needsUpdate=true; f.material.needsUpdate=true; });
+await b.close();
