@@ -41,7 +41,7 @@ const FIXED_DT = 1 / 60;
 const VIEWMODEL_SCALE = 0.56;
 const VIEWMODEL_POS = new THREE.Vector3(0.17, -0.21, -0.33);
 const VIEWMODEL_EULER = new THREE.Euler(0, Math.PI, 0);
-const VIEWMODEL_AIM_POS = new THREE.Vector3(0.0, -0.115, -0.28);
+const VIEWMODEL_AIM_POS = new THREE.Vector3(-0.026, -0.104, -0.28);
 
 const root = document.getElementById("app") ?? document.body;
 document.body.style.cssText = "margin:0;overflow:hidden;background:#0b0e12;";
@@ -518,6 +518,7 @@ function render(now: number): void {
     phase: state.phase,
     locked: pointerLocked,
     reloading: player.reloadTimer > 0,
+    hitFlash: hitMarker,
   });
   renderer.render(scene, camera);
   requestAnimationFrame(render);
@@ -570,4 +571,4 @@ void faceMap;
 void elapsed;
 
 // debug handle used by the local capture loop; harmless in production
-(window as unknown as Record<string, unknown>).__g = { scene, camera, renderer, world, player, state };
+(window as unknown as Record<string, unknown>).__g = { scene, camera, renderer, world, player, state, enemy };

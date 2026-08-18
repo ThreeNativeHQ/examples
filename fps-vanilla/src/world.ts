@@ -96,8 +96,8 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
 
   // ---- lighting: one high sun throwing long soft shadows, plus a cool sky fill.
   const sun = world.sun;
-  sun.position.set(28, 32, -15);
-  sun.target.position.set(-1, 0, 1);
+  sun.position.set(-27, 32, -14);
+  sun.target.position.set(1, 0, 0);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -26;
@@ -178,7 +178,7 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
   world.blockers.push({ minX: -13.2, maxX: -7.2, minZ: -2.8, maxZ: 3.2, top: Number.POSITIVE_INFINITY });
 
   // ---- concrete barricades down the centre
-  addBox(scene, world, [4.8, 1.72, 1.6], [0.1, 0, -5.0], concrete, false);
+  addBox(scene, world, [4.8, 1.58, 1.6], [0.1, 0, -5.0], concrete, false);
   addBox(scene, world, [3.4, 1.35, 1.3], [3.9, 0, -9.4], concrete, false);
   addBox(scene, world, [2.4, 1.0, 1.2], [-6.6, 0, -9.0], concrete, false);
 
@@ -224,12 +224,9 @@ export function buildWorld(scene: THREE.Scene, floorMap: THREE.Texture, propMap:
   addBox(scene, world, [3.0, 2.2, 2.0], [-14.0, 0, -14.4], darkBlock, false);
 
   // ---- targets
-  const plateMaterial = new THREE.MeshStandardMaterial({
-    color: 0xf4645c,
-    emissive: 0x3a100c,
-    roughness: 0.9,
-    side: THREE.DoubleSide,
-  });
+  // flat salmon, matching reference.png: the plates read the same tone whichever way the
+  // sun is behind them
+  const plateMaterial = new THREE.MeshBasicMaterial({ color: 0xff4f42, side: THREE.DoubleSide });
   for (const spec of TARGET_LAYOUT) {
     const [x, y, z] = spec.at;
     const [w, h] = spec.size;

@@ -8,6 +8,7 @@ export interface HudModel {
   phase: "playing" | "complete" | "failed";
   locked: boolean;
   reloading: boolean;
+  hitFlash: number;
 }
 
 const FONT = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
@@ -26,6 +27,7 @@ export class Hud {
   private readonly ammo: HTMLDivElement;
   private readonly objective: HTMLDivElement;
   private readonly banner: HTMLDivElement;
+  private readonly marker: HTMLDivElement;
 
   constructor(root: HTMLElement) {
     const overlay = element(
@@ -63,6 +65,12 @@ export class Hud {
     crosshair.innerHTML =
       '<div style="position:absolute;left:7px;top:0;width:1.5px;height:15px;background:#ffffff;"></div>' +
       '<div style="position:absolute;top:7px;left:0;height:1.5px;width:15px;background:#ffffff;"></div>';
+    this.marker = element(
+      "position:absolute;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%) rotate(45deg);opacity:0;",
+    );
+    this.marker.innerHTML =
+      '<div style="position:absolute;left:12px;top:0;width:2px;height:26px;background:#ff5a4d;"></div>' +
+      '<div style="position:absolute;top:12px;left:0;height:2px;width:26px;background:#ff5a4d;"></div>';
 
     const legend = element(
       "position:absolute;left:14px;bottom:14px;background:rgba(12,14,18,0.55);padding:7px 14px;" +
@@ -77,11 +85,12 @@ export class Hud {
       key("Enter", "Retry"),
     ].join('<span style="color:#5a5f66;margin:0 8px">|</span>');
 
-    overlay.append(this.score, this.health, this.time, this.ammo, this.objective, this.banner, crosshair, legend);
+    overlay.append(this.score, this.health, this.time, this.ammo, this.objective, this.banner, crosshair, this.marker, legend);
     root.appendChild(overlay);
   }
 
   update(model: HudModel): void {
+    this.marker.style.opacity = String(Math.min(1, Math.max(0, model.hitFlash / 0.18)));
     this.score.textContent = `SCORE ${String(Math.max(0, Math.round(model.score))).padStart(4, "0")}`;
     this.health.textContent = `HEALTH ${Math.max(0, Math.ceil(model.health))}`;
     this.health.style.color = model.health <= 30 ? "#ff5a4d" : "#43dd6f";
