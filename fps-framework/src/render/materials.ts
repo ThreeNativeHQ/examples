@@ -60,8 +60,8 @@ export function createMaterials(textures: RangeTextures): RangeMaterials {
     // printed face only shows once a plate has been struck and swung down.
     targetFace: new MeshStandardMaterial({
       color: palette.accent,
-      emissive: palette.accent,
-      emissiveIntensity: 0.06,
+      emissive: 0xff0000,
+      emissiveIntensity: 0.16,
       roughness: 0.9,
       side: DoubleSide,
     }),

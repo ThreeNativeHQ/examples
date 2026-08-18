@@ -8,5 +8,5 @@ export const palette = {
   paint: 0xf2f4f5,
   block: 0x333b45,
   concrete: 0x7a7e81,
-  accent: 0xff5245,
+  accent: 0xff5252,
 } as const;
