@@ -77,7 +77,19 @@
       {
         "entity": "enemy",
         "component": "deathClip",
-        "equals": "DeathFront",
+        "equals": "DeathHeadshot",
+        "allowTrivial": true
+      },
+      {
+        "entity": "enemy",
+        "component": "deathFallDot",
+        "gte": 0.0,
+        "allowTrivial": true
+      },
+      {
+        "entity": "enemy",
+        "component": "lastHitMultiplier",
+        "equals": 4,
         "allowTrivial": true
       }
     ]

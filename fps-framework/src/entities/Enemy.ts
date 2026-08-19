@@ -41,6 +41,20 @@ const NAV_REPLAN_SECONDS = 0.4;
 /** Seconds between first sighting and the first round, so the player is not shot on sight. */
 const REACTION_SECONDS = 0.45;
 const SPAWN_GRACE_SECONDS = 2.5;
+/**
+ * Animation blending, tuned by eye rather than by what typechecks.
+ *
+ * `LOCOMOTION_FADE` at 0.05 s is three frames, which pops; a quarter second reads as weight
+ * shifting between feet. `LOCOMOTION_HOLD` stops the rig re-deciding every frame when crouch
+ * state sits on a threshold, and `STILL_BEFORE_IDLE` stops one blocked step reading as a stop.
+ */
+const LOCOMOTION_FADE = 0.26;
+const LOCOMOTION_HOLD_SECONDS = 0.3;
+const STILL_BEFORE_IDLE_SECONDS = 0.16;
+/** Reactions and deaths are sharp events, but three frames is still a pop. */
+const REACTION_FADE = 0.12;
+const DEATH_FADE = 0.14;
+const FIRE_FADE = 0.1;
 const ROUTE: readonly Vector3[] = [
   new Vector3(-4.5, 0, -9.5),
   new Vector3(-11.5, 0, -13.0),
@@ -198,6 +212,30 @@ export class Enemy {
    */
   #deathClip: string | null = null;
   #deathClipFrames = 0;
+  /** Travel direction of the round that last connected, for choosing which way the body falls. */
+  #lastHitDirection: Vector3 | null = null;
+  #hips: Object3D | undefined;
+  /** Hip world position at the instant of death, so the fall direction can be measured. */
+  #deathHipStart: Vector3 | null = null;
+  /** Sticky fall measurement: the corpse is gone before a scenario can read a live value. */
+  #deathFallMeasured: number | null = null;
+  /** True while the last locomotion frame was a crouch, so standing up can play its transition. */
+  #crouchMoving = false;
+  /** Seconds left of the crouch-to-stand transition, during which no locomotion clip overrides it. */
+  #standUp = 0;
+  /** Seconds left of being under fire. Degrades aim and keeps the soldier low. */
+  #suppressed = 0;
+  #suppressedPeak = 0;
+  /**
+   * Frames each clip has actually advanced this session. The rig ships nine clips; without a
+   * per-clip count nothing catches four of them quietly going unused again.
+   */
+  #clipFrames = new Map<string, number>();
+  /** Locomotion clip currently committed to, and how long before another switch is allowed. */
+  #locomotion = "";
+  #locomotionHold = 0;
+  /** Seconds the body has been continuously still, so one blocked frame is not a stop. */
+  #stillFor = 0;
   #lastHitMultiplier = 1;
   /**
    * Skin envelope: one bone per entry with the radius of the furthest skin vertex bound to
@@ -275,6 +313,7 @@ export class Enemy {
         mesh.receiveShadow = false;
       }
     });
+    this.#hips = findBone(model, /hips/i);
     this.#leftUpLeg = findBone(model, /leftupleg/i);
     this.#leftFoot = findBone(model, /leftfoot/i);
     this.#rightUpLeg = findBone(model, /rightupleg/i);
@@ -722,6 +761,82 @@ export class Enemy {
     this.#animation.play(name, { fade, mode });
   }
 
+  /**
+   * Pick the locomotion clip from what the body is actually doing.
+   *
+   * Two things this fixes beyond using more of the rig: the walk cycle no longer plays while
+   * the soldier is standing still against a blocked path, and standing up out of a crouch runs
+   * its authored transition instead of popping straight to idle.
+   */
+  #playLocomotion(moving: boolean, crouched: boolean, dt: number): void {
+    // One frame against a wall, or one frame of a replan, is not a stop. Without this the
+    // walk clip strobes against idle whenever the path is briefly blocked.
+    this.#stillFor = moving ? 0 : this.#stillFor + dt;
+    const travelling = this.#stillFor < STILL_BEFORE_IDLE_SECONDS;
+
+    let wanted: string;
+    if (travelling) {
+      wanted = crouched && this.#clips.has("RifleCrouchWalk") ? "RifleCrouchWalk" : "RifleWalk";
+    } else if (this.#crouchMoving && this.#clips.has("RifleCrouchWalkToIdle")) {
+      // Standing up runs its authored transition, and owns the pose until it finishes.
+      this.#crouchMoving = false;
+      this.#standUp = this.#clipDurations.get("RifleCrouchWalkToIdle") ?? 0.5;
+      this.#locomotion = "RifleCrouchWalkToIdle";
+      this.#locomotionHold = this.#standUp;
+      this.#play("RifleCrouchWalkToIdle", LOCOMOTION_FADE, "once");
+      return;
+    } else {
+      if (this.#standUp > 0) return;
+      wanted = "RifleIdle";
+    }
+
+    // Commit to a locomotion clip for a beat. Crouch state can flicker as suppression decays
+    // or a burst starts, and a rig that re-blends every frame reads as a twitch, not a soldier.
+    if (wanted !== this.#locomotion && this.#locomotionHold > 0) return;
+    if (wanted !== this.#locomotion) this.#locomotionHold = LOCOMOTION_HOLD_SECONDS;
+    this.#locomotion = wanted;
+    this.#crouchMoving = wanted === "RifleCrouchWalk";
+    this.#standUp = travelling ? 0 : this.#standUp;
+    this.#play(wanted, LOCOMOTION_FADE);
+  }
+
+  /**
+   * How far the corpse travelled along the killing round's direction, in metres, measured on
+   * the hips and flattened to the deck. Positive means he fell away from the shooter, which is
+   * true of both death clips when they are mapped the right way round.
+   */
+  #deathFallDot(): number | null {
+    const start = this.#deathHipStart;
+    const round = this.#lastHitDirection;
+    if (start === null || round === null || this.#hips === undefined) return null;
+    const now = this.#hips.getWorldPosition(new Vector3());
+    const travel = new Vector3(now.x - start.x, 0, now.z - start.z);
+    const heading = new Vector3(round.x, 0, round.z);
+    if (heading.lengthSq() < 1e-6) return null;
+    return travel.dot(heading.normalize());
+  }
+
+  #countClipFrame(): void {
+    const current = this.#animation?.current;
+    if (current === undefined) return;
+    this.#clipFrames.set(current, (this.#clipFrames.get(current) ?? 0) + 1);
+  }
+
+  /** Which death animation reads as true for the round that killed him. */
+  #deathClipFor(): string {
+    const fallback = this.#clips.has("DeathFront") ? "DeathFront" : "DeathBack";
+    // A head hit is unmistakable on screen and outranks direction.
+    if (this.#lastHitMultiplier >= 4 && this.#clips.has("DeathHeadshot")) return "DeathHeadshot";
+    const round = this.#lastHitDirection;
+    if (round === null) return fallback;
+    const forward = new Vector3(0, 0, 1).applyEuler(this.group.rotation);
+    // A round travelling the way he faces reached him from behind, so the body pitches
+    // forward, away from the shooter. Facing into the round drops him backward instead.
+    const struckFromBehind = round.dot(forward) > 0;
+    const wanted = struckFromBehind ? "DeathFront" : "DeathBack";
+    return this.#clips.has(wanted) ? wanted : fallback;
+  }
+
   #occupied(x: number, z: number, padding: number): boolean {
     for (const box of this.#colliders) {
       // The raised deck is overhead, not a wall. Keep its supports and the lower range solids
@@ -885,7 +1000,8 @@ export class Enemy {
   }
 
   /** Follow a cached route, replanning when a moving goal changes or the corridor becomes blocked. */
-  #step(dt: number, toX: number, toZ: number, speed: number): void {
+  /** Returns true when the body actually travelled, so the walk clip cannot play on the spot. */
+  #step(dt: number, toX: number, toZ: number, speed: number): boolean {
     this.#replanIn -= dt;
     const goalMoved = Math.hypot(toX - this.#pathGoal.x, toZ - this.#pathGoal.z) > 0.8;
     const currentWaypoint = this.#path[this.#pathIndex];
@@ -901,11 +1017,11 @@ export class Enemy {
       this.#pathIndex += 1;
       waypoint = this.#path[this.#pathIndex];
     }
-    if (waypoint === undefined) return;
+    if (waypoint === undefined) return false;
     const dx = waypoint.x - this.group.position.x;
     const dz = waypoint.z - this.group.position.z;
     const distance = Math.hypot(dx, dz);
-    if (distance < 1e-3) return;
+    if (distance < 1e-3) return false;
 
     const heading = Math.atan2(dx, dz);
     const travel = Math.min(distance, speed * dt);
@@ -916,10 +1032,11 @@ export class Enemy {
     if (this.#blocked(nextX, nextZ)) {
       this.#path = [];
       this.#replanIn = 0;
-      return;
+      return false;
     }
     this.group.position.set(nextX, this.group.position.y, nextZ);
     this.group.rotation.y = this.#turn(this.group.rotation.y, heading, dt * 7);
+    return travel > speed * dt * 0.05;
   }
 
   #turn(from: number, to: number, rate: number): number {
@@ -969,25 +1086,42 @@ export class Enemy {
       this.#footClearance = null;
       this.#deathAnkleDelta = 0;
       this.#deathClipFrames = 0;
-      this.#deathClip = this.#clips.has("DeathFront") ? "DeathFront" : null;
-      this.#play("DeathFront", 0.06, "once");
-      this.#detachWeapon(ctx, "DeathFront");
+      this.#deathFallMeasured = null;
+      this.#deathHipStart = this.#hips?.getWorldPosition(new Vector3()) ?? null;
+      const clip = this.#deathClipFor();
+      this.#deathClip = this.#clips.has(clip) ? clip : null;
+      this.#play(clip, DEATH_FADE, "once");
+      this.#detachWeapon(ctx, clip);
       ctx.after(RESPAWN_SECONDS, () => this.#respawn());
       return earned + 300;
     }
-    this.#play("HitReaction", 0.05);
+    // Surviving a round costs him his composure for a couple of seconds, not just health.
+    this.#suppressed = Math.max(this.#suppressed, 2.4);
+    this.#suppressedPeak = Math.max(this.#suppressedPeak, this.#suppressed);
+    this.#play("HitReaction", REACTION_FADE);
     if (this.phase !== "engage") this.phase = "engage";
     return earned;
   }
 
-  recordHit(multiplier: number): void {
+  /** `shotDirection` is the round's travel direction, used to pick which way the body falls. */
+  recordHit(multiplier: number, shotDirection?: Vector3): void {
     this.#lastHitMultiplier = multiplier;
+    if (shotDirection !== undefined) {
+      this.#lastHitDirection = shotDirection.clone().normalize();
+    }
   }
 
   #respawn(): void {
     this.health = MAX_HEALTH;
     this.wounded = false;
     this.phase = "patrol";
+    this.#suppressed = 0;
+    this.#standUp = 0;
+    this.#crouchMoving = false;
+    this.#locomotion = "";
+    this.#locomotionHold = 0;
+    this.#stillFor = 0;
+    this.#lastHitDirection = null;
     this.#deathSettleReady = false;
     this.#reattachWeapon();
     this.#bodyClearance = null;
@@ -1013,7 +1147,7 @@ export class Enemy {
       Math.atan2(this.#target.x - this.group.position.x, this.#target.z - this.group.position.z),
       0,
     );
-    this.#play("RifleWalk", 0.05);
+    this.#play("RifleWalk", LOCOMOTION_FADE);
   }
 
   update(ctx: GameCtx, dt: number, playerEye: Vector3, deckY: number, hooks: EnemyHooks): void {
@@ -1023,7 +1157,12 @@ export class Enemy {
       // ended. Running both at once has the IK fighting the clip, and skipping the clip
       // entirely leaves the soldier standing upright as a corpse.
       this.#animation?.update(dt);
+      this.#countClipFrame();
       this.#deathClipFrames = Math.max(this.#deathClipFrames, this.#animation?.advancedFrames ?? 0);
+      const fall = this.#deathFallDot();
+      if (fall !== null && (this.#deathFallMeasured === null || fall > this.#deathFallMeasured)) {
+        this.#deathFallMeasured = fall;
+      }
       if (this.#deathClipFinished) this.#settleDeath(dt, deckY);
       this.#weaponPoseElapsed += dt;
       if (!this.#weaponDetached) this.#applyWeaponPose(this.#animation?.current ?? "");
@@ -1059,15 +1198,15 @@ export class Enemy {
         }
         if (this.#patrolPause > 0) {
           this.#patrolPause -= dt;
-          this.#play("RifleIdle");
+          this.#playLocomotion(false, false, dt);
           break;
         }
-        this.#step(dt, this.#target.x, this.#target.z, WALK_SPEED);
-        this.#play("RifleWalk");
+        this.#playLocomotion(this.#step(dt, this.#target.x, this.#target.z, WALK_SPEED), false, dt);
         if (this.group.position.distanceTo(this.#target) < 0.9) {
           this.#routeIndex = (this.#routeIndex + 1) % ROUTE.length;
           this.#target.copy(ROUTE[this.#routeIndex] as Vector3);
-          this.#patrolPause = 0.45;
+          // A patrol that pauses for exactly 0.45 s at every corner reads as a machine.
+          this.#patrolPause = 0.35 + ctx.random() * 1.1;
         }
         break;
       }
@@ -1079,7 +1218,8 @@ export class Enemy {
           this.#lastSeen.z - this.group.position.z,
         );
         this.group.rotation.y = this.#turn(this.group.rotation.y, wanted, dt * 4);
-        this.#play("RifleIdle");
+        // Something is wrong and he does not know what: stay low while he works it out.
+        this.#playLocomotion(false, true, dt);
         if (this.#alertTimer > 0.8) this.phase = "search";
         break;
       }
@@ -1090,13 +1230,17 @@ export class Enemy {
       case "search": {
         this.#alertTimer += dt;
         if (this.group.position.distanceTo(this.#lastSeen) >= 1.6 && this.#alertTimer <= 7) {
-          this.#step(dt, this.#lastSeen.x, this.#lastSeen.z, CHASE_SPEED);
-          this.#play("RifleWalk");
+          // Closing on a position someone was just shooting from: move low and quick.
+          this.#playLocomotion(
+            this.#step(dt, this.#lastSeen.x, this.#lastSeen.z, CHASE_SPEED * 0.85),
+            true,
+            dt,
+          );
         } else {
           // Search the last known area before giving up; do not instantly snap back to patrol.
           this.#searchAtGoal += dt;
           this.group.rotation.y += dt * (this.#strafe > 0 ? 1.2 : -1.2);
-          this.#play("RifleIdle");
+          this.#playLocomotion(false, true, dt);
         }
         if (this.#searchAtGoal > 2.4 || this.#alertTimer > 9.5) {
           this.phase = "return";
@@ -1108,13 +1252,16 @@ export class Enemy {
       }
       case "return": {
         const home = ROUTE[this.#routeIndex] as Vector3;
-        this.#step(dt, home.x, home.z, WALK_SPEED);
-        this.#play("RifleWalk");
+        this.#playLocomotion(this.#step(dt, home.x, home.z, WALK_SPEED), false, dt);
         if (this.group.position.distanceTo(home) < 1.0) this.phase = "patrol";
         break;
       }
     }
+    this.#standUp = Math.max(0, this.#standUp - dt);
+    this.#suppressed = Math.max(0, this.#suppressed - dt);
+    this.#locomotionHold = Math.max(0, this.#locomotionHold - dt);
     this.#animation?.update(dt);
+    this.#countClipFrame();
     this.#weaponPoseElapsed += dt;
     if (!this.#weaponDetached) this.#applyWeaponPose(this.#animation?.current ?? "");
     this.#groundToDeck(deckY, dt);
@@ -1220,13 +1367,22 @@ export class Enemy {
 
     this.#strafeTimer -= dt;
     if (this.#strafeTimer <= 0) {
-      this.#strafeTimer = 1.3;
+      // A metronome flank is the loudest tell that this is a state machine. Vary it.
+      this.#strafeTimer = 0.9 + ctx.random() * 1.4;
       this.#strafe = -this.#strafe;
     }
 
+    // Stay low when hurt or when rounds are landing near him, and plant to shoot: nobody
+    // sprints through their own burst. This is most of what separates a soldier from a turret
+    // that happens to be walking.
+    const firing = this.#burstLeft > 0;
+    const crouched = this.wounded || this.#suppressed > 0;
+    const settle = firing ? 0.18 : crouched ? 0.72 : 1;
+    let moved = false;
+
     if (this.#reaction > 0) {
       // Detection means pursuit immediately; tactical spacing begins only after reacting.
-      this.#step(dt, knownTarget.x, knownTarget.z, CHASE_SPEED);
+      moved = this.#step(dt, knownTarget.x, knownTarget.z, CHASE_SPEED * settle);
     } else {
       // Every later combat route is still derived from the player: close distance when far,
       // back off when rushed, and flank rather than running straight into the muzzle.
@@ -1242,14 +1398,15 @@ export class Enemy {
       const combatGoal = new Vector3(knownTarget.x, 0, knownTarget.z)
         .addScaledVector(away, desiredRange)
         .add(lateral);
-      this.#step(
+      moved = this.#step(
         dt,
         combatGoal.x,
         combatGoal.z,
-        flatDistance > ENGAGE_RANGE ? CHASE_SPEED : WALK_SPEED,
+        (flatDistance > ENGAGE_RANGE ? CHASE_SPEED : WALK_SPEED) * settle,
       );
     }
-    this.#play("RifleWalk");
+    // The firing clip owns the pose for as long as the burst lasts; locomotion resumes after.
+    if (!firing) this.#playLocomotion(moved, crouched, dt);
 
     this.#cooldown -= dt;
     this.#burstTimer -= dt;
@@ -1263,7 +1420,10 @@ export class Enemy {
         const clear = hooks.lineOfSight(chest, playerEye);
         // A round that connects costs the full 9; the ones that go wide do not.
         // Seeded, so a replay of the same run takes the same damage.
-        const accuracy = MathUtils.clamp(0.75 - flatDistance * 0.035, 0.12, 0.75);
+        // Taking rounds spoils a shooter's aim. Without this he shoots exactly as well while
+        // being hit as he does unopposed, which reads as a machine no matter how he moves.
+        const composure = this.#suppressed > 0 ? 0.45 : 1;
+        const accuracy = MathUtils.clamp((0.75 - flatDistance * 0.035) * composure, 0.05, 0.75);
         const muzzle = this.muzzle();
         const shotDirection = playerEye.clone().sub(muzzle).normalize();
         const missDirection = shotDirection.clone();
@@ -1274,11 +1434,17 @@ export class Enemy {
         }
         if (clear && shotDirection.angleTo(missDirection) < 0.02) hooks.damagePlayer(ROUND_DAMAGE);
         hooks.onMuzzleFlash(muzzle, missDirection, playerEye.distanceTo(muzzle));
-        this.#play("FiringRifle", 0.04);
-        if (this.#burstLeft === 0) this.#cooldown = BURST_COOLDOWN;
+        this.#play("FiringRifle", FIRE_FADE);
+        if (this.#burstLeft === 0) {
+          // Break contact for an irregular beat, longer when he is rattled. A fixed 3.2 s
+          // gap between bursts is learnable within two engagements.
+          this.#cooldown =
+            BURST_COOLDOWN * (0.7 + ctx.random() * 0.6) + (this.#suppressed > 0 ? 0.9 : 0);
+        }
       }
     } else if (sees && this.#cooldown <= 0 && this.#reaction <= 0) {
-      this.#burstLeft = BURST_ROUNDS;
+      // Bursts of two to four, not always three.
+      this.#burstLeft = BURST_ROUNDS + Math.round((ctx.random() - 0.5) * 2);
       this.#burstTimer = 0;
     }
 
@@ -1310,7 +1476,15 @@ export class Enemy {
     underWalkway: boolean;
     deathObserved: boolean;
     deathAnkleDelta: number;
+    wounded: boolean;
+    suppressedPeak: number;
+    crouchClipFrames: number;
+    clipsPlayed: string[];
     groundSnap: boolean;
+    deathFallDot: number | null;
+    crouching: boolean;
+    suppressed: number;
+    animation: string | null;
     deathClip: string | null;
     deathClipFrames: number;
     clips: string[];
@@ -1368,7 +1542,18 @@ export class Enemy {
       deathAnkleDelta: this.#deathAnkleDelta,
       // A frozen corpse passes every settle gate trivially, so publish how far the death
       // clip actually advanced and let a scenario require that it played.
+      wounded: this.wounded,
+      suppressedPeak: this.#suppressedPeak,
+      crouchClipFrames: this.#clipFrames.get("RifleCrouchWalk") ?? 0,
+      // Every clip the rig has actually run, so an unused animation is visible to a scenario.
+      clipsPlayed: [...this.#clipFrames.keys()].sort(),
       groundSnap: this.groundSnap,
+      // Whichever death clip ran, the body must travel the way the round did — i.e. away from
+      // the shooter. One number that catches DeathFront and DeathBack being swapped.
+      deathFallDot: this.#deathFallMeasured,
+      crouching: this.#crouchMoving,
+      suppressed: this.#suppressed,
+      animation: this.#animation?.current ?? null,
       deathClip: this.#deathClip,
       deathClipFrames: this.#deathClipFrames,
       clips: [...this.#clips].sort(),

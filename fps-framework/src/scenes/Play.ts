@@ -264,7 +264,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       if (struck !== undefined) {
         const multiplier =
           hit.point.y >= struck.headZoneMinY ? 4 : hit.point.y < struck.legZoneMaxY ? 0.7 : 1;
-        struck.recordHit(multiplier);
+        struck.recordHit(multiplier, direction);
         const earned = struck.hurt(frameCtx, ROUND_DAMAGE * multiplier);
         if (earned > 0) {
           frameCtx.state.set((state) => ({

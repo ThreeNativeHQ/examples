@@ -623,7 +623,7 @@ packages:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
   '@threenative/core@file:../.packages/threenative-core-0.2.0.tgz':
-    resolution: {integrity: sha512-q7dW8K/8K/dGONjaqvTcbvB/VedDTHOIlf7H1lc33xuTYZFbotcO8lN8I9kAOUis5kIF4iEcop6YSUbtYJVOBg==, tarball: file:../.packages/threenative-core-0.2.0.tgz}
+    resolution: {integrity: sha512-FxrdVDgLPVz58uLpyr2/UCOnLL5iT2GU2EXgpdTMre/+s4QZ52qxrTwXFv6LeZ5P2sdnVdKyLjQVeuMAfcYjIQ==, tarball: file:../.packages/threenative-core-0.2.0.tgz}
     version: 0.2.0
 
   '@threenative/physics@file:../.packages/threenative-physics-0.2.1.tgz':
