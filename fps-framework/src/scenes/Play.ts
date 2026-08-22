@@ -9,24 +9,26 @@ import {
   PointLight as PointLightClass,
   Vector3,
 } from "three";
+import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Enemy } from "../entities/Enemy.js";
 import { FpsPlayer } from "../entities/FpsPlayer.js";
 import { MAGAZINE, RESERVE, Rifle } from "../entities/Rifle.js";
-import type { Target } from "../entities/Target.js";
+import { Target } from "../entities/Target.js";
 import { setupLighting } from "../render/lighting.js";
-import { createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
-import { buildRange, type Range } from "../render/range.js";
-import { setupSky } from "../render/sky.js";
 import { softCircleTexture } from "../render/particles.js";
 import { scale } from "../render/scale.js";
+import { buildTown, TOWN_HALF, type Town } from "../render/town.js";
+import { createTownMaterials, type TownTextures } from "../render/townMaterials.js";
+import { setupSky } from "../render/sky.js";
 import { Tracers } from "../render/tracers.js";
 import { TARGET_GOAL, type GameState } from "../state.js";
 
 export type GameCtx = ICtx<GameState, IPhysicsContext>;
 
-const RUN_SECONDS = 60;
-const RANGE_METRES = 60;
+/** The reference HUD reads 1:45 on the round clock. */
+const RUN_SECONDS = 105;
+const RANGE_METRES = 70;
 const ROUND_DAMAGE = 10;
 
 type LoadedModel = { scene: Group; animations: AnimationClip[] };
@@ -35,10 +37,14 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   static override readonly initialState: GameState = {
     aiming: false,
     ammo: MAGAZINE,
+    blips: [],
     distanceMoved: 0,
     health: 100,
     hitFlash: 0,
     phase: "playing",
+    playerX: 0,
+    playerYaw: 0,
+    playerZ: 32,
     reloads: 0,
     reserve: RESERVE,
     score: 0,
@@ -53,31 +59,85 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         viewmodel: LoadedModel;
         weapon: LoadedModel;
         sky: Texture;
-        surface: Texture;
-        targetFace: Texture;
-        targetHit: Texture;
+        town: TownTextures;
       }
     | undefined;
 
   override async load(ctx: GameCtx): Promise<void> {
-    const [enemy, viewmodel, weapon, sky, surface, targetFace, targetHit] = await Promise.all([
+    // Every town surface is colour + OpenGL normal + roughness. The normals are
+    // what stopped the walls reading as painted cardboard: a stucco photograph
+    // with no relief takes the key light perfectly evenly however good the
+    // photograph is. `bayview-brick` is the one map with no PBR set of its own,
+    // so it borrows the whitewash relief — both are rough lime render at the
+    // same grain, and the alternative is the only flat wall in the town.
+    const texture = (file: string): Promise<Texture> => ctx.assets.texture(`assets/${file}`);
+    const [
+      enemy,
+      viewmodel,
+      weapon,
+      sky,
+      plaster,
+      plasterNormal,
+      plasterRough,
+      brick,
+      floor,
+      floorNormal,
+      floorRough,
+      floorAo,
+      concrete,
+      concreteNormal,
+      concreteRough,
+      quaystone,
+      quaystoneNormal,
+      quaystoneRough,
+      steel,
+      steelNormal,
+      steelRough,
+      wood,
+      woodNormal,
+    ] = await Promise.all([
       ctx.assets.model<LoadedModel>("assets/enemy-terrorist.glb"),
       ctx.assets.model<LoadedModel>("assets/player-viewmodel.glb"),
       ctx.assets.model<LoadedModel>("assets/weapon-ak47.glb"),
-      ctx.assets.texture("assets/sky.jpg"),
-      ctx.assets.texture("assets/ue-test-surface.jpg"),
-      ctx.assets.texture("assets/range-target-face.png"),
-      ctx.assets.texture("assets/range-target-face-hit.png"),
+      texture("bayview-sky.jpg"),
+      texture("bayview-whitewash.jpg"),
+      texture("bayview-whitewash-normal.jpg"),
+      texture("bayview-whitewash-rough.jpg"),
+      texture("bayview-brick.jpg"),
+      texture("bayview-flagstone.jpg"),
+      texture("bayview-flagstone-normal.jpg"),
+      texture("bayview-flagstone-rough.jpg"),
+      texture("bayview-flagstone-ao.jpg"),
+      texture("bayview-concrete.jpg"),
+      texture("bayview-concrete-normal.jpg"),
+      texture("bayview-concrete-rough.jpg"),
+      texture("bayview-quaystone.jpg"),
+      texture("bayview-quaystone-normal.jpg"),
+      texture("bayview-quaystone-rough.jpg"),
+      texture("bayview-steel.jpg"),
+      texture("bayview-steel-normal.jpg"),
+      texture("bayview-steel-rough.jpg"),
+      texture("bayview-wood.jpg"),
+      texture("bayview-wood-normal.jpg"),
     ]);
-    this.#assets = { enemy, viewmodel, weapon, sky, surface, targetFace, targetHit };
+    const town: TownTextures = {
+      plaster: { map: plaster, normal: plasterNormal, rough: plasterRough },
+      brick: { map: brick, normal: plasterNormal, rough: plasterRough },
+      floor: { map: floor, normal: floorNormal, rough: floorRough, ao: floorAo },
+      concrete: { map: concrete, normal: concreteNormal, rough: concreteRough },
+      quaystone: { map: quaystone, normal: quaystoneNormal, rough: quaystoneRough },
+      steel: { map: steel, normal: steelNormal, rough: steelRough },
+      wood: { map: wood, normal: woodNormal },
+    };
+    this.#assets = { enemy, viewmodel, weapon, sky, town };
     console.info(
-      `TN_FPS_ASSETS_LOADED:enemy(${enemy.animations.length} clips),viewmodel,sky,3 textures`,
+      `TN_FPS_ASSETS_LOADED:enemy(${enemy.animations.length} clips),viewmodel,sky,town textures`,
     );
   }
 
   override enter(ctx: GameCtx): SceneFrame<GameState, IPhysicsContext> {
     const assets = this.#assets;
-    if (assets === undefined) throw new Error("Range assets did not load.");
+    if (assets === undefined) throw new Error("Town assets did not load.");
 
     const camera = ctx.camera as PerspectiveCamera;
     setupSky(ctx.scene, assets.sky);
@@ -85,20 +145,33 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     setupPost(ctx.renderer);
     ctx.add(camera);
 
-    const materials = createMaterials({
-      surface: assets.surface,
-      targetFace: assets.targetFace,
-      targetHit: assets.targetHit,
-    });
-    const range: Range = buildRange(materials);
-    ctx.add(range.group);
-    range.targets.forEach((target, index) => {
+    const materials = createTownMaterials(assets.town);
+    const town: Town = buildTown(materials);
+    ctx.add(town.group);
+    // Plates are raycast targets like any solid: without them in the list a round flies
+    // straight through and scores whatever soldier happens to stand behind the plate.
+    const plateMeshes: Object3D[] = [];
+    town.targets.forEach((spec, index) => {
       const entity = `target-${index}`;
       ctx.entities.remove(entity);
-      ctx.entities.add(entity, target);
+      // The spec list is data; the plates themselves are entities so playtests can read them.
+      const plate = new Target(
+        {
+          face: materials.plateFace,
+          hit: materials.plateHit,
+          frame: materials.plateFrame,
+          steel: materials.steel,
+        },
+        spec,
+      );
+      // Plates live inside the town group like every other prop, so scene-wide
+      // audits that traverse the town find them where they belong.
+      town.group.add(plate.group);
+      ctx.entities.add(entity, plate);
+      plateMeshes.push(plate.plate);
     });
 
-    // One fixed body per solid so the player slides along the yard properly. These
+    // One fixed body per solid so the player slides along walls properly. These
     // colliders have no visual, so they take a bare `position` and never allocate a
     // carrier Object3D to hold a transform nothing reads.
     const staticBody = (
@@ -116,7 +189,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         type: "fixed",
       });
     };
-    for (const box of range.colliders) {
+    for (const box of town.colliders) {
       staticBody(
         (box.min[0] + box.max[0]) / 2,
         (box.min[1] + box.max[1]) / 2,
@@ -126,7 +199,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         box.max[2] - box.min[2],
       );
     }
-    staticBody(0, -0.5, 0, 40, 1, 40);
+    staticBody(0, -0.5, 0, TOWN_HALF * 2 + 4, 1, TOWN_HALF * 2 + 4);
 
     const playerSetup = ctx.entities.get<{
       readonly isObject3D?: boolean;
@@ -148,30 +221,54 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     );
     ctx.entities.add("rifle", rifle);
 
+    // Five soldiers patrol the ground lanes, one per route — a full T side holding
+    // the town. The model asset is shared; each Enemy normalises its own copy out of
+    // the cached scene only once, so later soldiers clone the prepared rig.
     const enemySetup = ctx.entities.get<{
       readonly isObject3D?: boolean;
       readonly position: Vector3;
     }>("enemy");
     ctx.entities.remove("enemy");
-    const enemy = new Enemy(
-      ctx,
-      assets.enemy.scene as Object3D,
-      assets.enemy.animations,
-      range.colliders,
-      assets.weapon.scene as Object3D,
-    );
-    if (enemySetup?.isObject3D === true && enemySetup.position.lengthSq() > 1e-6) {
-      enemy.group.position.copy(enemySetup.position);
-      enemy.group.updateWorldMatrix(true, true);
+    const navBounds = { min: -TOWN_HALF - 1, max: TOWN_HALF + 1 };
+    const enemies: Enemy[] = [];
+    for (let index = 0; index < town.enemyRoutes.length; index += 1) {
+      // Every soldier needs its own fully retargeted rig: the class mutates scale and pose.
+      const model = cloneSkeleton(assets.enemy.scene);
+      const soldier = new Enemy(
+        ctx,
+        model,
+        assets.enemy.animations,
+        town.colliders,
+        // The rifle is rigged too (it carries Grip_Bone), so it needs a retargeted
+        // clone as well — a plain clone shares the original's skeleton and renders
+        // the bind pose at authored scale, which reads as a giant floating AK.
+        cloneSkeleton(assets.weapon.scene),
+        {
+          route: town.enemyRoutes[index],
+          navBounds,
+          decks: town.decks,
+        },
+      );
+      if (index === 0 && enemySetup?.isObject3D === true && enemySetup.position.lengthSq() > 1e-6) {
+        soldier.group.position.copy(enemySetup.position);
+        soldier.group.updateWorldMatrix(true, true);
+      }
+      ctx.add(soldier.group);
+      ctx.entities.add(index === 0 ? "enemy" : `enemy-${index}`, soldier);
+      enemies.push(soldier);
     }
-    ctx.add(enemy.group);
-    ctx.entities.add("enemy", enemy);
 
-    // Hitscan picks against an explicit list: the yard, the plates and the enemy
-    // proxy. Raycasting the whole scene would also hit the viewmodel welded to
-    // the camera and score every shot as a miss at 0.4 m.
-    const hittable: Object3D[] = [...range.hittable, enemy.hitbox];
-    const occluders: Object3D[] = [...range.hittable];
+    // Hitscan picks against an explicit list: the town solids, the plates and the
+    // soldier proxies. Raycasting the whole scene would also hit the viewmodel welded
+    // to the camera and score every shot as a miss at 0.4 m.
+    const hittable: Object3D[] = [
+      ...town.hittable,
+      ...plateMeshes,
+      ...enemies.map((e) => e.hitbox),
+    ];
+    // Sight lines treat a standing plate like the old range did: thin dressing the
+    // LOS check skips by its userData, but a solid that can still stop a round.
+    const occluders: Object3D[] = [...town.hittable, ...plateMeshes];
 
     const lineOfSight = (from: Vector3, to: Vector3): boolean => {
       const direction = new Vector3().subVectors(to, from);
@@ -183,15 +280,15 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         origin: from,
         targets: occluders,
       })) {
-        // Plates and the paint are thin dressing; only solids block sight.
+        // Plates and paint are thin dressing; only solids block sight.
         if (hit.object.userData.target !== undefined) continue;
         return false;
       }
       return true;
     };
 
-    // Impact puffs: a small ring of additive quads reused round-robin, so a
-    // shot that lands on concrete reads as a hit even at 30 m.
+    // Impact puffs: a small ring of additive quads reused round-robin, so a shot that
+    // lands on plaster reads as a hit even across mid.
     const impactMaterial = new MeshBasicMaterial({
       blending: AdditiveBlending,
       color: 0xdfe4ea,
@@ -210,7 +307,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // Player rounds trail warm white; the enemy's are red so you can tell incoming from
     // outgoing at a glance, which is the whole point of seeing a trajectory at all.
     const playerTracers = new Tracers(ctx.scene, 12, 0xffe6b0);
-    const enemyTracers = new Tracers(ctx.scene, 12, 0xff6a4d);
+    const enemyTracers = new Tracers(ctx.scene, 16, 0xff6a4d);
     let impactCursor = 0;
     const spawnImpact = (at: Vector3, normal: Vector3): void => {
       const slot = impacts[impactCursor % impacts.length];
@@ -238,7 +335,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         origin: eye,
         targets: hittable,
       });
-      enemy.hearShot(eye.clone());
+      // Every soldier within earshot reacts, not just the closest one.
+      for (const soldier of enemies) soldier.hearShot(eye.clone());
       // The trail is drawn whether or not the round connects — a miss you cannot see is a
       // miss you cannot correct.
       const barrel = rifle.barrelRay();
@@ -259,7 +357,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         }
         return;
       }
-      spawnImpact(hit.point, hit.face?.normal ?? new Vector3(0, 1, 0));
       const struck = hit.object.userData.enemy as Enemy | undefined;
       if (struck !== undefined) {
         const multiplier =
@@ -273,7 +370,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
           }));
           hitFlash = 0.12;
         }
+        return;
       }
+      spawnImpact(hit.point, hit.face?.normal ?? new Vector3(0, 1, 0));
     };
 
     // A muzzle flash is three things at once: a bright card, a light that touches the world,
@@ -299,8 +398,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     ctx.add(enemyFlash);
     let enemyFlashLife = 0;
 
-    // The light is what makes it read at 30 m: it puts a warm kick on the soldier and the
-    // concrete for two frames, which no additive quad can do on its own.
+    // The light is what makes it read across a lane: it puts a warm kick on the soldier and
+    // the wall behind them for two frames, which no additive quad can do on its own.
     // Always in the scene, intensity driven to zero — see the note in Rifle: toggling a
     // light's visibility rebuilds pipelines and stalls the frame.
     const enemyLight = new PointLightClass(0xffc46a, 0, 9, 2);
@@ -416,7 +515,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       if (frameCtx.input.justPressed("reload")) rifle.reload(frameCtx);
 
       eye.set(player.eye.x, player.eye.y, player.eye.z);
-      enemy.update(frameCtx, dt, eye, 0, hooks);
+      for (const soldier of enemies) {
+        soldier.update(frameCtx, dt, eye, 0, hooks);
+      }
 
       const hitCount = frameCtx.state.getState().targetsHit;
       let phase: GameState["phase"] = "playing";
@@ -426,12 +527,21 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       frameCtx.state.set({
         aiming: player.aiming,
         ammo: rifle.ammo,
+        blips: enemies.map((soldier) => ({
+          alive: soldier.alive,
+          x: soldier.group.position.x,
+          z: soldier.group.position.z,
+        })),
         distanceMoved: player.distanceMoved,
         health: player.health,
         hitFlash,
         phase,
+        playerX: player.mesh.position.x,
+        playerYaw: player.look.yaw,
+        playerZ: player.mesh.position.z,
         reloads: rifle.reloads,
         reserve: rifle.reserve,
+        score: frameCtx.state.getState().score,
         shots: rifle.shots,
         timeRemaining,
       });

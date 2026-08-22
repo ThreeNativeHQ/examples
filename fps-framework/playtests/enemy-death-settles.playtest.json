@@ -1,0 +1,158 @@
+{
+  "name": "enemy-death-settles",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 30,
+  "subject": "enemy",
+  "setup": {
+    "entities": [
+      {
+        "entity": "player",
+        "position": [
+          -4.5,
+          0.89,
+          -5.0
+        ]
+      },
+      {
+        "entity": "enemy",
+        "position": [
+          -4.5,
+          0,
+          -6.8
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "body-measured",
+      "waitTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "kill-shot",
+      "press": "Space",
+      "holdTicks": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "kill-shot-2",
+      "press": "Space",
+      "holdTicks": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "kill-shot-3",
+      "press": "Space",
+      "holdTicks": 3,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-00",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-01",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-02",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-03",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-04",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-05",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-06",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-07",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-08",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fall-09",
+      "waitTicks": 20,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "components": [
+      {
+        "entity": "enemy",
+        "component": "deathRiseM",
+        "lte": 0.03,
+        "allowTrivial": "a living soldier has no death height to rise from, so this reads zero until the round lands"
+      },
+      {
+        "entity": "enemy",
+        "component": "deathClipFrames",
+        "gte": 60
+      },
+      {
+        "entity": "enemy",
+        "component": "footClearance",
+        "lte": 0.06,
+        "allowTrivial": "a standing soldier already has his boots on the deck, which is the point the corpse has to return to"
+      },
+      {
+        "entity": "enemy",
+        "component": "deathAnkleDelta",
+        "lte": 0.05,
+        "allowTrivial": "ankle drift is zero until the death clip plays, so the resting value is the honest baseline"
+      },
+      {
+        "entity": "enemy",
+        "component": "deathObserved",
+        "equals": true,
+        "allowTrivial": "death is observed only after the round lands, and the metric reads false before it"
+      }
+    ]
+  }
+}

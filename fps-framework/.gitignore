@@ -4,4 +4,19 @@ artifacts/
 # Runtime copies of the third-party kit assets. The repository root already keeps
 # `fps-framework/assets/` out for redistribution reasons; these are the same files
 # staged for Vite, so they stay on disk and out of the history too.
-public/assets/
+public/assets/*
+# ...but the map's own surfaces are CC0 and credited in CREDITS.md, and a clone
+# that cannot see them builds a game with no textures. Those come back in.
+!public/assets/bayview-*.jpg
+!public/assets/bayview-*.png
+# Self-contained CC0 props (single .glb, no sidecar .bin or textures/ directory).
+!public/assets/bayview-*.glb
+# Provider download staging: raw ZIPs/HDRs land here before being processed into
+# the `bayview-*` set above. They are inputs, never shipped.
+public/assets/polyhaven/
+public/assets/ambientcg/
+public/assets/kenney/
+
+# Throwaway capture/probe harnesses. They are how you look at the game (see
+# CLAUDE.md "How to actually look at it"), not something the game ships.
+*-tmp.mjs

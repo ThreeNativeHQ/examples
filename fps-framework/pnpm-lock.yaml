@@ -623,17 +623,17 @@ packages:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
   '@threenative/core@file:../.packages/threenative-core-0.2.0.tgz':
-    resolution: {integrity: sha512-FxrdVDgLPVz58uLpyr2/UCOnLL5iT2GU2EXgpdTMre/+s4QZ52qxrTwXFv6LeZ5P2sdnVdKyLjQVeuMAfcYjIQ==, tarball: file:../.packages/threenative-core-0.2.0.tgz}
+    resolution: {integrity: sha512-P2TcJk/qrU0icm3nnzsNSxT/75Rmz0J6QuXcEuatoC6PG93S9a2Zd7j9cZRsnmjvrZLJAmyQSBji9uBIUMyuvg==, tarball: file:../.packages/threenative-core-0.2.0.tgz}
     version: 0.2.0
 
   '@threenative/physics@file:../.packages/threenative-physics-0.2.1.tgz':
-    resolution: {integrity: sha512-V10ehhAfBQ7YskDll3/1KeJgNWCFVaKsJk7ETnQDzm80PjZ6aKlOGhbcwIKbEZkMdpqMJoat8WBOKFeKdDOdcQ==, tarball: file:../.packages/threenative-physics-0.2.1.tgz}
+    resolution: {integrity: sha512-QAANPA2VZAmorOqRJZKNVzAGug8+zuyk9c7XOfR+cd1QY4qmZFKWKdcLbTPWuZlh7hGU/GYiOyfowIbT1AZVIQ==, tarball: file:../.packages/threenative-physics-0.2.1.tgz}
     version: 0.2.1
     peerDependencies:
       '@threenative/core': '>=0.2.0 <0.3.0'
 
   '@threenative/playtest@file:threenative-playtest-0.2.0.tgz':
-    resolution: {integrity: sha512-e6dJZVRLnO+8hf4mL8xfSpbxvTPeA0C64clVTXBTVu9AOlNYf/Jdf28RLkPl2wWmB8Ftd5I7gVB/I8hUzZRfPA==, tarball: file:threenative-playtest-0.2.0.tgz}
+    resolution: {integrity: sha512-a0Ak3AyfqyKfuoZz3dO7n2JSVU8LIUq5StmUkcBad5WqhAD/GEJsHRMULOewBCB1Dkbnld/rTWbMD+sEdRU0FQ==, tarball: file:threenative-playtest-0.2.0.tgz}
     version: 0.2.0
     hasBin: true
     peerDependencies:
@@ -649,7 +649,7 @@ packages:
     resolution: {integrity: sha512-po6dPzNgWy/wBNO/0I3KwNuHlqxzBagtzbDnIMnDYqMdneyeBm0VAd0SK4WT/FXndyeNoHps7YOkTxR0FiN7nQ==}
 
   '@threenative/ui@file:../.packages/threenative-ui-0.2.1.tgz':
-    resolution: {integrity: sha512-52spjSYXeW/mzg2Q1LOscoeMBVWdYzoYMPqpuOF24BRTBSIZ0rg2OtzaIy+xn8KqrmlIRrhExnxGxFpdAiyQBA==, tarball: file:../.packages/threenative-ui-0.2.1.tgz}
+    resolution: {integrity: sha512-2gN1nxTW+LA5+EwijUgfCSMHxn6bohfpKClr5+6uKEC8WgFRiz3jMjWX4feJABslfqNM/JOLdwRpfnqXtyHOIg==, tarball: file:../.packages/threenative-ui-0.2.1.tgz}
     version: 0.2.1
     peerDependencies:
       '@threenative/core': '>=0.2.0 <0.3.0'

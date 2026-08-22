@@ -1,7 +1,6 @@
 import type { ICtx } from "@threenative/core";
 import { CharacterBody3D, CollisionShape3D, type IPhysicsContext } from "@threenative/physics";
 import { BoxGeometry, MathUtils, Mesh, MeshBasicMaterial, type PerspectiveCamera, Vector3 } from "three";
-import { FIRING_LINE_Z } from "../render/range.js";
 import { scale } from "../render/scale.js";
 import type { GameState } from "../state.js";
 
@@ -18,7 +17,8 @@ const LOOK_SENSITIVITY = 0.0022;
 const CAPSULE_RADIUS = scale.shoulderWidth / 2;
 const CAPSULE_HALF = (scale.humanHeight - CAPSULE_RADIUS * 2) / 2;
 const BODY_Y = scale.humanHeight / 2;
-const SPAWN = { x: 0.2, y: BODY_Y, z: FIRING_LINE_Z } as const;
+/** T spawn centre, facing north into the town (see docs/bayview-design.md). */
+const SPAWN = { x: 0, y: BODY_Y, z: 32 } as const;
 
 /**
  * Yaw and pitch, integrated from the `look` action. The action is bound

@@ -1,7 +1,6 @@
 import type { ICtx } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
-import { BoxGeometry, Group, Mesh, PlaneGeometry, type Vector3Like } from "three";
-import type { RangeMaterials } from "../render/materials.js";
+import { BoxGeometry, Group, Mesh, PlaneGeometry, type Material, type Vector3Like } from "three";
 import { scale } from "../render/scale.js";
 import type { GameState } from "../state.js";
 
@@ -9,6 +8,14 @@ type GameCtx = ICtx<GameState, IPhysicsContext>;
 
 /** A struck plate swings back up this long after it drops. */
 const RESET_SECONDS = 1.4;
+
+/** The four surfaces a plate needs; the town palette supplies them. */
+export type TargetMaterials = {
+  readonly face: Material;
+  readonly hit: Material;
+  readonly frame: Material;
+  readonly steel: Material;
+};
 
 export type TargetSpec = {
   readonly position: Vector3Like;
@@ -19,6 +26,8 @@ export type TargetSpec = {
   readonly standing?: boolean;
   /** Surface supporting a mounted target. Deck mounts are freestanding; walkway mounts meet its rail. */
   readonly mountedTo?: "deck" | "walkway";
+  /** Yaw the plate faces, radians. Zero faces +z like the range plates did. */
+  readonly yaw?: number;
 };
 
 export class Target {
@@ -28,18 +37,18 @@ export class Target {
   #up = true;
   #dropY: number;
   #mounted: boolean;
-  #faceMaterial: RangeMaterials["targetFace"];
-  #hitMaterial: RangeMaterials["targetHit"];
+  #faceMaterial: TargetMaterials["face"];
+  #hitMaterial: TargetMaterials["hit"];
 
-  constructor(materials: RangeMaterials, spec: TargetSpec) {
+  constructor(materials: TargetMaterials, spec: TargetSpec) {
     const width = spec.width ?? scale.silhouette.width;
     const height = spec.height ?? scale.silhouette.height;
     this.#mounted = spec.standing === false;
     this.#dropY = -Math.max(height * 0.65, scale.ankleHeight * 8);
     this.value = spec.value;
-    this.#faceMaterial = materials.targetFace;
-    this.#hitMaterial = materials.targetHit;
-    this.plate = new Mesh(new PlaneGeometry(width, height), materials.targetFace);
+    this.#faceMaterial = materials.face;
+    this.#hitMaterial = materials.hit;
+    this.plate = new Mesh(new PlaneGeometry(width, height), materials.face);
     this.plate.name = "target-plate";
     this.plate.castShadow = true;
     this.plate.receiveShadow = false;
@@ -49,7 +58,7 @@ export class Target {
     const carrier = new Group();
     const frame = new Mesh(
       new PlaneGeometry(width + 0.1, height + 0.1),
-      materials.block,
+      materials.frame,
     );
     frame.name = "target-frame";
     frame.castShadow = true;
@@ -58,6 +67,7 @@ export class Target {
     carrier.name = "target-carrier";
     this.group.add(carrier);
     this.group.position.set(spec.position.x, spec.position.y, spec.position.z);
+    if (spec.yaw !== undefined) this.group.rotation.y = spec.yaw;
 
     if (!this.#mounted) {
       // Steel stand: two posts down to the deck plus a cross brace under the plate.

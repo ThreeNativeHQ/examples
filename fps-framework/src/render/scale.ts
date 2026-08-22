@@ -119,6 +119,9 @@ export type SizeCheck = {
   readonly note?: string;
 };
 
+/** A Mediterranean street door reads two metres tall plus a lintel margin. */
+const DOOR_HEIGHT = 2.3;
+
 export const SCALE_EXPECTATIONS: readonly SizeCheck[] = [
   {
     subject: "enemy",
@@ -164,8 +167,9 @@ export const SCALE_EXPECTATIONS: readonly SizeCheck[] = [
   },
   { subject: "target-plate", axis: "height", metres: scale.silhouette.height, kind: "max" },
   { subject: "target-plate", axis: "width", metres: scale.silhouette.width * 1.5, kind: "max" },
-  { subject: "locker", axis: "height", metres: scale.locker.height, tolerance: 0.15, kind: "band" },
-  { subject: "barricade", axis: "depth", metres: scale.barricade.depth, kind: "max" },
-  { subject: "wall", axis: "height", metres: scale.wallHeight, tolerance: 0.1, kind: "band" },
+  // Town props: a man-size crate, an oil drum, and a door that a person opens.
+  { subject: "crate", axis: "height", metres: 0.78, tolerance: 0.1, kind: "band" },
+  { subject: "barrel", axis: "height", metres: 0.92, tolerance: 0.12, kind: "band" },
+  { subject: "door", axis: "height", metres: DOOR_HEIGHT, tolerance: 0.08, kind: "band" },
   { subject: "muzzle-flash", axis: "longest", metres: scale.muzzleFlash, kind: "max" },
 ];

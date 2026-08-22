@@ -151,9 +151,9 @@ try {
     const viewmodelSize = viewmodel === undefined ? undefined : boxOf(viewmodel);
     if (viewmodelSize !== undefined) add("player-viewmodel", "player viewmodel rifle", viewmodelSize);
 
-    // --- Range props, by the names range.ts assigns.
+    // --- World props, by the names the world builder assigns.
     const unlabelled = [];
-    const range = ctx.scene.getObjectByName("range");
+    const range = ctx.scene.getObjectByName("town") ?? ctx.scene.getObjectByName("range");
     range?.traverse((object) => {
       if (object.isMesh !== true) return;
       if (object.userData?.target !== undefined) {
