@@ -41,6 +41,9 @@ import {
   type Face,
 } from "./facade.js";
 import { addPalms, type PalmPlacement } from "./palm.js";
+// Impact surfaces are stamped here at construction so audio, VFX and any later
+// consumer read one tag off the mesh instead of re-deriving name tables.
+import { tagSurfaces } from "../surfaces.js";
 import type { TownMaterials } from "./townMaterials.js";
 import {
   addFishingBoat,
@@ -849,6 +852,10 @@ export function buildTown(materials: TownMaterials): Town {
 
   // One merge for the whole town's joinery, parapets and rooftop clutter.
   finishFacade(facade);
+
+  // Every solid now exists carrying its final material — merged facade batches
+  // included — so this one walk can tag them all. Must stay after the merge.
+  tagSurfaces(hittable, materials);
 
   return { group, hittable, colliders, spawn, targets, enemyRoutes, decks };
 }

@@ -1,5 +1,5 @@
 import { softCircleDataTexture } from "@threenative/core";
-import type { ImpactSurface } from "../audio/GameAudio.js";
+import type { ImpactSurface } from "../surfaces.js";
 import {
   AdditiveBlending,
   Color,

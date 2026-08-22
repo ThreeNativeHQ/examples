@@ -2,6 +2,7 @@ import type { ICtx } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
 import { BoxGeometry, Group, Mesh, PlaneGeometry, type Material, type Vector3Like } from "three";
 import { scale } from "../render/scale.js";
+import { tagSurface } from "../surfaces.js";
 import type { GameState } from "../state.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
@@ -53,6 +54,9 @@ export class Target {
     this.plate.castShadow = true;
     this.plate.receiveShadow = false;
     this.plate.userData.target = this;
+    // The plate is steel by the palette table; a struck plate is intercepted
+    // before surface resolution today, but the tag keeps it honest for decals.
+    tagSurface(this.plate, "steel");
     this.plate.position.set(0, 0, 0.03);
 
     const carrier = new Group();

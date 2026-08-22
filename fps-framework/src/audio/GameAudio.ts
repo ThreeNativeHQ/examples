@@ -5,6 +5,9 @@ import {
   PositionalAudio,
   Vector3,
 } from "three";
+// The surface vocabulary is defined once in `src/surfaces.ts`, where the world
+// builder tags meshes and every consumer reads them; audio only consumes it.
+import type { ImpactSurface } from "../surfaces.js";
 
 /**
  * Gameplay audio, every cue through `ctx.assets.audio` and the framework's
@@ -48,9 +51,6 @@ const CUE_FILES = {
 } as const;
 
 export type CueName = keyof typeof CUE_FILES;
-
-/** What a stray round landed on; picks the impact voice. */
-export type ImpactSurface = "plaster" | "wood" | "steel" | "stone";
 
 const STEP_VARIANTS: readonly CueName[] = [
   "stepStone1",

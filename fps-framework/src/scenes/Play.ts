@@ -3,8 +3,6 @@ import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenativ
 import type {
   AnimationClip,
   Group,
-  Intersection,
-  Material,
   Object3D,
   PerspectiveCamera,
   Quaternion,
@@ -20,7 +18,7 @@ import {
   PointLight as PointLightClass,
   Vector3,
 } from "three";
-import { GameAudio, type CueName, type ImpactSurface } from "../audio/GameAudio.js";
+import { GameAudio, type CueName } from "../audio/GameAudio.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Enemy } from "../entities/Enemy.js";
 import { FpsPlayer } from "../entities/FpsPlayer.js";
@@ -31,6 +29,7 @@ import { setupLighting } from "../render/lighting.js";
 import { setupPost } from "../render/postprocessing.js";
 import { scale } from "../render/scale.js";
 import { buildTown, TOWN_HALF, type Town } from "../render/town.js";
+import { resolveSurface } from "../surfaces.js";
 import { createTownMaterials, type TownTextures } from "../render/townMaterials.js";
 import { setupSky } from "../render/sky.js";
 import { TARGET_GOAL, type GameState } from "../state.js";
@@ -41,40 +40,6 @@ export type GameCtx = ICtx<GameState, IPhysicsContext>;
 const RUN_SECONDS = 105;
 const RANGE_METRES = 70;
 const ROUND_DAMAGE = 10;
-
-/**
- * Town-material member name → what a bullet hears when it lands there. Members
- * left out (water, shallows, fronds) have no honest cue and stay silent. The
- * plaster/brick walls are world-projected per-mesh materials, so they cannot be
- * tabled by identity — they are the resolver's default instead.
- */
-const MATERIAL_SURFACES: Readonly<Record<string, ImpactSurface>> = {
-  ground: "stone",
-  dadoBand: "plaster",
-  plasterTrim: "plaster",
-  brickTrim: "plaster",
-  doorBlue: "wood",
-  shutter: "wood",
-  rollerSteel: "steel",
-  awningCanvas: "plaster",
-  awningStripe: "plaster",
-  crate: "wood",
-  deckWood: "wood",
-  barrel: "steel",
-  palmTrunk: "wood",
-  siteMark: "stone",
-  plateFace: "steel",
-  plateHit: "steel",
-  plateFrame: "steel",
-  steel: "steel",
-  steelPost: "steel",
-  steelMast: "steel",
-  tankDark: "steel",
-  quay: "stone",
-  plazaWarm: "stone",
-  plazaCool: "stone",
-  plazaPale: "stone",
-};
 
 type LoadedModel = { scene: Group; animations: AnimationClip[] };
 
@@ -411,35 +376,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // LOS check skips by its userData, but a solid that can still stop a round.
     const occluders: Object3D[] = [...town.hittable, ...plateMeshes];
 
-    // Impact sounds by surface. Named solids classify by name; everything else by
-    // material identity off the town palette; whitewash (world-projected per mesh,
-    // so untabled) is both the dominant wall and the honest default.
-    const materialSurface = new Map<Material, ImpactSurface>();
-    for (const [key, surface] of Object.entries(MATERIAL_SURFACES)) {
-      const value = (materials as unknown as Record<string, unknown>)[key];
-      if (
-        typeof value === "object" &&
-        value !== null &&
-        (value as { isMaterial?: boolean }).isMaterial === true
-      ) {
-        materialSurface.set(value as Material, surface);
-      }
-    }
-    const resolveSurface = (hit: Intersection): ImpactSurface => {
-      const name = hit.object.name;
-      if (/crate|deck|pier|rail|stair/.test(name)) return "wood";
-      if (/barrel|bollard|post|mast|tank|roller|shutter/.test(name)) return "steel";
-      if (/quay|plaza|ground/.test(name)) return "stone";
-      // Only meshes carry a material; every hittable here is one.
-      const meshMaterial = (hit.object as MeshClass).material;
-      const first = Array.isArray(meshMaterial) ? meshMaterial[0] : meshMaterial;
-      if (first !== undefined) {
-        const mapped = materialSurface.get(first);
-        if (mapped !== undefined) return mapped;
-      }
-      return "plaster";
-    };
-
     const lineOfSight = (from: Vector3, to: Vector3): boolean => {
       const direction = new Vector3().subVectors(to, from);
       const distance = direction.length();
@@ -562,7 +498,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         return;
       }
       impactNormal.copy(hit.face?.normal ?? impactUp).transformDirection(hit.object.matrixWorld);
-      const surface = resolveSurface(hit);
+      // One tag, resolved once: the builder stamped `userData.surface` on every
+      // solid at construction, so audio and VFX read the same answer here
+      // instead of each walking its own name rules.
+      const surface = resolveSurface(hit.object);
       impacts.spawn(hit.point, impactNormal, surface);
       audio.impact(surface, hit.point);
     };
