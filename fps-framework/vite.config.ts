@@ -1,9 +1,17 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { optimizeModels } from "create-threenative";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    // Regenerates public/assets/*.glb from assets/models/ at build time
+    // whenever a source is newer (quantize + WebP + separate vertex layout).
+    // Disable: optimizeModels({ disabled: true }) or TN_NO_OPTIMIZE_MODELS=1.
+    optimizeModels(),
+    react(),
+    tailwindcss(),
+  ],
   server: {
     watch: {
       // The playtest runner writes its artifacts inside the project, and the

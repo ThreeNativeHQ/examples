@@ -16,7 +16,10 @@
 # So this wrapper does all three:
 #   - `flock`: exactly one capture machine-wide; waits its turn instead of
 #     failing, so several agents can call it concurrently (CAPTURE_LOCK_TIMEOUT
-#     bounds the wait).
+#     bounds the wait). Queue visibility included: waiters leave marker files,
+#     so contention prints WHO holds the display and how deep the queue is,
+#     and a timeout announces itself as a LOCK TIMEOUT, not a test failure —
+#     the false-FAIL-via-lock-timeout trap from the 2026-08-22 session retro.
 #   - reaps profiles stranded by earlier timed-out launches while holding the lock.
 #   - runs the capture on a PRIVATE VIRTUAL DISPLAY (Xvfb), never your desktop.
 #     Verified 2026-08-22 on this host (RTX 2080, Wayland session): under Xvfb,
@@ -42,17 +45,55 @@ if [ "$#" -eq 0 ]; then
   exit 64
 fi
 
-exec 9>"$lock"
-if ! flock --wait "$timeout" 9; then
-  echo "capture-lock: another capture held the display for ${timeout}s; giving up." >&2
-  exit 75
+tmpdir="$(mktemp -d)"
+cleanup() {
+  kill "${xvfb_pid:-}" 2>/dev/null || true
+  rm -rf "$tmpdir"
+  rm -f "${marker:-}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+# Append mode, never plain >: a plain open TRUNCATES, so every waiter would
+# wipe the holder's identity line right before trying to read it.
+exec 9>>"$lock"
+
+# Queue visibility: every waiter leaves <pid>-<epoch> in a side directory, so a
+# contended acquire can report real depth and dead owners are pruned by pid.
+queuedir="${lock}.queue"
+mkdir -p "$queuedir"
+marker="$queuedir/$$-$(date +%s)"
+touch "$marker"
+
+if flock -n 9; then
+  rm -f "$marker"
+else
+  # Prune markers whose owner died mid-wait (killed, timed out elsewhere).
+  for m in "$queuedir"/*; do
+    [ -e "$m" ] || continue
+    owner="${m##*/}"
+    owner="${owner%%-*}"
+    kill -0 "$owner" 2>/dev/null || rm -f "$m"
+  done
+  depth="$(find "$queuedir" -type f | wc -l)" # includes this process
+  holder="$(tr '\n' ';' <"$lock" 2>/dev/null || true)"
+  echo "capture-lock: display busy${holder:+ — ${holder%;};} $depth waiting; holding for up to ${timeout}s…" >&2
+  if ! flock --wait "$timeout" 9; then
+    echo "capture-lock: LOCK TIMEOUT after ${timeout}s — this is NOT a test failure." >&2
+    echo "capture-lock: another capture still held the display; last holder: $(tr '\n' ' ' <"$lock" 2>/dev/null || echo unknown)" >&2
+    exit 75
+  fi
+  rm -f "$marker"
 fi
+
+# We hold the lock. Record who we are for the next contended waiter.
+printf 'pid=%s started=%s cmd=%s\n' "$$" "$(date -Is)" "$*" >"$lock"
 
 # Reap anything a previous timed-out launch stranded; we hold the lock, so no
 # live capture can own these.
 pkill -f playwright_chromiumdev_profile >/dev/null 2>&1 || true
 
 if [ "${CAPTURE_ON_DESKTOP:-0}" = "1" ]; then
+  rm -f "$marker" # exec replaces this process; the EXIT trap never runs
   exec env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 "$@"
 fi
 
@@ -60,16 +101,13 @@ screen="${CAPTURE_SCREEN:-1600x900x24}"
 
 # A caller-managed virtual display wins; skip spawning our own.
 if [ -n "${CAPTURE_DISPLAY:-}" ]; then
+  rm -f "$marker" # exec replaces this process; the EXIT trap never runs
   env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 DISPLAY=":${CAPTURE_DISPLAY}" "$@"
   exit $?
 fi
 
 # Xvfb picks its own free display number via -displayfd, which sidesteps every
 # stale-socket / already-in-use case. It dies with this script via the trap.
-tmpdir="$(mktemp -d)"
-cleanup() { kill "${xvfb_pid:-}" 2>/dev/null || true; rm -rf "$tmpdir"; }
-trap cleanup EXIT INT TERM
-
 # NOTE: -screen takes TWO words deliberately unquoted.
 Xvfb -displayfd 1 -screen 0 $screen -nolisten tcp >"$tmpdir/display" 2>"$tmpdir/xvfb.err" &
 xvfb_pid=$!

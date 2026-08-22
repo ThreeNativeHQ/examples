@@ -271,3 +271,32 @@ Ranked by (recurring pain avoided) ÷ (effort).
 3. Commit granularity — the entire session is uncommitted in the working tree.
 4. Confirm whether the WebGL2 fallback exists at all now that materials moved to node
    materials (`preferWebGPU: true` currently implies a fallback that likely cannot draw them).
+
+---
+
+## 7. Resolution log — later the same day
+
+Follow-up pass addressing everything actionable above. Items here are **done and
+verified**; §6 items 1–3 remain human decisions.
+
+| Retro item | Resolution |
+|---|---|
+| §3 hygiene: `.gitignore` had no `.env` rule | Added to `fps-framework/.gitignore` (root already had it). `.env.example` stays tracked. |
+| §3 hygiene: `public/assets/` exclusion broke fresh clones; `sky.jpg` ignored while loaded | Already fixed before this pass: `bayview-*` negations re-admit the CC0 set (`git check-ignore` verified), sky is now `bayview-sky.jpg`. No change needed. |
+| **§6.4 WebGL2 fallback** | **Answered by experiment, suspicion disproven.** The fallback exists (`createRenderer` → classic `THREE.WebGLRenderer`, tagged `"webgl2"`). Forcing `preferWebGPU: false` boots the full Bayview scene with zero console errors and a frame visually identical to WebGPU — three r185's node system renders `MeshStandardNodeMaterial` on the WebGL2 backend too. The fallback is a real safety net, not a trap. Config reverted to `true`. |
+| §2 build weight: "Draco/meshopt on the AK is the actual fix" | Done without decoder wiring: `gltf-transform optimize --compress quantize --texture-compress webp --texture-size 2048` (KHR_mesh_quantization + EXT_texture_webp, both native in GLTFLoader). Runtime GLBs 19.2 MB → **4.5 MB**, `public/` 30 → **16 MB**. Vertex counts and all clip names unchanged; verified by capture plus `headshot-hits-head` and `shot-tracks-crosshair` passing. |
+| §4 Tier 1.1: bake the fix into the runner, not a wrapper someone must remember | Done at **engine level**: `create-threenative` 0.2.3 ships an exported `optimizeModels()` Vite plugin and all seven templates wire it in — every new project optimizes `assets/models/*.glb → public/assets/` automatically at build (mtime-cached), with `optimizeModels({ disabled: true })` / `TN_NO_OPTIMIZE_MODELS=1` to opt out, and zero effect on projects without source models. This sandbox consumes the repacked tarball; its `vite.config.ts` is now a one-line import instead of a local copy. `tools/optimize-models.sh` kept for manual force-regeneration. |
+| §1 residual: no queue visibility | `capture-lock.sh` now records holder identity (pid/start/cmd) in the lockfile; waiters print `display busy — pid=… cmd=…; N waiting`; waiters mark themselves for true queue depth; dead waiters' markers are pruned by pid. Gotcha found en route: opening the lockfile `>` truncates, so every waiter was erasing the holder line before reading it — fixed with append-mode `>>`. |
+| §1 residual: lock timeouts masquerade as test failures | Timeout path now prints `LOCK TIMEOUT … NOT a test failure` plus the last holder's identity, exit 75 unchanged. |
+
+Two new machine facts worth carrying forward:
+
+- **gltf-transform's default interleaved vertex layout breaks `THREE.WebGPURenderer`:**
+  every mesh fails `createRenderPipeline … GPUVertexState` per frame. Always pass
+  `--vertex-layout separate`. Saved to memory as `gltf-interleaved-breaks-webgpu`.
+- **`pkill -f <pattern>` still matches its own shell** when the pattern text appears in
+  the invoking command line (§1 "blunt reaping", relived live this pass). Prefer exact
+  process paths or pgrep-then-filter that excludes `$$`.
+
+Still open, needs a human: `references/` provenance (§6.1), ElevenLabs key (§6.2 — the
+`.env` ignore rule it required is now in place), commit granularity (§6.3).
