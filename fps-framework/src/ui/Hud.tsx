@@ -1,6 +1,7 @@
 import type { IGame } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
 import { useGameState } from "@threenative/ui";
+import { townSchematic } from "../render/town.js";
 import { TARGET_GOAL, type GameState } from "../state.js";
 import { Minimap } from "./Minimap.js";
 
@@ -167,8 +168,15 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-sans">
-      {/* Top left: the round minimap, north-up. */}
-      <Minimap playerX={playerX} playerZ={playerZ} playerYaw={playerYaw} blips={blips} />
+      {/* Top left: the round minimap, north-up. It renders the plain map data
+          the town builder emits — no scene objects cross into the HUD. */}
+      <Minimap
+        schematic={townSchematic}
+        playerX={playerX}
+        playerZ={playerZ}
+        playerYaw={playerYaw}
+        blips={blips}
+      />
 
       {/* Top centre: team rosters flanking the round clock, score beneath —
           five defenders in blue against five attackers in gold, like the

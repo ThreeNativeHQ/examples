@@ -1,37 +1,16 @@
+import type { ITownSchematic, SchematicRect } from "../render/town.js";
 import type { Blip } from "../state.js";
 
-// Schematic extents come from docs/bayview-design.md: the playable deck is an
-// 84 m square centred on the origin, open sea east of x = +42, B site on the
-// waterfront. One SVG unit is one metre. North (-z) points up, east (+x) right,
-// so a world point lands at SVG (x, z) directly — +z (south) draws downward.
-type Rect = readonly [number, number, number, number]; // x, z, width, depth (metres)
-
-// Walkable lanes, courtyards and plazas; the gaps between them are buildings.
-const AREAS: readonly Rect[] = [
-  [-2, -40, 18, 10], // CT spawn
-  [-18, -36, 10, 12], // CT ramp
-  [-8, -8, 18, 16], // mid
-  [10, 0, 6, 10], // connector
-  [16, -20, 16, 24], // B site
-  [-36, -8, 16, 18], // A site
-  [-20, 4, 8, 14], // short A
-  [-12, 12, 10, 14], // T main
-  [-9, 26, 18, 12], // T spawn
-  [32, 4, 10, 26], // outside long
-];
-
-// Raised decks, drawn dashed gold: back plat y=2.4, heaven y=4.8, catwalk y=2.4.
-const RAISED: readonly Rect[] = [
-  [0, -22, 12, 12], // back plat
-  [20, -30, 10, 10], // heaven
-  [22, -16, 6, 14], // catwalk
-];
-
+// One SVG unit is one metre. North (-z) points up, east (+x) right, so a world
+// point lands at SVG (x, z) directly — +z (south) draws downward. Every rect,
+// label and extent arrives as plain data in the `schematic` prop emitted by the
+// town builder (see ITownSchematic); this component owns only how that data is
+// presented and the live state drawn on top of it.
 const VIEW_CONE_RADIUS = 26; // metres
 const VIEW_CONE_HALF_ANGLE = Math.PI / 6; // 30 deg each side of facing
 const DOT_CLAMP = 45; // metres from centre; keeps dots just inside the disc rim
 
-function AreaRect({ rect, raised }: { rect: Rect; raised?: boolean }) {
+function AreaRect({ rect, raised }: { rect: SchematicRect; raised?: boolean }) {
   const [x, z, width, depth] = rect;
   return (
     <rect
@@ -49,12 +28,32 @@ function AreaRect({ rect, raised }: { rect: Rect; raised?: boolean }) {
   );
 }
 
+function MapLabel({ label }: { label: ITownSchematic["labels"][number] }) {
+  const site = label.kind === "site";
+  return (
+    <text
+      x={label.x}
+      y={label.z}
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={site ? 9 : 5.4}
+      fontWeight={site ? 700 : 600}
+      fill={site ? "#ffb84d" : "#ffd166"}
+      fillOpacity={site ? undefined : 0.85}
+    >
+      {label.text}
+    </text>
+  );
+}
+
 export function Minimap({
+  schematic,
   playerX,
   playerZ,
   playerYaw,
   blips,
 }: {
+  schematic: ITownSchematic;
   playerX: number;
   playerZ: number;
   playerYaw: number;
@@ -79,45 +78,40 @@ export function Minimap({
         </defs>
         <g clipPath="url(#bayview-map-disc)">
           {/* Sea east of the deck edge, and the dock pier reaching into it. */}
-          <rect x={42} y={-50} width={8} height={100} fill="#5b93b8" opacity={0.35} />
+          <rect x={schematic.sea.edgeX} y={-50} width={8} height={100} fill="#5b93b8" opacity={0.35} />
           <line
-            x1={36}
-            y1={-8}
-            x2={57}
-            y2={-14}
+            x1={schematic.pier.ax}
+            y1={schematic.pier.az}
+            x2={schematic.pier.bx}
+            y2={schematic.pier.bz}
             stroke="#c9a06a"
             strokeOpacity={0.75}
             strokeWidth={1.6}
             strokeLinecap="round"
           />
 
-          {/* Deck outline, lanes and plazas, raised decks, site letters. */}
+          {/* Deck outline, lanes and plazas, raised decks, callout labels —
+              all traced from the builder's schematic. */}
           <rect
-            x={-42}
-            y={-42}
-            width={84}
-            height={84}
+            x={-schematic.deck.half}
+            y={-schematic.deck.half}
+            width={schematic.deck.half * 2}
+            height={schematic.deck.half * 2}
             fill="#ffffff"
             fillOpacity={0.04}
             stroke="#ffffff"
             strokeOpacity={0.3}
             vectorEffect="non-scaling-stroke"
           />
-          {AREAS.map((rect) => (
+          {schematic.areas.map((rect) => (
             <AreaRect key={rect.join(",")} rect={rect} />
           ))}
-          {RAISED.map((rect) => (
+          {schematic.raised.map((rect) => (
             <AreaRect key={rect.join(",")} rect={rect} raised />
           ))}
-          <text x={-28} y={1} textAnchor="middle" dominantBaseline="central" fontSize={9} fontWeight={700} fill="#ffb84d">
-            A
-          </text>
-          <text x={24} y={-8} textAnchor="middle" dominantBaseline="central" fontSize={9} fontWeight={700} fill="#ffb84d">
-            B
-          </text>
-          <text x={1} y={13} textAnchor="middle" dominantBaseline="central" fontSize={5.4} fontWeight={600} fill="#ffd166" fillOpacity={0.85}>
-            Mid
-          </text>
+          {schematic.labels.map((label) => (
+            <MapLabel key={label.text} label={label} />
+          ))}
 
           {/* Facing cone, live enemy dots, player dot on top. */}
           <path

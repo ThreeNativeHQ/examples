@@ -74,6 +74,44 @@ export type DeckFootprint = {
   readonly maxZ: number;
 };
 
+/** One rectangle of overhead-map data: the top-left corner, then the size, in
+ * metres. North (-z) draws upward, east (+x) right, so a world point lands at
+ * map (x, z) directly. */
+export type SchematicRect = readonly [number, number, number, number];
+
+/**
+ * Plain JSON-safe map data for overhead views, so the HUD renders the town
+ * without restating its numbers. Every field is derived from the same local
+ * constants that place the corresponding geometry (see `townSchematic`), which
+ * keeps geometry and its map one edit apart. Extents per docs/bayview-design.md:
+ * an 84 m playable square centred on the origin, open sea east of x = +42.
+ */
+export interface ITownSchematic {
+  /** Walkable lanes, courtyards and plazas; the gaps between them are buildings. */
+  readonly areas: readonly SchematicRect[];
+  /** Raised decks drawn dashed overhead: back plat y 2.4, heaven y 4.8, catwalk y 2.4. */
+  readonly raised: readonly SchematicRect[];
+  /** Callout anchors — the site letters and district names. */
+  readonly labels: readonly {
+    readonly text: string;
+    readonly x: number;
+    readonly z: number;
+    /** `site` letters name a bomb site; `area` names a district. */
+    readonly kind: "site" | "area";
+  }[];
+  /** Playable deck: a square of half-extent `half` centred on the origin. */
+  readonly deck: { readonly half: number };
+  /** Open water east of `edgeX`. */
+  readonly sea: { readonly edgeX: number };
+  /** Dock pier centre-line, quay wall to outer end. */
+  readonly pier: {
+    readonly ax: number;
+    readonly az: number;
+    readonly bx: number;
+    readonly bz: number;
+  };
+}
+
 export type Town = {
   readonly group: Group;
   /** Every solid the round and the sight lines meet. */
@@ -85,6 +123,8 @@ export type Town = {
   readonly enemyRoutes: readonly TownRoute[];
   /** Raised deck footprints, for the under-the-deck observation. */
   readonly decks: readonly DeckFootprint[];
+  /** Overhead-map data traced from the same constants that built the scene. */
+  readonly schematic: ITownSchematic;
 };
 
 /** Deterministic layout hash: identical across runs, so replays match. */
@@ -169,15 +209,20 @@ const BUILDINGS: readonly BuildingSpec[] = [
   { x: [-9, 16], z: [38, 42], h: 5.5, j: ["n"] },
 ];
 
+/** The A site and mid-courtyard slabs are named because the minimap schematic
+ * traces these exact rectangles; the rest of the plazas stay anonymous. */
+const A_SITE_PLAZA = { x: [-36, -20], z: [-8, 10], finish: "plazaWarm" } as const;
+const MID_COURTYARD_PLAZA = { x: [-8, 10], z: [-8, 8], finish: "plazaPale" } as const;
+
 /** Site plazas, mid courtyard, T spawn and the dock read a shade apart. */
 const PLAZAS: readonly {
   readonly x: readonly [number, number];
   readonly z: readonly [number, number];
   readonly finish: "plazaWarm" | "plazaCool" | "plazaPale";
 }[] = [
-  { x: [-36, -20], z: [-8, 10], finish: "plazaWarm" }, // A site
+  A_SITE_PLAZA,
   { x: [16, 33], z: [-8, 11], finish: "plazaCool" }, // B site
-  { x: [-8, 10], z: [-8, 8], finish: "plazaPale" }, // mid courtyard
+  MID_COURTYARD_PLAZA,
   { x: [-9, 9], z: [26, 40], finish: "plazaWarm" }, // T spawn
   { x: [33, 42], z: [-10, -1], finish: "plazaPale" }, // dock plaza
   { x: [30, 34], z: [-16, 4], finish: "plazaCool" }, // promenade strip
@@ -487,15 +532,17 @@ function addRail(
   );
 }
 
+/** The floor marks are named because the schematic's site letters trace their
+ * positions. */
+const A_SITE_MARK = { at: [-28, 1], letter: "A", approach: "e" } as const;
+const B_SITE_MARK = { at: [27, 3], letter: "B", approach: "w" } as const;
+
 /** A site plaza, mid courtyard, B site plaza and T spawn stay open. */
 const SITE_MARKS: readonly {
   readonly at: readonly [number, number];
   readonly letter: "A" | "B";
   readonly approach: Face;
-}[] = [
-  { at: [-28, 1], letter: "A", approach: "e" },
-  { at: [27, 3], letter: "B", approach: "w" },
-];
+}[] = [A_SITE_MARK, B_SITE_MARK];
 
 /** Rooftop power lines: thin dark catenary spans between neighbouring roofs,
  * purely visual — they never block a bullet or a sight line. */
@@ -541,6 +588,71 @@ function addWire(
   wireLine.name = "roof-wire";
   group.add(wireLine);
 }
+
+/**
+ * Raised-deck footprints, stated once and read three times: the deck meshes
+ * place themselves from these, the under-deck observation gets them as
+ * `Town.decks`, and the minimap schematic traces them — one edit moves all
+ * three. The numbers are the deck's walking surface extents on the ground
+ * plane; heights live with the meshes below.
+ */
+const BACK_PLAT_DECK: DeckFootprint = { minX: 0, maxX: 12, minZ: -22, maxZ: -10 };
+const HEAVEN_DECK: DeckFootprint = { minX: 20, maxX: 30, minZ: -30, maxZ: -20 };
+const CATWALK_DECK: DeckFootprint = { minX: 23.7, maxX: 26.3, minZ: -16.3, maxZ: -1.7 };
+
+/** Dock pier span: plank deck from the quay wall (`x0`) out to `x1`, centred
+ * on `z`; both the pier meshes and the minimap line read it. */
+const PIER = { x0: WATER_X - 1, x1: WATER_X + 17, z: -6 } as const;
+
+/** Plaza slabs are placed from x/z ranges; the schematic wants corner + size. */
+const plazaRect = ({
+  x,
+  z,
+}: {
+  x: readonly [number, number];
+  z: readonly [number, number];
+}): SchematicRect => [x[0], z[0], x[1] - x[0], z[1] - z[0]];
+
+/** Deck footprints likewise. */
+const deckRect = ({ minX, maxX, minZ, maxZ }: DeckFootprint): SchematicRect => [
+  minX,
+  minZ,
+  maxX - minX,
+  maxZ - minZ,
+];
+
+/**
+ * The map picture, emitted beside the map itself. Lane rectangles have no
+ * geometry of their own — they are the negative space between BUILDINGS — so
+ * their numbers live only here, but beside the plazas, decks, pier and site
+ * marks they were traced from, so a layout edit and its minimap update land in
+ * one file.
+ */
+export const townSchematic: ITownSchematic = {
+  areas: [
+    [-2, -40, 18, 10], // CT spawn
+    [-18, -36, 10, 12], // CT ramp
+    plazaRect(MID_COURTYARD_PLAZA), // mid courtyard
+    [10, 0, 6, 10], // connector
+    [16, -20, 16, 24], // B site, including the quay-north pocket
+    plazaRect(A_SITE_PLAZA), // A site
+    [-20, 4, 8, 14], // short A
+    [-12, 12, 10, 14], // T main
+    [-9, 26, 18, 12], // T spawn
+    [32, 4, 10, 26], // outside long
+  ],
+  raised: [deckRect(BACK_PLAT_DECK), deckRect(HEAVEN_DECK), deckRect(CATWALK_DECK)],
+  labels: [
+    { text: "A", x: A_SITE_MARK.at[0], z: A_SITE_MARK.at[1], kind: "site" },
+    // B's anchor sits at the site's readable north end rather than on its
+    // floor mark (27, 3), which faces the connector approach.
+    { text: "B", x: 24, z: -8, kind: "site" },
+    { text: "Mid", x: 1, z: 13, kind: "area" },
+  ],
+  deck: { half: TOWN_HALF },
+  sea: { edgeX: WATER_X },
+  pier: { ax: PIER.x0, az: PIER.z, bx: PIER.x1, bz: PIER.z },
+};
 
 export function buildTown(materials: TownMaterials): Town {
   const group = new Group();
@@ -591,31 +703,35 @@ export function buildTown(materials: TownMaterials): Town {
   }
 
   // Dock pier: plank deck on posts, running east into the water at the
-  // north-east waterfront, z ∈ [−10, −2].
-  const pierDeck = new Mesh(new BoxGeometry(18, 0.24, 4.4), materials.deckWood);
+  // north-east waterfront from the PIER span above — the same numbers the
+  // schematic's centre-line draws.
+  const pierDeck = new Mesh(
+    new BoxGeometry(PIER.x1 - PIER.x0, 0.24, 4.4),
+    materials.deckWood,
+  );
   pierDeck.name = "pier-deck";
-  pierDeck.position.set(WATER_X + 8, 0.12, -6);
+  pierDeck.position.set((PIER.x0 + PIER.x1) / 2, 0.12, PIER.z);
   pierDeck.castShadow = true;
   pierDeck.receiveShadow = true;
   group.add(pierDeck);
   hittable.push(pierDeck);
   colliders.push({
-    min: [WATER_X - 1, 0, -8.2],
-    max: [WATER_X + 17, 0.24, -3.8],
+    min: [PIER.x0, 0, -8.2],
+    max: [PIER.x1, 0.24, -3.8],
   });
   for (let index = 0; index < 4; index += 1) {
     for (const side of [-1, 1]) {
       const post = new Mesh(new CylinderGeometry(0.18, 0.22, 2.4, 6), materials.deckWood);
       post.name = "pier-post";
-      post.position.set(WATER_X + 1.5 + index * 5, -1.08, -6 + side * 1.9);
+      post.position.set(PIER.x0 + 2.5 + index * 5, -1.08, PIER.z + side * 1.9);
       post.castShadow = true;
       group.add(post);
     }
   }
   for (const side of [-1, 1]) {
-    const railBeam = new Mesh(new BoxGeometry(18, 0.07, 0.07), materials.steelMast);
+    const railBeam = new Mesh(new BoxGeometry(PIER.x1 - PIER.x0, 0.07, 0.07), materials.steelMast);
     railBeam.name = "pier-rail";
-    railBeam.position.set(WATER_X + 8, 1.16, -6 + side * 2.05);
+    railBeam.position.set((PIER.x0 + PIER.x1) / 2, 1.16, PIER.z + side * 2.05);
     group.add(railBeam);
     for (let index = 0; index < 5; index += 1) {
       addCylinderProp(
@@ -625,7 +741,7 @@ export function buildTown(materials: TownMaterials): Town {
         0.04,
         0.95,
         5,
-        [WATER_X + 0.5 + index * 4.25, 0.72, -6 + side * 2.05],
+        [PIER.x0 + 1.5 + index * 4.25, 0.72, PIER.z + side * 2.05],
       );
     }
   }
@@ -664,14 +780,24 @@ export function buildTown(materials: TownMaterials): Town {
   // soldier walk straight through.
   for (const gateway of BAYVIEW_ARCHES) addArchGateway(facade, gateway);
 
-  // Raised decks: back plat y 2.4, heaven y 4.8, catwalk bridge y 2.4.
+  // Raised decks: back plat y 2.4, heaven y 4.8, catwalk bridge y 2.4. Each
+  // slab places itself from its footprint constant above, which the schematic
+  // and the under-deck observation share.
   const backPlat = addSolid(
     group,
     colliders,
     hittable,
     materials.deckWood,
-    [12, DECK_THICKNESS, 12],
-    [6, 2.4 - DECK_THICKNESS / 2, -16],
+    [
+      BACK_PLAT_DECK.maxX - BACK_PLAT_DECK.minX,
+      DECK_THICKNESS,
+      BACK_PLAT_DECK.maxZ - BACK_PLAT_DECK.minZ,
+    ],
+    [
+      (BACK_PLAT_DECK.minX + BACK_PLAT_DECK.maxX) / 2,
+      2.4 - DECK_THICKNESS / 2,
+      (BACK_PLAT_DECK.minZ + BACK_PLAT_DECK.maxZ) / 2,
+    ],
     "back-plat",
   );
   void backPlat;
@@ -683,22 +809,44 @@ export function buildTown(materials: TownMaterials): Town {
     colliders,
     hittable,
     materials.deckWood,
-    [10, 0.4, 10],
-    [25, 4.8 - 0.2, -25],
+    [
+      HEAVEN_DECK.maxX - HEAVEN_DECK.minX,
+      DECK_THICKNESS,
+      HEAVEN_DECK.maxZ - HEAVEN_DECK.minZ,
+    ],
+    [
+      (HEAVEN_DECK.minX + HEAVEN_DECK.maxX) / 2,
+      4.8 - DECK_THICKNESS / 2,
+      (HEAVEN_DECK.minZ + HEAVEN_DECK.maxZ) / 2,
+    ],
     "heaven",
   );
   void heaven;
   addStairs(group, colliders, hittable, materials.deckWood, 3.2, [17.5, 0, -25], [20, 4.8, -25]);
 
   // Catwalk bridge on posts from the back plat's south-east corner to B site.
-  const catwalkDeck = new Mesh(new BoxGeometry(2.6, 0.22, 14.6), materials.deckWood);
+  const catwalkDeck = new Mesh(
+    new BoxGeometry(
+      CATWALK_DECK.maxX - CATWALK_DECK.minX,
+      0.22,
+      CATWALK_DECK.maxZ - CATWALK_DECK.minZ,
+    ),
+    materials.deckWood,
+  );
   catwalkDeck.name = "catwalk-deck";
-  catwalkDeck.position.set(25, 2.29, -9);
+  catwalkDeck.position.set(
+    (CATWALK_DECK.minX + CATWALK_DECK.maxX) / 2,
+    2.29,
+    (CATWALK_DECK.minZ + CATWALK_DECK.maxZ) / 2,
+  );
   catwalkDeck.castShadow = true;
   catwalkDeck.receiveShadow = true;
   group.add(catwalkDeck);
   hittable.push(catwalkDeck);
-  colliders.push({ min: [23.7, 0, -16.3], max: [26.3, 2.4, -1.7] });
+  colliders.push({
+    min: [CATWALK_DECK.minX, 0, CATWALK_DECK.minZ],
+    max: [CATWALK_DECK.maxX, 2.4, CATWALK_DECK.maxZ],
+  });
   for (const z of [-14.6, -9, -3.4]) {
     for (const side of [-1, 1]) {
       const post = new Mesh(new BoxGeometry(0.22, 2.18, 0.22), materials.steelPost);
@@ -844,11 +992,7 @@ export function buildTown(materials: TownMaterials): Town {
   ];
 
   // Raised deck footprints, for the under-the-deck observation.
-  const decks: DeckFootprint[] = [
-    { minX: 0, maxX: 12, minZ: -22, maxZ: -10 },
-    { minX: 20, maxX: 30, minZ: -30, maxZ: -20 },
-    { minX: 23.7, maxX: 26.3, minZ: -16.3, maxZ: -1.7 },
-  ];
+  const decks: DeckFootprint[] = [BACK_PLAT_DECK, HEAVEN_DECK, CATWALK_DECK];
 
   // One merge for the whole town's joinery, parapets and rooftop clutter.
   finishFacade(facade);
@@ -857,5 +1001,14 @@ export function buildTown(materials: TownMaterials): Town {
   // included — so this one walk can tag them all. Must stay after the merge.
   tagSurfaces(hittable, materials);
 
-  return { group, hittable, colliders, spawn, targets, enemyRoutes, decks };
+  return {
+    group,
+    hittable,
+    colliders,
+    spawn,
+    targets,
+    enemyRoutes,
+    decks,
+    schematic: townSchematic,
+  };
 }
