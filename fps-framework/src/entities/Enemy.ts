@@ -238,6 +238,18 @@ export class Enemy {
   phase: EnemyPhase = "patrol";
   wounded = false;
   /**
+   * Combat voice, assigned by the scene and throttled there (one shout at a time
+   * across the squad). Optional so tests and headless rigs run mute.
+   */
+  voice:
+    | {
+        readonly spot: (at: Vector3) => void;
+        readonly chase: (at: Vector3) => void;
+        readonly pain: (at: Vector3) => void;
+        readonly death: (at: Vector3) => void;
+      }
+    | undefined;
+  /**
    * Whether the body is snapped down so its lowest posed point rests on the deck.
    *
    * On is right for a soldier walking a range: the planted foot has to touch the floor and
@@ -1380,6 +1392,9 @@ export class Enemy {
     if (this.phase === "patrol" || this.phase === "return") {
       this.phase = "suspicious";
       this.#alertTimer = 0;
+      // Only the men pulled off a calm route call it out; anyone already
+      // fighting has said his piece.
+      this.voice?.chase(this.group.position);
     }
   }
 
@@ -1395,6 +1410,7 @@ export class Enemy {
     if (this.health <= 0) {
       this.health = 0;
       this.phase = "dead";
+      this.voice?.death(this.group.position);
       this.#deadFor = 0;
       this.#deathObserved = true;
       this.#deathSettleReady = false;
@@ -1416,6 +1432,7 @@ export class Enemy {
     // Surviving a round costs him his composure for a couple of seconds, not just health.
     this.#suppressed = Math.max(this.#suppressed, 2.4);
     this.#suppressedPeak = Math.max(this.#suppressedPeak, this.#suppressed);
+    this.voice?.pain(this.group.position);
     this.#play("HitReaction", REACTION_FADE);
     // A frozen sentry flinches at the impact but holds his ground: engaging here
     // would walk him out of a scenario-placed spawn on the first non-killing round.
@@ -1510,6 +1527,7 @@ export class Enemy {
       if (this.phase !== "engage") {
         this.#reaction = REACTION_SECONDS;
         this.#beginPursuit(playerEye);
+        this.voice?.spot(this.group.position);
       }
       this.#lastSeen.copy(playerEye);
       this.phase = "engage";

@@ -144,33 +144,45 @@ different surface from plaza flags.
 
 ## Priority 2 — test-suite integrity
 
-The suite is 20 scenarios, all wired into `pnpm test` and all passing. Two structural weaknesses were found and
-partly fixed; the pattern matters more than the instances.
+The suite is 21 scenarios, all wired into `pnpm test`. The two structural weaknesses below
+are **fixed as of 2026-08-22**; the pattern still matters for any new shooting scenario.
 
-### 2.1 Scenarios that shoot a patrolling soldier are inherently marginal
+### 2.1 Scenarios that shoot a patrolling soldier — FIXED with a frozen sentry
 
-`enemy-death-settles` and `death-no-snap` place the soldier 1.8 m from the player, then
-wait before firing. His route target is still `route[1]`, so from the setup position he
-tracks **mostly laterally at ~2.04 m/s**. The hitbox is 0.5 m wide, so the shot tolerates
-about ±0.25 m — roughly a 7-tick window. Five ticks of drift is 0.17 m against that 0.25 m,
-a 1.5× margin: it passes most of the time and fails sometimes.
+The old failure: `enemy-death-settles`/`death-no-snap` placed a *patrolling* soldier whose
+lateral drift gave each shot only a ~7-tick hit window, papered over with 1-tick waits and
+extra press cycles.
 
-Both were hardened (wait cut to 1 tick, plus extra press/release cycles — `justPressed`
-fires once per press, so a longer `holdTicks` adds no rounds). **The underlying fragility
-remains**: any new scenario that shoots a soldier inherits it.
+The fix is game-owned and needs no schema change: `game.ts` registers an extra
+non-rendered placeholder entity **"enemy-frozen"** (parked off-map at y=−1000 so "never
+placed" is distinguishable from "placed at the origin"). A scenario that includes it in
+`setup.entities` turns soldier 0 into a **sentry** at that position: `EnemyOptions.frozen`
+disconnects hearing, vision *and* the hurt-path engage reflex (`hurt()` used to force
+`phase = "engage"` on any surviving hit), so rounds landing near him never walk him out of
+his spawn. `Play.enter()` reads the placeholder like the existing player/enemy ones.
 
-The real fix is a way to place a soldier who does not patrol. There is none in the current
-schema. **If you add one, say a `frozen` flag or a scenario-settable route override, three
-things become possible**: reliable shooting scenarios, the missing zone-contrast control
-(2.2), and removal of the timing hacks above.
+Both death scenarios now use the sentry; every timing hack is gone — one Space press
+kills (level ray crosses the head zone at eye height 1.66 > headZoneMinY ≈ 1.46), then a
+single settle wait. Each passes repeatedly. Any new shooting scenario should use
+`enemy-frozen`; do not shoot patrollers.
 
-### 2.2 Missing: zone-contrast negative control
+### 2.2 Zone-contrast control — FIXED as a two-scenario pair
 
-Nothing asserts that a body shot yields multiplier 1 while a head shot yields 4. It used to
-live in `headshot-hits-head`'s trailing steps, which fired at a *respawned* patrolling
-soldier at a fixed screen fraction (`lower-to-navel`, y=0.58) — calibrated against a body
-that was floating before the grounding fix. Two consecutive runs gave a total miss and then
-a *headshot* where a body shot was expected, so those assertions were scoped away.
+`zone-contrast-body` and `zone-contrast-head` share one geometry: frozen sentry at the
+origin, player 4 m south on the same axis, fired with Space (no pointer input anywhere).
+They differ **only** in the player placeholder's spawn pitch, carried in the setup
+entity's rotation quaternion and applied by `Play.enter()` onto `player.look`
+(identity = level):
+
+- level ray crosses the body at world Y ≈ 1.66 ≥ headZoneMinY ≈ 1.46 → head zone:
+  `lastHitMultiplier equals 4`, `health equals 0`, dead;
+- pitched-down quaternion [−0.05722, 0, 0, 0.99836] (−0.1145 rad ≈ −6.6°) crosses at
+  ≈ 1.20, mid-way between legZoneMaxY ≈ 0.94 and headZoneMinY ≈ 1.46 → body zone:
+  `lastHitMultiplier equals 1`, `health exactly 26`, `deathObserved equals false`.
+
+Zone bands were measured off the live rig via the bridge components, not guessed.
+Both assert the sentry never moves (`blips.0.x/z equals 0 throughoutSteps`). No timing
+sensitivity: the aim is fixed at spawn, the soldier cannot move, one round per run.
 
 **Do not rebuild it as another timing-sensitive scenario.** Its honest prerequisite is 2.1.
 
@@ -243,15 +255,14 @@ wide, because the bind pose is a T. A posed measurement is no better: over a wal
 box is 1.13 m deep because the stride reaches fore and aft. Hitbox width and depth now come
 from `scale.ts`. Do not reintroduce a bounds-derived hitbox.
 
-### 3.4 Node materials require WebGPU
+### 3.4 Node materials require WebGPU — VERIFIED FALSE (2026-08-22)
 
-`townMaterials.ts` now uses `MeshStandardNodeMaterial` with TSL for world-projected
-triplanar sampling. The framework's WebGL2 fallback cannot draw node materials. This is
-probably pre-existing rather than new — `postprocessing.ts` already calls
-`renderer.setOutputNode`, which `@threenative/core` refuses on any other backend — but
-**nobody confirmed it**, and `threenative.config.ts` still says `preferWebGPU: true`, which
-implies a working fallback. Verify, and if there is no fallback, say so where a reader will
-find it.
+Confirmed empirically by forcing the webgl2 path (shadowing `navigator.gpu` in a headed
+Chromium): `@threenative/core` falls back to `WebGLRenderer` silently when WebGPU init
+fails, and **this map boots and renders correctly on it** — three 0.185's node system
+draws `MeshStandardNodeMaterial` + TSL fine over WebGL2. The feared `setOutputNode`
+refusal no longer applies either: nothing in `src/` calls it any more.
+Full write-up: "Renderer requirement" in `docs/bayview-design.md`.
 
 ---
 

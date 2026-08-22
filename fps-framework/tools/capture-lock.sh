@@ -1,25 +1,37 @@
 #!/usr/bin/env bash
-# Serialise headed WebGPU captures.
+# Serialise headed WebGPU captures AND keep them off the real desktop.
 #
-# CLAUDE.md tells you to look at the game, and on this machine that means a
-# HEADED Chromium with `--enable-features=Vulkan` — headless serves WebGPU from
-# SwiftShader and hands back a black canvas. The cost is that each capture holds
-# a real GPU context rendering a ~380k-triangle scene at 60 fps, and several of
-# those at once starves the compositor and makes the whole desktop stutter.
+# Three problems, one wrapper:
 #
-# So: one capture at a time, machine-wide. Wrap every capture command in this.
+# 1. Headless Chromium cannot render WebGPU here — headless serves WebGPU from
+#    SwiftShader and hands back a black canvas — so captures must be HEADED.
+# 2. Headed Chromium hangs on launch under a native Wayland session: the process
+#    spawns but never answers the CDP pipe, Playwright dies at 120–180 s, and
+#    every failed launch strands ~5 chrome processes. Forcing X11/XWayland took
+#    launch from that timeout to ~175 ms.
+# 3. A headed capture opens a REAL window on your desktop and holds a GPU
+#    context rendering a ~380k-triangle scene at 60 fps. Several of those at
+#    once starve the compositor and make the desktop unusable.
+#
+# So this wrapper does all three:
+#   - `flock`: exactly one capture machine-wide; waits its turn instead of
+#     failing, so several agents can call it concurrently (CAPTURE_LOCK_TIMEOUT
+#     bounds the wait).
+#   - reaps profiles stranded by earlier timed-out launches while holding the lock.
+#   - runs the capture on a PRIVATE VIRTUAL DISPLAY (Xvfb), never your desktop.
+#     Verified 2026-08-22 on this host (RTX 2080, Wayland session): under Xvfb,
+#     navigator.gpu reports the REAL NVIDIA adapter ("nvidia | turing", not
+#     SwiftShader) and frames render correctly with the usual recipe flags.
+#     Same launch flags, same code path — only DISPLAY differs.
 #
 #   tools/capture-lock.sh node tour-tmp.mjs /tmp/shots
 #   tools/capture-lock.sh npx @threenative/playtest --scenario ... --headed
 #
-# Waits for its turn rather than failing, so it is safe to call from several
-# agents or shells at once. Set CAPTURE_LOCK_TIMEOUT to bound the wait.
-# It also forces Chromium onto XWayland. Under a native Wayland session on this
-# host, `chromium.launch({ headless: false })` spawns the process but never
-# answers the CDP pipe, so Playwright sits until `Timeout 180000ms exceeded` and
-# dies — and every failed launch strands about five processes. That is what a
-# pile-up of "concurrent browsers" here usually is: hung launches, not captures.
-# Unsetting WAYLAND_DISPLAY takes launch from a 120s+ timeout to ~175ms.
+# Opt out of the virtual display and capture on the visible desktop (old
+# behaviour) with CAPTURE_ON_DESKTOP=1. To reuse an already-running virtual
+# display instead of spawning a throwaway one, set CAPTURE_DISPLAY=<number>.
+# Screen size: CAPTURE_SCREEN (default 1600x900x24), which every 1280x720
+# viewport fits inside.
 set -euo pipefail
 
 lock="${CAPTURE_LOCK_FILE:-/tmp/threenative-capture.lock}"
@@ -40,4 +52,43 @@ fi
 # live capture can own these.
 pkill -f playwright_chromiumdev_profile >/dev/null 2>&1 || true
 
-exec env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 "$@"
+if [ "${CAPTURE_ON_DESKTOP:-0}" = "1" ]; then
+  exec env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 "$@"
+fi
+
+screen="${CAPTURE_SCREEN:-1600x900x24}"
+
+# A caller-managed virtual display wins; skip spawning our own.
+if [ -n "${CAPTURE_DISPLAY:-}" ]; then
+  env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 DISPLAY=":${CAPTURE_DISPLAY}" "$@"
+  exit $?
+fi
+
+# Xvfb picks its own free display number via -displayfd, which sidesteps every
+# stale-socket / already-in-use case. It dies with this script via the trap.
+tmpdir="$(mktemp -d)"
+cleanup() { kill "${xvfb_pid:-}" 2>/dev/null || true; rm -rf "$tmpdir"; }
+trap cleanup EXIT INT TERM
+
+# NOTE: -screen takes TWO words deliberately unquoted.
+Xvfb -displayfd 1 -screen 0 $screen -nolisten tcp >"$tmpdir/display" 2>"$tmpdir/xvfb.err" &
+xvfb_pid=$!
+
+ok=""
+for _ in $(seq 1 100); do
+  [ -s "$tmpdir/display" ] && ok=1 && break
+  kill -0 "$xvfb_pid" 2>/dev/null || break
+  sleep 0.1
+done
+if [ -z "$ok" ]; then
+  echo "capture-lock: Xvfb failed to start:" >&2
+  cat "$tmpdir/xvfb.err" >&2
+  exit 70
+fi
+display_num="$(tr -dc '0-9' <"$tmpdir/display")"
+if [ -z "$display_num" ]; then
+  echo "capture-lock: Xvfb started but reported no display number" >&2
+  exit 70
+fi
+
+env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 DISPLAY=":${display_num}" "$@"

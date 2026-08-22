@@ -84,6 +84,32 @@ Sources: <https://elevenlabs.io/sound-effects-terms>,
 <https://help.elevenlabs.io/hc/en-us/articles/13313564601361-Can-I-publish-the-content-I-generate-on-the-platform>,
 <https://elevenlabs.io/docs/api-reference/text-to-sound-effects/convert.mdx>.
 
+### Generated voice barks (ElevenLabs TTS)
+
+Enemy combat callouts, **strictly non-religious**: short shouted Arabic phrases plus
+nonverbal pain/death cries. Verbal lines were generated on 2026-08-22 with the
+**ElevenLabs `POST /v1/text-to-speech/{voice_id}` API**, model `eleven_multilingual_v2`,
+premade voice "Harry — Fierce Warrior" (`SOYHLrjzK2X1ezoPC6cr`); the two pain grunts and
+two death cries are wordless and came from the sound-generation endpoint like the cues
+above. Same key handling as above (gitignored `.env`, never shipped).
+
+| File | Duration | Line / prompt |
+| --- | --- | --- |
+| `public/audio/bark-spot-1.ogg` | ~1.4 s | "هناك! أراه!" — "Over there! I see him!" |
+| `public/audio/bark-spot-2.ogg` | ~2.1 s | "إنه هنا! انتبهوا!" — "He's here! Watch out!" |
+| `public/audio/bark-spot-3.ogg` | ~1.7 s | "هناك، أمامكم!" — "There, in front of you!" |
+| `public/audio/bark-chase-1.ogg` | ~1.0 s | "تابعوه!" — "After him!" |
+| `public/audio/bark-chase-2.ogg` | ~1.4 s | "لا تدعوه يهرب!" — "Don't let him escape!" |
+| `public/audio/bark-chase-3.ogg` | ~0.9 s | "أوقفوه!" — "Stop him!" |
+| `public/audio/bark-pain-1.ogg` | ~0.7 s | Wordless sharp male combat pain grunt |
+| `public/audio/bark-pain-2.ogg` | ~0.8 s | Wordless pained shout through gritted teeth |
+| `public/audio/bark-death-1.ogg` | ~1.8 s | Wordless strained dying cry fading out |
+| `public/audio/bark-death-2.ogg` | ~1.6 s | Wordless death cry, wounded soldier collapsing |
+
+The commercial-use terms recorded above for the generated SFX apply to these TTS
+outputs as well; text-to-speech carries the same Terms of Service and paid-plan
+commercial licence conditions (checked 2026-08-22, sources as listed above).
+
 ## Reference images
 
 `CLAUDE.md` requires each reference image to be credited with its creator, licence and source
@@ -131,3 +157,19 @@ a Poly Haven CC0 download and is credited in the textures table above.)
 supplied with the brief. The repository `.gitignore` records that the viewmodel is
 "user-provided; verify upstream pack terms before redistribution" and that the enemy is
 CC-BY-4.0 carrying retargeted Mixamo clips. Those terms are unverified by this workstream.
+
+On 2026-08-22 `weapon-ak47.glb`'s two 4096² albedo JPEGs were re-encoded in place at
+JPEG quality 80 (4:2:0), same resolution, geometry/animation/materials byte-identical:
+11,751,004 → 9,738,056 bytes. The untouched original is kept recoverable at
+`assets/weapon-ak47.glb.orig` (gitignored). Render verified pixel-equivalent against
+the pre-recompress build (structural similarity 0.9998, ΔE00 0.012).
+
+Same date, `player-viewmodel.glb`: its four opaque baseColour PNGs were re-encoded to
+JPEG quality 80 (4:2:0) — 967,635 → 100,472 bytes — and its eleven normal/metallic-
+roughness/occlusion maps were re-compressed **losslessly** (pixel-exact decode verified)
+with PIL optimize: 4,024,770 → 3,172,523 bytes. The Scope's baseColour stays a PNG
+because that material blends (`alphaMode: BLEND`) and needs its alpha channel; geometry,
+skin and five animation samplers are byte-identical. File total 7,495,528 → 5,663,412
+bytes. Original recoverable at `assets/player-viewmodel.glb.orig`. All five skinned
+meshes verified rendering via capture comparison against the pre-recompress build
+(overall similarity 0.9999, ΔE00 0.0033).

@@ -75,6 +75,33 @@ edge is open water with quay wall, bollards, pier rails and shallow-water strip.
 - Enemy nav grid covers the whole playable deck (±42 m); all route straight segments
   keep ≥1 m clearance from new solids.
 
+## Renderer requirement
+
+**WebGPU is preferred, not required. A WebGL2 fallback exists for this map and it
+works.** Verified 2026-08-22 rather than assumed, because the source used to imply
+otherwise:
+
+- `@threenative/core`'s `createRenderer` tries `WebGPURenderer` when
+  `preferWebGPU` is set and the host exposes `navigator.gpu`, and **silently falls
+  back to `WebGLRenderer` (webgl2) if construction or init throws**
+  (`core/dist/index.js`, `createRenderer`/`wrapRenderer`). `threenative.config.ts`
+  `renderer.preferWebGPU: true` therefore means "WebGPU when the host offers it",
+  not "WebGPU or nothing".
+- Forced onto the webgl2 path (shadowing `navigator.gpu` in a headed Chromium),
+  the map **boots and renders correctly**: townMaterials.ts'
+  `MeshStandardNodeMaterial` + TSL world-projection draws on three 0.185's
+  WebGL2 backend — textures, triplanar walls, soldier, viewmodel, shadows and
+  ACES tone mapping all present in the capture. Screenshot evidence taken during
+  verification; the canvas reports `webgl2: true, webgpu: false` there.
+- The one historical hard refusal is gone: `postprocessing.ts` no longer calls
+  `renderer.setOutputNode` (which `@threenative/core` throws on for non-webgpu
+  kinds). Nothing in `src/` calls it any more. If it ever comes back, it must be
+  gated on the backend kind.
+
+What *is* still required either way: a real GPU context. Headless Chromium on this
+host renders a black canvas under both backends — that is a capture-environment
+fact, not a backend-selection fact (see CLAUDE.md "How to actually look at it").
+
 ## HUD direction
 
 Toward the reference screenshots: round timer top-centre in `m:ss`; minimap

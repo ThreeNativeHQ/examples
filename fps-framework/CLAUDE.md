@@ -431,6 +431,15 @@ Run `pnpm dev`, then get eyes on it. In rough order of preference:
    the fallback if you truly want it.
 3. **Ask the user to look**, and say specifically what you want them to check.
 
+**Wrap every browser launch in `tools/capture-lock.sh <command>`** (playtests, probe
+scripts, tours — everything). It serialises captures machine-wide via `flock`, reaps
+profiles stranded by earlier failed launches, forces the X11 path that this Wayland host
+needs, and runs the capture on a **private throwaway Xvfb display** so no window ever
+appears on the user's desktop — verified to reach the real NVIDIA adapter there, not
+SwiftShader. Visible-desktop captures are banned by user directive; opt out only with
+`CAPTURE_DISPLAY=<n>` (reuse a running virtual display) or `CAPTURE_ON_DESKTOP=1`
+(emergency only).
+
 On a machine with no screen, run any of those under a virtual display. **Do not use
 `xvfb-run`:** on `xorg-server-xvfb` 21.1.x its cleanup `kill` fails after Xvfb has already
 exited and that failing kill's status replaces the real one, so

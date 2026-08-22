@@ -34,7 +34,9 @@ export class Tracers {
 
   constructor(parent: Object3D, count = 12, colour = 0xffe6b0) {
     // Unit-length cylinder along +Y: scaling y to the shot distance stretches it end to end.
-    const geometry = new CylinderGeometry(0.012, 0.012, 1, 6, 1, true);
+    // Tapered — the far end is the glowing slug's head, the near end its thinning tail.
+    // A uniform tube read as a chalk line.
+    const geometry = new CylinderGeometry(0.017, 0.005, 1, 6, 1, true);
     geometry.translate(0, 0.5, 0);
     const material = new MeshBasicMaterial({
       blending: AdditiveBlending,
@@ -54,8 +56,12 @@ export class Tracers {
     });
   }
 
-  /** Draw one round travelling from `from` along `direction` for `distance` metres. */
-  spawn(from: Vector3, direction: Vector3, distance: number): void {
+  /**
+   * Draw one round travelling from `from` along `direction` for `distance` metres.
+   * `rng` jitters width and streak length per shot — pass the scene's seeded
+   * `ctx.random` so replays stay identical.
+   */
+  spawn(from: Vector3, direction: Vector3, distance: number, rng: () => number = Math.random): void {
     const slot = this.#pool[this.#cursor % this.#pool.length];
     this.#cursor += 1;
     if (slot === undefined) return;
@@ -64,15 +70,17 @@ export class Tracers {
     this.#quaternion.setFromUnitVectors(UP, this.#direction);
     // A short travelling streak reads as a round leaving the barrel. Stretching
     // one cylinder all the way to the target looked like a laser and hid the
-    // actual muzzle angle.
-    const segmentLength = Math.min(3.2, distance);
+    // actual muzzle angle; a little shot-to-shot variation stops it reading
+    // as the same drawn line every time.
+    const segmentLength = Math.min(2.4 + rng() * 1.1, distance);
     const lead = Math.min(0.16, Math.max(0, distance - segmentLength));
+    const width = 0.75 + rng() * 0.6;
     slot.direction.copy(this.#direction);
     slot.travel = lead;
     slot.maxTravel = Math.max(lead, distance - segmentLength);
     slot.mesh.position.copy(from).addScaledVector(this.#direction, lead);
     slot.mesh.quaternion.copy(this.#quaternion);
-    slot.mesh.scale.set(1, segmentLength, 1);
+    slot.mesh.scale.set(width, segmentLength, width);
     (slot.mesh.material as MeshBasicMaterial).opacity = 0.9;
     slot.life = Math.min(0.11, distance / 360);
   }

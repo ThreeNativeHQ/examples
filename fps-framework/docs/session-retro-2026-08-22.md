@@ -87,6 +87,17 @@ timed-out launches while holding the lock, strips the Wayland env, execs the com
 | **Blunt reaping.** `pkill -f playwright_chromiumdev_profile` is pattern-based; one `pkill -f verify-tmp.mjs` matched its own shell command line and killed the run it had just started. | Session log, near the end |
 | **Round timer < tour length.** The 105 s round ends under a long tour; `RUN OVER` overlay covers every later frame until the harness learns to restart rounds. | Patched into the harness mid-tour |
 
+**Update, later the same day — Layer 3 is fully closed.** A second concurrent session kept
+flashing capture windows over the user's desktop and they banned visible captures outright.
+Verified that headed Chromium under **Xvfb** reaches the real NVIDIA adapter
+(`nvidia | turing`, not SwiftShader) and renders correctly — so `tools/capture-lock.sh` now
+spawns a throwaway virtual display per run (`Xvfb -displayfd`, dies with the script) by
+default. Captures are invisible, serialised, and hang-proof without anyone remembering
+anything. Opt-outs: `CAPTURE_DISPLAY=<n>` (reuse a running display), `CAPTURE_ON_DESKTOP=1`
+(emergency only). Gotcha fixed en route: `Xvfb -screen` takes two words; quoting
+`"0 $size"` into one argument kills Xvfb instantly. Remaining residuals: solo-run lock
+overhead (use `CAPTURE_LOCK_TIMEOUT=150`) and queue visibility are still open.
+
 ---
 
 ## 2. Other bottlenecks

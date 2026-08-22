@@ -25,6 +25,7 @@ import { Enemy } from "../entities/Enemy.js";
 import { FpsPlayer } from "../entities/FpsPlayer.js";
 import { MAGAZINE, RESERVE, Rifle } from "../entities/Rifle.js";
 import { Target } from "../entities/Target.js";
+import { flashTexture, ImpactBursts, MuzzleFlash } from "../render/gunfx.js";
 import { setupLighting } from "../render/lighting.js";
 import { setupPost } from "../render/postprocessing.js";
 import { softCircleTexture } from "../render/particles.js";
@@ -348,9 +349,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       frozenSetup?.isObject3D === true && frozenSetup.position.y > -100
         ? frozenSetup.position.clone()
         : undefined;
-    console.info(
-      `TN_FPS_FROZEN_DEBUG:isObject3D=${frozenSetup?.isObject3D} pos=${JSON.stringify(frozenSetup?.position)} frozen=${frozenSpawn !== undefined}`,
-    );
     const navBounds = { min: -TOWN_HALF - 1, max: TOWN_HALF + 1 };
     const enemies: Enemy[] = [];
     for (let index = 0; index < town.enemyRoutes.length; index += 1) {
@@ -391,6 +389,14 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       }
       ctx.add(soldier.group);
       ctx.entities.add(index === 0 ? "enemy" : `enemy-${index}`, soldier);
+      // Shouted callouts on spotting, hearing rounds and being hit; the audio
+      // sink throttles so five men reacting never stack into a wall of shouting.
+      soldier.voice = {
+        spot: (at) => audio.soldierSpot(at),
+        chase: (at) => audio.soldierChase(at),
+        pain: (at) => audio.soldierPain(at),
+        death: (at) => audio.soldierDeath(at),
+      };
       enemies.push(soldier);
     }
 
@@ -452,38 +458,22 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       return true;
     };
 
-    // Impact puffs: a small ring of additive quads reused round-robin, so a shot that
-    // lands on plaster reads as a hit even across mid.
-    const impactMaterial = new MeshBasicMaterial({
-      blending: AdditiveBlending,
-      color: 0xdfe4ea,
-      depthWrite: false,
-      map: softCircleTexture(64, 0.18),
-      opacity: 0.85,
-      transparent: true,
-    });
-    const impacts = Array.from({ length: 8 }, () => {
-      const puff = new MeshClass(new PlaneGeometry(0.26, 0.26), impactMaterial.clone());
-      (puff.material as MeshBasicMaterial).opacity = 0;
-      puff.visible = true;
-      ctx.add(puff);
-      return { life: 0, mesh: puff };
-    });
+    // Impact bursts: flash, sparks, chips and dust in one pooled system keyed by
+    // surface — steel sprays fast bright sparks, stone/plaster throw pale chips
+    // under a dust cloud, wood spits brown splinters. One expanding circle read
+    // as a decal; a burst is what makes a hit look like material answering.
+    const impacts = new ImpactBursts(ctx.scene, () => ctx.random());
+    // `hit.face.normal` is object-local; transform it into world space before any
+    // spawn math, or rotated meshes send their bursts into the wall.
+    const impactNormal = new Vector3();
+    const impactUp = new Vector3(0, 1, 0);
     // Player rounds trail warm white; the enemy's are red so you can tell incoming from
     // outgoing at a glance, which is the whole point of seeing a trajectory at all.
     const playerTracers = new Tracers(ctx.scene, 12, 0xffe6b0);
     const enemyTracers = new Tracers(ctx.scene, 16, 0xff6a4d);
-    let impactCursor = 0;
-    const spawnImpact = (at: Vector3, normal: Vector3): void => {
-      const slot = impacts[impactCursor % impacts.length];
-      if (slot === undefined) return;
-      impactCursor += 1;
-      slot.mesh.position.copy(at).addScaledVector(normal, 0.02);
-      slot.mesh.lookAt(at.clone().add(normal));
-      slot.mesh.scale.setScalar(0.6);
-      (slot.mesh.material as MeshBasicMaterial).opacity = 0.85;
-      slot.life = 0.18;
-    };
+    // One hoisted rng closure shared by every per-shot spawn: a closure literal at a
+    // call site is a fresh allocation on every trigger pull.
+    const shotRng = (): number => ctx.random();
 
     let elapsed = 0;
     let hitFlash = 0;
@@ -509,7 +499,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // miss you cannot correct.
       const barrel = rifle.barrelRay();
       const distance = hit === undefined ? RANGE_METRES : hit.point.distanceTo(eye);
-      playerTracers.spawn(barrel.origin, barrel.direction, distance);
+      playerTracers.spawn(barrel.origin, barrel.direction, distance, shotRng);
+      playerFlash.spawn(barrel.origin, barrel.direction, shotRng);
       if (hit === undefined) return;
 
       const target = hit.object.userData.target as Target | undefined;
@@ -542,13 +533,16 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         }
         return;
       }
-      spawnImpact(hit.point, hit.face?.normal ?? new Vector3(0, 1, 0));
-      audio.impact(resolveSurface(hit), hit.point);
+      impactNormal.copy(hit.face?.normal ?? impactUp).transformDirection(hit.object.matrixWorld);
+      const surface = resolveSurface(hit);
+      impacts.spawn(hit.point, impactNormal, surface);
+      audio.impact(surface, hit.point);
     };
 
-    // A muzzle flash is three things at once: a bright card, a light that touches the world,
-    // and smoke that outlives both. One card alone reads as a decal pasted on the scene.
-    const flashSprite = softCircleTexture(64, 0.45);
+    // A muzzle flash is three things at once: a bright star-silhouette card, a light
+    // that touches the world, and smoke that outlives both. One round glow alone
+    // reads as a lamp switching on; the uneven rays are what say "gunshot".
+    const flashSprite = flashTexture();
     const smokeSprite = softCircleTexture(64, 0.05);
     const flashMaterial = new MeshBasicMaterial({
       blending: AdditiveBlending,
@@ -575,6 +569,19 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // light's visibility rebuilds pipelines and stalls the frame.
     const enemyLight = new PointLightClass(0xffc46a, 0, 9, 2);
     ctx.add(enemyLight);
+
+    // The player's own flash is drawn in world space at the measured muzzle tip:
+    // the star card reads on camera and the light kicks the wall ahead of the
+    // barrel for a frame. Rifle's suppressed cone stays as the tight forward core.
+    const playerFlash = new MuzzleFlash(ctx.scene, {
+      colour: 0xffd9a0,
+      forwardOffset: 0.06,
+      life: 0.085,
+      lightColour: 0xffc46a,
+      lightDistance: 12,
+      lightIntensity: 24,
+      size: 0.36,
+    });
 
     const smokeMaterial = new MeshBasicMaterial({
       color: 0xb9bec6,
@@ -616,10 +623,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         enemyFlash.scale.setScalar(0.85 + ctx.random() * 0.5);
         enemyFlash.rotation.z = ctx.random() * Math.PI;
         flashMaterial.opacity = 1;
-        enemyFlashLife = 0.075;
+        enemyFlashLife = 0.09;
         enemyLight.position.copy(enemyFlash.position);
-        enemyLight.intensity = 26;
-        enemyTracers.spawn(enemyFlash.position, direction, distance);
+        enemyLight.intensity = 34;
+        enemyTracers.spawn(enemyFlash.position, direction, distance, shotRng);
         spawnSmoke(enemyFlash.position, direction, ctx);
         audio.enemyShot(at);
         audio.nearMiss(distance);
@@ -644,7 +651,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // quad still visible leaves it frozen in the world behind the end screen.
       enemyFlashLife = Math.max(0, enemyFlashLife - dt);
       if (enemyFlashLife <= 0) flashMaterial.opacity = 0;
-      enemyLight.intensity = Math.max(0, enemyLight.intensity - dt * 260);
+      enemyLight.intensity = Math.max(0, enemyLight.intensity - dt * 430);
+      // Bursts decay outside the phase gate too: a chip cloud frozen mid-air
+      // behind the end screen reads exactly like the stuck-quad bug above.
+      impacts.update(dt, eye);
+      playerFlash.update(dt, eye);
       for (const puff of smoke) {
         if (puff.life <= 0) continue;
         puff.life -= dt;
@@ -669,13 +680,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
 
       elapsed += dt;
       hitFlash = Math.max(0, hitFlash - dt * 2.4);
-      for (const slot of impacts) {
-        if (slot.life <= 0) continue;
-        slot.life -= dt;
-        slot.mesh.scale.setScalar(0.6 + (0.18 - slot.life) * 4);
-        (slot.mesh.material as MeshBasicMaterial).opacity = Math.max(0, slot.life * 4.7);
-        if (slot.life <= 0) (slot.mesh.material as MeshBasicMaterial).opacity = 0;
-      }
       if (enemyFlashLife > 0) enemyFlash.lookAt(eye.x, eye.y, eye.z);
       const timeRemaining = Math.max(0, RUN_SECONDS - elapsed);
 
