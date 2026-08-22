@@ -48,6 +48,39 @@ Estimated deletion: ~300–500 lines. **Migration is also the acceptance test fo
 lifts** — if `TracerPool3D` cannot express the enemy-tracer colour split, that is a
 defect in the lift, found now and not by a stranger.
 
+**Migration outcome, 2026-08-22 (done — engine `f35478e5`, game `ab62bcc`, net −131
+lines, 6/6 playtests green before and after):**
+
+- `TracerPool3D` — **adopted**, and the acceptance test did its job: the pool could not
+  express this game's seeded per-shot width/length jitter or distance-scaled lifetime,
+  which was a defect in the lift. Fixed engine-side (`ITracerSpawnOptions` pass-through,
+  values still game-supplied); both pools migrated over one shared tapered geometry.
+- `softCircleDataTexture` — **adopted** (`particles.ts` deleted; exact twin).
+  `prewarm()` — **rejected for this game**: every effect animates opacity through a held
+  material reference, and `prewarm()` clones surfaces (`renderer.ts warmSurface`), so
+  adoption would silently detach them; all sites are already visible-at-opacity-zero from
+  construction, which is the warmed state prewarm exists to create. Re-propose only for
+  effects that start hidden.
+- `normaliseToMetres` — **adopted** at six sites (crown-bone height + longest axis);
+  `scale.ts` keeps only the metre table and audit rules. `attachToBone` — **adopted** for
+  the enemy hand attach. `#measureBarrel`'s optic search has no lift counterpart and stays
+  game-side; root `measure.mjs` stays too — it is an offline GLB inspector, not a runtime
+  measurement twin.
+- `GroundSnap` — **not adopted**: verified against the corpse path, parity is partial.
+  Corpse grounding here is deck-Y plus a sink-only clamp after the death clip plus a hard
+  ceiling plus two-bone leg-settle IK; `GroundSnap.apply` measures and corrects but cannot
+  express sink-only (its rate clamp is symmetric), and growing it an option for one caller
+  fails the kill switch. Forcing adoption would have risked the `death-no-snap` gate for
+  no deletion. Revisit only if a standing-character caller appears.
+- `PathFollow3D` — **not adopted**: patrol lanes cross colliders (that is why patrol goes
+  through the grid A*), and combat goals move every frame. An obstacle-free decorative
+  loop would be the only fit; none exists in this map.
+- `AnimationPlayer` — **already current**: the game rides `mode:"once"` + `.finished`
+  today; the timer-driven ragdoll stop this row cites is gone from the source. The real
+  remaining workarounds are the mixer reach-ins (`setEffectiveTimeScale`,
+  half-cycle footstep crossings) — those are exactly §2.7's measured verbs, owner decision
+  pending vs PRD-039.
+
 Charter fit: pure kill-switch win (vanilla-across-sites loses; the framework column
 already exists). No new surface, no new package.
 
