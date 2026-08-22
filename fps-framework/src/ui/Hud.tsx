@@ -120,6 +120,9 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
   const playerZ = useGameState(game, (state) => state.playerZ);
   const playerYaw = useGameState(game, (state) => state.playerYaw);
   const blips = useGameState(game, (state) => state.blips);
+  const ready = useGameState(game, (state) => state.ready);
+  const assetsLoaded = useGameState(game, (state) => state.assetsLoaded);
+  const assetsTotal = useGameState(game, (state) => state.assetsTotal);
   const aimReticleCentred = true;
 
   const lowHealth = health < 35;
@@ -130,6 +133,37 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
   const clockSeconds = Math.max(0, Math.floor(timeRemaining));
   const clockMinutes = Math.floor(clockSeconds / 60);
   const clockPart = String(clockSeconds % 60).padStart(2, "0");
+
+  if (!ready) {
+    // The town is ~23 MB of textures and rigged GLBs, which is several seconds
+    // of black canvas on a cold cache. `assetsTotal` grows as jobs are queued,
+    // so early on the fraction is optimistic; it is still honest movement, and
+    // the bar is capped at 92% until the scene reports itself built so it never
+    // sits full while the first frame is still being drawn.
+    const fraction =
+      assetsTotal === 0 ? 0 : Math.min(0.92, assetsLoaded / Math.max(assetsTotal, 1));
+    return (
+      <div className="absolute inset-0 flex select-none flex-col items-center justify-center bg-[#0b1016] font-sans">
+        <div className="text-[13px] font-semibold uppercase tracking-[0.42em] text-[#ffa63d]">
+          Bayview
+        </div>
+        <div className="mt-2 text-[11px] font-medium tracking-[0.18em] text-white/40">
+          COASTAL TOWN · 5v5 BOMB DEFUSAL
+        </div>
+        <div className="mt-7 h-[3px] w-[240px] overflow-hidden rounded-full bg-white/10">
+          <i
+            className="block h-full rounded-full bg-[#ffa63d] transition-[width] duration-200 ease-out"
+            style={{ width: `${(fraction * 100).toFixed(1)}%` }}
+          />
+        </div>
+        <div className="mt-3 text-[11px] tabular-nums tracking-[0.14em] text-white/35">
+          {assetsTotal === 0
+            ? "PREPARING"
+            : `LOADING ${assetsLoaded} / ${assetsTotal}`}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-sans">

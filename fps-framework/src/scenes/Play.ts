@@ -37,6 +37,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   static override readonly initialState: GameState = {
     aiming: false,
     ammo: MAGAZINE,
+    assetsLoaded: 0,
+    assetsTotal: 0,
     blips: [],
     distanceMoved: 0,
     health: 100,
@@ -45,6 +47,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     playerX: 0,
     playerYaw: 0,
     playerZ: 32,
+    ready: false,
     reloads: 0,
     reserve: RESERVE,
     score: 0,
@@ -70,7 +73,20 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // photograph is. `bayview-brick` is the one map with no PBR set of its own,
     // so it borrows the whitewash relief — both are rough lime render at the
     // same grain, and the alternative is the only flat wall in the town.
-    const texture = (file: string): Promise<Texture> => ctx.assets.texture(`assets/${file}`);
+    // Boot progress is counted, not faked: each asset ticks the HUD's bar as it
+    // resolves, so a slow cold load shows movement instead of a black canvas.
+    let loaded = 0;
+    let total = 0;
+    const track = <T,>(job: Promise<T>): Promise<T> => {
+      total += 1;
+      return job.then((value) => {
+        loaded += 1;
+        ctx.state.set({ assetsLoaded: loaded, assetsTotal: total });
+        return value;
+      });
+    };
+    const texture = (file: string): Promise<Texture> =>
+      track(ctx.assets.texture(`assets/${file}`));
     const [
       enemy,
       viewmodel,
@@ -96,9 +112,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       wood,
       woodNormal,
     ] = await Promise.all([
-      ctx.assets.model<LoadedModel>("assets/enemy-terrorist.glb"),
-      ctx.assets.model<LoadedModel>("assets/player-viewmodel.glb"),
-      ctx.assets.model<LoadedModel>("assets/weapon-ak47.glb"),
+      track(ctx.assets.model<LoadedModel>("assets/enemy-terrorist.glb")),
+      track(ctx.assets.model<LoadedModel>("assets/player-viewmodel.glb")),
+      track(ctx.assets.model<LoadedModel>("assets/weapon-ak47.glb")),
       texture("bayview-sky.jpg"),
       texture("bayview-whitewash.jpg"),
       texture("bayview-whitewash-normal.jpg"),
@@ -452,6 +468,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         spawnSmoke(enemyFlash.position, direction, ctx);
       },
     };
+
+    // The scene is built: geometry, physics, soldiers and the viewmodel all
+    // exist. Flip the boot flag here rather than when the last byte arrived,
+    // because the black canvas lasts until the first frame actually draws.
+    ctx.state.set({ ready: true });
 
     return (frameCtx, dt) => {
       if (frameCtx.input.justPressed("restart")) {

@@ -19,6 +19,15 @@ export type GameState = {
   playerYaw: number;
   /** Enemy positions for the minimap, one entry per soldier. */
   blips: Blip[];
+  /**
+   * Boot progress. The town loads ~23 textures and three rigged GLBs totalling
+   * about 23 MB, which is a few seconds of black canvas on a cold cache; the
+   * HUD shows a real progress bar over it rather than nothing. `ready` flips
+   * when the scene has finished building, not when the last byte arrives.
+   */
+  ready: boolean;
+  assetsLoaded: number;
+  assetsTotal: number;
 };
 
 /** Shared objective contract for the scene and the HUD. */
