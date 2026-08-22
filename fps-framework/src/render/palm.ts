@@ -294,6 +294,15 @@ function buildPalm(seed: number): PalmParts {
     // Golden angle: an even fan looks stamped, and a random one clumps.
     const azimuth = i * 2.39996 + rng() * 0.22;
     const tier = i % 3;
+    // Value separation is what makes a crown read as foliage instead of as one
+    // green silhouette. The upright tier-0 fronds sit in each other's shade and
+    // stay deep green; the long tier-2 droopers take the sun and their tips
+    // bleach toward yellow. Red leads the bleach, blue lags — a flat brightness
+    // ramp would read as fog, not as sun damage. A per-frond jitter keeps
+    // neighbouring fronds from matching exactly.
+    const depth = tier === 0 ? 0.55 : tier === 1 ? 0.78 : 1.0;
+    const bleach = tier === 0 ? 0.98 : tier === 1 ? 1.14 : 1.34;
+    const jitter = 0.9 + rng() * 0.2;
     const spec: FrondSpec = {
       length: (tier === 0 ? 2.9 : tier === 1 ? 3.3 : 3.6) + rng() * 0.4,
       width: 0.4 + rng() * 0.09,
@@ -303,8 +312,12 @@ function buildPalm(seed: number): PalmParts {
       // Twenty leaflets a side. Ten read as a coarse zigzag; the reference
       // frond is a feather, and leaflet count is what separates the two.
       segments: LEAFLETS_PER_SIDE,
-      shade: [0.58, 0.66, 0.44],
-      tip: [1.22, 1.16, 0.78],
+      shade: [0.58 * depth * jitter, 0.66 * depth * jitter, 0.44 * depth * jitter],
+      tip: [
+        1.22 * bleach * jitter * 1.06,
+        1.16 * bleach * jitter,
+        0.78 * bleach * jitter * 0.88,
+      ],
     };
     live.push(placed(frondGeometry(spec, rng), azimuth, crown));
   }

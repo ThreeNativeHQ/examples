@@ -1,14 +1,25 @@
 import { type ICtx, Scene, type SceneFrame } from "@threenative/core";
 import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
-import type { AnimationClip, Group, Object3D, PerspectiveCamera, Texture } from "three";
+import type {
+  AnimationClip,
+  Group,
+  Intersection,
+  Material,
+  Object3D,
+  PerspectiveCamera,
+  Quaternion,
+  Texture,
+} from "three";
 import {
   AdditiveBlending,
+  MathUtils,
   Mesh as MeshClass,
   MeshBasicMaterial,
   PlaneGeometry,
   PointLight as PointLightClass,
   Vector3,
 } from "three";
+import { GameAudio, type CueName, type ImpactSurface } from "../audio/GameAudio.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Enemy } from "../entities/Enemy.js";
 import { FpsPlayer } from "../entities/FpsPlayer.js";
@@ -30,6 +41,40 @@ export type GameCtx = ICtx<GameState, IPhysicsContext>;
 const RUN_SECONDS = 105;
 const RANGE_METRES = 70;
 const ROUND_DAMAGE = 10;
+
+/**
+ * Town-material member name → what a bullet hears when it lands there. Members
+ * left out (water, shallows, fronds) have no honest cue and stay silent. The
+ * plaster/brick walls are world-projected per-mesh materials, so they cannot be
+ * tabled by identity — they are the resolver's default instead.
+ */
+const MATERIAL_SURFACES: Readonly<Record<string, ImpactSurface>> = {
+  ground: "stone",
+  dadoBand: "plaster",
+  plasterTrim: "plaster",
+  brickTrim: "plaster",
+  doorBlue: "wood",
+  shutter: "wood",
+  rollerSteel: "steel",
+  awningCanvas: "plaster",
+  awningStripe: "plaster",
+  crate: "wood",
+  deckWood: "wood",
+  barrel: "steel",
+  palmTrunk: "wood",
+  siteMark: "stone",
+  plateFace: "steel",
+  plateHit: "steel",
+  plateFrame: "steel",
+  steel: "steel",
+  steelPost: "steel",
+  steelMast: "steel",
+  tankDark: "steel",
+  quay: "stone",
+  plazaWarm: "stone",
+  plazaCool: "stone",
+  plazaPale: "stone",
+};
 
 type LoadedModel = { scene: Group; animations: AnimationClip[] };
 
@@ -65,6 +110,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         town: TownTextures;
       }
     | undefined;
+
+  /** Decoded cue buffers from `load`; kept across restarts so replays stay instant. */
+  #audioBuffers: ReadonlyMap<CueName, AudioBuffer> | undefined;
+  /** Live bus for the current scene instance; rebuilt by every `enter`, dropped by `exit`. */
+  #audio: GameAudio | undefined;
 
   override async load(ctx: GameCtx): Promise<void> {
     // Every town surface is colour + OpenGL normal + roughness. The normals are
@@ -111,6 +161,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       steelRough,
       wood,
       woodNormal,
+      paving,
+      pavingNormal,
+      pavingRough,
     ] = await Promise.all([
       track(ctx.assets.model<LoadedModel>("assets/enemy-terrorist.glb")),
       track(ctx.assets.model<LoadedModel>("assets/player-viewmodel.glb")),
@@ -135,6 +188,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       texture("bayview-steel-rough.jpg"),
       texture("bayview-wood.jpg"),
       texture("bayview-wood-normal.jpg"),
+      texture("bayview-paving.jpg"),
+      texture("bayview-paving-normal.jpg"),
+      texture("bayview-paving-rough.jpg"),
     ]);
     const town: TownTextures = {
       plaster: { map: plaster, normal: plasterNormal, rough: plasterRough },
@@ -144,11 +200,21 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       quaystone: { map: quaystone, normal: quaystoneNormal, rough: quaystoneRough },
       steel: { map: steel, normal: steelNormal, rough: steelRough },
       wood: { map: wood, normal: woodNormal },
+      paving: { map: paving, normal: pavingNormal, rough: pavingRough },
     };
     this.#assets = { enemy, viewmodel, weapon, sky, town };
+    // Audio loads through the same tracked pipeline, so the boot bar covers it too.
+    this.#audioBuffers = await GameAudio.load(ctx.assets);
     console.info(
-      `TN_FPS_ASSETS_LOADED:enemy(${enemy.animations.length} clips),viewmodel,sky,town textures`,
+      `TN_FPS_ASSETS_LOADED:enemy(${enemy.animations.length} clips),viewmodel,sky,town textures,audio(${this.#audioBuffers.size})`,
     );
+  }
+
+  override exit(): void {
+    // Every enter builds a fresh bus. Without this the old one survives a restart
+    // with its window gesture listeners and its looping ambience still live.
+    this.#audio?.dispose();
+    this.#audio = undefined;
   }
 
   override enter(ctx: GameCtx): SceneFrame<GameState, IPhysicsContext> {
@@ -160,6 +226,15 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     setupLighting(ctx.scene, ctx.renderer.raw as Parameters<typeof setupLighting>[1]);
     setupPost(ctx.renderer);
     ctx.add(camera);
+
+    // The bus rides the camera's listener and registers as an entity so the dev
+    // overlay and playtests can read its counters. It queues until the first
+    // key/click gesture unlocks the WebAudio context, then flushes.
+    const audio = new GameAudio(camera, this.#audioBuffers ?? new Map());
+    this.#audio = audio;
+    ctx.entities.remove("audio");
+    ctx.entities.add("audio", audio);
+    audio.startAmbience();
 
     const materials = createTownMaterials(assets.town);
     const town: Town = buildTown(materials);
@@ -220,15 +295,26 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const playerSetup = ctx.entities.get<{
       readonly isObject3D?: boolean;
       readonly position: Vector3;
+      readonly quaternion?: Quaternion;
     }>("player");
     ctx.entities.remove("player");
     const player = new FpsPlayer(ctx, camera);
     if (playerSetup?.isObject3D === true && playerSetup.position.lengthSq() > 1e-6) {
       player.mesh.position.copy(playerSetup.position);
       player.body.teleport(player.mesh.position);
+      // A scenario can aim the spawn through the placeholder's rotation. Only the
+      // look angles are taken (the body stays upright): forward's height is the
+      // pitch, its heading the yaw — identity falls out as the constructor defaults.
+      if (playerSetup.quaternion !== undefined) {
+        const forward = new Vector3(0, 0, -1).applyQuaternion(playerSetup.quaternion);
+        player.look.pitch = Math.asin(MathUtils.clamp(forward.y, -1, 1));
+        player.look.yaw = Math.atan2(-forward.x, -forward.z);
+      }
       player.syncCamera();
     }
     ctx.entities.add("player", player);
+    // Strides are distance-driven inside the player; the scene owns where they sound.
+    player.onFootstep = () => audio.localStep();
     const rifle = new Rifle(
       camera,
       assets.viewmodel.scene as Object3D,
@@ -236,6 +322,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       ctx.scene,
     );
     ctx.entities.add("rifle", rifle);
+    rifle.onMagOut = () => audio.magOut();
+    rifle.onMagIn = () => audio.magIn();
 
     // Five soldiers patrol the ground lanes, one per route — a full T side holding
     // the town. The model asset is shared; each Enemy normalises its own copy out of
@@ -245,6 +333,24 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       readonly position: Vector3;
     }>("enemy");
     ctx.entities.remove("enemy");
+    // A scenario that shoots a soldier needs one who does not patrol. Placing the
+    // optional "enemy-frozen" placeholder turns soldier 0 into a sentry standing at
+    // that spot for the whole round: presence is the flag, position is the spawn
+    // (facing +z, toward a player placed north of him). It takes precedence over the
+    // plain "enemy" placement when both are present. The placeholder parks off-map
+    // until placed (see game.ts), so an origin spawn is still a real placement.
+    const frozenSetup = ctx.entities.get<{
+      readonly isObject3D?: boolean;
+      readonly position: Vector3;
+    }>("enemy-frozen");
+    ctx.entities.remove("enemy-frozen");
+    const frozenSpawn =
+      frozenSetup?.isObject3D === true && frozenSetup.position.y > -100
+        ? frozenSetup.position.clone()
+        : undefined;
+    console.info(
+      `TN_FPS_FROZEN_DEBUG:isObject3D=${frozenSetup?.isObject3D} pos=${JSON.stringify(frozenSetup?.position)} frozen=${frozenSpawn !== undefined}`,
+    );
     const navBounds = { min: -TOWN_HALF - 1, max: TOWN_HALF + 1 };
     const enemies: Enemy[] = [];
     for (let index = 0; index < town.enemyRoutes.length; index += 1) {
@@ -259,13 +365,27 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         // clone as well — a plain clone shares the original's skeleton and renders
         // the bind pose at authored scale, which reads as a giant floating AK.
         cloneSkeleton(assets.weapon.scene),
-        {
-          route: town.enemyRoutes[index],
-          navBounds,
-          decks: town.decks,
-        },
+        index === 0 && frozenSpawn !== undefined
+          ? {
+              route: [frozenSpawn],
+              navBounds,
+              decks: town.decks,
+              frozen: true,
+            }
+          : {
+              route: town.enemyRoutes[index],
+              navBounds,
+              decks: town.decks,
+            },
       );
-      if (index === 0 && enemySetup?.isObject3D === true && enemySetup.position.lengthSq() > 1e-6) {
+      if (index === 0 && frozenSpawn !== undefined) {
+        soldier.group.position.copy(frozenSpawn);
+        soldier.group.updateWorldMatrix(true, true);
+      } else if (
+        index === 0 &&
+        enemySetup?.isObject3D === true &&
+        enemySetup.position.lengthSq() > 1e-6
+      ) {
         soldier.group.position.copy(enemySetup.position);
         soldier.group.updateWorldMatrix(true, true);
       }
@@ -285,6 +405,35 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // Sight lines treat a standing plate like the old range did: thin dressing the
     // LOS check skips by its userData, but a solid that can still stop a round.
     const occluders: Object3D[] = [...town.hittable, ...plateMeshes];
+
+    // Impact sounds by surface. Named solids classify by name; everything else by
+    // material identity off the town palette; whitewash (world-projected per mesh,
+    // so untabled) is both the dominant wall and the honest default.
+    const materialSurface = new Map<Material, ImpactSurface>();
+    for (const [key, surface] of Object.entries(MATERIAL_SURFACES)) {
+      const value = (materials as unknown as Record<string, unknown>)[key];
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        (value as { isMaterial?: boolean }).isMaterial === true
+      ) {
+        materialSurface.set(value as Material, surface);
+      }
+    }
+    const resolveSurface = (hit: Intersection): ImpactSurface => {
+      const name = hit.object.name;
+      if (/crate|deck|pier|rail|stair/.test(name)) return "wood";
+      if (/barrel|bollard|post|mast|tank|roller|shutter/.test(name)) return "steel";
+      if (/quay|plaza|ground/.test(name)) return "stone";
+      // Only meshes carry a material; every hittable here is one.
+      const meshMaterial = (hit.object as MeshClass).material;
+      const first = Array.isArray(meshMaterial) ? meshMaterial[0] : meshMaterial;
+      if (first !== undefined) {
+        const mapped = materialSurface.get(first);
+        if (mapped !== undefined) return mapped;
+      }
+      return "plaster";
+    };
 
     const lineOfSight = (from: Vector3, to: Vector3): boolean => {
       const direction = new Vector3().subVectors(to, from);
@@ -338,10 +487,13 @@ export class Play extends Scene<GameState, IPhysicsContext> {
 
     let elapsed = 0;
     let hitFlash = 0;
+    let lastPhase: GameState["phase"] = "playing";
+    let lastTickSecond = Number.POSITIVE_INFINITY;
     const eye = new Vector3();
 
     const fire = (frameCtx: GameCtx, aimRay: { origin: Vector3; direction: Vector3 }): void => {
       if (!rifle.fire()) return;
+      audio.playerShot();
       eye.copy(aimRay.origin);
       const direction = aimRay.direction.clone().normalize();
       player.recordFiringDirection(direction);
@@ -370,11 +522,13 @@ export class Play extends Scene<GameState, IPhysicsContext> {
             targetsHit: state.targetsHit + 1,
           }));
           hitFlash = 0.12;
+          audio.plateChime(hit.point);
         }
         return;
       }
       const struck = hit.object.userData.enemy as Enemy | undefined;
       if (struck !== undefined) {
+        audio.bodyImpact(hit.point);
         const multiplier =
           hit.point.y >= struck.headZoneMinY ? 4 : hit.point.y < struck.legZoneMaxY ? 0.7 : 1;
         struck.recordHit(multiplier, direction);
@@ -389,6 +543,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         return;
       }
       spawnImpact(hit.point, hit.face?.normal ?? new Vector3(0, 1, 0));
+      audio.impact(resolveSurface(hit), hit.point);
     };
 
     // A muzzle flash is three things at once: a bright card, a light that touches the world,
@@ -466,7 +621,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         enemyLight.intensity = 26;
         enemyTracers.spawn(enemyFlash.position, direction, distance);
         spawnSmoke(enemyFlash.position, direction, ctx);
+        audio.enemyShot(at);
+        audio.nearMiss(distance);
       },
+      onFootstep: (at: Vector3): void => audio.soldierStep(at),
     };
 
     // The scene is built: geometry, physics, soldiers and the viewmodel all
@@ -499,6 +657,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       rifle.updateSmoke(dt, eye);
       playerTracers.update(dt);
       enemyTracers.update(dt);
+      // Peak-voice tracking runs outside the phase gate so the end screen still samples.
+      audio.sample();
 
       const state = frameCtx.state.getState();
       if (state.phase !== "playing") {
@@ -525,7 +685,12 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // start would leave the camera dead. Keyboard shots never reach here, so the playtests
       // never ask for a lock they did not earn.
       const pointer = frameCtx.input.raw.pointer;
-      if (pointer.down && !pointer.captured) frameCtx.input.captureMouse();
+      if (pointer.down && !pointer.captured) {
+        frameCtx.input.captureMouse();
+        // The click that buys the mouse also confirms it: the UI cue's one home,
+        // since this game's only "menu" is the pointer lock itself.
+        audio.uiClick();
+      }
 
       player.update(frameCtx, dt, !rifle.reloading);
       const moveVector = frameCtx.input.vector("move");
@@ -544,6 +709,19 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       let phase: GameState["phase"] = "playing";
       if (hitCount >= TARGET_GOAL) phase = "complete";
       else if (player.health <= 0 || timeRemaining <= 0) phase = "failed";
+
+      // The clock's last ten seconds tick once per remaining second, and the round
+      // ends on its own sting. Both fire exactly once per transition.
+      const tickSecond = Math.ceil(timeRemaining);
+      if (timeRemaining > 0 && timeRemaining <= 10 && tickSecond !== lastTickSecond) {
+        lastTickSecond = tickSecond;
+        audio.tick();
+      }
+      if (phase !== lastPhase) {
+        if (phase === "complete") audio.roundEnd(true);
+        else if (phase === "failed") audio.roundEnd(false);
+        lastPhase = phase;
+      }
 
       frameCtx.state.set({
         aiming: player.aiming,

@@ -46,6 +46,9 @@ export class Rifle {
   shots = 0;
   reloads = 0;
   reloading = false;
+  /** Set by the scene: foley for the magazine leaving and returning. */
+  onMagOut: (() => void) | undefined;
+  onMagIn: (() => void) | undefined;
   readonly group = new Group();
   #flash: Mesh;
   #flashLife = 0;
@@ -299,6 +302,7 @@ export class Rifle {
   reload(ctx: GameCtx): void {
     if (this.reloading || this.reserve <= 0 || this.ammo >= MAGAZINE) return;
     this.reloading = true;
+    this.onMagOut?.();
     this.#play("Reload", 0.05);
     ctx.after(RELOAD_SECONDS, () => {
       const moved = Math.min(MAGAZINE - this.ammo, this.reserve);
@@ -306,6 +310,7 @@ export class Rifle {
       this.reserve -= moved;
       this.reloads += 1;
       this.reloading = false;
+      this.onMagIn?.();
     });
   }
 

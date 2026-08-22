@@ -49,10 +49,14 @@ export class FpsPlayer {
   health = 100;
   distanceMoved = 0;
   aiming = false;
+  /** Set by the scene: fired each time a stride completes, so footsteps keep pace with speed. */
+  onFootstep: ((sprinting: boolean) => void) | undefined;
   #camera: PerspectiveCamera;
   #fov = FOV_HIP;
   #lastX: number = SPAWN.x;
   #lastZ: number = SPAWN.z;
+  /** Metres accumulated since the last planted foot, measured like `distanceMoved`. */
+  #strideAccumulated = 0;
   #shake = 0;
   #shakePeak = 0;
   #shakePhase = 0;
@@ -148,10 +152,17 @@ export class FpsPlayer {
     // The backend writes the solved transform after the step, so measuring the
     // mesh either side of `moveAndSlide` in one frame always reads zero. Compare
     // against the previous frame's written position instead.
-    this.distanceMoved += Math.hypot(
+    const strideDelta = Math.hypot(
       this.mesh.position.x - this.#lastX,
       this.mesh.position.z - this.#lastZ,
     );
+    this.distanceMoved += strideDelta;
+    // Footsteps are distance-driven, so sprint cadence comes out naturally faster.
+    this.#strideAccumulated += strideDelta;
+    if (length > 1e-4 && this.#strideAccumulated >= (sprinting ? 0.95 : 0.78)) {
+      this.#strideAccumulated = 0;
+      this.onFootstep?.(sprinting);
+    }
     this.#lastX = this.mesh.position.x;
     this.#lastZ = this.mesh.position.z;
     this.body.velocity.x = vx;

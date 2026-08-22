@@ -26,8 +26,14 @@ const scenarioSetupPlaceholders = {
     // Scenario setup is delivered before the async scene load finishes. These non-rendered
     // objects give the bridge a stable transform target; Play.enter() transfers the values to
     // the real entities and removes the placeholders before the first sample.
-    for (const id of ["player", "enemy"] as const) {
-      if (ctx.entities.get(id) === undefined) ctx.entities.add(id, new Object3D());
+    // "enemy-frozen" is optional per scenario: placing it turns soldier 0 into a sentry at
+    // that spot instead of a patroller (see Play.enter). It parks off-map so "the scenario
+    // never placed him" stays distinguishable from "the scenario placed him at the origin".
+    for (const id of ["player", "enemy", "enemy-frozen"] as const) {
+      if (ctx.entities.get(id) !== undefined) continue;
+      const placeholder = new Object3D();
+      if (id === "enemy-frozen") placeholder.position.set(0, -1000, 0);
+      ctx.entities.add(id, placeholder);
     }
     return undefined;
   },

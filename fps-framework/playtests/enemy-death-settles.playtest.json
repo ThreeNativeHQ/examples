@@ -19,7 +19,7 @@
         ]
       },
       {
-        "entity": "enemy",
+        "entity": "enemy-frozen",
         "position": [
           -4.5,
           0,
@@ -30,12 +30,6 @@
   },
   "steps": [
     {
-      "kind": "wait",
-      "label": "body-measured",
-      "waitTicks": 1,
-      "release": true
-    },
-    {
       "kind": "input",
       "label": "kill-shot",
       "press": "Space",
@@ -43,77 +37,9 @@
       "release": true
     },
     {
-      "kind": "input",
-      "label": "kill-shot-2",
-      "press": "Space",
-      "holdTicks": 3,
-      "release": true
-    },
-    {
-      "kind": "input",
-      "label": "kill-shot-3",
-      "press": "Space",
-      "holdTicks": 3,
-      "release": true
-    },
-    {
       "kind": "wait",
-      "label": "fall-00",
-      "waitTicks": 20,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "fall-01",
-      "waitTicks": 20,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "fall-02",
-      "waitTicks": 20,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "fall-03",
-      "waitTicks": 20,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "fall-04",
-      "waitTicks": 20,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "fall-05",
-      "waitTicks": 20,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "fall-06",
-      "waitTicks": 20,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "fall-07",
-      "waitTicks": 20,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "fall-08",
-      "waitTicks": 20,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "fall-09",
-      "waitTicks": 20,
+      "label": "death-settle",
+      "waitTicks": 200,
       "release": true
     }
   ],

@@ -141,7 +141,9 @@ function createFacadeMaterials(materials: TownMaterials): FacadeMaterials {
       emissiveIntensity: 1.9,
       roughness: 0.35,
     }),
-    dado: new MeshStandardMaterial({ color: 0x86a0ae, roughness: 0.88, metalness: 0.02 }),
+    // The dado is painted render, not plastic: it reads `dadoBand` from
+    // townMaterials, world-projected off the same field as the wall behind it.
+    dado: materials.dadoBand,
     timber: new MeshStandardMaterial({ color: 0x6d4c33, roughness: 0.82, metalness: 0.03 }),
     stone: new MeshStandardMaterial({ color: 0xded6c4, roughness: 0.9, metalness: 0.01 }),
     roller: (materials as WithRoller).rollerSteel ?? materials.shutter,

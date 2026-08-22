@@ -19,7 +19,7 @@
         ]
       },
       {
-        "entity": "enemy",
+        "entity": "enemy-frozen",
         "position": [
           -4.5,
           0,
@@ -30,40 +30,8 @@
   },
   "steps": [
     {
-      "kind": "wait",
-      "label": "body-measured",
-      "waitTicks": 1,
-      "release": true
-    },
-    {
       "kind": "input",
       "label": "head-shot",
-      "press": "Space",
-      "holdTicks": 3,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "regrip-2",
-      "waitTicks": 1,
-      "release": true
-    },
-    {
-      "kind": "input",
-      "label": "head-shot-2",
-      "press": "Space",
-      "holdTicks": 3,
-      "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "regrip-3",
-      "waitTicks": 1,
-      "release": true
-    },
-    {
-      "kind": "input",
-      "label": "head-shot-3",
       "press": "Space",
       "holdTicks": 3,
       "release": true

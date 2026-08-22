@@ -38,3 +38,7 @@ artifacts/
 *.apk
 *.aab
 *.keystore
+
+# Local secrets. Never commit a key.
+.env
+.env.*

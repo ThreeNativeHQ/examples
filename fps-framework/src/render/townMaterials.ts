@@ -93,8 +93,14 @@ export type TownTextures = {
   readonly plaster: SurfaceMaps;
   /** Weathered render over brick: the aged accent buildings. */
   readonly brick: SurfaceMaps;
-  /** Flagged stone paving: the street deck, the plazas and the quay walk. */
+  /** Flagged stone paving: the plazas and the quay walk. */
   readonly floor: SurfaceMaps;
+  /**
+   * Fan-pattern granite setts for the streets. The maps are 2:1, so this set
+   * is optional only until `Play.ts` loads it — the street material falls back
+   * to the flagstone until then.
+   */
+  readonly paving?: SurfaceMaps;
   /** Poured concrete: parapets, copings, sills, doorsteps, stair treads. */
   readonly concrete: SurfaceMaps;
   /** Coursed rubble masonry: the east quay wall. */
@@ -106,7 +112,10 @@ export type TownTextures = {
 };
 
 export type TownMaterials = {
-  /** Street deck under the whole town. */
+  /**
+   * Street deck under the whole town — fan-pattern granite setts, cooler and
+   * darker than the flagged plazas that slab over it.
+   */
   readonly ground: Material;
   /**
    * Washed building walls. The metre argument is vestigial: the wall is world-
@@ -115,6 +124,13 @@ export type TownMaterials = {
   readonly plaster: (longestSideMetres: number) => Material;
   /** Weathered render over brick, on the aged accent buildings. */
   readonly brick: (longestSideMetres: number) => Material;
+  /**
+   * Painted blue-grey dado along the foot of a lane wall. World-projected like
+   * every other surface, so the band reads as weathered paint on render rather
+   * than as a plastic skirt; `facade.ts` reads this instead of owning a flat
+   * material of its own.
+   */
+  readonly dadoBand: Material;
   /** Parapet capping course over plaster / brick walls. */
   readonly plasterTrim: Material;
   readonly brickTrim: Material;
@@ -172,6 +188,14 @@ const TILE_METRES = {
   brick: 3.4,
   /** Tiles098's flags measure 185 cm; two metres keeps them near life size. */
   floor: 2.0,
+  /**
+   * PavingStones150's fan-pattern setts ship as a 2:1 image covering a 2:1
+   * patch of ground — about 30 setts across 1.8 m, per the asset manifest's
+   * measurement notes. The U/V pair is load-bearing: a square repeat stretches
+   * every sett into an ellipse.
+   */
+  pavingU: 1.8,
+  pavingV: 0.9,
   concrete: 2.4,
   quaystone: 2.0,
   /** Corrugated ribs land near ten centimetres apart at this tile. */
@@ -199,6 +223,13 @@ function prepare(map: Texture, srgb: boolean): Texture {
 }
 
 type WorldSurfaceOptions = {
+  /**
+   * Metres of world per repeat along the projection's V axis, for non-square
+   * tiles. Only the up-facing projection lands on anything that uses this, and
+   * there U runs along world Z and V along world X — so a 2:1 image wants
+   * `tileMetres` 2× `tileMetresV`, or its pattern stretches into ellipses.
+   */
+  readonly tileMetresV?: number;
   /** Multiplied over the sampled colour; this is the surface's paint. */
   readonly tint?: number;
   /**
@@ -245,12 +276,14 @@ function worldSurface(
   tileMetres: number,
   options: WorldSurfaceOptions = {},
 ): MeshStandardNodeMaterial {
-  const project = (source: Texture, srgb: boolean, metres: number) =>
+  const project = (source: Texture, srgb: boolean, metresU: number, metresV = metresU) =>
     triplanarTexture(
       texture(prepare(source, srgb)),
       null,
       null,
-      float(1 / metres),
+      options.tileMetresV === undefined
+        ? float(1 / metresU)
+        : vec2(float(1 / metresU), float(1 / metresV)),
       positionWorld,
       // The GEOMETRIC world normal, not `normalWorld`: that one is the shaded
       // normal, so feeding it the blend that feeds `normalNode` would close a
@@ -268,8 +301,13 @@ function worldSurface(
   const blend = mx_noise_float(positionWorld.mul(0.065)).mul(0.5).add(0.5);
   const sample = (source: Texture, srgb: boolean) =>
     mix(
-      project(source, srgb, tileMetres),
-      project(source, srgb, tileMetres * BREAKUP),
+      project(source, srgb, tileMetres, options.tileMetresV ?? tileMetres),
+      project(
+        source,
+        srgb,
+        tileMetres * BREAKUP,
+        (options.tileMetresV ?? tileMetres) * BREAKUP,
+      ),
       smoothstep(0.35, 0.65, blend),
     );
 
@@ -357,6 +395,26 @@ export function createTownMaterials(textures: TownTextures): TownMaterials {
       roughness: [0.72, 0.97],
       normalScale: 0.7,
     });
+  // Streets take the fan-pattern granite setts — cooler and a step darker than
+  // any plaza flag — so a lane and a plaza read as two paving jobs rather than
+  // one continuous beige deck. The set's image is 2:1 and so is its world
+  // footprint; see TILE_METRES.pavingU/V. Until `Play.ts` loads the set, the
+  // street falls back to the flagstone at a cooler tint than it used to wear,
+  // which already breaks the uniform-warmth problem halfway.
+  const street =
+    textures.paving === undefined
+      ? paving(0x9fa29c, 0xaaada5)
+      : worldSurface(textures.paving, TILE_METRES.pavingU, {
+          tileMetresV: TILE_METRES.pavingV,
+          tint: 0xa8aba9,
+          tintAlt: 0x999f9d,
+          patch: 0.13,
+          mottle: 0.14,
+          saturation: 0.42,
+          occlusion: 0.55,
+          roughness: [0.7, 0.96],
+          normalScale: 0.8,
+        });
   const concreteTrim = (tint: number) =>
     worldSurface(textures.concrete, TILE_METRES.concrete, {
       tint,
@@ -393,9 +451,22 @@ export function createTownMaterials(textures: TownTextures): TownMaterials {
   const anySize = (material: Material) => (): Material => material;
 
   return {
-    ground: paving(0xb0aa9c, 0xbcb3a1),
+    ground: street,
     plaster: anySize(plaster),
     brick: anySize(brick),
+    // The painted dado rides the same world-projected field as the wall it is
+    // painted on, so paint grain and plaster grain agree instead of the band
+    // reading as a plastic skirt glued to the foot of the wall.
+    dadoBand: worldSurface(textures.plaster, TILE_METRES.plaster, {
+      tint: 0x93aebc,
+      tintAlt: 0x7e97a5,
+      grime: 0.34,
+      patch: 0.12,
+      mottle: 0.08,
+      saturation: 0.28,
+      roughness: [0.78, 0.98],
+      normalScale: 0.75,
+    }),
     plasterTrim: concreteTrim(0xdedacd),
     brickTrim: concreteTrim(0xc0a184),
     // The reference doors are blue-painted roller shutters and blue joinery,

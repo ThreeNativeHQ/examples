@@ -183,6 +183,11 @@ export type EnemyHooks = {
   readonly lineOfSight: (from: Vector3, to: Vector3) => boolean;
   readonly damagePlayer: (amount: number) => void;
   readonly onMuzzleFlash: (at: Vector3, direction: Vector3, distance: number) => void;
+  /**
+   * A foot planted while actually moving — at most twice per walk cycle, read off
+   * the locomotion action's phase so steps stay glued to the animation.
+   */
+  readonly onFootstep?: (at: Vector3) => void;
 };
 
 /** Raised-deck footprints this soldier may be routed beneath. */
@@ -200,6 +205,13 @@ export type EnemyOptions = {
   readonly navBounds?: { readonly min: number; readonly max: number };
   /** Raised deck footprints, reported by `underDeck` so a scenario can see routing under them. */
   readonly decks?: readonly DeckFootprint[];
+  /**
+   * Scenario-placed sentry: stands at route[0] and never walks it. Hearing and vision
+   * are disconnected, so rounds landing near him cannot turn the rest of the shot into
+   * pursuit; a killing round still plays the full death. Shooting scenarios need a
+   * target whose hit window does not depend on where a patrol happens to be.
+   */
+  readonly frozen?: boolean;
 };
 
 /**
@@ -291,6 +303,9 @@ export class Enemy {
   /** Locomotion clip currently committed to, and how long before another switch is allowed. */
   #locomotion = "";
   #locomotionHold = 0;
+  /** Walk-cycle phase bookkeeping for the footstep hook: which half-cycle last planted a foot. */
+  #lastStepClip = "";
+  #lastStepHalf = -1;
   /** Clips by name, so a locomotion action can be re-timed through the mixer that owns it. */
   #clipsByName = new Map<string, AnimationClip>();
   /** Metres per second each clip covers at rate 1, measured off this rig's own feet. */
@@ -364,6 +379,7 @@ export class Enemy {
   #navMin = NAV_MIN;
   #navMax = NAV_MAX;
   #decks: readonly DeckFootprint[] = [];
+  #frozen = false;
 
   constructor(
     ctx: GameCtx,
@@ -378,6 +394,7 @@ export class Enemy {
     this.#navMin = options.navBounds?.min ?? NAV_MIN;
     this.#navMax = options.navBounds?.max ?? NAV_MAX;
     this.#decks = options.decks ?? [];
+    this.#frozen = options.frozen ?? false;
     this.#pathGoal.copy(this.#route[0] ?? ROUTE_START);
     this.#target.copy(this.#route[0] ?? ROUTE_START);
     model.removeFromParent();
@@ -1079,6 +1096,29 @@ export class Enemy {
     this.#clipFrames.set(current, (this.#clipFrames.get(current) ?? 0) + 1);
   }
 
+  /**
+   * Fire `hooks.onFootstep` each time the locomotion action crosses a half-cycle
+   * boundary — one planted foot per half-cycle, so a re-timed walk keeps its steps
+   * in step with the animation rather than with a timer. A clip switch resets the
+   * phase so the first frame of a new clip cannot read as a plant.
+   */
+  #updateFootsteps(hooks: EnemyHooks): void {
+    if (hooks.onFootstep === undefined || this.#groundSpeed < LOCOMOTION_RATE_FLOOR) return;
+    const clip = this.#clipsByName.get(this.#locomotion);
+    if (clip === undefined || clip.duration <= 0) return;
+    const action = this.#animation?.mixer.existingAction(clip);
+    if (action === null || action === undefined) return;
+    const half = Math.floor(((action.time / clip.duration) % 1) * 2);
+    if (this.#locomotion !== this.#lastStepClip) {
+      this.#lastStepClip = this.#locomotion;
+      this.#lastStepHalf = half;
+      return;
+    }
+    if (half === this.#lastStepHalf) return;
+    this.#lastStepHalf = half;
+    hooks.onFootstep(this.group.position);
+  }
+
   /** Which death animation reads as true for the round that killed him. */
   #deathClipFor(): string {
     const fallback = this.#clips.has("DeathFront") ? "DeathFront" : "DeathBack";
@@ -1333,7 +1373,7 @@ export class Enemy {
   }
 
   hearShot(shooter: Vector3): void {
-    if (!this.alive) return;
+    if (!this.alive || this.#frozen) return;
     if (shooter.distanceTo(this.group.position) > HEAR_RANGE) return;
     this.#lastSeen.copy(shooter);
     this.#beginPursuit(shooter);
@@ -1377,7 +1417,9 @@ export class Enemy {
     this.#suppressed = Math.max(this.#suppressed, 2.4);
     this.#suppressedPeak = Math.max(this.#suppressedPeak, this.#suppressed);
     this.#play("HitReaction", REACTION_FADE);
-    if (this.phase !== "engage") this.phase = "engage";
+    // A frozen sentry flinches at the impact but holds his ground: engaging here
+    // would walk him out of a scenario-placed spawn on the first non-killing round.
+    if (!this.#frozen && this.phase !== "engage") this.phase = "engage";
     return earned;
   }
 
@@ -1461,7 +1503,7 @@ export class Enemy {
       return;
     }
     this.#spawnGrace = Math.max(0, this.#spawnGrace - dt);
-    const sees = this.#spawnGrace <= 0 && this.#canSee(playerEye, hooks);
+    const sees = !this.#frozen && this.#spawnGrace <= 0 && this.#canSee(playerEye, hooks);
     if (sees) {
       // Entering combat from anywhere else starts the reaction clock, so the player gets a
       // moment to react rather than taking a burst the instant they step into the open.
@@ -1549,6 +1591,7 @@ export class Enemy {
     this.#locomotionHold = Math.max(0, this.#locomotionHold - dt);
     this.#animation?.update(dt);
     this.#countClipFrame();
+    this.#updateFootsteps(hooks);
     this.#weaponPoseElapsed += dt;
     if (!this.#weaponDetached) this.#applyWeaponPose(this.#animation?.current ?? "");
     this.#groundToDeck(deckY, dt);

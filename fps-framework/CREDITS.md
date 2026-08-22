@@ -49,6 +49,41 @@ required when using its API"`).
 
 Credit to Kenney is optional but appreciated by the author; the project should include it.
 
+### Generated cues (ElevenLabs)
+
+All of the following were generated with the **ElevenLabs `POST /v1/sound-generation`
+API** on **2026-08-22**, using the project's own API key (kept out of the repository in a
+gitignored `.env`; generation is an offline step — the shipped game only loads the
+`.ogg` files). MP3 responses were converted to mono/stereo Ogg Vorbis with ffmpeg.
+Prompts are summarised; each was a one-line sound description.
+
+| File | Duration | Prompt summary |
+| --- | --- | --- |
+| `public/audio/shot-player.ogg` | ~1.4 s | Single assault rifle gunshot outdoors, sharp close crack with brief echo tail |
+| `public/audio/shot-enemy.ogg` | ~1.6 s | Single AK rifle shot from across a street, harder distant crack, slap-back off stone buildings |
+| `public/audio/step-stone-1.ogg` … `-4.ogg` | ~0.6 s each | Four variants: one military boot footstep on stone paving / flagstones / cobbles (dry scuff, firm heel, soft toe roll, brisk step) |
+| `public/audio/impact-plaster.ogg` | ~0.7 s | Bullet striking old plastered stone wall, dusty crumble thud |
+| `public/audio/impact-wood.ogg` | ~0.7 s | Bullet into thick wooden crate, knock and splinter |
+| `public/audio/impact-steel.ogg` | ~0.9 s | Bullet onto hollow corrugated steel door, metallic clang |
+| `public/audio/impact-stone.ogg` | ~0.7 s | Bullet chipping granite paving stone, hard stone crack |
+| `public/audio/ambience-harbour.ogg` | 16 s (looped) | Coastal harbour ambience: water lapping a stone quay, distant gulls, faint town murmur, light breeze |
+| `public/audio/reload-magout.ogg` | ~0.8 s | Magazine release and empty mag pulled from receiver, close foley |
+| `public/audio/reload-magin.ogg` | ~0.9 s | Fresh magazine inserted and slapped home, bolt catch released |
+
+**Commercial-use terms for these outputs** (checked 2026-08-22 against ElevenLabs'
+published terms): commercial use of generated audio requires an active **paid**
+subscription at generation time — free-plan output is non-commercial only and demands
+attribution. The Sound Effects product carries supplemental Service Terms under which
+ElevenLabs may **sublicense SFX Outputs to third parties** (including other ElevenLabs
+users); that sharing can be switched off via the "Disable" control on the Sound Effects
+product page, but an opt-out is not retroactive. Rights in outputs remain with the user
+as against ElevenLabs, subject to their Terms of Service and Prohibited Use Policy, and
+output produced while a feature is designated Beta is excluded from commercial use.
+Sources: <https://elevenlabs.io/sound-effects-terms>,
+<https://elevenlabs.io/terms-of-use>,
+<https://help.elevenlabs.io/hc/en-us/articles/13313564601361-Can-I-publish-the-content-I-generate-on-the-platform>,
+<https://elevenlabs.io/docs/api-reference/text-to-sound-effects/convert.mdx>.
+
 ## Reference images
 
 `CLAUDE.md` requires each reference image to be credited with its creator, licence and source
