@@ -1,4 +1,4 @@
-import { AnimationPlayer, type ICtx } from "@threenative/core";
+import { AnimationPlayer, attachToBone, normaliseToMetres, type ICtx } from "@threenative/core";
 import { CharacterBody3D, CollisionShape3D, type IPhysicsContext } from "@threenative/physics";
 import { measureThreePose } from "@threenative/playtest/three";
 import {
@@ -15,7 +15,7 @@ import {
   Vector3,
 } from "three";
 import type { TownCollider } from "../render/town.js";
-import { normaliseHeight, normaliseLongestAxis, scale } from "../render/scale.js";
+import { scale } from "../render/scale.js";
 import type { GameState } from "../state.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
@@ -419,7 +419,7 @@ export class Enemy {
     this.#head = findBone(model, /mixamorigHead$|^head$/i) ?? findBone(model, /head/i);
     this.#leftKnee = findBone(model, /left.*leg|left.*knee/i);
     this.#rightKnee = findBone(model, /right.*leg|right.*knee/i);
-    normaliseHeight(model, scale.humanHeight, this.#crown);
+    normaliseToMetres(model, { axis: "height", metres: scale.humanHeight, top: this.#crown });
     model.traverse((object) => {
       if (/hips|upleg|leg|foot|toe|head/i.test(object.name)) this.#poseBones.push(object);
       const mesh = object as Mesh;
@@ -617,15 +617,17 @@ export class Enemy {
       holder.rotation.set(0, Math.PI / 2, 0);
       this.group.add(holder);
       this.#weapon = holder;
-      normaliseLongestAxis(holder, scale.rifleLength);
+      normaliseToMetres(holder, { axis: "longest", metres: scale.rifleLength });
       this.#alignWeaponGrip();
       this.#renderedRifleLength = this.#measureRenderedWeapon(weapon);
       return;
     }
-    hand.add(holder);
+    // The engine's attachment keeps the holder's authored world scale under the hand bone;
+    // the measured re-normalisation below still has the final word on length.
+    attachToBone(model, hand.name, holder);
     this.#weapon = holder;
     this.#applyWeaponPose("RifleWalk");
-    normaliseLongestAxis(holder, scale.rifleLength);
+    normaliseToMetres(holder, { axis: "longest", metres: scale.rifleLength });
     this.#alignWeaponGrip();
     this.#renderedRifleLength = this.#measureRenderedWeapon(weapon);
   }
@@ -1634,7 +1636,8 @@ export class Enemy {
 
   /** Keep the rendered rifle at its declared length after parent-bone animation updates. */
   #normaliseWeapon(): void {
-    if (this.#weapon !== undefined) normaliseLongestAxis(this.#weapon, scale.rifleLength);
+    if (this.#weapon !== undefined)
+      normaliseToMetres(this.#weapon, { axis: "longest", metres: scale.rifleLength });
   }
 
   /**

@@ -1,3 +1,4 @@
+import { softCircleDataTexture } from "@threenative/core";
 import type { ImpactSurface } from "../audio/GameAudio.js";
 import {
   AdditiveBlending,
@@ -16,7 +17,6 @@ import {
   UnsignedByteType,
   Vector3,
 } from "three";
-import { softCircleTexture } from "./particles.js";
 
 /**
  * Gunshot feedback, built as pixel data rather than painted canvases.
@@ -235,7 +235,7 @@ export class ImpactBursts {
   constructor(parent: Object3D, rng: () => number) {
     this.#rng = rng;
     this.#streakMap = streakTexture();
-    this.#dustMap = softCircleTexture(64, 0.05);
+    this.#dustMap = softCircleDataTexture(64, 0.05);
     const quad = new PlaneGeometry(1, 1);
     const buildPool = (
       count: number,

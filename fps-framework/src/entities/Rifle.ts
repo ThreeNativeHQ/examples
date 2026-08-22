@@ -1,4 +1,4 @@
-import { AnimationPlayer, type ICtx } from "@threenative/core";
+import { AnimationPlayer, normaliseToMetres, softCircleDataTexture, type ICtx } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
 import {
   AdditiveBlending,
@@ -17,8 +17,7 @@ import {
   type Scene as ThreeScene,
   Vector3,
 } from "three";
-import { softCircleTexture } from "../render/particles.js";
-import { normaliseLongestAxis, scale } from "../render/scale.js";
+import { scale } from "../render/scale.js";
 import type { GameState } from "../state.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
@@ -88,7 +87,7 @@ export class Rifle {
     viewmodel.position.set(0, 0, 0);
     viewmodel.rotation.set(0, 0, 0);
     viewmodel.scale.setScalar(1);
-    normaliseLongestAxis(viewmodel, scale.rifleLength);
+    normaliseToMetres(viewmodel, { axis: "longest", metres: scale.rifleLength });
     viewmodel.traverse((object) => {
       object.castShadow = false;
       object.receiveShadow = false;
@@ -142,7 +141,7 @@ export class Rifle {
     this.#smokeMaterial = new MeshBasicMaterial({
       color: 0xc3c8d0,
       depthWrite: false,
-      map: softCircleTexture(64, 0.05),
+      map: softCircleDataTexture(64, 0.05),
       opacity: 0.42,
       transparent: true,
     });

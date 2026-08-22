@@ -8,7 +8,7 @@
 // This file is why the 2.68 m soldier, the 1.19 m AK and the 1.43 m viewmodel cannot
 // come back: there is no second place to write a size.
 
-import { Box3, type Object3D, Vector3 } from "three";
+import type { Object3D } from "three";
 
 /** Real-world sizes, in metres. */
 export const scale = {
@@ -64,29 +64,9 @@ export const scale = {
   drum: { radius: 3.7, height: 1.55 },
 } as const;
 
-/** Scale an object from a measured bone or bounding-box height to a world-space height. */
-export function normaliseHeight(object: Object3D, metres: number, top?: Object3D): number {
-  object.updateWorldMatrix(true, true);
-  const origin = object.getWorldPosition(new Vector3());
-  const measuredTop = top?.getWorldPosition(new Vector3()).y;
-  const bounds = measuredTop === undefined ? new Box3().setFromObject(object) : undefined;
-  const current = measuredTop === undefined ? bounds?.getSize(new Vector3()).y ?? 0 : measuredTop - origin.y;
-  const factor = current > 0 ? metres / current : 1;
-  object.scale.multiplyScalar(factor);
-  object.updateWorldMatrix(true, true);
-  return factor;
-}
-
-/** Scale an asset's longest measured world-space axis to a real-world length. */
-export function normaliseLongestAxis(object: Object3D, metres: number): number {
-  object.updateWorldMatrix(true, true);
-  const size = new Box3().setFromObject(object).getSize(new Vector3());
-  const current = Math.max(size.x, size.y, size.z);
-  const factor = current > 0 ? metres / current : 1;
-  object.scale.multiplyScalar(factor);
-  object.updateWorldMatrix(true, true);
-  return factor;
-}
+// Measurement and normalisation live in the engine now: `normaliseToMetres` from
+// `@threenative/core` does crown-bone height and longest-axis scaling. This file keeps
+// only this game's real-world metre table and the audit rules that check it.
 
 /** Which measured dimension a check reads. */
 export type SizeAxis = "height" | "width" | "depth" | "longest";

@@ -1,4 +1,4 @@
-import { type ICtx, Scene, type SceneFrame } from "@threenative/core";
+import { softCircleDataTexture, TracerPool3D, type ITracerSpawnOptions, type ICtx, Scene, type SceneFrame } from "@threenative/core";
 import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
 import type {
   AnimationClip,
@@ -12,6 +12,7 @@ import type {
 } from "three";
 import {
   AdditiveBlending,
+  CylinderGeometry,
   MathUtils,
   Mesh as MeshClass,
   MeshBasicMaterial,
@@ -28,12 +29,10 @@ import { Target } from "../entities/Target.js";
 import { flashTexture, ImpactBursts, MuzzleFlash } from "../render/gunfx.js";
 import { setupLighting } from "../render/lighting.js";
 import { setupPost } from "../render/postprocessing.js";
-import { softCircleTexture } from "../render/particles.js";
 import { scale } from "../render/scale.js";
 import { buildTown, TOWN_HALF, type Town } from "../render/town.js";
 import { createTownMaterials, type TownTextures } from "../render/townMaterials.js";
 import { setupSky } from "../render/sky.js";
-import { Tracers } from "../render/tracers.js";
 import { TARGET_GOAL, type GameState } from "../state.js";
 
 export type GameCtx = ICtx<GameState, IPhysicsContext>;
@@ -469,8 +468,37 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const impactUp = new Vector3(0, 1, 0);
     // Player rounds trail warm white; the enemy's are red so you can tell incoming from
     // outgoing at a glance, which is the whole point of seeing a trajectory at all.
-    const playerTracers = new Tracers(ctx.scene, 12, 0xffe6b0);
-    const enemyTracers = new Tracers(ctx.scene, 16, 0xff6a4d);
+    // Unit-length tapered cylinder along +Y, base at the origin: scaling y stretches it end to
+    // end. Tapered — the far end is the glowing slug's head, the near end its thinning tail;
+    // a uniform tube read as a chalk line.
+    const tracerGeometry = new CylinderGeometry(0.017, 0.005, 1, 6, 1, true);
+    tracerGeometry.translate(0, 0.5, 0);
+    const tracerMaterial = (colour: number): MeshBasicMaterial =>
+      new MeshBasicMaterial({
+        blending: AdditiveBlending,
+        color: colour,
+        depthWrite: false,
+        opacity: 0.9,
+        transparent: true,
+      });
+    const playerTracers = new TracerPool3D(ctx.scene, {
+      count: 12,
+      geometry: tracerGeometry,
+      material: tracerMaterial(0xffe6b0),
+    });
+    const enemyTracers = new TracerPool3D(ctx.scene, {
+      count: 16,
+      geometry: tracerGeometry,
+      material: tracerMaterial(0xff6a4d),
+    });
+    // Per-shot variation, computed here so replays stay seeded: two rounds must never read
+    // as one drawn line, and a point-blank round dies faster than a far one. The pool only
+    // applies these; the numbers are this game's.
+    const tracerShot = (distance: number): ITracerSpawnOptions => ({
+      lifetime: Math.min(0.11, distance / 360),
+      segmentLength: 2.4 + ctx.random() * 1.1,
+      widthScale: 0.75 + ctx.random() * 0.6,
+    });
     // One hoisted rng closure shared by every per-shot spawn: a closure literal at a
     // call site is a fresh allocation on every trigger pull.
     const shotRng = (): number => ctx.random();
@@ -499,7 +527,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // miss you cannot correct.
       const barrel = rifle.barrelRay();
       const distance = hit === undefined ? RANGE_METRES : hit.point.distanceTo(eye);
-      playerTracers.spawn(barrel.origin, barrel.direction, distance, shotRng);
+      playerTracers.spawn(barrel.origin, barrel.direction, distance, tracerShot(distance));
       playerFlash.spawn(barrel.origin, barrel.direction, shotRng);
       if (hit === undefined) return;
 
@@ -543,7 +571,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // that touches the world, and smoke that outlives both. One round glow alone
     // reads as a lamp switching on; the uneven rays are what say "gunshot".
     const flashSprite = flashTexture();
-    const smokeSprite = softCircleTexture(64, 0.05);
+    const smokeSprite = softCircleDataTexture(64, 0.05);
     const flashMaterial = new MeshBasicMaterial({
       blending: AdditiveBlending,
       color: 0xffd79a,
@@ -626,7 +654,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         enemyFlashLife = 0.09;
         enemyLight.position.copy(enemyFlash.position);
         enemyLight.intensity = 34;
-        enemyTracers.spawn(enemyFlash.position, direction, distance, shotRng);
+        enemyTracers.spawn(enemyFlash.position, direction, distance, tracerShot(distance));
         spawnSmoke(enemyFlash.position, direction, ctx);
         audio.enemyShot(at);
         audio.nearMiss(distance);
