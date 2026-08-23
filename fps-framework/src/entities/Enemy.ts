@@ -33,7 +33,20 @@ export type EnemyPhase = "patrol" | "suspicious" | "engage" | "search" | "return
 
 const MAX_HEALTH = 36;
 const WALK_SPEED = 2.4;
-const CHASE_SPEED = 3.6;
+/**
+ * Chase pace, capped at what this rig can be animated doing.
+ *
+ * It was 3.6 m/s. The only locomotion clip in the asset is a walk that covers 1.307 m/s at rate 1,
+ * so a 3.6 m/s chase drove `setEffectiveTimeScale` to 2.75 and clipped against a ceiling of 3 —
+ * a walk cycle on fast-forward, which is exactly the "moving faster than he is animated" read.
+ * Measured over a 45 s run: `maxRate` 3.00 on both engaging soldiers, i.e. saturated.
+ *
+ * 2.75 m/s is rate 2.10 against the same clip: a brisk jog, which a walk cycle can pass for, and
+ * `#applyCarriage` now leans him into it. The honest fix is a run cycle retargeted onto this
+ * skeleton — the asset is "CC-BY-4.0 carrying retargeted Mixamo clips" and a run is one more of
+ * those — and until there is one, the pace is bounded by the animation rather than the reverse.
+ */
+const CHASE_SPEED = 2.75;
 const HEAR_RANGE = 26;
 const VIEW_RANGE = 30;
 const VIEW_HALF_ANGLE = MathUtils.degToRad(46);
@@ -78,7 +91,7 @@ const STILL_BEFORE_IDLE_SECONDS = 0.16;
  * the clamp is no longer reachable by anything the stride metric scores.
  */
 const LOCOMOTION_RATE_MIN = 0.15;
-const LOCOMOTION_RATE_MAX = 3;
+const LOCOMOTION_RATE_MAX = 2.1;
 /** Ground speed below which the rate is meaningless and the stride metric is not scored. */
 const LOCOMOTION_RATE_FLOOR = 0.3;
 /** Frames used to sample one clip cycle when measuring its stride. */
@@ -155,6 +168,17 @@ const CARRIAGE_LEAD = 0.075;
 const CARRIAGE_LEAD_MAX = 0.14;
 const CARRIAGE_PITCH = 0.014;
 const CARRIAGE_PITCH_MAX = 0.055;
+/**
+ * Forward lean at full chase pace, in radians, on top of the acceleration pitch above.
+ *
+ * The acceleration pitch is a transient: it exists while he is speeding up and decays to nothing
+ * once he is at pace, which is correct for what it models and leaves a soldier travelling flat out
+ * standing as upright as one strolling. A run is a *sustained* posture, and the lean is most of
+ * what separates the two silhouettes at a glance. Driven by `#pace` rather than by acceleration so
+ * it holds for as long as the chase does — and it is zero at walking pace, so a patrol, a frozen
+ * sentry and a corpse are all untouched.
+ */
+const RUN_LEAN = 0.17;
 /** Seconds the carriage takes to catch up with a change, so it never pops. */
 const CARRIAGE_SETTLE = 7;
 /**
@@ -593,6 +617,16 @@ export class Enemy {
   /** Body yaw last frame, so the carriage measures the turn instead of trusting one turner. */
   #lastYaw = 0;
   /** Playback rate the locomotion clip is running at, and how well it matches the ground. */
+  /**
+   * Seconds the flinch still owns the pose.
+   *
+   * Without it `HitReaction` was set by `hurt` and overwritten by `#playLocomotion` on the very
+   * next frame, because the locomotion branch re-asserts its clip every frame and `#play` only
+   * declines when the clip it is asked for is already current. Measured over two 45 s runs and
+   * 678 samples: `HitReaction` was never the current clip on a single one. A soldier who does not
+   * flinch when hit is the loudest "this is a state machine" cue in the game, and it was one line.
+   */
+  #reactionHold = 0;
   #locomotionRate = 1;
   #locomotionRatePeak = 0;
   #strideErrorRatio = 1;
@@ -1248,8 +1282,19 @@ export class Enemy {
     return weapon.localToWorld(tip);
   }
 
-  #play(name: string, fade = 0.18, mode: "loop" | "once" = "loop"): void {
+  /**
+   * `override` is what makes the flinch survive.
+   *
+   * Every branch of the state machine re-asserts its own clip every frame, so a one-shot pose set
+   * from outside the machine — `hurt` setting `HitReaction`, which is the only one — was replaced
+   * on the next frame by whichever branch ran. Guarding the two call sites was not enough: the
+   * spawn-grace branch plays `RifleIdle` directly rather than through `#playLocomotion`, and the
+   * burst plays `FiringRifle` on every round. One refusal here covers all of them, and death
+   * passes `override` because a corpse outranks a flinch.
+   */
+  #play(name: string, fade = 0.18, mode: "loop" | "once" = "loop", override = false): void {
     if (this.#animation === undefined || !this.#clips.has(name)) return;
+    if (!override && this.#reactionHold > 0) return;
     if (this.#animation.current === name) return;
     this.#weaponPoseElapsed = 0;
     this.#applyWeaponPose(name);
@@ -1380,7 +1425,7 @@ export class Enemy {
    * the soldier is standing still against a blocked path, and standing up out of a crouch runs
    * its authored transition instead of popping straight to idle.
    */
-  #playLocomotion(moving: boolean, crouched: boolean, dt: number): void {
+  #playLocomotion(moving: boolean, crouched: boolean, dt: number, poseLocked = false): void {
     // Ground speed is measured from where the body actually got to this frame, not from the
     // speed constant it was asked for: a blocked step, a corner, or a slow turn all cut it.
     this.#groundSpeed =
@@ -1393,6 +1438,11 @@ export class Enemy {
     // One frame against a wall, or one frame of a replan, is not a stop. Without this the
     // walk clip strobes against idle whenever the path is briefly blocked.
     this.#stillFor = moving ? 0 : this.#stillFor + dt;
+    // The burst clip and the flinch own the pose while they last, but the body keeps reporting the
+    // ground speed it is actually making. Returning before the measurement above froze
+    // `#groundSpeed` at whatever it was when the burst started, which drove `#updateFootsteps`
+    // into playing footfalls for a soldier standing still.
+    if (poseLocked || this.#reactionHold > 0) return;
     const travelling = this.#stillFor < STILL_BEFORE_IDLE_SECONDS;
 
     let wanted: string;
@@ -1861,7 +1911,7 @@ export class Enemy {
       this.#deathHipStart = this.#hips?.getWorldPosition(new Vector3()) ?? null;
       const clip = this.#deathClipFor();
       this.#deathClip = this.#clips.has(clip) ? clip : null;
-      this.#play(clip, DEATH_FADE, "once");
+      this.#play(clip, DEATH_FADE, "once", true);
       this.#detachWeapon(ctx, clip);
       ctx.after(RESPAWN_SECONDS, () => this.#respawn());
       return earned + 300;
@@ -1870,7 +1920,10 @@ export class Enemy {
     this.#suppressed = Math.max(this.#suppressed, 2.4);
     this.#suppressedPeak = Math.max(this.#suppressedPeak, this.#suppressed);
     this.voice?.pain(this.group.position);
-    this.#play("HitReaction", REACTION_FADE);
+    // "once", and held: the clip is a one-shot flinch, and the hold is what stops locomotion
+    // reclaiming the rig before a single frame of it has been drawn.
+    this.#reactionHold = Math.min(this.#clipDurations.get("HitReaction") ?? 0.4, 0.45);
+    this.#play("HitReaction", REACTION_FADE, "once", true);
     // A frozen sentry flinches at the impact but holds his ground: engaging here
     // would walk him out of a scenario-placed spawn on the first non-killing round.
     if (!this.#frozen && this.phase !== "engage") this.phase = "engage";
@@ -1891,6 +1944,7 @@ export class Enemy {
     this.phase = "patrol";
     this.#suppressed = 0;
     this.#standUp = 0;
+    this.#reactionHold = 0;
     this.#crouchMoving = false;
     this.#locomotion = "";
     this.#locomotionHold = 0;
@@ -1938,7 +1992,7 @@ export class Enemy {
     this.#paceRate = 0;
     this.#carriageTurn = 0;
     this.#carriagePush = 0;
-    this.#play("RifleWalk", LOCOMOTION_FADE);
+    this.#play("RifleWalk", LOCOMOTION_FADE, "loop", true);
   }
 
   /**
@@ -1974,7 +2028,12 @@ export class Enemy {
     this.#carriagePush += (this.#paceRate - this.#carriagePush) * blend;
     const turn = this.#carriageTurn;
     const push = this.#carriagePush;
-    if (Math.abs(turn) < 1e-3 && Math.abs(push) < 1e-3) return;
+    // Sustained lean, from pace rather than acceleration. Zero at walking pace by construction,
+    // so a patrol, a pause and a scenario-frozen sentry all still get a delta of exactly zero.
+    const run =
+      MathUtils.clamp((this.#pace - WALK_SPEED) / Math.max(0.1, CHASE_SPEED - WALK_SPEED), 0, 1) *
+      RUN_LEAN;
+    if (Math.abs(turn) < 1e-3 && Math.abs(push) < 1e-3 && run < 1e-3) return;
 
     const bank = MathUtils.clamp(turn * CARRIAGE_BANK, -CARRIAGE_BANK_MAX, CARRIAGE_BANK_MAX);
     const lag = MathUtils.clamp(-turn * CARRIAGE_LAG, -CARRIAGE_LAG_MAX, CARRIAGE_LAG_MAX);
@@ -1992,9 +2051,11 @@ export class Enemy {
       scratchLocal.copy(parent).invert().multiply(world).multiply(parent);
       bone.quaternion.premultiply(scratchLocal);
     };
-    // Leaning forward under acceleration belongs to the lower torso, banking with it.
-    apply(spine, -pitch, 0, bank);
-    apply(this.#chest, 0, lag, bank * 0.5);
+    // Leaning forward under acceleration belongs to the lower torso, banking with it. The run
+    // lean rides the same bone, and the chest takes a fraction of it back so the head and the
+    // rifle stay level — a torso that pitches as one piece points the weapon at the pavement.
+    apply(spine, -pitch - run, 0, bank);
+    apply(this.#chest, run * 0.42, lag, bank * 0.5);
     apply(this.#neck, 0, lead, 0);
   }
 
@@ -2026,6 +2087,7 @@ export class Enemy {
       return;
     }
     this.#spawnGrace = Math.max(0, this.#spawnGrace - dt);
+    this.#reactionHold = Math.max(0, this.#reactionHold - dt);
     const sees =
       !this.#frozen &&
       this.#spawnGrace <= 0 &&
@@ -2310,7 +2372,10 @@ export class Enemy {
     // that happens to be walking.
     const firing = this.#burstLeft > 0;
     const crouched = this.wounded || this.#suppressed > 0;
-    const settle = firing ? 0.18 : crouched ? 0.72 : 1;
+    // Planted, not creeping. At 0.18 he still made 0.65 m/s under a firing clip that has both
+    // feet nailed down — 16 frames of visible slide per engagement, measured. `#step` still runs,
+    // so he decelerates into the plant over ~70 ms rather than stopping on the frame.
+    const settle = firing ? 0 : crouched ? 0.72 : 1;
     let moved = false;
 
     if (this.#reaction > 0) {
@@ -2351,7 +2416,7 @@ export class Enemy {
       : aim;
     this.group.rotation.y = this.#facing.step(carry, dt, 1.25);
     // The firing clip owns the pose for as long as the burst lasts; locomotion resumes after.
-    if (!firing) this.#playLocomotion(moved, crouched, dt);
+    this.#playLocomotion(moved, crouched, dt, firing);
 
     this.#cooldown -= dt;
     this.#burstTimer -= dt;
@@ -2379,6 +2444,8 @@ export class Enemy {
         }
         if (clear && shotDirection.angleTo(missDirection) < 0.02) hooks.damagePlayer(ROUND_DAMAGE);
         hooks.onMuzzleFlash(muzzle, missDirection, playerEye.distanceTo(muzzle));
+        // `#play` declines while a flinch is held, so a soldier hit mid-burst keeps the reaction
+        // rather than having it stomped by the very next round 110 ms later.
         this.#play("FiringRifle", FIRE_FADE);
         if (this.#burstLeft === 0) {
           // Break contact for an irregular beat, longer when he is rattled. A fixed 3.2 s

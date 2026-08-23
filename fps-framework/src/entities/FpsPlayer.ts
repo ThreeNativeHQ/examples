@@ -171,7 +171,10 @@ export class FpsPlayer {
       x: MathUtils.clamp(keyboardMove.x + (touch?.moveX ?? 0), -1, 1),
       y: MathUtils.clamp(keyboardMove.y + (touch?.moveY ?? 0), -1, 1),
     };
-    const sprinting = ctx.input.pressed("sprint") && !this.aiming && !this.crouching;
+    // The stick-push sprint arrives as its own flag rather than as a bigger move vector, so the
+    // same two vetoes below apply to a thumb and to Shift alike.
+    const sprintAsked = ctx.input.pressed("sprint") || touch?.sprint === true;
+    const sprinting = sprintAsked && !this.aiming && !this.crouching;
     // Crouch wins over sprint: holding both should not sprint at a crouch-walk's silhouette.
     const speed = this.crouching ? CROUCH_SPEED : sprinting ? SPRINT_SPEED : WALK_SPEED;
     // `vector().y` is +up; forward on this ground plane is -z.

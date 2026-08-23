@@ -69,7 +69,7 @@ export function Minimap({
   };
 
   return (
-    <div className="pointer-events-none absolute left-4 top-4 h-[180px] w-[180px] rounded-full bg-black/55 shadow-[0_2px_12px_rgba(0,0,0,0.45)] ring-1 ring-[#ffa63d]/40">
+    <div className="hud-minimap pointer-events-none absolute left-4 top-4 h-[180px] w-[180px] rounded-full bg-black/55 shadow-[0_2px_12px_rgba(0,0,0,0.45)] ring-1 ring-[#ffa63d]/40">
       <svg viewBox="-50 -50 100 100" className="absolute inset-0 h-full w-full">
         <defs>
           <clipPath id="bayview-map-disc">

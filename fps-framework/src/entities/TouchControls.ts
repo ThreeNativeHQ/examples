@@ -40,6 +40,22 @@ const STICK_RANGE = 74;
 const STICK_DEAD_ZONE = 9;
 /** Touch look is a raw pixel delta; this scales it to feel like the mouse without a lock. */
 const LOOK_SCALE = 1.35;
+/**
+ * How far forward the stick has to go before it is a sprint, and how far back before it is not.
+ *
+ * Sprint is a *gesture*, not a seventh button. The right thumb already carries fire, aim, reload
+ * and crouch, and the screen a phone has left after those is the screen the player is trying to
+ * shoot into — a fifth circle would cost more of the fight than it is worth. Pushing the stick to
+ * the stop is what every phone shooter means by "run", and the left thumb is otherwise idle.
+ *
+ * The two thresholds are a Schmitt trigger. A single one at 0.9 puts the sprint flag on the same
+ * knife edge the thumb rests on, so a player holding full forward flickers between walk and sprint
+ * several times a second — audible in the footstep cadence and visible in the weapon sway.
+ */
+const SPRINT_ENGAGE = 0.92;
+const SPRINT_RELEASE = 0.78;
+/** How straight ahead the push has to be. A diagonal is a strafe, and nobody sprints sideways. */
+const SPRINT_FORWARD_DOT = 0.72;
 
 /** A circular on-screen button, positioned from the bottom-right in CSS pixels. */
 type Button = {
@@ -77,6 +93,7 @@ export type TouchFrame = {
   readonly aim: boolean;
   readonly reload: boolean;
   readonly crouch: boolean;
+  readonly sprint: boolean;
 };
 
 const IDLE: TouchFrame = {
@@ -88,6 +105,7 @@ const IDLE: TouchFrame = {
   aim: false,
   reload: false,
   crouch: false,
+  sprint: false,
 };
 
 export class TouchControls {
@@ -97,6 +115,8 @@ export class TouchControls {
   #engaged = false;
   /** Rising-edge latch: reload should fire once per press, not once per tick held. */
   #reloadWasDown = false;
+  /** Hysteresis state for the stick-push sprint: what it decided last tick. */
+  #sprinting = false;
 
   get frame(): TouchFrame {
     return this.#frame;
@@ -181,6 +201,7 @@ export class TouchControls {
 
     let moveX = 0;
     let moveY = 0;
+    let stickPush = 0;
     let fire = false;
     let aim = false;
     let reloadDown = false;
@@ -196,6 +217,8 @@ export class TouchControls {
           const strength = Math.min(1, (distance - STICK_DEAD_ZONE) / STICK_RANGE);
           moveX = (dx / distance) * strength;
           moveY = (dy / distance) * strength;
+          // Forward component only: the push has to be both far and roughly straight ahead.
+          stickPush = dy / distance >= SPRINT_FORWARD_DOT ? strength : 0;
         }
       } else if (role.kind === "button") {
         if (role.action === "fire") fire = true;
@@ -209,6 +232,15 @@ export class TouchControls {
     const reload = reloadDown && !this.#reloadWasDown;
     this.#reloadWasDown = reloadDown;
 
+    // Aiming and sprinting are the same request in opposite directions, and the player's own
+    // movement code already refuses to sprint while aiming; declining here as well keeps the
+    // reported frame honest about what the thumbs actually asked for.
+    this.#sprinting = aim
+      ? false
+      : this.#sprinting
+        ? stickPush >= SPRINT_RELEASE
+        : stickPush >= SPRINT_ENGAGE;
+
     this.#frame = {
       moveX: MathUtils.clamp(moveX, -1, 1),
       moveY: MathUtils.clamp(moveY, -1, 1),
@@ -218,6 +250,7 @@ export class TouchControls {
       aim,
       reload,
       crouch,
+      sprint: this.#sprinting,
     };
     return this.#frame;
   }
@@ -229,6 +262,7 @@ export class TouchControls {
     moveX: number;
     moveY: number;
     firing: number;
+    sprinting: number;
   } {
     return {
       engaged: this.#engaged ? 1 : 0,
@@ -236,6 +270,7 @@ export class TouchControls {
       moveX: Number(this.#frame.moveX.toFixed(3)),
       moveY: Number(this.#frame.moveY.toFixed(3)),
       firing: this.#frame.fire ? 1 : 0,
+      sprinting: this.#frame.sprint ? 1 : 0,
     };
   }
 }

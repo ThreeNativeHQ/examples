@@ -1,6 +1,7 @@
 import type { IGame } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
 import { useGameState } from "@threenative/ui";
+import { Play } from "../scenes/Play.js";
 import { townSchematic } from "../render/town.js";
 import { TARGET_GOAL, type GameState } from "../state.js";
 import { Minimap } from "./Minimap.js";
@@ -108,6 +109,76 @@ function BulletsGlyph() {
   );
 }
 
+
+/**
+ * Go full screen and lock to landscape, on the one tap a phone player is guaranteed to make.
+ *
+ * Two things this fixes, both measured on a Pixel 8 in Chrome. Portrait gives the game a 411x784
+ * surface for a scene composed at 1280x720, so the horizontal field of view a shooter needs is
+ * simply not there. And even rotated, Chrome's URL bar and gesture bar leave 303 px of height out
+ * of 1080 — nearly three quarters of the screen spent on browser furniture.
+ *
+ * Both APIs are DOM-only and both are gated behind a user gesture, which is why this is a button
+ * and not something the scene does at boot. `src/ui/` is the web-only half of this game by
+ * contract — the native target never builds it, and the native target has neither problem, because
+ * `threenative.config.ts` already declares `orientation: "landscape"` and `fullscreen: true`.
+ *
+ * Failure is silent and non-fatal on purpose: iOS Safari has no `requestFullscreen` on elements
+ * and no orientation lock at all, and a player there should get the game, not an error.
+ */
+async function goImmersive(): Promise<void> {
+  try {
+    if (document.fullscreenElement === null) {
+      await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+    }
+  } catch {
+    // Refused (iOS, or no gesture credit left). The orientation attempt below may still work.
+  }
+  try {
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (to: string) => Promise<void>;
+    };
+    await orientation.lock?.("landscape");
+  } catch {
+    // No orientation lock on this platform. The player rotates the phone themselves.
+  }
+}
+
+/**
+ * A HUD control a thumb can actually press.
+ *
+ * Everything else under `.touch-only` is `pointer-events-none`, because the gameplay controls are
+ * read from `ctx.input.raw.pointers` inside the scene and a div that swallowed touches would make
+ * the game stop responding exactly where its controls are drawn. These two are the exception: they
+ * are React actions, not gameplay input, so they take their own events and sit clear of the
+ * thumb bands the scene reads.
+ */
+function TouchAction({
+  onPress,
+  children,
+  className = "",
+}: {
+  onPress: () => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      // `onPointerDown`, not `onClick`: a click needs a press and a release inside the same
+      // element and waits out the gesture, which on a phone is a control that feels broken.
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onPress();
+      }}
+      className={`pointer-events-auto touch-none select-none ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
   const score = useGameState(game, (state) => state.score);
   const health = useGameState(game, (state) => state.health);
@@ -126,6 +197,14 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
   const assetsLoaded = useGameState(game, (state) => state.assetsLoaded);
   const assetsTotal = useGameState(game, (state) => state.assetsTotal);
   const aimReticleCentred = true;
+
+  // The same two lines the keyboard's Enter path runs in `Play.update`. A phone has no Enter key,
+  // and until this existed a mobile player who ran out of time had no way to start another round —
+  // the end card told them to press a key their device does not have.
+  const restart = () => {
+    game.state.set(Play.initialState);
+    void game.goto("play");
+  };
 
   const lowHealth = health < 35;
   // The header score is the round's real tally, not a placeholder: soldiers
@@ -184,7 +263,7 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
           reference's 5-vs-5 header. Both rows are live: the gold chips are the
           five patrolling soldiers and grey out as they fall, and the leading
           blue chip is the player. */}
-      <div className="absolute left-1/2 top-2 flex -translate-x-1/2 flex-col items-center drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
+      <div className="hud-top absolute left-1/2 top-2 flex -translate-x-1/2 flex-col items-center drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
         <div className="flex items-start gap-2">
           <div className="flex items-center gap-[3px] pt-1">
             {ROSTER.map((index) => (
@@ -233,7 +312,7 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
 
       {/* Bottom centre: armour badge, health readout, rank emblem and ammo on
           one shared baseline, like the reference's lower cluster. */}
-      <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-end gap-9">
+      <div className="hud-bottom absolute bottom-4 left-1/2 flex -translate-x-1/2 items-end gap-9">
         <div className="flex items-end gap-3">
           <span className="relative inline-block h-[34px] w-[30px]">
             <ShieldGlyph className="h-full w-full fill-[#274a68] stroke-[#7fb3e8] stroke-[1.4]" />
@@ -268,13 +347,26 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
         </div>
       </div>
 
+      {/* Top right: one tap to full screen and landscape. Placed opposite the minimap and above
+          the right thumb's look band, so it is reachable but never under a finger that is aiming. */}
+      <div className="hud-immersive touch-show pointer-events-none absolute right-2 top-2">
+        <TouchAction
+          onPress={() => {
+            void goImmersive();
+          }}
+          className="rounded-[4px] border border-white/25 bg-black/50 px-2.5 py-1.5 text-[11px] font-bold tracking-[0.12em] text-white/75"
+        >
+          FULL
+        </TouchAction>
+      </div>
+
       {/* Thumb controls. A root-level sibling on purpose: every child here is positioned against
           the full HUD surface, and nesting these inside the legend stack below put the fire button
           62 px from the right edge of a 62 px chip instead of the right edge of the screen. */}
       <TouchOverlay />
 
       {/* Bottom left: money chip over the key legend. */}
-      <div className="absolute bottom-3 left-3 flex flex-col items-start gap-2.5">
+      <div className="hud-corner absolute bottom-3 left-3 flex flex-col items-start gap-2.5">
         <div className="pl-1 text-[16px] font-bold tabular-nums tracking-[0.03em] text-[#ffd166] drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
           $10000
         </div>
@@ -316,7 +408,7 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
       ) : null}
 
       {phase !== "playing" ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45">
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-black/45">
           <div
             className={`text-[42px] font-bold tracking-[0.08em] ${
               phase === "complete" ? "text-[#3ddc6b]" : "text-[#ff5f4d]"
@@ -327,8 +419,16 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
           <div className="mt-2 text-[18px] font-bold tracking-[0.06em] text-white">
             SCORE {String(score).padStart(4, "0")} · {targetsHit} HITS
           </div>
-          <div className="mt-6 text-[15px] font-bold tracking-[0.14em] text-[#ffa63d]">
+          <div className="desktop-only mt-6 text-[15px] font-bold tracking-[0.14em] text-[#ffa63d]">
             PRESS ENTER TO RUN IT AGAIN
+          </div>
+          <div className="touch-show mt-6">
+            <TouchAction
+              onPress={restart}
+              className="rounded-[4px] border-2 border-[#ffa63d] bg-[#ffa63d]/15 px-8 py-3 text-[16px] font-bold tracking-[0.16em] text-[#ffa63d] active:bg-[#ffa63d]/35"
+            >
+              RUN IT AGAIN
+            </TouchAction>
           </div>
           {/* Poly Haven's licence requires a visible credit wherever its API was
               used to source assets, and "visible" means a player has to be able

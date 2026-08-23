@@ -37,7 +37,7 @@
     {
       "kind": "wait",
       "label": "approach-1",
-      "waitTicks": 130,
+      "waitTicks": 170,
       "release": true
     },
     {
@@ -50,7 +50,7 @@
     {
       "kind": "wait",
       "label": "approach-2",
-      "waitTicks": 130,
+      "waitTicks": 170,
       "release": true
     },
     {
@@ -63,7 +63,7 @@
     {
       "kind": "wait",
       "label": "path",
-      "waitTicks": 200,
+      "waitTicks": 262,
       "release": true
     }
   ],

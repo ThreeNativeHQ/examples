@@ -27,7 +27,7 @@ export function TouchOverlay() {
       {/* Left band hint. The real stick floats to wherever the thumb lands, so this is a
           resting place rather than a target — drawing a fixed stick would lie about that. */}
       <div
-        className="absolute rounded-full border-2 border-white/20"
+        className="stick-hint absolute rounded-full border-2 border-white/20"
         style={{ bottom: 96, height: 148, left: 40, width: 148 }}
       >
         <div className="absolute inset-0 grid place-items-center text-[11px] font-bold tracking-widest text-white/35">
