@@ -1,3 +1,5 @@
+import { onAfterPhysics } from "../postPhysics.js";
+import { TouchControls } from "../entities/TouchControls.js";
 import { softCircleDataTexture, TracerPool3D, type ITracerSpawnOptions, type ICtx, Scene, type SceneFrame } from "@threenative/core";
 import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
 import type {
@@ -225,6 +227,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // with its window gesture listeners and its looping ambience still live.
     this.#audio?.dispose();
     this.#audio = undefined;
+    // The hook closes over this scene's player. Leaving it registered means a restart keeps
+    // syncing the camera to the torn-down body until `enter` happens to overwrite it.
+    onAfterPhysics(undefined);
   }
 
   override enter(ctx: GameCtx): SceneFrame<GameState, IPhysicsContext> {
@@ -334,6 +339,34 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       player.syncCamera();
     }
     ctx.entities.add("player", player);
+    // The camera is placed here, after rapier has written the solved transform, rather than at the
+    // end of `player.update` where `mesh.position` is still last step's. See `onAfterPhysics`.
+    // Split the physics step out of `outsideGame`.
+    //
+    // `outsideGame` proved the hitch is not in game logic, but it lumps four different things
+    // together: the rapier step, the projection reconcile, the draw, and whatever the browser does
+    // between callbacks. This hook fires immediately after rapier's plugin update, so the gap from
+    // the end of the game frame to here is the physics step and nothing else — which is the one
+    // suspect that scales with a firefight's worth of shards and pursuing soldiers.
+    onAfterPhysics(() => {
+      const now = clock();
+      if (gameFrameEndedAt > 0) frameStats.chargeSection("physics", now - gameFrameEndedAt);
+      player.syncCamera();
+    });
+    // Thumb controls. Registered so a scenario can assert a finger actually drove the player,
+    // and read every tick below before the player consumes its input.
+    // Two seconds in, every pooled pipeline has been through a real draw, so the unused slots can
+    // stop being submitted. Worth ~a third of the draw calls on a phone.
+    ctx.after(2, () => {
+      decals.settle();
+      smoke.settle();
+      impacts.settle();
+      rifle.settlePools();
+    });
+
+    const touch = new TouchControls();
+    ctx.entities.remove("touch");
+    ctx.entities.add("touch", touch);
     // Strides are distance-driven inside the player; the scene owns where they sound.
     player.onFootstep = () => audio.localStep();
     const rifle = new Rifle(
@@ -737,12 +770,60 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // Nothing else in this project can see a stutter: typecheck, lint and every existing
     // scenario pass at four frames a second. This is the one thing that can fail on one.
     const frameStats = new FrameStats();
+    /** Stamped when the game frame ends, so the post-physics hook can bill the step. */
+    let gameFrameEndedAt = 0;
     ctx.entities.remove("frame");
     ctx.entities.add("frame", frameStats);
     // Where the squad's frame goes. "enemies cost 13 ms" is not actionable; this says which
     // stage of a soldier's update spent it.
     ctx.entities.remove("squad");
     ctx.entities.add("squad", { debug: () => squadProfile() });
+
+    // What the renderer actually drew last frame, so a scenario can fail on an empty picture.
+    //
+    // Every gate in this project is blind to how the game looks, and that is not a slogan: a
+    // `prewarm(ctx.scene)` call once put every material in the town at zero opacity, and the whole
+    // suite stayed green. Decals still "placed", soldiers still pathfound, diagnostics were clean,
+    // and the frame budget *improved*, because a level nobody draws is cheap. `survives` checks for
+    // a nonblank frame and passed too — the sky and the clouds are not blank.
+    //
+    // Triangles are the assertion that would have caught it. A game drawing its level submits
+    // hundreds of thousands of them; a game drawing only its sky submits a handful.
+    const renderInfo = (): {
+      drawCalls: number;
+      triangles: number;
+      invisibleMeshes: number;
+    } => {
+      const info = ctx.renderer.info as
+        | { render?: { drawCalls?: number; triangles?: number } }
+        | undefined;
+      // Meshes the renderer is still drawing that cannot possibly show up: fully transparent.
+      //
+      // Counting pixels does not catch this. A scene whose materials are all at zero opacity
+      // submits *more* triangles than a healthy one, because transparency pushes every mesh off
+      // the projection's batched lane, and the resulting sky-only picture is neither blank nor
+      // notably brighter than the real one — both a nonblank-ratio and a dark-pixel-ratio
+      // assertion passed on it. The invariant that actually holds is simpler: nothing in this
+      // game's level is supposed to be invisible, so any solid mesh at zero opacity is a defect.
+      let invisibleMeshes = 0;
+      ctx.scene.traverse((object) => {
+        const mesh = object as { isMesh?: boolean; material?: unknown };
+        if (mesh.isMesh !== true || mesh.material === undefined) return;
+        const surfaces = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const surface of surfaces) {
+          const material = surface as { opacity?: number; visible?: boolean };
+          if (material.visible === false) continue;
+          if ((material.opacity ?? 1) <= 0) invisibleMeshes += 1;
+        }
+      });
+      return {
+        drawCalls: info?.render?.drawCalls ?? 0,
+        triangles: info?.render?.triangles ?? 0,
+        invisibleMeshes,
+      };
+    };
+    ctx.entities.remove("render");
+    ctx.entities.add("render", { debug: renderInfo });
     const clock = (): number => globalThis.performance?.now() ?? 0;
     // Startup is not gameplay: pipeline compilation and every material's first draw land in the
     // opening second and cannot hitch twice. Measuring them alongside play hides real stalls.
@@ -807,7 +888,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // start would leave the camera dead. Keyboard shots never reach here, so the playtests
       // never ask for a lock they did not earn.
       const pointer = frameCtx.input.raw.pointer;
-      if (pointer.down && !pointer.captured) {
+      // Never on a touch screen: there is no pointer to lock, the request is refused or prompts,
+      // and every thumb press would ask again. Thumb input needs no capture to steer.
+      if (pointer.down && !pointer.captured && !touch.engaged) {
         frameCtx.input.captureMouse();
         // The click that buys the mouse also confirms it: the UI cue's one home,
         // since this game's only "menu" is the pointer lock itself.
@@ -815,6 +898,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       }
 
       frameStats.mark(clock());
+      player.touch = touch.update(frameCtx);
       player.update(frameCtx, dt, !rifle.reloading);
       frameStats.measure("player", clock());
       const moveVector = frameCtx.input.vector("move");
@@ -824,8 +908,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // Held, not tapped. The trigger is polled every frame and `Rifle` decides which of those
       // frames sends a round, so a held button fires at the weapon's cyclic rate instead of asking
       // the player to produce ten clicks a second by hand.
-      if (frameCtx.input.pressed("fire")) fire(frameCtx, aimRay);
-      if (frameCtx.input.justPressed("reload")) rifle.reload(frameCtx);
+      if (frameCtx.input.pressed("fire") || player.touch?.fire === true) fire(frameCtx, aimRay);
+      if (frameCtx.input.justPressed("reload") || player.touch?.reload === true) {
+        rifle.reload(frameCtx);
+      }
 
       eye.set(player.eye.x, player.eye.y, player.eye.z);
       frameStats.mark(clock());
@@ -881,6 +967,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // spent outside this callback — the physics step, the scene projection and the draw — which
       // is the only way to tell "our code is slow" apart from "the engine is".
       frameStats.measure("gameFrame", clock());
+      gameFrameEndedAt = clock();
     };
   }
 }

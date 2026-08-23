@@ -3,12 +3,18 @@ import { CharacterBody3D, CollisionShape3D, type IPhysicsContext } from "@threen
 import { BoxGeometry, MathUtils, Mesh, MeshBasicMaterial, type PerspectiveCamera, Vector3 } from "three";
 import { scale } from "../render/scale.js";
 import type { GameState } from "../state.js";
+import type { TouchFrame } from "./TouchControls.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
 
 export const EYE_HEIGHT = scale.eyeHeight;
 const WALK_SPEED = 5.6;
 const SPRINT_SPEED = 8.2;
+/** Crouched movement, and how far the eye drops. A crouch that only slows you reads as a bug. */
+const CROUCH_SPEED = 2.6;
+const CROUCH_EYE_DROP = scale.eyeHeight * 0.34;
+/** Seconds-ish to fold and unfold; fast enough to dodge with, slow enough to see. */
+const CROUCH_RATE = 11;
 const FOV_HIP = 70;
 const FOV_AIM = 22;
 const PITCH_MIN = MathUtils.degToRad(-66);
@@ -30,6 +36,13 @@ class Look {
   yaw = 0;
   pitch = 0;
 
+  /** Touch look, which has no lock to earn. Applied on top of the mouse path below. */
+  applyDelta(dx: number, dy: number, scale: number): void {
+    if (dx === 0 && dy === 0) return;
+    this.yaw -= dx * LOOK_SENSITIVITY * scale;
+    this.pitch = MathUtils.clamp(this.pitch - dy * LOOK_SENSITIVITY * scale, PITCH_MIN, PITCH_MAX);
+  }
+
   consume(ctx: GameCtx, scale: number): void {
     if (!ctx.input.raw.pointer.captured) return;
     const delta = ctx.input.vector("look");
@@ -49,6 +62,19 @@ export class FpsPlayer {
   health = 100;
   distanceMoved = 0;
   aiming = false;
+  crouching = false;
+  /** This tick's thumb input, set by the scene before `update`. Undefined on desktop. */
+  touch: TouchFrame | undefined;
+  /**
+   * Worst gap, in metres, between where the camera was placed and where the body actually was
+   * when the frame drew. Sampled at the top of `update`, before anything moves: the camera still
+   * holds the position it was rendered from, and `eye` now reads the transform physics wrote
+   * after that render. Any difference is error the player saw. It is a peak, not an instant, so a
+   * scenario that samples every few hundred frames still catches a single bad step.
+   */
+  cameraLagPeak = 0;
+  /** 0 standing, 1 fully folded; eased so the eye slides rather than teleports. */
+  #crouch = 0;
   /** Set by the scene: fired each time a stride completes, so footsteps keep pace with speed. */
   onFootstep: ((sprinting: boolean) => void) | undefined;
   #camera: PerspectiveCamera;
@@ -91,7 +117,7 @@ export class FpsPlayer {
   get eye(): { x: number; y: number; z: number } {
     return {
       x: this.mesh.position.x,
-      y: this.mesh.position.y + scale.eyeHeight - BODY_Y,
+      y: this.mesh.position.y + scale.eyeHeight - BODY_Y - this.#crouch * CROUCH_EYE_DROP,
       z: this.mesh.position.z,
     };
   }
@@ -127,13 +153,27 @@ export class FpsPlayer {
   }
 
   update(ctx: GameCtx, dt: number, canAim: boolean): void {
-    this.aiming = canAim && ctx.input.pressed("aim");
+    const renderedLag = Math.abs(this.#camera.position.y - this.eye.y);
+    if (renderedLag > this.cameraLagPeak) this.cameraLagPeak = renderedLag;
+    const touch = this.touch;
+    this.aiming = canAim && (ctx.input.pressed("aim") || touch?.aim === true);
+    // Eased rather than switched: an eye that teleports down 20 cm reads as a glitch, and the
+    // same easing is what lets a player peek by tapping it.
+    this.crouching = ctx.input.pressed("crouch") || touch?.crouch === true;
+    this.#crouch = MathUtils.damp(this.#crouch, this.crouching ? 1 : 0, CROUCH_RATE, dt);
     // Mouse look is half as sensitive down the sights.
-    this.look.consume(ctx, this.aiming ? 0.5 : 1);
+    const lookScale = this.aiming ? 0.5 : 1;
+    this.look.consume(ctx, lookScale);
+    if (touch !== undefined) this.look.applyDelta(touch.lookX, touch.lookY, lookScale);
 
-    const move = ctx.input.vector("move");
-    const sprinting = ctx.input.pressed("sprint") && !this.aiming;
-    const speed = sprinting ? SPRINT_SPEED : WALK_SPEED;
+    const keyboardMove = ctx.input.vector("move");
+    const move = {
+      x: MathUtils.clamp(keyboardMove.x + (touch?.moveX ?? 0), -1, 1),
+      y: MathUtils.clamp(keyboardMove.y + (touch?.moveY ?? 0), -1, 1),
+    };
+    const sprinting = ctx.input.pressed("sprint") && !this.aiming && !this.crouching;
+    // Crouch wins over sprint: holding both should not sprint at a crouch-walk's silhouette.
+    const speed = this.crouching ? CROUCH_SPEED : sprinting ? SPRINT_SPEED : WALK_SPEED;
     // `vector().y` is +up; forward on this ground plane is -z.
     const forwardX = -Math.sin(this.look.yaw);
     const forwardZ = -Math.cos(this.look.yaw);
@@ -178,7 +218,14 @@ export class FpsPlayer {
       this.#camera.fov = this.#fov;
       this.#camera.updateProjectionMatrix();
     }
-    this.syncCamera();
+    // Deliberately NOT syncing the camera here.
+    //
+    // `moveAndSlide` above only queues the motion; the rapier plugin steps the world and writes
+    // the solved transform after this method returns, so reading `mesh.position` now yields last
+    // step's position. Placing the camera from it left the eye one physics step behind the body —
+    // invisible on flat ground, and a third of a metre low on a 0.32 m stair step, which is how a
+    // shot aimed at a soldier ended up in the tread underfoot. `Play` now drives `syncCamera`
+    // from the post-physics hook instead, where the position is real.
   }
 
   hurt(amount: number): void {
@@ -188,6 +235,8 @@ export class FpsPlayer {
   }
 
   debug(): {
+    cameraLagPeak: number;
+    crouching: number;
     health: number;
     position: number[];
     positionY: number;
@@ -200,6 +249,8 @@ export class FpsPlayer {
     const firingDirection = this.#lastFiringDirection;
     const cameraDirection = this.#lastFiringCameraDirection;
     return {
+      cameraLagPeak: this.cameraLagPeak,
+      crouching: this.crouching ? 1 : 0,
       health: this.health,
       position: this.mesh.position.toArray(),
       positionY: this.mesh.position.y,

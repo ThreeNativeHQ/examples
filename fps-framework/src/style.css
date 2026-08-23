@@ -54,3 +54,33 @@ body,
 canvas {
   cursor: none;
 }
+
+/*
+ * Thumb controls, and the desktop legend they replace.
+ *
+ * Gated on `pointer: coarse` rather than on a width breakpoint: a narrow desktop window is still a
+ * mouse, and a tablet in landscape is still a thumb. Width would get both of those wrong.
+ */
+.touch-only {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .touch-only {
+    display: block;
+    /*
+     * Not `inset-0`'s inherited height, which comes from a `h-screen` parent.
+     *
+     * On a phone `100vh` is the tallest the viewport ever gets — it counts the space behind the
+     * retractable URL bar — so a control anchored to the bottom of it sits ~80 px below the glass
+     * you can actually touch. Measured on a Pixel 8: 864 vs the 784 that is visible, which put the
+     * fire button off the bottom of the screen entirely. `100dvh` tracks the viewport as it is
+     * right now, and the safe-area inset keeps the buttons clear of the gesture bar.
+     */
+    height: calc(100dvh - env(safe-area-inset-bottom, 0px));
+    bottom: auto;
+  }
+  .desktop-only {
+    display: none;
+  }
+}

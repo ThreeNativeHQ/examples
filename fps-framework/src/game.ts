@@ -4,6 +4,7 @@ import type { IPhysicsContext } from "@threenative/physics";
 import { rapier } from "@threenative/physics";
 import { Object3D } from "three";
 import config from "../threenative.config.js";
+import { postPhysicsPlugin } from "./postPhysics.js";
 import { Play } from "./scenes/Play.js";
 import type { GameState } from "./state.js";
 
@@ -56,10 +57,22 @@ const game = defineGame<GameState, IPhysicsContext>({
     fire: { keys: ["Space"], mouseButtons: [0] },
     reload: { keys: ["KeyR"] },
     sprint: { keys: ["ShiftLeft", "ShiftRight"] },
-    aim: { keys: ["KeyF", "ControlLeft"], mouseButtons: [2] },
+    // Ctrl used to be a second aim key, which is why crouch "did not work": the bind existed,
+    // it just aimed. Aim keeps KeyF and the right mouse button; Ctrl belongs to crouch, and KeyC
+    // is there for keyboards that hand Ctrl to the window manager.
+    aim: { keys: ["KeyF"], mouseButtons: [2] },
+    crouch: { keys: ["ControlLeft", "ControlRight", "KeyC"] },
     restart: { keys: ["Enter", "NumpadEnter"] },
   },
-  plugins: [rapier(), replay(), scenarioSetupPlaceholders, componentObservationCapability, playtest()],
+  // Order matters: `postPhysicsPlugin` must follow `rapier()` so the world has already stepped.
+  plugins: [
+    rapier(),
+    postPhysicsPlugin,
+    replay(),
+    scenarioSetupPlaceholders,
+    componentObservationCapability,
+    playtest(),
+  ],
   render: config.renderer,
   renderer: { antialias: false },
   scenes: { play: Play },

@@ -346,6 +346,11 @@ export class Rifle {
     this.#kick = Math.max(0, this.#kick - dt * 7);
   }
 
+  /** Let the smoke pool stop drawing its spent cards once their pipelines exist. */
+  settlePools(): void {
+    this.#smoke.settle();
+  }
+
   /** Peak opacity of the muzzle cone. A playtest reads this to prove the flash retires. */
   get flashOpacity(): number {
     return (this.#flash.material as MeshBasicMaterial).opacity;

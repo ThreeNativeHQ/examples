@@ -56,6 +56,8 @@ const scratchScale = new Vector3();
 export class PooledBillboards {
   readonly #slots: ISlot[];
   #cursor = 0;
+  /** Dead slots stop being submitted once their pipeline exists. See `settle`. */
+  #settled = false;
 
   constructor(
     parent: Object3D,
@@ -70,6 +72,21 @@ export class PooledBillboards {
       parent.add(mesh);
       return { drift: new Vector3(), life: 0, life0: 1, mesh, opacity0: 0, scaleFrom: 1, scaleTo: 1 };
     });
+  }
+
+  /**
+   * Stop drawing the cards that are not alive.
+   *
+   * Same trade as the decal field: every slot is resident from frame one so its pipeline compiles
+   * during loading, and the cost is a draw call per dead card, every frame, forever. A phone pays
+   * for the call rather than the pixels, so parking an invisible quad is not free there the way it
+   * is on a desktop. Once compiled the pipeline is cached, so `spawn` re-showing a slot is free.
+   */
+  settle(): void {
+    this.#settled = true;
+    for (const slot of this.#slots) {
+      if (slot.life <= 0) slot.mesh.visible = false;
+    }
   }
 
   /** Birth one card on the next recycled slot. */
@@ -92,6 +109,7 @@ export class PooledBillboards {
     slot.scaleTo = scaleTo;
     slot.mesh.position.copy(at);
     slot.mesh.scale.setScalar(scaleFrom);
+    slot.mesh.visible = true;
     (slot.mesh.material as MeshBasicMaterial).opacity = opacity;
   }
 
@@ -103,6 +121,7 @@ export class PooledBillboards {
       const material = slot.mesh.material as MeshBasicMaterial;
       if (slot.life <= 0) {
         material.opacity = 0;
+        if (this.#settled) slot.mesh.visible = false;
         continue;
       }
       const age = 1 - slot.life / slot.life0;

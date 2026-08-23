@@ -4,6 +4,7 @@ import { useGameState } from "@threenative/ui";
 import { townSchematic } from "../render/town.js";
 import { TARGET_GOAL, type GameState } from "../state.js";
 import { Minimap } from "./Minimap.js";
+import { TouchOverlay } from "./TouchOverlay.js";
 
 const KEYS: readonly (readonly [string, string])[] = [
   ["WASD", "Move"],
@@ -14,7 +15,7 @@ const KEYS: readonly (readonly [string, string])[] = [
 
 function Legend() {
   return (
-    <div className="pointer-events-none flex items-center gap-3 bg-black/45 px-4 py-2 text-[13px] font-semibold tracking-wide">
+    <div className="desktop-only pointer-events-none flex items-center gap-3 bg-black/45 px-4 py-2 text-[13px] font-semibold tracking-wide">
       {KEYS.map(([key, label], index) => (
         <span className="flex items-center gap-2" key={key}>
           {index > 0 ? <i className="mr-1 not-italic text-white/25">|</i> : null}
@@ -266,6 +267,11 @@ export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
           <BulletsGlyph />
         </div>
       </div>
+
+      {/* Thumb controls. A root-level sibling on purpose: every child here is positioned against
+          the full HUD surface, and nesting these inside the legend stack below put the fire button
+          62 px from the right edge of a 62 px chip instead of the right edge of the screen. */}
+      <TouchOverlay />
 
       {/* Bottom left: money chip over the key legend. */}
       <div className="absolute bottom-3 left-3 flex flex-col items-start gap-2.5">

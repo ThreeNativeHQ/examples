@@ -138,6 +138,8 @@ export class DecalField<TVariant extends string> {
   readonly #offset: number;
   #placed = 0;
   #capacity = 0;
+  /** Slots stop being submitted once their pipeline exists. See `settle`. */
+  #settled = false;
 
   constructor(
     parent: Object3D,
@@ -185,6 +187,29 @@ export class DecalField<TVariant extends string> {
     }
   }
 
+  /**
+   * Stop drawing the slots that have not been used yet.
+   *
+   * Every slot is resident and `frustumCulled = false` from frame one so its pipeline is built
+   * during loading rather than on the frame the first round lands. The cost of that trick is that
+   * 224 invisible quads are submitted every frame forever, and on a phone the draw call is the
+   * expensive part, not the triangle: a Pixel 8 was spending more per frame outside game logic
+   * (37.5 ms at p99) than inside it (6.7 ms), with 1,100 draw calls of which roughly a third were
+   * placeholders for marks nobody had made yet.
+   *
+   * Once the pipeline is compiled it stays compiled, so hiding a slot afterwards costs nothing to
+   * undo — `place` simply shows it again. Call this a second or two into the scene, not on the
+   * first frame, or the compile this exists to force will not have happened yet.
+   */
+  settle(): void {
+    this.#settled = true;
+    for (const family of this.#variants.values()) {
+      for (const mesh of family.slots) {
+        if (mesh.scale.x <= 0.001) mesh.visible = false;
+      }
+    }
+  }
+
   /** Marks placed since construction. A playtest reads this to prove a round left something. */
   get placed(): number {
     return this.#placed;
@@ -213,6 +238,7 @@ export class DecalField<TVariant extends string> {
     mesh.quaternion.copy(scratchQuaternion);
     mesh.position.copy(point).addScaledVector(scratchNormal, this.#offset);
     mesh.scale.setScalar(scale);
+    mesh.visible = true;
     // The renderer reads the mark off its world matrix, and this slot was moved after the last
     // scene update; without this the mark renders one frame behind, at its previous hit.
     mesh.updateMatrixWorld(true);
@@ -226,7 +252,10 @@ export class DecalField<TVariant extends string> {
   /** Wipe every mark. Slots stay allocated; only their size goes back to nothing. */
   clear(): void {
     for (const family of this.#variants.values()) {
-      for (const mesh of family.slots) mesh.scale.setScalar(0.0001);
+      for (const mesh of family.slots) {
+        mesh.scale.setScalar(0.0001);
+        if (this.#settled) mesh.visible = false;
+      }
       family.cursor = 0;
     }
   }

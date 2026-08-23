@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz",
+    "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.2.0-prd186p1-6f464198bdd3.tgz",
     "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.2.1.tgz",
     "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.2.1.tgz",
     "react": "19.2.0",
@@ -28,7 +28,7 @@
   "devDependencies": {
     "@gltf-transform/cli": "^4.4.2",
     "@tailwindcss/vite": "4.3.3",
-    "@threenative/playtest": "file:./threenative-playtest-0.2.0.tgz",
+    "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.2.0-protocol-c0530a153cef.tgz",
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
     "@types/three": "0.185.3",

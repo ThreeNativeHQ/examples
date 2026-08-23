@@ -224,6 +224,8 @@ export class ImpactBursts {
   readonly #chips: BurstSlot[] = [];
   readonly #dust: BurstSlot[] = [];
   readonly #flashes: { age: number; baseScale: number; life: number; mesh: Mesh; roll: number }[] = [];
+  /** Dead slots stop being submitted once their pipeline exists. See `settle`. */
+  #settled = false;
   #sparkCursor = 0;
   #chipCursor = 0;
   #dustCursor = 0;
@@ -324,6 +326,7 @@ export class ImpactBursts {
     slot.baseScale = style.flashScale * (0.85 + this.#rng() * 0.4);
     slot.roll = this.#rng() * Math.PI * 2;
     slot.life = 0.075;
+    this.#wake(slot.mesh);
     slot.age = 0;
     (slot.mesh.material as MeshBasicMaterial).color.setHex(style.flashColour);
     (slot.mesh.material as MeshBasicMaterial).opacity = 1;
@@ -340,6 +343,7 @@ export class ImpactBursts {
     slot.mesh.position.copy(at).addScaledVector(normal, 0.012);
     slot.age = 0;
     slot.life = 0.2 + this.#rng() * 0.2;
+    this.#wake(slot.mesh);
     slot.seed = this.#rng() * 10;
     slot.baseScale = 1;
     scratchColour.setHex(style.sparkColour);
@@ -362,6 +366,7 @@ export class ImpactBursts {
     slot.spin = (this.#rng() * 2 - 1) * 18;
     slot.age = 0;
     slot.life = 0.38 + this.#rng() * 0.3;
+    this.#wake(slot.mesh);
     slot.baseScale = slot.mesh.scale.x;
     const material = slot.mesh.material as MeshBasicMaterial;
     material.color.setHex(style.chipColour);
@@ -385,6 +390,7 @@ export class ImpactBursts {
       .addScaledVector(scratchBasisT2, (this.#rng() * 2 - 1) * 0.2);
     slot.age = 0;
     slot.life = 0.55 + this.#rng() * 0.3;
+    this.#wake(slot.mesh);
     slot.baseScale = style.dustSize * (0.7 + this.#rng() * 0.5);
     const material = slot.mesh.material as MeshBasicMaterial;
     material.color.setHex(style.dustColour);
@@ -392,6 +398,26 @@ export class ImpactBursts {
   }
 
   /** Integrate everything live; `eye` keeps flashes, dust and sparks camera-facing. */
+  /**
+   * Stop drawing spent bursts.
+   *
+   * Every slot is resident from frame one so its pipeline compiles during loading. On a phone the
+   * draw call costs more than the quad does, so a dead card is not free the way it is on a
+   * desktop; once the pipeline exists, hiding it is reversible for nothing.
+   */
+  settle(): void {
+    this.#settled = true;
+    for (const pool of [this.#sparks, this.#chips, this.#dust]) {
+      for (const slot of pool) if (slot.life <= 0) slot.mesh.visible = false;
+    }
+    for (const flash of this.#flashes) if (flash.life <= 0) flash.mesh.visible = false;
+  }
+
+  /** Show a slot that is being reused after `settle` hid it. */
+  #wake(mesh: Mesh): void {
+    if (this.#settled) mesh.visible = true;
+  }
+
   update(dt: number, eye: Vector3): void {
     for (const slot of this.#sparks) {
       if (slot.life <= 0) continue;
@@ -399,6 +425,7 @@ export class ImpactBursts {
       const t = slot.age / slot.life;
       if (t >= 1) {
         slot.life = 0;
+        if (this.#settled) slot.mesh.visible = false;
         (slot.mesh.material as MeshBasicMaterial).opacity = 0;
         continue;
       }
@@ -426,6 +453,7 @@ export class ImpactBursts {
       const t = slot.age / slot.life;
       if (t >= 1) {
         slot.life = 0;
+        if (this.#settled) slot.mesh.visible = false;
         (slot.mesh.material as MeshBasicMaterial).opacity = 0;
         continue;
       }
@@ -441,6 +469,7 @@ export class ImpactBursts {
       const t = slot.age / slot.life;
       if (t >= 1) {
         slot.life = 0;
+        if (this.#settled) slot.mesh.visible = false;
         (slot.mesh.material as MeshBasicMaterial).opacity = 0;
         continue;
       }
@@ -460,6 +489,7 @@ export class ImpactBursts {
       const t = slot.age / slot.life;
       if (t >= 1) {
         slot.life = 0;
+        if (this.#settled) slot.mesh.visible = false;
         (slot.mesh.material as MeshBasicMaterial).opacity = 0;
         continue;
       }

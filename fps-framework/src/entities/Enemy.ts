@@ -1,11 +1,17 @@
-import { AnimationPlayer, attachToBone, normaliseToMetres, type ICtx } from "@threenative/core";
+import {
+  AnimationPlayer,
+  attachToBone,
+  type ICtx,
+  measureThreePose,
+  normaliseToMetres,
+} from "@threenative/core";
 import { CharacterBody3D, CollisionShape3D, type IPhysicsContext } from "@threenative/physics";
-import { measureThreePose } from "@threenative/playtest/three";
 import {
   type AnimationClip,
   AnimationMixer,
   Box3,
   BoxGeometry,
+  Euler,
   Group,
   MathUtils,
   Mesh,
@@ -63,13 +69,94 @@ const STILL_BEFORE_IDLE_SECONDS = 0.16;
  * The rate is therefore derived from the measured stride (`#measureClipGroundSpeed`) and the
  * speed the body is actually making. The clamp is the honest limit of a nine-clip rig with no
  * run cycle: above it a sprint would read as a cartoon, below it a crawl would freeze.
+ *
+ * The floor is 0.15 and not 0.35 because the body now accelerates. The measured walk clip
+ * covers 1.307 m/s at rate 1, so 0.35 cannot represent any ground speed under 0.46 m/s — and
+ * every start and every stop passes through that band. Clamped there, the feet run visibly
+ * faster than the ground and `strideErrorPeak` goes to 0.5 against a gate that allows 0.15.
+ * 0.15 represents everything from 0.196 m/s up, which is below `LOCOMOTION_RATE_FLOOR`, so
+ * the clamp is no longer reachable by anything the stride metric scores.
  */
-const LOCOMOTION_RATE_MIN = 0.35;
+const LOCOMOTION_RATE_MIN = 0.15;
 const LOCOMOTION_RATE_MAX = 3;
 /** Ground speed below which the rate is meaningless and the stride metric is not scored. */
 const LOCOMOTION_RATE_FLOOR = 0.3;
 /** Frames used to sample one clip cycle when measuring its stride. */
 const STRIDE_SAMPLES = 96;
+/**
+ * How a body gets up to walking pace and back down again, in metres per second squared.
+ *
+ * Travel used to be `speed * dt` with no ramp at all. Traced over 359 frames of patrol, the
+ * soldier was either standing at exactly 0 or travelling at exactly 2.400 m/s, and the change
+ * between the two happened inside one frame. That single step is most of what reads as a
+ * machine: nothing with legs reaches full pace instantly, and nothing with legs stops dead.
+ * 6.5 m/s² is about 0.37 s to walking pace, which is roughly two steps.
+ */
+const WALK_ACCEL = 6.5;
+const WALK_DECEL = 9;
+/**
+ * Steering and facing, in radians per second and radians per second squared.
+ *
+ * The old turn was `MathUtils.clamp(delta, -dt * 7, dt * 7)`: a bang-bang servo that sat at
+ * exactly zero angular velocity, saturated at the cap for two or three frames at a waypoint,
+ * and stopped dead. The same 359-frame trace held the heading bit-exactly constant on 343
+ * frames and ran at 5–10 rad/s on the other 16. Carrying angular velocity and accelerating it
+ * toward what the error asks for gives a turn that starts, peaks and settles.
+ *
+ * Travel direction is steered as well as facing, so a corner is a curve through the waypoint
+ * rather than a vertex — the A* grid is 0.7 m, and turning hard at every grid point is what
+ * made the route read as faceted. `#segmentClear` already keeps the corridor wide enough for
+ * the body, and cornering sheds speed, so the curve stays inside what the search cleared.
+ *
+ * Steering is deliberately quicker than facing. `enemy-reaches-walkway` is the constraint: the
+ * soldier has about eight seconds to cover twenty-five metres, and the first tuning — steering
+ * at 3.1 rad/s with cornering cutting to a third of pace — cost roughly a metre and a half per
+ * ninety-degree corner and he arrived too late, twice, against a baseline that passed twice.
+ * At 4.6 rad/s a right-angle takes about a third of a second, which is what a walking person
+ * takes, and the visible easing is all still there: peak turn rate stays under half of the old
+ * clamp's, and the turn still spins up and settles instead of switching on and off.
+ */
+const STEER_RATE_MAX = 4.6;
+const STEER_ACCEL = 26;
+const STEER_SETTLE = 0.11;
+const FACE_RATE_MAX = 4.4;
+const FACE_ACCEL = 26;
+const FACE_SETTLE = 0.12;
+/** Heading error, in radians, at which cornering has taken all the speed off it can. */
+const CORNER_FULL = 2.2;
+/** Slowest a corner may be taken, as a fraction of the requested speed. */
+const CORNER_FLOOR = 0.55;
+/** Metres from the end of the route over which he eases off instead of stopping on the mark. */
+const ARRIVE_DISTANCE = 1.6;
+const ARRIVE_FLOOR = 0.3;
+/**
+ * How far a soldier's facing may deviate from where his feet are going, in radians.
+ *
+ * `#engage` aimed the body at the player and then `#step` immediately overwrote that with the
+ * travel heading, so a flanking soldier turned his back and jogged. Facing the player outright
+ * is not the answer either: this rig has no strafe cycle, so a body moving sideways under a
+ * forward walk clip moonwalks. 0.75 rad is as far as the feet can be wrong before that shows.
+ */
+const AIM_LEAD_MAX = 0.75;
+/**
+ * Upper-body carriage, layered on top of the clip after the mixer has written the pose.
+ *
+ * A rifle carry clip holds the torso rigid, so a soldier who turns is a statue rotating about
+ * its own axis. These are the three cues that read as a person: the chest banks into a turn,
+ * the shoulders lag it, and the head leads it. All three are driven by angular velocity and
+ * acceleration, so a soldier standing still gets exactly zero of them and every frozen-sentry
+ * scenario keeps the pose it had.
+ */
+const CARRIAGE_BANK = 0.055;
+const CARRIAGE_BANK_MAX = 0.1;
+const CARRIAGE_LAG = 0.05;
+const CARRIAGE_LAG_MAX = 0.085;
+const CARRIAGE_LEAD = 0.075;
+const CARRIAGE_LEAD_MAX = 0.14;
+const CARRIAGE_PITCH = 0.014;
+const CARRIAGE_PITCH_MAX = 0.055;
+/** Seconds the carriage takes to catch up with a change, so it never pops. */
+const CARRIAGE_SETTLE = 7;
 /**
  * Seconds between precise corpse ground measurements. The precise pass is the per-vertex
  * `Box3` the skin envelope exists to avoid, so a corpse pays it at 20 Hz rather than 60 —
@@ -136,6 +223,9 @@ const GOAL_REPLAN_SECONDS = 0.15;
 let losStagger = 0;
 
 
+/** Blocked-cell bitmaps per collider set, so the squad pays for the nav grid once. */
+const NAV_GRIDS = new WeakMap<object, Map<string, Uint8Array>>();
+
 const squadFrame = { canSee: 0, ground: 0, weapon: 0, animation: 0, brain: 0, opacity: 0 };
 const squadPeak = { canSee: 0, ground: 0, weapon: 0, animation: 0, brain: 0, opacity: 0 };
 type SquadStage = keyof typeof squadFrame;
@@ -175,10 +265,70 @@ const scratchGoal = new Vector3();
 const scratchTo = new Vector3();
 const scratchFacing = new Vector3();
 const scratchFlat = new Vector3();
+// Scratch for the upper-body carriage: five soldiers × six rotations × 60 Hz is real garbage.
+const scratchEuler = new Euler();
+const scratchDelta = new Quaternion();
+const scratchBody = new Quaternion();
+const scratchInverse = new Quaternion();
+const scratchParent = new Quaternion();
+const scratchLocal = new Quaternion();
 
 function worldScaleOf(object: Object3D): number {
   const e = object.matrixWorld.elements;
   return Math.hypot(e[0] as number, e[1] as number, e[2] as number);
+}
+
+/** Shortest signed rotation from one yaw to another, in radians. */
+function angleDelta(from: number, to: number): number {
+  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+}
+
+/**
+ * A yaw that carries its own angular velocity, so a turn eases in as well as out.
+ *
+ * Clamping the per-frame step — what `#turn` did — gives a body that is either not turning at
+ * all or turning at exactly its maximum. There is no third state, and both edges are a step
+ * change in angular velocity. Accelerating the rate toward `delta / settle` instead means the
+ * turn spins up over a few frames, tops out at `maxRate`, and eases onto the target. Never
+ * stepping past the remaining delta keeps it from ringing on a small correction.
+ */
+class EasedYaw {
+  value: number;
+  #rate = 0;
+  readonly #maxRate: number;
+  readonly #accel: number;
+  readonly #settle: number;
+
+  constructor(maxRate: number, accel: number, settle: number, value = 0) {
+    this.#maxRate = maxRate;
+    this.#accel = accel;
+    this.#settle = settle;
+    this.value = value;
+  }
+
+  /** Jump to a yaw with no turn at all: a respawn, or a body placed by a scenario. */
+  set(value: number): void {
+    this.value = value;
+    this.#rate = 0;
+  }
+
+  /** `scale` trims the ceiling for a slower turn — looking around rather than reorienting. */
+  step(target: number, dt: number, scale = 1): number {
+    const delta = angleDelta(this.value, target);
+    const ceiling = this.#maxRate * scale;
+    const wanted = MathUtils.clamp(delta / this.#settle, -ceiling, ceiling);
+    this.#rate += MathUtils.clamp(wanted - this.#rate, -this.#accel * dt, this.#accel * dt);
+    const magnitude = Math.abs(delta);
+    this.value += MathUtils.clamp(this.#rate * dt, -magnitude, magnitude);
+    return this.value;
+  }
+
+  /** Drive the yaw directly — a scanning sweep — while keeping `rate` honest for the carriage. */
+  spin(radiansPerSecond: number, dt: number): number {
+    this.#rate = radiansPerSecond;
+    this.value += radiansPerSecond * dt;
+    return this.value;
+  }
 }
 
 type WeaponPose = {
@@ -415,6 +565,33 @@ export class Enemy {
   /** Where the body stood at the top of this frame, so ground speed is measured, not assumed. */
   #frameStart = new Vector3();
   #groundSpeed = 0;
+  /**
+   * Ground pace he is actually carrying, in metres per second. Ramped toward whatever the
+   * current behaviour asked for rather than adopted outright — see `WALK_ACCEL`.
+   */
+  #pace = 0;
+  /** Change in `#pace` per second, for the forward lean. Smoothed; raw it is frame noise. */
+  #paceRate = 0;
+  /** True when a movement branch ran `#step` this frame; if none did, he coasts to a stop. */
+  #stepped = false;
+  /** Direction he is travelling, and which way the body is pointed. Both eased, both stateful. */
+  #heading = new EasedYaw(STEER_RATE_MAX, STEER_ACCEL, STEER_SETTLE);
+  #facing = new EasedYaw(FACE_RATE_MAX, FACE_ACCEL, FACE_SETTLE);
+  /**
+   * This soldier's own pace, as a multiplier. Five men walking at exactly 2.400 m/s in step
+   * with each other is a tell no amount of animation work can cover. Seeded, so a replay of
+   * the same run puts every soldier in the same place.
+   */
+  #gait = 1;
+  /** Torso, shoulders and head, for the carriage layered over the clip. */
+  #spine: Object3D | undefined;
+  #chest: Object3D | undefined;
+  #neck: Object3D | undefined;
+  /** Smoothed carriage inputs, so a turn does not snap the torso on its first frame. */
+  #carriageTurn = 0;
+  #carriagePush = 0;
+  /** Body yaw last frame, so the carriage measures the turn instead of trusting one turner. */
+  #lastYaw = 0;
   /** Playback rate the locomotion clip is running at, and how well it matches the ground. */
   #locomotionRate = 1;
   #locomotionRatePeak = 0;
@@ -533,12 +710,23 @@ export class Enemy {
       }
     });
     this.#hips = findBone(model, /hips/i);
+    // Mixamo names these Spine / Spine1 / Spine2 / Neck. The carriage banks the lower torso,
+    // lags the upper one and leads with the head; missing any of them just drops that cue.
+    this.#spine = findBone(model, /spine1$|spine1_/i) ?? findBone(model, /spine/i);
+    this.#chest = findBone(model, /spine2/i);
+    this.#neck = findBone(model, /neck/i);
     this.#leftUpLeg = findBone(model, /leftupleg/i);
     this.#leftFoot = findBone(model, /leftfoot/i);
     this.#rightUpLeg = findBone(model, /rightupleg/i);
     this.#rightFoot = findBone(model, /rightfoot/i);
     this.group.add(model);
     if (weapon !== undefined) this.#equip(model, weapon);
+    // Before the first draw, not on the first death. `#respawn` also calls this, but `#respawn`
+    // only ever runs off the death timer, so a soldier that has never died would otherwise reach
+    // his own death still carrying the blend state the asset shipped with — which is both a
+    // mid-fight pipeline compile and, once `#setOpacity` stopped flipping the flag, a fade that
+    // does not render at all because opacity is ignored on an opaque material.
+    this.#fixBlendState();
     this.group.name = "enemy";
     this.group.position.copy(this.#route[0] ?? ROUTE_START);
     const firstWaypoint = this.#route[1];
@@ -554,6 +742,12 @@ export class Enemy {
       this.#target.x - this.group.position.x,
       this.#target.z - this.group.position.z,
     );
+    this.#heading.set(this.group.rotation.y);
+    this.#facing.set(this.group.rotation.y);
+    this.#lastYaw = this.group.rotation.y;
+    // Seeded per soldier: 0.94–1.06 is enough to break the squad out of lockstep and still
+    // leaves the walk clip re-timed between 1.73 and 1.95, well clear of both rate clamps.
+    this.#gait = ctx.random.range(0.94, 1.06);
 
     // Skinned meshes are the slow path for picking, so the rifle traces a plain
     // box proxy that follows the body. Invisible, but still raycastable.
@@ -990,6 +1184,25 @@ export class Enemy {
   }
 
 
+  /**
+   * Fade a soldier in or out without changing his pipeline.
+   *
+   * `transparent` and `depthWrite` are blend and depth state, not shader uniforms, so flipping
+   * either one makes WebGPU compile a *new* render pipeline for every material it touches — and a
+   * soldier is a skinned mesh with several. This used to set `transparent = alpha < 0.999` and
+   * `depthWrite = alpha > 0.5`, which meant the first death in a round compiled a fresh pipeline
+   * per material on the frame the corpse started fading. Measured as a single ~180 ms frame,
+   * mid-round, entirely outside game logic: `outsideGame` peaked at 177-186 ms with a firefight in
+   * the scenario and 28.6 ms without one, on identical movement.
+   *
+   * So the state is fixed at construction and never moves. Only `opacity` changes, which is a
+   * uniform the existing pipeline already reads. `needsUpdate` is deliberately not set: it forces
+   * the material to be re-evaluated, and there is nothing left to re-evaluate.
+   *
+   * Keeping `depthWrite` on for a fading corpse is the deliberate half of this. It costs a little
+   * correctness on a half-faded body seen through another one, and it buys never compiling
+   * mid-fight — and a corpse fading on the ground is not what anyone is looking at.
+   */
   #setOpacity(alpha: number): void {
     const objects = [...this.#bodyMeshes, ...(this.#weaponModel === undefined ? [] : [this.#weaponModel])];
     for (const object of objects) {
@@ -998,14 +1211,33 @@ export class Enemy {
         if (mesh.isMesh !== true) return;
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         for (const material of materials) {
-          material.transparent = alpha < 0.999;
           material.opacity = alpha;
-          material.depthWrite = alpha > 0.5;
-          material.needsUpdate = true;
         }
       });
     }
     this.#fade = alpha;
+  }
+
+  /**
+   * Put every material into its final blend state once, before the soldier is ever drawn.
+   *
+   * Called at construction so the transparent pipeline is compiled during loading, where a long
+   * frame is part of the loading screen, rather than on the frame someone dies.
+   */
+  #fixBlendState(): void {
+    const objects = [...this.#bodyMeshes, ...(this.#weaponModel === undefined ? [] : [this.#weaponModel])];
+    for (const object of objects) {
+      object.traverse((child) => {
+        const mesh = child as Mesh;
+        if (mesh.isMesh !== true) return;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const material of materials) {
+          material.transparent = true;
+          material.depthWrite = true;
+          material.needsUpdate = true;
+        }
+      });
+    }
   }
 
   /** Muzzle point in world space: the weapon tip when equipped, the chest otherwise. */
@@ -1286,6 +1518,40 @@ export class Enemy {
     return false;
   }
 
+  /**
+   * The navigation grid's blocked cells, built once and shared by the whole squad.
+   *
+   * `#occupied` is a linear scan of every town collider, and A* asked it for up to three cells per
+   * neighbour across a 46x46 grid — per search, per soldier. It was the single hottest function in
+   * the game (197 ms of self time in a 3.7-minute trace) and it was recomputing one static answer
+   * over and over: the town's colliders never move, so a cell that is blocked on the first frame is
+   * blocked on the last. The bitmap is keyed on the collider array itself, so the five soldiers
+   * that share `town.colliders` share one grid, and a scene that rebuilds its town gets a new one.
+   *
+   * Only cell-centre queries use this. `#segmentClear` interpolates arbitrary points between cells
+   * and still runs the exact test, so no route changes shape.
+   */
+  #navGrid(width: number): Uint8Array {
+    let byBounds = NAV_GRIDS.get(this.#colliders);
+    if (byBounds === undefined) {
+      byBounds = new Map();
+      NAV_GRIDS.set(this.#colliders, byBounds);
+    }
+    const boundsKey = `${this.#navMin}|${this.#navMax}|${width}`;
+    const cached = byBounds.get(boundsKey);
+    if (cached !== undefined) return cached;
+    const grid = new Uint8Array(width * width);
+    for (let z = 0; z < width; z += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const worldX = this.#navMin + x * NAV_CELL;
+        const worldZ = this.#navMin + z * NAV_CELL;
+        grid[z * width + x] = this.#occupied(worldX, worldZ, AGENT_RADIUS + 0.16) ? 1 : 0;
+      }
+    }
+    byBounds.set(boundsKey, grid);
+    return grid;
+  }
+
   #blocked(x: number, z: number): boolean {
     return this.#occupied(x, z, AGENT_RADIUS);
   }
@@ -1317,6 +1583,9 @@ export class Enemy {
       MathUtils.clamp(Math.round((value - navMin) / NAV_CELL), 0, width - 1);
     const toWorld = (cell: number): number => navMin + cell * NAV_CELL;
     const key = (x: number, z: number): number => z * width + x;
+    const grid = this.#navGrid(width);
+    /** Cell-centre blocked test: one array read instead of a scan of every collider. */
+    const cellBlocked = (x: number, z: number): boolean => grid[z * width + x] === 1;
     const sx = toCell(this.group.position.x);
     const sz = toCell(this.group.position.z);
     let gx = toCell(goalX);
@@ -1324,7 +1593,7 @@ export class Enemy {
     const requestedGoalBlocked = this.#navBlocked(goalX, goalZ);
 
     // A requested point may sit within the body's clearance margin. Pick the nearest usable cell.
-    if (this.#navBlocked(toWorld(gx), toWorld(gz))) {
+    if (cellBlocked(gx, gz)) {
       let replacement: [number, number] | undefined;
       for (let radius = 1; radius < width && replacement === undefined; radius += 1) {
         for (let dz = -radius; dz <= radius && replacement === undefined; dz += 1) {
@@ -1337,7 +1606,7 @@ export class Enemy {
               z >= 0 &&
               x < width &&
               z < width &&
-              !this.#navBlocked(toWorld(x), toWorld(z))
+              !cellBlocked(x, z)
             ) {
               replacement = [x, z];
               break;
@@ -1378,13 +1647,12 @@ export class Enemy {
         const nx = cx + dx;
         const nz = cz + dz;
         if (nx < 0 || nz < 0 || nx >= width || nz >= width) continue;
-        if (this.#navBlocked(toWorld(nx), toWorld(nz))) continue;
+        if (cellBlocked(nx, nz)) continue;
         // Do not squeeze diagonally between two touching solids.
         if (
           dx !== 0 &&
           dz !== 0 &&
-          (this.#navBlocked(toWorld(cx + dx), toWorld(cz)) ||
-            this.#navBlocked(toWorld(cx), toWorld(cz + dz)))
+          (cellBlocked(cx + dx, cz) || cellBlocked(cx, cz + dz))
         ) continue;
         const next = key(nx, nz);
         const tentative = (gScore.get(current) ?? Number.POSITIVE_INFINITY) + cost;
@@ -1432,9 +1700,24 @@ export class Enemy {
     this.#replanIn = NAV_REPLAN_SECONDS;
   }
 
+  /** Shed pace at the walking deceleration. Used by every branch that is not travelling. */
+  #brake(dt: number): void {
+    this.#pace = Math.max(0, this.#pace - WALK_DECEL * dt);
+  }
+
   /** Follow a cached route, replanning when a moving goal changes or the corridor becomes blocked. */
-  /** Returns true when the body actually travelled, so the walk clip cannot play on the spot. */
-  #step(dt: number, toX: number, toZ: number, speed: number): boolean {
+  /**
+   * Returns true while he is walking the route — including the first few frames of the ramp,
+   * where the body has barely moved. The old test was `travel > speed * dt * 0.05`, which is
+   * false for the whole acceleration, so the walk clip would not start until he was already
+   * gliding. What the caller wants to know is whether he is under way, not whether this
+   * particular frame cleared a distance threshold.
+   *
+   * `faceTravel` is off for combat, where `#engage` owns the facing so the rifle can stay on
+   * the player while the feet go somewhere else.
+   */
+  #step(dt: number, toX: number, toZ: number, speed: number, faceTravel = true): boolean {
+    this.#stepped = true;
     this.#replanIn -= dt;
     this.#goalReplanIn -= dt;
     const goalMoved = Math.hypot(toX - this.#pathGoal.x, toZ - this.#pathGoal.z) > 0.8;
@@ -1469,33 +1752,51 @@ export class Enemy {
       this.#pathIndex += 1;
       waypoint = this.#path[this.#pathIndex];
     }
-    if (waypoint === undefined) return false;
+    if (waypoint === undefined) {
+      this.#brake(dt);
+      return false;
+    }
     const dx = waypoint.x - this.group.position.x;
     const dz = waypoint.z - this.group.position.z;
     const distance = Math.hypot(dx, dz);
-    if (distance < 1e-3) return false;
+    if (distance < 1e-3) {
+      this.#brake(dt);
+      return false;
+    }
 
-    const heading = Math.atan2(dx, dz);
-    const travel = Math.min(distance, speed * dt);
-    const stepX = Math.sin(heading) * travel;
-    const stepZ = Math.cos(heading) * travel;
-    const nextX = this.group.position.x + stepX;
-    const nextZ = this.group.position.z + stepZ;
+    // Steer the direction of travel rather than snapping it to the bearing of the next grid
+    // point. This is what turns the 0.7 m A* polyline into a path a body could have walked.
+    const bearing = Math.atan2(dx, dz);
+    const heading = this.#heading.step(bearing, dt);
+    const error = Math.abs(angleDelta(heading, bearing));
+    // Nobody walks a corner at full pace. This also keeps the arc tight: the harder he has to
+    // turn, the less ground he covers while turning, so the curve stays in the cleared corridor.
+    const cornering = MathUtils.clamp(1 - error / CORNER_FULL, CORNER_FLOOR, 1);
+    // Ease off onto the last waypoint instead of stopping on the mark.
+    const arriving =
+      this.#pathIndex >= this.#path.length - 1
+        ? MathUtils.clamp(distance / ARRIVE_DISTANCE, ARRIVE_FLOOR, 1)
+        : 1;
+    const wanted = speed * this.#gait * cornering * arriving;
+    const gained = MathUtils.clamp(wanted - this.#pace, -WALK_DECEL * dt, WALK_ACCEL * dt);
+    this.#pace += gained;
+    this.#paceRate = dt > 0 ? gained / dt : 0;
+
+    const travel = Math.min(distance, this.#pace * dt);
+    const nextX = this.group.position.x + Math.sin(heading) * travel;
+    const nextZ = this.group.position.z + Math.cos(heading) * travel;
     if (this.#blocked(nextX, nextZ)) {
       this.#path = [];
       this.#replanIn = 0;
+      // He walked into something. A body that hits a wall does not keep its momentum.
+      this.#pace *= 0.3;
       return false;
     }
     this.group.position.set(nextX, this.group.position.y, nextZ);
-    this.group.rotation.y = this.#turn(this.group.rotation.y, heading, dt * 7);
-    return travel > speed * dt * 0.05;
+    if (faceTravel) this.group.rotation.y = this.#facing.step(heading, dt);
+    return true;
   }
 
-  #turn(from: number, to: number, rate: number): number {
-    let delta = ((to - from + Math.PI) % (Math.PI * 2)) - Math.PI;
-    if (delta < -Math.PI) delta += Math.PI * 2;
-    return from + MathUtils.clamp(delta, -rate, rate);
-  }
 
   /**
    * Can he see the player right now?
@@ -1602,6 +1903,9 @@ export class Enemy {
     this.#bodyClearance = null;
     this.#footClearance = null;
     this.#groundInitialised = false;
+    // Blend state first, and only here: it is what costs a pipeline, so it is set once per
+    // soldier and never again. The fade below is a uniform on the pipeline this just built.
+    this.#fixBlendState();
     this.#setOpacity(0);
     this.#reaction = 0;
     this.#burstLeft = 0;
@@ -1625,7 +1929,73 @@ export class Enemy {
       Math.atan2(this.#target.x - this.group.position.x, this.#target.z - this.group.position.z),
       0,
     );
+    // A fresh body starts still and pointed down its route, with no turn or pace carried over
+    // from the one that died — otherwise he respawns already leaning out of a corner.
+    this.#heading.set(this.group.rotation.y);
+    this.#facing.set(this.group.rotation.y);
+    this.#lastYaw = this.group.rotation.y;
+    this.#pace = 0;
+    this.#paceRate = 0;
+    this.#carriageTurn = 0;
+    this.#carriagePush = 0;
     this.#play("RifleWalk", LOCOMOTION_FADE);
+  }
+
+  /**
+   * Layer a walking carriage over whatever the clip just posed.
+   *
+   * The rig's rifle clips hold the torso locked to the hips, so a soldier changing direction is
+   * a mannequin rotating about its own axis — which is most of what is left of "robot" once the
+   * path and the pace are smooth. Three cues, all driven by how hard he is turning and how hard
+   * he is accelerating, so a man standing still gets a delta of exactly zero and every
+   * frozen-sentry scenario keeps the pose it measured:
+   *
+   *   - the lower torso banks into the turn,
+   *   - the shoulders lag behind it,
+   *   - the head leads it, because people look where they are going before they get there.
+   *
+   * The delta is built in the body's own frame and rotated into each bone's parent space, so it
+   * stays a lean and a twist however the rig's bind axes happen to be oriented. It is applied
+   * after `AnimationPlayer.update`, which rewrites every bone from the clip, so it can never
+   * accumulate.
+   */
+  #applyCarriage(dt: number): void {
+    // How fast the body actually turned this frame, read off the transform rather than off any
+    // one branch's turner: patrol, suspicion, search and combat all steer the yaw differently,
+    // and a soldier standing in a patrol pause has to read as zero without extra bookkeeping.
+    const yaw = this.group.rotation.y;
+    const measured = dt > 0 ? angleDelta(this.#lastYaw, yaw) / dt : 0;
+    this.#lastYaw = yaw;
+    const spine = this.#spine;
+    if (spine === undefined) return;
+    // Smoothed, not raw: angular velocity changes fast enough near a waypoint to pop the torso.
+    const blend = 1 - Math.exp(-dt * CARRIAGE_SETTLE);
+    this.#carriageTurn += (measured - this.#carriageTurn) * blend;
+    this.#carriagePush += (this.#paceRate - this.#carriagePush) * blend;
+    const turn = this.#carriageTurn;
+    const push = this.#carriagePush;
+    if (Math.abs(turn) < 1e-3 && Math.abs(push) < 1e-3) return;
+
+    const bank = MathUtils.clamp(turn * CARRIAGE_BANK, -CARRIAGE_BANK_MAX, CARRIAGE_BANK_MAX);
+    const lag = MathUtils.clamp(-turn * CARRIAGE_LAG, -CARRIAGE_LAG_MAX, CARRIAGE_LAG_MAX);
+    const lead = MathUtils.clamp(turn * CARRIAGE_LEAD, -CARRIAGE_LEAD_MAX, CARRIAGE_LEAD_MAX);
+    const pitch = MathUtils.clamp(push * CARRIAGE_PITCH, -CARRIAGE_PITCH_MAX, CARRIAGE_PITCH_MAX);
+
+    const body = this.group.getWorldQuaternion(scratchBody);
+    const inverse = scratchInverse.copy(body).invert();
+    const apply = (bone: Object3D | undefined, x: number, y: number, z: number): void => {
+      if (bone === undefined || bone.parent === null) return;
+      scratchEuler.set(x, y, z, "YXZ");
+      // Body frame → world, then world → this bone's parent frame.
+      const world = scratchDelta.setFromEuler(scratchEuler).premultiply(body).multiply(inverse);
+      const parent = bone.parent.getWorldQuaternion(scratchParent);
+      scratchLocal.copy(parent).invert().multiply(world).multiply(parent);
+      bone.quaternion.premultiply(scratchLocal);
+    };
+    // Leaning forward under acceleration belongs to the lower torso, banking with it.
+    apply(spine, -pitch, 0, bank);
+    apply(this.#chest, 0, lag, bank * 0.5);
+    apply(this.#neck, 0, lead, 0);
   }
 
   update(ctx: GameCtx, dt: number, playerEye: Vector3, deckY: number, hooks: EnemyHooks): void {
@@ -1674,6 +2044,7 @@ export class Enemy {
     }
 
     const brainStarted = nowMs();
+    this.#stepped = false;
     switch (this.phase) {
       case "patrol": {
         if (this.#spawnGrace > 0) {
@@ -1704,7 +2075,8 @@ export class Enemy {
           this.#lastSeen.x - this.group.position.x,
           this.#lastSeen.z - this.group.position.z,
         );
-        this.group.rotation.y = this.#turn(this.group.rotation.y, wanted, dt * 4);
+        // Slower than a combat turn: he is placing a sound, not swinging onto a target.
+        this.group.rotation.y = this.#facing.step(wanted, dt, 0.55);
         // Something is wrong and he does not know what: stay low while he works it out.
         this.#playLocomotion(false, true, dt);
         if (this.#alertTimer > 0.8) this.phase = "search";
@@ -1726,7 +2098,9 @@ export class Enemy {
         } else {
           // Search the last known area before giving up; do not instantly snap back to patrol.
           this.#searchAtGoal += dt;
-          this.group.rotation.y += dt * (this.#strafe > 0 ? 1.2 : -1.2);
+          // Through the eased yaw rather than straight onto the transform, so the sweep is
+          // reported as angular velocity and the shoulders and head read it like any other turn.
+          this.group.rotation.y = this.#facing.spin(this.#strafe > 0 ? 1.2 : -1.2, dt);
           this.#playLocomotion(false, true, dt);
         }
         if (this.#searchAtGoal > 2.4 || this.#alertTimer > 9.5) {
@@ -1745,11 +2119,21 @@ export class Enemy {
       }
     }
     squadFrame.brain += nowMs() - brainStarted;
+    // A branch that never called `#step` — a patrol pause, a burst, standing and listening —
+    // is a soldier coming to a halt, not one who was never moving. Coast the pace down.
+    if (!this.#stepped) {
+      const before = this.#pace;
+      this.#brake(dt);
+      this.#paceRate = dt > 0 ? (this.#pace - before) / dt : 0;
+    }
     this.#standUp = Math.max(0, this.#standUp - dt);
     this.#suppressed = Math.max(0, this.#suppressed - dt);
     this.#locomotionHold = Math.max(0, this.#locomotionHold - dt);
     chargeStage("animation", () => {
       this.#animation?.update(dt);
+      // Straight after the mixer writes the pose and before anything reads the bones: the
+      // carriage is a delta on top of the clip, and the clip is rewritten every frame.
+      this.#applyCarriage(dt);
       this.#countClipFrame();
       this.#updateFootsteps(hooks);
     });
@@ -1911,8 +2295,7 @@ export class Enemy {
   #engage(ctx: GameCtx, dt: number, playerEye: Vector3, hooks: EnemyHooks, sees: boolean): void {
     const chest = this.chest;
     const knownTarget = sees ? playerEye : this.#lastSeen;
-    const wanted = Math.atan2(knownTarget.x - chest.x, knownTarget.z - chest.z);
-    this.group.rotation.y = this.#turn(this.group.rotation.y, wanted, dt * 6);
+    const aim = Math.atan2(knownTarget.x - chest.x, knownTarget.z - chest.z);
     const flatDistance = Math.hypot(playerEye.x - chest.x, playerEye.z - chest.z);
 
     this.#strafeTimer -= dt;
@@ -1932,7 +2315,7 @@ export class Enemy {
 
     if (this.#reaction > 0) {
       // Detection means pursuit immediately; tactical spacing begins only after reacting.
-      moved = this.#step(dt, knownTarget.x, knownTarget.z, CHASE_SPEED * settle);
+      moved = this.#step(dt, knownTarget.x, knownTarget.z, CHASE_SPEED * settle, false);
     } else {
       // Every later combat route is still derived from the player: close distance when far,
       // back off when rushed, and flank rather than running straight into the muzzle.
@@ -1953,8 +2336,20 @@ export class Enemy {
         combatGoal.x,
         combatGoal.z,
         (flatDistance > ENGAGE_RANGE ? CHASE_SPEED : WALK_SPEED) * settle,
+        false,
       );
     }
+    // Facing is the engage branch's, not `#step`'s. Standing, he squares up on the player;
+    // moving, he keeps the rifle as far round as the feet can carry without moonwalking, which
+    // is a flanker who never takes his weapon off you rather than one who turns his back.
+    const carry = moved
+      ? this.#heading.value + MathUtils.clamp(
+          angleDelta(this.#heading.value, aim),
+          -AIM_LEAD_MAX,
+          AIM_LEAD_MAX,
+        )
+      : aim;
+    this.group.rotation.y = this.#facing.step(carry, dt, 1.25);
     // The firing clip owns the pose for as long as the burst lasts; locomotion resumes after.
     if (!firing) this.#playLocomotion(moved, crouched, dt);
 

@@ -45,6 +45,8 @@ export class FrameStats {
   /** Section name → its own sample ring, so a section can be read at p99 and not just its worst. */
   readonly #sectionSamples = new Map<string, SectionRing>();
   #sectionStart = 0;
+  /** The wall-clock cost of the frame now being measured, for the `outsideGame` split. */
+  #lastDelta = 0;
   /** Start of the whole callback, kept apart from `#sectionStart` so the two can overlap. */
   #frameStart = 0;
   /** Frames since `resetWindow`, and spikes among them: play measured apart from startup. */
@@ -55,6 +57,7 @@ export class FrameStats {
   begin(now: number): number {
     const delta = this.#last === 0 ? 0 : now - this.#last;
     this.#last = now;
+    this.#lastDelta = delta;
     if (delta > 0) {
       this.#samples[this.#cursor % WINDOW] = delta;
       this.#cursor += 1;
@@ -81,6 +84,26 @@ export class FrameStats {
 
   measure(name: string, now: number): void {
     const spent = now - (name === "gameFrame" ? this.#frameStart : this.#sectionStart);
+    // Everything the frame cost that the game did not spend: the renderer's own work, pipeline
+    // compilation, texture upload, GC, and whatever else the browser did between callbacks.
+    //
+    // Without this the profile is blind exactly where it matters. `gameFrame` peaked at 17.8 ms
+    // on a run whose worst wall-clock frame was 184.5 ms, so 167 ms of the worst hitch in the game
+    // was happening somewhere nothing measured — and three separate optimisations aimed at game
+    // logic moved it by nothing at all, because none of them were pointed at the cost.
+    if (name === "gameFrame" && this.#lastDelta > 0) {
+      this.#record("outsideGame", Math.max(0, this.#lastDelta - spent));
+    }
+    this.#record(name, spent);
+  }
+
+  /** Bill a section a duration measured elsewhere, for work outside the mark/measure bracket. */
+  chargeSection(name: string, spent: number): void {
+    this.#record(name, Math.max(0, spent));
+  }
+
+  /** File one section sample against its peak and its percentile ring. */
+  #record(name: string, spent: number): void {
     const peak = this.#sectionPeaks.get(name) ?? 0;
     if (spent > peak) this.#sectionPeaks.set(name, spent);
     let entry = this.#sectionSamples.get(name);
