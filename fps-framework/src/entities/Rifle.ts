@@ -1,4 +1,5 @@
 import { AnimationPlayer, normaliseToMetres, softCircleDataTexture, type ICtx } from "@threenative/core";
+import { PooledBillboards } from "../render/pooled-billboards.js";
 import type { IPhysicsContext } from "@threenative/physics";
 import {
   AdditiveBlending,
@@ -53,8 +54,7 @@ export class Rifle {
   #flashLife = 0;
   #light: PointLight;
   #smokeMaterial: MeshBasicMaterial;
-  #smoke: { life: number; drift: Vector3; mesh: Mesh }[];
-  #smokeCursor = 0;
+  #smoke: PooledBillboards;
   #muzzlePoint = new Vector3();
   #kick = 0;
   #blend = 0;
@@ -137,7 +137,8 @@ export class Rifle {
     this.#light.position.copy(this.#barrelTipLocal);
     this.group.add(this.#light);
     // Smoke lives in world space, not on the camera, so it stays where it was made when you
-    // turn — smoke welded to the viewmodel slides with the view and reads as a bug.
+    // turn — smoke welded to the viewmodel slides with the view and reads as a bug. The
+    // shared billboard pool keeps every puff present at zero opacity from the first frame.
     this.#smokeMaterial = new MeshBasicMaterial({
       color: 0xc3c8d0,
       depthWrite: false,
@@ -145,16 +146,11 @@ export class Rifle {
       opacity: 0.42,
       transparent: true,
     });
-    this.#smoke = Array.from({ length: 8 }, () => {
-      const puff = new Mesh(new PlaneGeometry(0.22, 0.22), this.#smokeMaterial.clone());
-      // Present from the first frame at zero opacity, like the tracer pool. Revealing a
-      // hidden mesh on the first shot makes the renderer build its pipeline mid-frame,
-      // which is the hitch you feel exactly once per session and never again.
-      (puff.material as MeshBasicMaterial).opacity = 0;
-      puff.visible = true;
-      puff.renderOrder = 29;
-      scene.add(puff);
-      return { life: 0, drift: new Vector3(), mesh: puff };
+    this.#smoke = new PooledBillboards(scene, {
+      count: 8,
+      geometry: new PlaneGeometry(0.22, 0.22),
+      materialPrototype: this.#smokeMaterial,
+      renderOrder: 29,
     });
     camera.add(this.group);
     this.#apply(0, 0);
@@ -273,29 +269,25 @@ export class Rifle {
   #spawnSmoke(): void {
     this.#muzzlePoint.copy(this.barrelRay().origin);
     for (let index = 0; index < 2; index += 1) {
-      const slot = this.#smoke[this.#smokeCursor % this.#smoke.length];
-      this.#smokeCursor += 1;
-      if (slot === undefined) continue;
-      slot.mesh.position.copy(this.#muzzlePoint);
       const spin = this.shots * 2.399 + index;
-      slot.drift.set(Math.sin(spin) * 0.24, 0.5 + ((index * 7) % 3) * 0.1, Math.cos(spin) * 0.24);
-      slot.mesh.scale.setScalar(0.2);
-      (slot.mesh.material as MeshBasicMaterial).opacity = 0.42;
-      slot.life = 0.6;
+      this.#smoke.spawn({
+        at: this.#muzzlePoint,
+        drift: new Vector3(
+          Math.sin(spin) * 0.24,
+          0.5 + ((index * 7) % 3) * 0.1,
+          Math.cos(spin) * 0.24,
+        ),
+        life: 0.6,
+        opacity: 0.42,
+        scaleFrom: 0.2,
+        scaleTo: 0.2 + 0.6 * 1.1,
+      });
     }
   }
 
   /** Drift, grow and fade the muzzle smoke. `eye` keeps the billboards facing the camera. */
   updateSmoke(dt: number, eye: Vector3): void {
-    for (const puff of this.#smoke) {
-      if (puff.life <= 0) continue;
-      puff.life -= dt;
-      puff.mesh.position.addScaledVector(puff.drift, dt);
-      puff.mesh.scale.setScalar(0.2 + (0.6 - puff.life) * 1.1);
-      (puff.mesh.material as MeshBasicMaterial).opacity = Math.max(0, puff.life * 0.6);
-      puff.mesh.lookAt(eye);
-      if (puff.life <= 0) (puff.mesh.material as MeshBasicMaterial).opacity = 0;
-    }
+    this.#smoke.update(dt, eye);
   }
 
   reload(ctx: GameCtx): void {

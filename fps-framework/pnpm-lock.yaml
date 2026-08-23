@@ -12,14 +12,14 @@ importers:
   .:
     dependencies:
       '@threenative/core':
-        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.2.0-lifts-c12eb191.tgz
-        version: file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz(@types/react@19.2.0)(react@19.2.0)
+        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz
+        version: file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz(@types/react@19.2.0)(react@19.2.0)
       '@threenative/physics':
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.2.1.tgz
-        version: file:../.packages/threenative-physics-0.2.1.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz(@types/react@19.2.0)(react@19.2.0))
+        version: file:../.packages/threenative-physics-0.2.1.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz(@types/react@19.2.0)(react@19.2.0))
       '@threenative/ui':
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.2.1.tgz
-        version: file:../.packages/threenative-ui-0.2.1.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+        version: file:../.packages/threenative-ui-0.2.1.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       react:
         specifier: 19.2.0
         version: 19.2.0
@@ -795,8 +795,8 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@threenative/core@file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz':
-    resolution: {integrity: sha512-aL0WLqIK2wTIqTrUAomHghrz5WnaXeMLyN1h6la2HMh0LzssnH3IpDS3yC+2Zt7FSAhvO7Ug78UrUMlLFxB3xQ==, tarball: file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz}
+  '@threenative/core@file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz':
+    resolution: {integrity: sha512-RiQiw/qeE6VTDwh1+mOSL/4PiU9xI4InfpTxBfpdVKoGg8MMlea9KhNsy0uTpbVOPW1sGEiA20d2akNkST1Rfg==, tarball: file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz}
     version: 0.2.0
 
   '@threenative/physics@file:../.packages/threenative-physics-0.2.1.tgz':
@@ -2689,7 +2689,7 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.2.0(@types/node@26.2.0)(esbuild@0.27.0)(jiti@2.7.0)
 
-  '@threenative/core@file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz(@types/react@19.2.0)(react@19.2.0)':
+  '@threenative/core@file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz(@types/react@19.2.0)(react@19.2.0)':
     dependencies:
       three: 0.185.1
       three-mesh-bvh: 0.9.14(three@0.185.1)
@@ -2700,10 +2700,10 @@ snapshots:
       - react
       - use-sync-external-store
 
-  '@threenative/physics@file:../.packages/threenative-physics-0.2.1.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz(@types/react@19.2.0)(react@19.2.0))':
+  '@threenative/physics@file:../.packages/threenative-physics-0.2.1.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz(@types/react@19.2.0)(react@19.2.0))':
     dependencies:
       '@dimforge/rapier3d-compat': 0.19.3
-      '@threenative/core': file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz(@types/react@19.2.0)(react@19.2.0)
+      '@threenative/core': file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz(@types/react@19.2.0)(react@19.2.0)
       recast-navigation: 0.43.1
 
   '@threenative/playtest@file:threenative-playtest-0.2.0.tgz(playwright@1.62.1)(three@0.185.1)':
@@ -2718,9 +2718,9 @@ snapshots:
       pngjs: 7.0.0
     optional: true
 
-  '@threenative/ui@file:../.packages/threenative-ui-0.2.1.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+  '@threenative/ui@file:../.packages/threenative-ui-0.2.1.tgz(@threenative/core@file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
-      '@threenative/core': file:../.packages/threenative-core-0.2.0-lifts-c12eb191.tgz(@types/react@19.2.0)(react@19.2.0)
+      '@threenative/core': file:../.packages/threenative-core-0.2.0-voicepool-7eb9c45f.tgz(@types/react@19.2.0)(react@19.2.0)
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
 
