@@ -98,6 +98,84 @@ const ROUTE_START = ROUTE[0] ?? new Vector3();
  * the first basis column is the same number for the uniform scales this rig uses, and this runs
  * per soldier per frame.
  */
+/**
+ * Where a soldier's frame goes, accumulated across the squad.
+ *
+ * A section timer inside the per-soldier update, because "enemies cost 13 ms" is not something
+ * anyone can act on. Peaks are per frame and reset by `beginSquadFrame`, so what comes out is
+ * the worst single frame each stage has ever cost across all five soldiers together.
+ */
+/**
+ * Seconds between line-of-sight raycasts for one soldier.
+ *
+ * The cheap half of `#canSee` — range and view cone — still runs every frame, so a soldier turning
+ * away or stepping out of range loses sight instantly. Only the raycast is rationed, because it is
+ * a `raycastAll` against every solid in the town and five soldiers doing that at 60 Hz measured at
+ * 15.9 ms of a 16.3 ms frame: the entire mid-round hitch, in one call.
+ *
+ * A tenth of a second of staleness on "can he see me" is invisible next to `REACTION_SECONDS`,
+ * which already holds fire for far longer than this after a soldier first spots the player.
+ */
+const LOS_INTERVAL_SECONDS = 0;
+/**
+ * Shortest gap between two grid searches for one soldier when only the goal has drifted.
+ *
+ * `NAV_REPLAN_SECONDS` (0.4) is the gap for a route that has become obstructed. Reusing it for
+ * goal drift is too coarse to navigate with: `enemy-reaches-walkway` caught a soldier failing to
+ * work his way under the deck because he could not re-plan often enough to follow the target
+ * around it. A tenth of a second still turns a per-frame search into one every six frames, which
+ * is where nearly all of the saving was.
+ *
+ * Settled at 0.15 s, about nine frames. The scenario's flakiness turned out to be a stale sight
+ * answer rather than a stale route — see `#canSee` — so this can be rationed properly: a route
+ * re-aimed six times a second still tracks a running player, and the search stops being a
+ * per-frame cost.
+ */
+const GOAL_REPLAN_SECONDS = 0.15;
+/** Spreads the squad's raycasts across frames, so five soldiers never all test on the same one. */
+let losStagger = 0;
+
+
+const squadFrame = { canSee: 0, ground: 0, weapon: 0, animation: 0, brain: 0, opacity: 0 };
+const squadPeak = { canSee: 0, ground: 0, weapon: 0, animation: 0, brain: 0, opacity: 0 };
+type SquadStage = keyof typeof squadFrame;
+const nowMs = (): number => globalThis.performance?.now() ?? 0;
+
+/** Forget the peaks so far. Startup builds raycast trees and compiles pipelines exactly once. */
+export function resetSquadProfile(): void {
+  for (const key of Object.keys(squadPeak) as SquadStage[]) squadPeak[key] = 0;
+}
+
+/** Call once per frame before the squad updates: the per-frame accumulators start again. */
+export function beginSquadFrame(): void {
+  for (const key of Object.keys(squadFrame) as SquadStage[]) {
+    if (squadFrame[key] > squadPeak[key]) squadPeak[key] = squadFrame[key];
+    squadFrame[key] = 0;
+  }
+}
+
+/** Worst single frame each stage has cost across the whole squad, in milliseconds. */
+export function squadProfile(): Record<SquadStage, number> {
+  const out = {} as Record<SquadStage, number>;
+  for (const key of Object.keys(squadPeak) as SquadStage[]) {
+    out[key] = Math.round(squadPeak[key] * 100) / 100;
+  }
+  return out;
+}
+
+function chargeStage<T>(stage: SquadStage, run: () => T): T {
+  const started = nowMs();
+  const value = run();
+  squadFrame[stage] += nowMs() - started;
+  return value;
+}
+
+// Scratch for the per-frame sight test; five soldiers × three vectors × 60 Hz is real garbage.
+const scratchGoal = new Vector3();
+const scratchTo = new Vector3();
+const scratchFacing = new Vector3();
+const scratchFlat = new Vector3();
+
 function worldScaleOf(object: Object3D): number {
   const e = object.matrixWorld.elements;
   return Math.hypot(e[0] as number, e[1] as number, e[2] as number);
@@ -407,6 +485,8 @@ export class Enemy {
   #pathIndex = 0;
   #pathGoal = new Vector3();
   #replanIn = 0;
+  /** Countdown for goal-drift replans, kept apart from the obstruction cooldown. */
+  #goalReplanIn = 0;
   #searchAtGoal = 0;
   #patrolPause = 0;
   #spawnGrace = SPAWN_GRACE_SECONDS;
@@ -1356,14 +1436,33 @@ export class Enemy {
   /** Returns true when the body actually travelled, so the walk clip cannot play on the spot. */
   #step(dt: number, toX: number, toZ: number, speed: number): boolean {
     this.#replanIn -= dt;
+    this.#goalReplanIn -= dt;
     const goalMoved = Math.hypot(toX - this.#pathGoal.x, toZ - this.#pathGoal.z) > 0.8;
     const currentWaypoint = this.#path[this.#pathIndex];
     const routeObstructed =
       this.#replanIn <= 0 &&
       currentWaypoint !== undefined &&
       !this.#segmentClear(this.group.position, currentWaypoint);
-    if (this.#path.length === 0 || goalMoved || routeObstructed) {
-      this.#beginPursuit(new Vector3(toX, 0, toZ));
+    // A grid search is not a per-frame operation. `goalMoved` used to bypass the replan cooldown
+    // entirely, so a soldier chasing a moving player re-planned his whole route on almost every
+    // frame — measured at 16.7 ms across the squad, the largest single cost left in the game.
+    // Having no path at all is still replanned immediately, because a soldier with nowhere to go
+    // stands still and that is visible; a route four-tenths of a second out of date is not.
+    // A grid search is not a per-frame operation. `goalMoved` used to bypass the replan cooldown
+    // entirely, so a soldier chasing a moving player re-planned his whole route on almost every
+    // frame — measured at 16.7 ms across the squad, the largest single cost left in the game.
+    // Having no path at all is still replanned immediately, because a soldier with nowhere to go
+    // stands still and that is visible; a route four-tenths of a second out of date is not.
+    //
+    // A squad-wide budget of one search per frame was tried on top of this and reverted: it holds
+    // the worst frame down further, but a soldier pressed against geometry then has to win a race
+    // for the token before he can re-route, and `enemy-reaches-walkway` caught him failing to.
+    // The cooldown alone is the part that is safe to keep.
+    const mustReplan = this.#path.length === 0;
+    const goalDrifted = goalMoved && this.#goalReplanIn <= 0;
+    if (goalDrifted) this.#goalReplanIn = GOAL_REPLAN_SECONDS;
+    if (mustReplan || goalDrifted || routeObstructed) {
+      this.#beginPursuit(scratchGoal.set(toX, 0, toZ));
     }
     let waypoint = this.#path[this.#pathIndex];
     while (waypoint !== undefined && this.group.position.distanceTo(waypoint) < 0.32) {
@@ -1398,14 +1497,26 @@ export class Enemy {
     return from + MathUtils.clamp(delta, -rate, rate);
   }
 
+  /**
+   * Can he see the player right now?
+   *
+   * Every frame, with no caching. Rationing this to one answer every few frames was tried and
+   * reverted: `enemy-reaches-walkway` went from reliable to a coin flip, because a soldier acting
+   * on a sight answer a tenth of a second stale takes a different route and does not arrive.
+   * Vision is what the whole AI branches on, and stale input to a state machine is not a
+   * shortcut — it is a different state machine.
+   *
+   * It is affordable because the sight line itself got cheap: the range and cone rejects here
+   * cost three dot products, and `lineOfSight` answers most calls from a box test without
+   * touching a raycast at all. See the two-stage test in `Play`.
+   */
   #canSee(eye: Vector3, hooks: EnemyHooks): boolean {
     const chest = this.chest;
-    const to = new Vector3().subVectors(eye, chest);
-    const distance = to.length();
-    if (distance > VIEW_RANGE) return false;
-    const facing = new Vector3(Math.sin(this.group.rotation.y), 0, Math.cos(this.group.rotation.y));
-    const flat = new Vector3(to.x, 0, to.z).normalize();
-    if (facing.dot(flat) < Math.cos(VIEW_HALF_ANGLE)) return false;
+    scratchTo.subVectors(eye, chest);
+    if (scratchTo.length() > VIEW_RANGE) return false;
+    scratchFacing.set(Math.sin(this.group.rotation.y), 0, Math.cos(this.group.rotation.y));
+    scratchFlat.set(scratchTo.x, 0, scratchTo.z).normalize();
+    if (scratchFacing.dot(scratchFlat) < Math.cos(VIEW_HALF_ANGLE)) return false;
     return hooks.lineOfSight(chest, eye);
   }
 
@@ -1545,7 +1656,10 @@ export class Enemy {
       return;
     }
     this.#spawnGrace = Math.max(0, this.#spawnGrace - dt);
-    const sees = !this.#frozen && this.#spawnGrace <= 0 && this.#canSee(playerEye, hooks);
+    const sees =
+      !this.#frozen &&
+      this.#spawnGrace <= 0 &&
+      chargeStage("canSee", () => this.#canSee(playerEye, hooks));
     if (sees) {
       // Entering combat from anywhere else starts the reaction clock, so the player gets a
       // moment to react rather than taking a burst the instant they step into the open.
@@ -1559,6 +1673,7 @@ export class Enemy {
       this.#alertTimer = 0;
     }
 
+    const brainStarted = nowMs();
     switch (this.phase) {
       case "patrol": {
         if (this.#spawnGrace > 0) {
@@ -1629,19 +1744,28 @@ export class Enemy {
         break;
       }
     }
+    squadFrame.brain += nowMs() - brainStarted;
     this.#standUp = Math.max(0, this.#standUp - dt);
     this.#suppressed = Math.max(0, this.#suppressed - dt);
     this.#locomotionHold = Math.max(0, this.#locomotionHold - dt);
-    this.#animation?.update(dt);
-    this.#countClipFrame();
-    this.#updateFootsteps(hooks);
+    chargeStage("animation", () => {
+      this.#animation?.update(dt);
+      this.#countClipFrame();
+      this.#updateFootsteps(hooks);
+    });
     this.#weaponPoseElapsed += dt;
-    if (!this.#weaponDetached) this.#applyWeaponPose(this.#animation?.current ?? "");
-    this.#groundToDeck(deckY, dt);
-    this.#normaliseWeapon();
-    this.#alignWeaponGrip();
-    this.#syncCollisionBody();
-    if (this.#fade < 1) this.#setOpacity(MathUtils.clamp(this.#fade + dt / 0.35, 0, 1));
+    chargeStage("weapon", () => {
+      if (!this.#weaponDetached) this.#applyWeaponPose(this.#animation?.current ?? "");
+    });
+    chargeStage("ground", () => this.#groundToDeck(deckY, dt));
+    chargeStage("weapon", () => {
+      this.#normaliseWeapon();
+      this.#alignWeaponGrip();
+      this.#syncCollisionBody();
+    });
+    if (this.#fade < 1) {
+      chargeStage("opacity", () => this.#setOpacity(MathUtils.clamp(this.#fade + dt / 0.35, 0, 1)));
+    }
   }
 
   #groundInitialised = false;

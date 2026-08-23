@@ -537,6 +537,11 @@ export class MuzzleFlash {
     this.#life = this.#maxLife;
   }
 
+  /** Current card opacity. Zero means retired — the playtest gate for a stuck flash reads this. */
+  get opacity(): number {
+    return (this.#card.material as MeshBasicMaterial).opacity;
+  }
+
   update(dt: number, eye: Vector3): void {
     this.#life = Math.max(0, this.#life - dt);
     if (this.#life <= 0) {
@@ -555,5 +560,63 @@ export class MuzzleFlash {
     (this.#card.material as Material).dispose();
     this.#card.removeFromParent();
     this.#light.removeFromParent();
+  }
+}
+
+/**
+ * Independent muzzle flashes, one per concurrent shot.
+ *
+ * ## The bug this replaces
+ *
+ * A squad used to share a single flash quad and a single point light. Two soldiers firing a few
+ * frames apart teleported the quad between them, and — worse — every shot from anyone reset the
+ * one shared lifetime. Under sustained fire from five men that lifetime never reached zero, so
+ * the flash sat permanently lit at whichever muzzle fired last, looking for all the world like a
+ * flash that had failed to clean itself up. It had not: it was being kept alive by other people's
+ * gunfire.
+ *
+ * Round-robin over N independent slots fixes it by construction. Each slot owns its own lifetime,
+ * so no shooter can hold another shooter's flash open, and `update` retires slots on their own
+ * clock whatever else is firing.
+ *
+ * Every slot's card and light are in the scene from construction with opacity and intensity at
+ * zero — revealing a hidden mesh or a hidden light mid-round makes WebGPU rebuild pipelines and
+ * stalls the frame, which is the note in `Rifle` and it applies just as hard here.
+ */
+export class MuzzleFlashPool {
+  readonly #slots: MuzzleFlash[] = [];
+  #cursor = 0;
+
+  constructor(
+    parent: Object3D,
+    count: number,
+    options: ConstructorParameters<typeof MuzzleFlash>[1] = {},
+  ) {
+    for (let index = 0; index < count; index += 1) {
+      this.#slots.push(new MuzzleFlash(parent, options));
+    }
+  }
+
+  spawn(at: Vector3, direction: Vector3, rng: () => number): void {
+    const slot = this.#slots[this.#cursor % this.#slots.length];
+    this.#cursor += 1;
+    slot?.spawn(at, direction, rng);
+  }
+
+  /** Every slot, every frame. Call this outside any gameplay-phase gate — see `Play`. */
+  update(dt: number, eye: Vector3): void {
+    for (const slot of this.#slots) slot.update(dt, eye);
+  }
+
+  /** Highest opacity across the pool. A playtest reads it to prove flashes retire. */
+  peakOpacity(): number {
+    let peak = 0;
+    for (const slot of this.#slots) peak = Math.max(peak, slot.opacity);
+    return peak;
+  }
+
+  dispose(): void {
+    for (const slot of this.#slots) slot.dispose();
+    this.#slots.length = 0;
   }
 }

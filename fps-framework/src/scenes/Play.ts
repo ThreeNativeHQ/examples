@@ -20,11 +20,14 @@ import {
 } from "three";
 import { GameAudio, type CueName } from "../audio/GameAudio.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { Enemy } from "../entities/Enemy.js";
+import { beginSquadFrame, Enemy, resetSquadProfile, squadProfile } from "../entities/Enemy.js";
 import { FpsPlayer } from "../entities/FpsPlayer.js";
 import { MAGAZINE, RESERVE, Rifle } from "../entities/Rifle.js";
 import { Target } from "../entities/Target.js";
-import { flashTexture, ImpactBursts, MuzzleFlash } from "../render/gunfx.js";
+import { BreakableField } from "../render/breakables.js";
+import { bulletHoleTexture, DecalField } from "../render/decals.js";
+import { BoxOccluders } from "../render/occlusion.js";
+import { ImpactBursts, MuzzleFlash, MuzzleFlashPool } from "../render/gunfx.js";
 import { setupLighting } from "../render/lighting.js";
 import { setupPost } from "../render/postprocessing.js";
 import { PooledBillboards } from "../render/pooled-billboards.js";
@@ -33,6 +36,7 @@ import { buildTown, TOWN_HALF, type Town } from "../render/town.js";
 import { resolveSurface } from "../surfaces.js";
 import { createTownMaterials, type TownTextures } from "../render/townMaterials.js";
 import { setupSky } from "../render/sky.js";
+import { FrameStats } from "../perf.js";
 import { TARGET_GOAL, type GameState } from "../state.js";
 
 export type GameCtx = ICtx<GameState, IPhysicsContext>;
@@ -41,6 +45,29 @@ export type GameCtx = ICtx<GameState, IPhysicsContext>;
 const RUN_SECONDS = 105;
 const RANGE_METRES = 70;
 const ROUND_DAMAGE = 10;
+
+/**
+ * Where the breakable vessels stand. Placed against walls and in doorways rather than out in the
+ * open: a pot in the middle of a lane is an obstacle, and a pot beside a doorway is a place
+ * someone lives. Every one of these is on the ground deck, clear of the patrol routes.
+ */
+const BREAKABLE_SPOTS: readonly {
+  kind: "pot" | "jar" | "bottle";
+  x: number;
+  z: number;
+  yaw: number;
+}[] = [
+  { kind: "pot", x: -8.4, z: 18.6, yaw: 0.3 },
+  { kind: "jar", x: -7.2, z: 18.2, yaw: 1.1 },
+  { kind: "pot", x: 11.5, z: 12.4, yaw: -0.6 },
+  { kind: "bottle", x: 12.3, z: 12.1, yaw: 0 },
+  { kind: "jar", x: 4.2, z: -6.5, yaw: 2.2 },
+  { kind: "pot", x: -14.8, z: -3.2, yaw: 0.9 },
+  { kind: "bottle", x: -15.6, z: -3.6, yaw: 0 },
+  { kind: "jar", x: 17.4, z: -14.2, yaw: -1.4 },
+  { kind: "pot", x: -3.6, z: 27.4, yaw: 1.8 },
+  { kind: "bottle", x: 8.1, z: 24.6, yaw: 0 },
+];
 
 type LoadedModel = { scene: Group; animations: AnimationClip[] };
 
@@ -82,7 +109,18 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   /** Live bus for the current scene instance; rebuilt by every `enter`, dropped by `exit`. */
   #audio: GameAudio | undefined;
 
+  /**
+   * Boot cost, in milliseconds, by phase.
+   *
+   * The black canvas before a round starts is almost entirely CPU: on this machine the last byte
+   * arrives at ~1.0 s and the first playable frame is at ~6.0 s. Network is not the problem, so
+   * "make the assets smaller" is not the fix — knowing which phase owns the other five seconds is.
+   */
+  #boot: Record<string, number> = {};
+
   override async load(ctx: GameCtx): Promise<void> {
+    const bootClock = (): number => globalThis.performance?.now() ?? 0;
+    const loadStarted = bootClock();
     // Every town surface is colour + OpenGL normal + roughness. The normals are
     // what stopped the walls reading as painted cardboard: a stucco photograph
     // with no relief takes the key light perfectly evenly however good the
@@ -130,6 +168,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       paving,
       pavingNormal,
       pavingRough,
+      audioBuffers,
     ] = await Promise.all([
       track(ctx.assets.model<LoadedModel>("assets/enemy-terrorist.glb")),
       track(ctx.assets.model<LoadedModel>("assets/player-viewmodel.glb")),
@@ -157,6 +196,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       texture("bayview-paving.jpg"),
       texture("bayview-paving-normal.jpg"),
       texture("bayview-paving-rough.jpg"),
+      // Audio decodes alongside the textures rather than after them. Thirty cues is thirty
+      // `decodeAudioData` calls; running them only once every model and texture had resolved
+      // added their whole cost to the end of the boot instead of overlapping it with the image
+      // decodes, which are the part actually holding the main thread.
+      track(GameAudio.load(ctx.assets)),
     ]);
     const town: TownTextures = {
       plaster: { map: plaster, normal: plasterNormal, rough: plasterRough },
@@ -169,8 +213,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       paving: { map: paving, normal: pavingNormal, rough: pavingRough },
     };
     this.#assets = { enemy, viewmodel, weapon, sky, town };
-    // Audio loads through the same tracked pipeline, so the boot bar covers it too.
-    this.#audioBuffers = await GameAudio.load(ctx.assets);
+    this.#audioBuffers = audioBuffers;
+    this.#boot.load = Math.round(bootClock() - loadStarted);
     console.info(
       `TN_FPS_ASSETS_LOADED:enemy(${enemy.animations.length} clips),viewmodel,sky,town textures,audio(${this.#audioBuffers.size})`,
     );
@@ -187,6 +231,15 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const assets = this.#assets;
     if (assets === undefined) throw new Error("Town assets did not load.");
 
+    const bootClock = (): number => globalThis.performance?.now() ?? 0;
+    const enterStarted = bootClock();
+    let phaseStarted = enterStarted;
+    const phase = (name: string): void => {
+      const now = bootClock();
+      this.#boot[name] = Math.round(now - phaseStarted);
+      phaseStarted = now;
+    };
+
     const camera = ctx.camera as PerspectiveCamera;
     setupSky(ctx.scene, assets.sky);
     setupLighting(ctx.scene, ctx.renderer.raw as Parameters<typeof setupLighting>[1]);
@@ -196,15 +249,17 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // The bus rides the camera's listener and registers as an entity so the dev
     // overlay and playtests can read its counters. It queues until the first
     // key/click gesture unlocks the WebAudio context, then flushes.
-    const audio = new GameAudio(camera, this.#audioBuffers ?? new Map());
+    const audio = new GameAudio(camera, this.#audioBuffers ?? new Map(), ctx.scene);
     this.#audio = audio;
     ctx.entities.remove("audio");
     ctx.entities.add("audio", audio);
     audio.startAmbience();
 
+    phase("render-setup");
     const materials = createTownMaterials(assets.town);
     const town: Town = buildTown(materials);
     ctx.add(town.group);
+    phase("town");
     // Plates are raycast targets like any solid: without them in the list a round flies
     // straight through and scores whatever soldier happens to stand behind the plate.
     const plateMeshes: Object3D[] = [];
@@ -365,19 +420,47 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       enemies.push(soldier);
     }
 
+    // Vessels standing about the town that come apart when they are shot. They are the one thing
+    // in the world that answers a round with more than a mark, which is what stops the town
+    // reading as a shooting gallery with scenery painted on it.
+    const breakables = new BreakableField(ctx.scene, ctx.physics, () => ctx.random());
+    for (const spot of BREAKABLE_SPOTS) {
+      breakables.add(spot.kind, { x: spot.x, y: 0, z: spot.z }, spot.yaw);
+    }
+    ctx.entities.remove("breakables");
+    ctx.entities.add("breakables", breakables);
+
     // Hitscan picks against an explicit list: the town solids, the plates and the
     // soldier proxies. Raycasting the whole scene would also hit the viewmodel welded
     // to the camera and score every shot as a miss at 0.4 m.
+    phase("soldiers");
     const hittable: Object3D[] = [
       ...town.hittable,
       ...plateMeshes,
+      ...breakables.hittable(),
       ...enemies.map((e) => e.hitbox),
     ];
     // Sight lines treat a standing plate like the old range did: thin dressing the
     // LOS check skips by its userData, but a solid that can still stop a round.
+    // Sight lines are answered in two stages, cheap first.
+    //
+    // The raycast on its own cost 15.4 ms of a 16.3 ms frame across five soldiers — the whole
+    // mid-round hitch, in one call. Replacing it outright with a box test against the town's
+    // colliders was fast but wrong: a collider is a solid slab where the building has a doorway,
+    // so soldiers went blind through openings they should see through, and
+    // `enemy-reaches-walkway` started failing about half the time.
+    //
+    // So the box test is a pre-filter, not a replacement. Colliders are conservative — they cover
+    // at least as much as the walls they stand for — which means "no box in the way" is a
+    // trustworthy *clear*, and that is the common case while a firefight is in the open. Only a
+    // box-blocked line needs the exact answer, and that is where the doorways are.
+    const boxes = new BoxOccluders(town.colliders);
+    ctx.entities.remove("occluders");
+    ctx.entities.add("occluders", boxes);
     const occluders: Object3D[] = [...town.hittable, ...plateMeshes];
 
     const lineOfSight = (from: Vector3, to: Vector3): boolean => {
+      if (boxes.clear(from, to)) return true;
       const direction = new Vector3().subVectors(to, from);
       const distance = direction.length();
       if (distance < 0.001) return true;
@@ -399,6 +482,22 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // under a dust cloud, wood spits brown splinters. One expanding circle read
     // as a decal; a burst is what makes a hit look like material answering.
     const impacts = new ImpactBursts(ctx.scene, () => ctx.random());
+    // Bullet holes. They stay put: a mark that fades tells the player their rounds went nowhere.
+    // What colour the crushed rim comes out is per material — steel burns bare and cold, plaster
+    // and stone go pale, wood darkens. See `decals.ts` for why the pool is shaped this way.
+    const decals = new DecalField(ctx.scene, {
+      countPerVariant: 56,
+      map: bulletHoleTexture(),
+      size: 0.13,
+      tints: {
+        plaster: 0xf3ead8,
+        stone: 0xd2cbbb,
+        steel: 0xb6bcc4,
+        wood: 0x8a6a44,
+      },
+    });
+    ctx.entities.remove("decals");
+    ctx.entities.add("decals", decals);
     // `hit.face.normal` is object-local; transform it into world space before any
     // spawn math, or rotated meshes send their bursts into the wall.
     const impactNormal = new Vector3();
@@ -408,14 +507,17 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // Unit-length tapered cylinder along +Y, base at the origin: scaling y stretches it end to
     // end. Tapered — the far end is the glowing slug's head, the near end its thinning tail;
     // a uniform tube read as a chalk line.
-    const tracerGeometry = new CylinderGeometry(0.017, 0.005, 1, 6, 1, true);
+    const tracerGeometry = new CylinderGeometry(0.009, 0.002, 1, 6, 1, true);
     tracerGeometry.translate(0, 0.5, 0);
     const tracerMaterial = (colour: number): MeshBasicMaterial =>
       new MeshBasicMaterial({
         blending: AdditiveBlending,
         color: colour,
         depthWrite: false,
-        opacity: 0.9,
+        // A tracer is a hot gas trail, not a painted line. At 0.9 the old 1.7 cm cylinder read
+        // as chalk drawn across the frame; thin and half-transparent over the additive blend is
+        // what makes it a thing that glowed rather than a thing that was drawn.
+        opacity: 0.55,
         transparent: true,
       });
     const playerTracers = new TracerPool3D(ctx.scene, {
@@ -432,10 +534,23 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // as one drawn line, and a point-blank round dies faster than a far one. The pool only
     // applies these; the numbers are this game's.
     const tracerShot = (distance: number): ITracerSpawnOptions => ({
-      lifetime: Math.min(0.11, distance / 360),
-      segmentLength: 2.4 + ctx.random() * 1.1,
-      widthScale: 0.75 + ctx.random() * 0.6,
+      // Long enough to see the round travel, short enough that it is gone before the next one.
+      lifetime: MathUtils.clamp(distance / 400, 0.025, 0.13),
+      segmentLength: 1.5 + ctx.random() * 0.8,
+      widthScale: 0.7 + ctx.random() * 0.5,
     });
+    /**
+     * Not every round is a tracer. A real belt carries one in four or five, and that is not a
+     * detail — it is the whole reason tracers read as individual rounds instead of a continuous
+     * beam. Drawing one per shot at 600 rounds a minute paints a solid stripe down the lane.
+     *
+     * The enemy's are more frequent because they are the player's only warning of where incoming
+     * fire is coming from; the player's own are sparse because they already know.
+     */
+    let playerTracerCursor = 0;
+    let enemyTracerCursor = 0;
+    const playerTracerDue = (): boolean => playerTracerCursor++ % 4 === 0;
+    const enemyTracerDue = (): boolean => enemyTracerCursor++ % 2 === 0;
     // One hoisted rng closure shared by every per-shot spawn: a closure literal at a
     // call site is a fresh allocation on every trigger pull.
     const shotRng = (): number => ctx.random();
@@ -464,7 +579,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // miss you cannot correct.
       const barrel = rifle.barrelRay();
       const distance = hit === undefined ? RANGE_METRES : hit.point.distanceTo(eye);
-      playerTracers.spawn(barrel.origin, barrel.direction, distance, tracerShot(distance));
+      if (playerTracerDue()) {
+        playerTracers.spawn(barrel.origin, barrel.direction, distance, tracerShot(distance));
+      }
       playerFlash.spawn(barrel.origin, barrel.direction, shotRng);
       if (hit === undefined) return;
 
@@ -499,44 +616,52 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         return;
       }
       impactNormal.copy(hit.face?.normal ?? impactUp).transformDirection(hit.object.matrixWorld);
+      // A vessel answers a round by coming apart, not by taking a mark. Ask first: the breakable
+      // branch consumes the hit, so nothing below stamps a bullet hole into geometry that is no
+      // longer there.
+      if (breakables.shatter(hit.object, hit.point, direction) !== undefined) {
+        impacts.spawn(hit.point, impactNormal, "stone");
+        audio.shatter("stone", hit.point);
+        return;
+      }
       // One tag, resolved once: the builder stamped `userData.surface` on every
       // solid at construction, so audio and VFX read the same answer here
       // instead of each walking its own name rules.
       const surface = resolveSurface(hit.object);
       impacts.spawn(hit.point, impactNormal, surface);
       audio.impact(surface, hit.point);
+      // The mark outlives the burst. `impactNormal` is already in world space above; handing a
+      // raycast's object-local `face.normal` straight to a decal buries it in the wall.
+      decals.place(hit.point, impactNormal, surface, 0.82 + ctx.random() * 0.45);
     };
 
     // A muzzle flash is three things at once: a bright star-silhouette card, a light
     // that touches the world, and smoke that outlives both. One round glow alone
     // reads as a lamp switching on; the uneven rays are what say "gunshot".
-    const flashSprite = flashTexture();
+    //
+    // One flash per shooter, never one shared between them. The squad used to share a single
+    // quad and a single lifetime, so any soldier firing reset it for all of them — under
+    // sustained fire from five men the lifetime never reached zero and the flash sat lit at the
+    // last muzzle that fired, which is the "flash that never gets destroyed". See
+    // `MuzzleFlashPool` for the whole story.
     const smokeSprite = softCircleDataTexture(64, 0.05);
-    const flashMaterial = new MeshBasicMaterial({
-      blending: AdditiveBlending,
-      color: 0xffd79a,
-      depthWrite: false,
-      map: flashSprite,
-      transparent: true,
+    const enemyFlashes = new MuzzleFlashPool(ctx.scene, 6, {
+      colour: 0xffd79a,
+      forwardOffset: 0.22,
+      life: 0.05,
+      lightColour: 0xffb347,
+      lightDistance: 11,
+      // Brighter than before but over a shorter life. Peak brightness is what says "explosion at
+      // the muzzle"; duration is what makes the same light read as a lamp someone switched on.
+      lightIntensity: 44,
+      size: scale.muzzleFlash * 1.25,
     });
-    const enemyFlash = new MeshClass(
-      new PlaneGeometry(scale.muzzleFlash, scale.muzzleFlash),
-      flashMaterial,
-    );
-    enemyFlash.name = "muzzle-flash";
-    // Same prewarm as the tracers and the impact puffs: in the scene from the first frame,
-    // driven by opacity. Toggling `visible` rebuilds the pipeline on the first shot.
-    flashMaterial.opacity = 0;
-    enemyFlash.visible = true;
-    ctx.add(enemyFlash);
-    let enemyFlashLife = 0;
-
-    // The light is what makes it read across a lane: it puts a warm kick on the soldier and
-    // the wall behind them for two frames, which no additive quad can do on its own.
-    // Always in the scene, intensity driven to zero — see the note in Rifle: toggling a
-    // light's visibility rebuilds pipelines and stalls the frame.
-    const enemyLight = new PointLightClass(0xffc46a, 0, 9, 2);
-    ctx.add(enemyLight);
+    // Registered so a scenario can prove a squad's flashes retire. Sustained fire from five
+    // soldiers is exactly the case that used to hold the old single shared flash open forever.
+    ctx.entities.remove("enemy-flashes");
+    ctx.entities.add("enemy-flashes", {
+      debug: (): { peakOpacity: number } => ({ peakOpacity: enemyFlashes.peakOpacity() }),
+    });
 
     // The player's own flash is drawn in world space at the measured muzzle tip:
     // the star card reads on camera and the light kicks the wall ahead of the
@@ -544,11 +669,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const playerFlash = new MuzzleFlash(ctx.scene, {
       colour: 0xffd9a0,
       forwardOffset: 0.06,
-      life: 0.085,
-      lightColour: 0xffc46a,
-      lightDistance: 12,
-      lightIntensity: 24,
-      size: 0.36,
+      life: 0.06,
+      lightColour: 0xffb347,
+      lightDistance: 14,
+      lightIntensity: 40,
+      size: 0.34,
     });
 
     const smokeMaterial = new MeshBasicMaterial({
@@ -588,15 +713,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       lineOfSight,
       damagePlayer: (amount: number): void => player.hurt(amount),
       onMuzzleFlash: (at: Vector3, direction: Vector3, distance: number): void => {
-        enemyFlash.position.copy(at).addScaledVector(direction, 0.22);
-        enemyFlash.scale.setScalar(0.85 + ctx.random() * 0.5);
-        enemyFlash.rotation.z = ctx.random() * Math.PI;
-        flashMaterial.opacity = 1;
-        enemyFlashLife = 0.09;
-        enemyLight.position.copy(enemyFlash.position);
-        enemyLight.intensity = 34;
-        enemyTracers.spawn(enemyFlash.position, direction, distance, tracerShot(distance));
-        spawnSmoke(enemyFlash.position, direction, ctx);
+        enemyFlashes.spawn(at, direction, shotRng);
+        if (enemyTracerDue()) enemyTracers.spawn(at, direction, distance, tracerShot(distance));
+        spawnSmoke(at, direction, ctx);
         audio.enemyShot(at);
         audio.nearMiss(distance);
       },
@@ -606,9 +725,40 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // The scene is built: geometry, physics, soldiers and the viewmodel all
     // exist. Flip the boot flag here rather than when the last byte arrived,
     // because the black canvas lasts until the first frame actually draws.
+    phase("effects");
+    this.#boot.enterTotal = Math.round(bootClock() - enterStarted);
+    // Wall clock since navigation: the number a player actually waits, as opposed to the sum of
+    // the phases below it. The gap between the two is module load, renderer bring-up and the
+    // first pipeline compilation, which is where the dev server's unbundled modules show up.
+    this.#boot.sinceNavigation = Math.round(bootClock());
+    console.info(`TN_FPS_BOOT_MS:${JSON.stringify(this.#boot)}`);
     ctx.state.set({ ready: true });
 
+    // Nothing else in this project can see a stutter: typecheck, lint and every existing
+    // scenario pass at four frames a second. This is the one thing that can fail on one.
+    const frameStats = new FrameStats();
+    ctx.entities.remove("frame");
+    ctx.entities.add("frame", frameStats);
+    // Where the squad's frame goes. "enemies cost 13 ms" is not actionable; this says which
+    // stage of a soldier's update spent it.
+    ctx.entities.remove("squad");
+    ctx.entities.add("squad", { debug: () => squadProfile() });
+    const clock = (): number => globalThis.performance?.now() ?? 0;
+    // Startup is not gameplay: pipeline compilation and every material's first draw land in the
+    // opening second and cannot hitch twice. Measuring them alongside play hides real stalls.
+    let warmupLeft = 1.5;
+
     return (frameCtx, dt) => {
+      const frameEntered = clock();
+      frameStats.begin(frameEntered);
+      frameStats.markFrame(frameEntered);
+      if (warmupLeft > 0) {
+        warmupLeft -= dt;
+        if (warmupLeft <= 0) {
+          frameStats.resetWindow();
+          resetSquadProfile();
+        }
+      }
       if (frameCtx.input.justPressed("restart")) {
         frameCtx.state.set(Play.initialState);
         frameCtx.state.flush();
@@ -616,32 +766,39 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         return;
       }
 
-      // The muzzle flash decays outside the phase gate: an early return with the
-      // quad still visible leaves it frozen in the world behind the end screen.
-      enemyFlashLife = Math.max(0, enemyFlashLife - dt);
-      if (enemyFlashLife <= 0) flashMaterial.opacity = 0;
-      enemyLight.intensity = Math.max(0, enemyLight.intensity - dt * 430);
-      // Bursts decay outside the phase gate too: a chip cloud frozen mid-air
-      // behind the end screen reads exactly like the stuck-quad bug above.
+      // Every shot effect decays outside the phase gate. An early return with a quad still lit
+      // leaves it frozen in the world behind the end screen, which is indistinguishable from an
+      // effect that failed to clean itself up.
+      frameStats.mark(clock());
+      enemyFlashes.update(dt, eye);
       impacts.update(dt, eye);
       playerFlash.update(dt, eye);
+      breakables.update(dt);
       smoke.update(dt, eye);
       rifle.updateSmoke(dt, eye);
       playerTracers.update(dt);
       enemyTracers.update(dt);
+      frameStats.measure("effects", clock());
       // Peak-voice tracking runs outside the phase gate so the end screen still samples.
-      audio.sample();
+      frameStats.mark(clock());
+      audio.sample(dt);
+      frameStats.measure("audio", clock());
 
       const state = frameCtx.state.getState();
       if (state.phase !== "playing") {
         // The run is over: hold the frame, keep looking around, wait for Enter.
+        //
+        // The viewmodel's muzzle cone and its point light still have to retire. `rifle.update` is
+        // the pose-and-animation half and belongs to gameplay, but a round fired on the very frame
+        // the clock expired would otherwise leave the cone and the light burning on screen for as
+        // long as the end card is up.
+        rifle.decay(dt);
         player.update(frameCtx, dt, false);
         return;
       }
 
       elapsed += dt;
       hitFlash = Math.max(0, hitFlash - dt * 2.4);
-      if (enemyFlashLife > 0) enemyFlash.lookAt(eye.x, eye.y, eye.z);
       const timeRemaining = Math.max(0, RUN_SECONDS - elapsed);
 
       // Any press on the surface buys the pointer, which is what makes the mouse steer.
@@ -657,18 +814,26 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         audio.uiClick();
       }
 
+      frameStats.mark(clock());
       player.update(frameCtx, dt, !rifle.reloading);
+      frameStats.measure("player", clock());
       const moveVector = frameCtx.input.vector("move");
       const aimRay = player.aimRay();
       rifle.converge(aimRay.origin, aimRay.direction);
       rifle.update(dt, player.aiming, Math.min(1, Math.hypot(moveVector.x, moveVector.y)));
-      if (frameCtx.input.justPressed("fire")) fire(frameCtx, aimRay);
+      // Held, not tapped. The trigger is polled every frame and `Rifle` decides which of those
+      // frames sends a round, so a held button fires at the weapon's cyclic rate instead of asking
+      // the player to produce ten clicks a second by hand.
+      if (frameCtx.input.pressed("fire")) fire(frameCtx, aimRay);
       if (frameCtx.input.justPressed("reload")) rifle.reload(frameCtx);
 
       eye.set(player.eye.x, player.eye.y, player.eye.z);
+      frameStats.mark(clock());
+      beginSquadFrame();
       for (const soldier of enemies) {
         soldier.update(frameCtx, dt, eye, 0, hooks);
       }
+      frameStats.measure("enemies", clock());
 
       const hitCount = frameCtx.state.getState().targetsHit;
       let phase: GameState["phase"] = "playing";
@@ -688,6 +853,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         lastPhase = phase;
       }
 
+      frameStats.mark(clock());
       frameCtx.state.set({
         aiming: player.aiming,
         ammo: rifle.ammo,
@@ -709,7 +875,12 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         shots: rifle.shots,
         timeRemaining,
       });
+      frameStats.measure("state", clock());
       if (phase !== "playing") frameCtx.state.flush();
+      // Everything the game does this frame. Subtracting it from the frame delta leaves the time
+      // spent outside this callback — the physics step, the scene projection and the draw — which
+      // is the only way to tell "our code is slow" apart from "the engine is".
+      frameStats.measure("gameFrame", clock());
     };
   }
 }

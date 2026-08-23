@@ -26,6 +26,11 @@ type GameCtx = ICtx<GameState, IPhysicsContext>;
 export const MAGAZINE = 30;
 export const RESERVE = 90;
 const RELOAD_SECONDS = 0.7;
+/**
+ * 600 rounds a minute, the AK's cyclic rate. The trigger is held, not tapped: the scene reads
+ * `input.pressed("fire")` and this cooldown is what turns a held button into a cadence.
+ */
+const CYCLIC_SECONDS = 0.1;
 
 /**
  * Hip and aimed rest poses, in camera space. The shipped viewmodel is authored
@@ -57,6 +62,7 @@ export class Rifle {
   #smoke: PooledBillboards;
   #muzzlePoint = new Vector3();
   #kick = 0;
+  #cooldown = 0;
   #blend = 0;
   #sway = 0;
   #lowered = 0;
@@ -233,12 +239,17 @@ export class Rifle {
   }
 
   get ready(): boolean {
-    return !this.reloading && this.ammo > 0;
+    return !this.reloading && this.ammo > 0 && this.#cooldown <= 0;
   }
 
-  /** One round per press: the scene only calls this on `justPressed`. */
+  /**
+   * One round, if the action is cycled. The scene calls this every frame the trigger is held;
+   * the cyclic cooldown here decides which of those frames actually sends a round, so
+   * hold-to-fire and a single tap run through exactly the same path.
+   */
   fire(): boolean {
     if (!this.ready) return false;
+    this.#cooldown = CYCLIC_SECONDS;
     this.ammo -= 1;
     this.shots += 1;
     this.#kick = 1;
@@ -317,6 +328,29 @@ export class Rifle {
     this.#hasAimRay = true;
   }
 
+  /**
+   * Retire the visible effects of a shot: the muzzle cone, its point light, and the kick.
+   *
+   * Separate from `update` because it must run on frames where the game is not being played —
+   * the end card, a paused round. `update` used to own it, `update` only ran while the phase was
+   * "playing", and a round fired on the frame the clock expired therefore left the cone and its
+   * light burning on screen for as long as the end card was up.
+   *
+   * `update` calls this itself, so a scene that always updates the rifle needs nothing extra.
+   */
+  decay(dt: number): void {
+    this.#cooldown = Math.max(0, this.#cooldown - dt);
+    this.#flashLife = Math.max(0, this.#flashLife - dt);
+    (this.#flash.material as MeshBasicMaterial).opacity = Math.min(1, this.#flashLife / 0.025);
+    this.#light.intensity = Math.max(0, this.#light.intensity - dt * 90);
+    this.#kick = Math.max(0, this.#kick - dt * 7);
+  }
+
+  /** Peak opacity of the muzzle cone. A playtest reads this to prove the flash retires. */
+  get flashOpacity(): number {
+    return (this.#flash.material as MeshBasicMaterial).opacity;
+  }
+
   update(dt: number, aiming: boolean, moving: number): void {
     this.#shootFor = Math.max(0, this.#shootFor - dt);
     if (this.reloading) this.#play("Reload");
@@ -325,10 +359,7 @@ export class Rifle {
     else if (moving > 0.05) this.#play("Walk");
     else this.#play("Idle");
     this.#animation?.update(dt);
-    this.#flashLife = Math.max(0, this.#flashLife - dt);
-    (this.#flash.material as MeshBasicMaterial).opacity = Math.min(1, this.#flashLife / 0.025);
-    this.#light.intensity = Math.max(0, this.#light.intensity - dt * 90);
-    this.#kick = Math.max(0, this.#kick - dt * 7);
+    this.decay(dt);
     // The sights drop while the magazine is out and come back up after.
     const wantLowered = this.reloading ? 1 : 0;
     this.#lowered += (wantLowered - this.#lowered) * Math.min(1, dt * 9);
@@ -370,6 +401,7 @@ export class Rifle {
 
   debug(): {
     barrelAxisErrorDeg: number;
+    flashOpacity: number;
     muzzleLocal: number[];
     tipGapToGeometry: number;
     opticScreen: { x: number; y: number };
@@ -380,6 +412,9 @@ export class Rifle {
     const optic = this.group.localToWorld(this.#opticLocal.clone()).project(this.#camera);
     return {
       barrelAxisErrorDeg: MathUtils.radToDeg(ray.direction.angleTo(cameraDirection)),
+      // Zero once the shot has retired. A non-zero reading long after the last round is the
+      // stuck-flash bug, and it is the only way a gate can see it.
+      flashOpacity: this.flashOpacity,
       muzzleLocal: this.#barrelTipLocal.toArray(),
       tipGapToGeometry: this.#flash.position.distanceTo(this.#geometryTipLocal),
       opticScreen: { x: (optic.x + 1) / 2, y: (1 - optic.y) / 2 },

@@ -664,7 +664,10 @@ export function buildTown(materials: TownMaterials): Town {
   const deck = new Mesh(new PlaneGeometry(TOWN, TOWN), materials.ground);
   deck.rotation.x = -Math.PI / 2;
   deck.receiveShadow = true;
-  deck.name = "deck";
+  // Named "street", not "deck": the wood name rule exists for the pier and catwalk planking and
+  // matches any name containing "deck", so calling the stone street deck tagged the whole town
+  // floor as wood — wrong impact cue, wrong debris, wrong decal tint, on every ground shot.
+  deck.name = "street";
   group.add(deck);
   hittable.push(deck);
 
@@ -683,6 +686,10 @@ export function buildTown(materials: TownMaterials): Town {
     );
     slab.receiveShadow = true;
     group.add(slab);
+    // Hittable, or a round fired at a plaza passes straight through the paving the player can
+    // see and registers on the street plane 3 cm below — which put every impact cue, burst and
+    // bullet hole on the wrong surface, and buried the hole inside the slab.
+    hittable.push(slab);
   }
 
   // Sea east of the quay, one huge plane well below street level, with pale
