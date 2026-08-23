@@ -27,6 +27,7 @@ import { Target } from "../entities/Target.js";
 import { flashTexture, ImpactBursts, MuzzleFlash } from "../render/gunfx.js";
 import { setupLighting } from "../render/lighting.js";
 import { setupPost } from "../render/postprocessing.js";
+import { PooledBillboards } from "../render/pooled-billboards.js";
 import { scale } from "../render/scale.js";
 import { buildTown, TOWN_HALF, type Town } from "../render/town.js";
 import { resolveSurface } from "../surfaces.js";
@@ -557,28 +558,29 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       opacity: 0.5,
       transparent: true,
     });
-    const smoke = Array.from({ length: 10 }, () => {
-      const puff = new MeshClass(new PlaneGeometry(0.4, 0.4), smokeMaterial.clone());
-      (puff.material as MeshBasicMaterial).opacity = 0;
-      puff.visible = true;
-      ctx.add(puff);
-      return { life: 0, drift: new Vector3(), mesh: puff };
+    // Enemy muzzle smoke rides the same pooled-billboard mechanism as the player's.
+    // Scratch vectors keep the fire path allocation-free; the three random draws per
+    // puff keep their original order so seeded replays stay identical.
+    const smoke = new PooledBillboards(ctx.scene, {
+      count: 10,
+      geometry: new PlaneGeometry(0.4, 0.4),
+      materialPrototype: smokeMaterial,
     });
-    let smokeCursor = 0;
+    const smokeAt = new Vector3();
+    const smokeDrift = new Vector3();
     const spawnSmoke = (at: Vector3, forward: Vector3, ctxFrame: GameCtx): void => {
       for (let index = 0; index < 2; index += 1) {
-        const slot = smoke[smokeCursor % smoke.length];
-        smokeCursor += 1;
-        if (slot === undefined) continue;
-        slot.mesh.position.copy(at).addScaledVector(forward, 0.3 + index * 0.16);
-        slot.drift.set(
-          (ctxFrame.random() - 0.5) * 0.5,
-          0.55 + ctxFrame.random() * 0.35,
-          (ctxFrame.random() - 0.5) * 0.5,
-        );
-        slot.mesh.scale.setScalar(0.35);
-        (slot.mesh.material as MeshBasicMaterial).opacity = 0.5;
-        slot.life = 0.75;
+        const driftX = (ctxFrame.random() - 0.5) * 0.5;
+        const driftY = 0.55 + ctxFrame.random() * 0.35;
+        const driftZ = (ctxFrame.random() - 0.5) * 0.5;
+        smoke.spawn({
+          at: smokeAt.copy(at).addScaledVector(forward, 0.3 + index * 0.16),
+          drift: smokeDrift.set(driftX, driftY, driftZ),
+          life: 0.75,
+          opacity: 0.5,
+          scaleFrom: 0.35,
+          scaleTo: 1.475,
+        });
       }
     };
 
@@ -623,15 +625,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // behind the end screen reads exactly like the stuck-quad bug above.
       impacts.update(dt, eye);
       playerFlash.update(dt, eye);
-      for (const puff of smoke) {
-        if (puff.life <= 0) continue;
-        puff.life -= dt;
-        puff.mesh.position.addScaledVector(puff.drift, dt);
-        puff.mesh.scale.setScalar(0.35 + (0.75 - puff.life) * 1.5);
-        (puff.mesh.material as MeshBasicMaterial).opacity = Math.max(0, puff.life * 0.62);
-        puff.mesh.lookAt(eye.x, eye.y, eye.z);
-        if (puff.life <= 0) (puff.mesh.material as MeshBasicMaterial).opacity = 0;
-      }
+      smoke.update(dt, eye);
       rifle.updateSmoke(dt, eye);
       playerTracers.update(dt);
       enemyTracers.update(dt);
