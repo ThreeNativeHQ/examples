@@ -42,3 +42,6 @@ artifacts/
 # Local secrets. Never commit a key.
 .env
 .env.*
+
+
+.claude
