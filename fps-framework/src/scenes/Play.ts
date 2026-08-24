@@ -102,6 +102,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         viewmodel: LoadedModel;
         weapon: LoadedModel;
         sky: Texture;
+        skyIbl: Texture;
         town: TownTextures;
       }
     | undefined;
@@ -148,6 +149,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       viewmodel,
       weapon,
       sky,
+      skyIbl,
       plaster,
       plasterNormal,
       plasterRough,
@@ -176,6 +178,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       track(ctx.assets.model<LoadedModel>("assets/player-viewmodel.glb")),
       track(ctx.assets.model<LoadedModel>("assets/weapon-ak47.glb")),
       texture("bayview-sky.jpg"),
+      texture("bayview-sky-ibl.jpg"),
       texture("bayview-whitewash.jpg"),
       texture("bayview-whitewash-normal.jpg"),
       texture("bayview-whitewash-rough.jpg"),
@@ -214,7 +217,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       wood: { map: wood, normal: woodNormal },
       paving: { map: paving, normal: pavingNormal, rough: pavingRough },
     };
-    this.#assets = { enemy, viewmodel, weapon, sky, town };
+    this.#assets = { enemy, viewmodel, weapon, sky, skyIbl, town };
     this.#audioBuffers = audioBuffers;
     this.#boot.load = Math.round(bootClock() - loadStarted);
     console.info(
@@ -246,7 +249,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     };
 
     const camera = ctx.camera as PerspectiveCamera;
-    setupSky(ctx.scene, assets.sky);
+    setupSky(ctx.scene, assets.sky, assets.skyIbl);
     setupLighting(ctx.scene, ctx.renderer.raw as Parameters<typeof setupLighting>[1]);
     setupPost(ctx.renderer);
     ctx.add(camera);
