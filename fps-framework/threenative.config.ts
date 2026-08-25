@@ -1,6 +1,10 @@
 import type { IThreeNativeConfig } from "@threenative/core";
 
 export default {
+  assets: {
+    models: "none",
+    textures: "none",
+  },
   app: {
     id: "com.threenative.bayview",
     name: "Bayview",
@@ -21,4 +25,7 @@ export default {
   },
   nativeEntry: "src/game.ts",
   renderer: { preferWebGPU: true }, // Use WebGPU when the host exposes it.
+  // One UI on every target: src/ui/ renders through the platform's own browser-class renderer,
+  // so the same React, Tailwind, CSS and SVG run on web, desktop, Android and iOS alike.
+  ui: { renderer: "web" },
 } satisfies IThreeNativeConfig;

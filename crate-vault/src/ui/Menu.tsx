@@ -1,17 +1,19 @@
-import type { IGame } from "@threenative/core";
-import type { IPhysicsContext } from "@threenative/physics";
+import { useUiIntent } from "@threenative/ui";
 import { type KeyboardEvent, useState } from "react";
-import type { GameState } from "../state.js";
 
-export function Menu({ game }: { game: IGame<GameState, IPhysicsContext> }) {
+export function Menu() {
   const [paused, setPaused] = useState(false);
+  // Intents, not method calls: on native this component runs in the platform's web view, in a
+  // different realm from the game, and cannot hold a reference to it. The game decides what
+  // pausing and restarting mean; this only says which one the player asked for.
+  const sendIntent = useUiIntent();
   const togglePause = () => {
-    if (paused) game.resume();
-    else game.pause();
+    sendIntent(paused ? "resume" : "pause");
     setPaused((value) => !value);
   };
   const restart = () => {
-    void game.goto("play");
+    sendIntent("restart");
+    setPaused(false);
   };
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;

@@ -24,4 +24,16 @@ const game = defineGame<GameState, IPhysicsContext>({
   start: "play",
 });
 
+/**
+ * What the UI layer is allowed to ask for.
+ *
+ * The HUD and menu run in the platform's web view on native, so they cannot pause the game or
+ * change scenes themselves. Each intent names the request; the game decides what it does.
+ */
+game.ui.onIntent((intent) => {
+  if (intent === "pause") game.pause();
+  if (intent === "resume") game.resume();
+  if (intent === "restart") void game.goto("play");
+});
+
 export default game;

@@ -1,6 +1,4 @@
-import type { IGame } from "@threenative/core";
-import type { IPhysicsContext } from "@threenative/physics";
-import { useGameState } from "@threenative/ui";
+import { useUiState } from "@threenative/ui";
 import type { GameState } from "../state.js";
 
 function Row({ label, value, tone }: { label: string; value: string; tone?: string }) {
@@ -12,16 +10,12 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: stri
   );
 }
 
-export function Hud({ game }: { game: IGame<GameState, IPhysicsContext> }) {
-  const bodyCount = useGameState(game, (state) => state.bodyCount);
-  const settled = useGameState(game, (state) => state.settled);
-  const pushed = useGameState(game, (state) => state.pushed);
-  const contacts = useGameState(game, (state) => state.contacts);
-  const phaseThroughs = useGameState(game, (state) => state.phaseThroughs);
-  const goalReached = useGameState(game, (state) => state.goalReached);
-  const goalBy = useGameState(game, (state) => state.goalBy);
-  const replayPhase = useGameState(game, (state) => state.replayPhase);
-  const replayMatch = useGameState(game, (state) => state.replayMatch);
+export function Hud() {
+  const state = useUiState<GameState>();
+  // Nothing to draw until the game publishes a frame. On native this component is loaded by the
+  // platform's web view before the game has run a tick, so an empty first paint is normal here.
+  if (state === undefined) return null;
+  const { bodyCount, settled, pushed, contacts, phaseThroughs, goalReached, goalBy, replayPhase, replayMatch } = state;
 
   return (
     <>

@@ -37,8 +37,16 @@ body,
   overflow: hidden;
 }
 
-body {
+/*
+ * The backdrop belongs to the web document's own mount point, never to `body`: `src/ui/main.tsx`
+ * imports this stylesheet, and on native that file is what the transparent web view loads over the
+ * game, where a `body` background is an opaque sheet over the frame just rendered.
+ */
+#root {
   background: var(--color-ink);
+}
+
+body {
   color: var(--color-text);
   font-family: var(--font-mono);
   -webkit-font-smoothing: antialiased;
