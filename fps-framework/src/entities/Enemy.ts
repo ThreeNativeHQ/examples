@@ -135,6 +135,13 @@ const STEER_SETTLE = 0.11;
 const FACE_RATE_MAX = 4.4;
 const FACE_ACCEL = 26;
 const FACE_SETTLE = 0.12;
+/**
+ * Pace below which a coast is over, in metres per second.
+ *
+ * Two centimetres a second is under a millimetre a frame: past this the body is standing, and
+ * carrying the remainder only keeps the walk clip alive on a soldier who has stopped.
+ */
+const COAST_FLOOR = 0.02;
 /** Heading error, in radians, at which cornering has taken all the speed off it can. */
 const CORNER_FULL = 2.2;
 /** Slowest a corner may be taken, as a fraction of the requested speed. */
@@ -700,6 +707,10 @@ export class Enemy {
   #goalReplanIn = 0;
   #searchAtGoal = 0;
   #patrolPause = 0;
+  #previousGroundSpeed = 0;
+  #decelPeak = 0;
+  /** Set on the frames a hard stop is honest — walking into a wall, dying, being placed. */
+  #decelExempt = false;
   #spawnGrace = SPAWN_GRACE_SECONDS;
   #route: readonly Vector3[] = ROUTE;
   #navMin = NAV_MIN;
@@ -1435,6 +1446,19 @@ export class Enemy {
             this.group.position.z - this.#frameStart.z,
           ) / dt
         : 0;
+    // How hard the body braked this frame, in metres per second squared.
+    //
+    // A soldier sheds pace at WALK_DECEL and no faster. Anything above it means the body was
+    // teleported to rest rather than walked to it, which is what a patrol pause used to do:
+    // `#brake` decays `#pace`, `#pace` is read only by `#step`, and the pause called neither —
+    // so ground speed went 2.31 to 0 between two frames while the legs were mid-stride.
+    // Exempt frames are the stops that are honest: a wall, a death, a scenario placement.
+    if (dt > 0 && !this.#decelExempt) {
+      const braking = (this.#previousGroundSpeed - this.#groundSpeed) / dt;
+      if (braking > this.#decelPeak) this.#decelPeak = braking;
+    }
+    this.#previousGroundSpeed = this.#groundSpeed;
+    this.#decelExempt = false;
     // One frame against a wall, or one frame of a replan, is not a stop. Without this the
     // walk clip strobes against idle whenever the path is briefly blocked.
     this.#stillFor = moving ? 0 : this.#stillFor + dt;
@@ -1447,7 +1471,15 @@ export class Enemy {
 
     let wanted: string;
     if (travelling) {
-      wanted = crouched && this.#clips.has("RifleCrouchWalk") ? "RifleCrouchWalk" : "RifleWalk";
+      // Crouch state changes on the frame he is suppressed or wounded, but the body takes
+      // `WALK_DECEL` to shed the pace it was carrying. Dropping onto the crouch clip during
+      // that window puts a 0.807 m/s creep under a body still making walking pace, which is
+      // the same foot slide `#clipPaceCap` exists to prevent — so the clip waits for the legs.
+      const creeping = this.#groundSpeed <= this.#clipPaceCap(true) * 1.02;
+      wanted =
+        crouched && creeping && this.#clips.has("RifleCrouchWalk")
+          ? "RifleCrouchWalk"
+          : "RifleWalk";
     } else if (this.#crouchMoving && this.#clips.has("RifleCrouchWalkToIdle")) {
       // Standing up runs its authored transition, and owns the pose until it finishes.
       this.#crouchMoving = false;
@@ -1755,6 +1787,45 @@ export class Enemy {
     this.#pace = Math.max(0, this.#pace - WALK_DECEL * dt);
   }
 
+  /**
+   * Carry the last of his pace into the stop instead of dropping it in one frame.
+   *
+   * `#brake` only decays `#pace`, and `#pace` is read nowhere except `#step`. So every branch
+   * that stopped by braking without stepping — a patrol pause, a consumed path, a waypoint
+   * reached — took the body from walking pace to standing still between two frames while the
+   * legs were still mid-stride. Measured on patrol before this existed: ground speed went
+   * 2.31 -> 0 with no intermediate frame, twice in 2.6 s, and the locomotion clip snapped to
+   * idle underneath a body that had already teleported to rest. It reads as a stutter, and it is
+   * the same foot-slide defect `#clipPaceCap` guards on the other end of the speed range.
+   *
+   * Returns whether he is still under way, so the caller can keep the walk clip on until the
+   * body has actually finished moving rather than the frame the decision was made.
+   */
+  #coast(dt: number): boolean {
+    // Coasting owns the pace for this frame. Without claiming the step, the tail brake at the
+    // end of `update` — which exists for the branches that neither step nor coast, a burst or a
+    // soldier standing and listening — decays it a second time, and the body stops at twice the
+    // deceleration it was authored with. Measured: 18.0 m/s squared against a WALK_DECEL of 9.
+    this.#stepped = true;
+    this.#brake(dt);
+    if (this.#pace <= COAST_FLOOR) {
+      this.#pace = 0;
+      return false;
+    }
+    const heading = this.#heading.value;
+    const travel = this.#pace * dt;
+    const nextX = this.group.position.x + Math.sin(heading) * travel;
+    const nextZ = this.group.position.z + Math.cos(heading) * travel;
+    // A body that walks into something does not coast through it.
+    if (this.#blocked(nextX, nextZ)) {
+      this.#pace = 0;
+      this.#decelExempt = true;
+      return false;
+    }
+    this.group.position.set(nextX, this.group.position.y, nextZ);
+    return true;
+  }
+
   /** Follow a cached route, replanning when a moving goal changes or the corridor becomes blocked. */
   /**
    * Returns true while he is walking the route — including the first few frames of the ramp,
@@ -1766,7 +1837,40 @@ export class Enemy {
    * `faceTravel` is off for combat, where `#engage` owns the facing so the rifle can stay on
    * the player while the feet go somewhere else.
    */
-  #step(dt: number, toX: number, toZ: number, speed: number, faceTravel = true): boolean {
+  /**
+   * The fastest this soldier may travel while the clip that carries him still keeps up, in
+   * metres per second.
+   *
+   * `#applyLocomotionRate` re-times the locomotion clip to the ground speed and clamps the
+   * result at `LOCOMOTION_RATE_MAX`. Whenever that clamp bites, the clamp is what gives — the
+   * body keeps its speed and the feet stop matching it, which is foot slide by another name and
+   * is silent from inside `#applyLocomotionRate`, which has already moved the body by then.
+   *
+   * Measured, before this existed: a soldier searching crouched ran `RifleCrouchWalk`, a clip
+   * that carries 0.807 m/s at rate 1, at 2.25 m/s — rate 2.79 asked for, 2.1 delivered, feet
+   * making 1.69 m/s under a body making 2.25. `strideErrorPeak` 0.248 against a gate of 0.15.
+   * The uncrouched chase saturated too, mildly: 2.886 m/s against a walk ceiling of 2.744.
+   *
+   * So the ceiling is applied where it belongs — to the speed that is asked for, before the
+   * body travels — and the rate clamp goes back to being unreachable. Divided by nothing:
+   * `#step` applies `#gait` first and this caps the product, so the fastest-gaited soldier is
+   * bounded by the same clip as the slowest.
+   */
+  #clipPaceCap(crouched: boolean): number {
+    const name = crouched && this.#clips.has("RifleCrouchWalk") ? "RifleCrouchWalk" : "RifleWalk";
+    const clipSpeed = this.#clipGroundSpeed.get(name) ?? 0;
+    // A clip with no measurable stride cannot bound anything; leave the caller's speed alone.
+    return clipSpeed <= 0.05 ? Number.POSITIVE_INFINITY : clipSpeed * LOCOMOTION_RATE_MAX;
+  }
+
+  #step(
+    dt: number,
+    toX: number,
+    toZ: number,
+    speed: number,
+    faceTravel = true,
+    crouched = false,
+  ): boolean {
     this.#stepped = true;
     this.#replanIn -= dt;
     this.#goalReplanIn -= dt;
@@ -1802,17 +1906,11 @@ export class Enemy {
       this.#pathIndex += 1;
       waypoint = this.#path[this.#pathIndex];
     }
-    if (waypoint === undefined) {
-      this.#brake(dt);
-      return false;
-    }
+    if (waypoint === undefined) return this.#coast(dt);
     const dx = waypoint.x - this.group.position.x;
     const dz = waypoint.z - this.group.position.z;
     const distance = Math.hypot(dx, dz);
-    if (distance < 1e-3) {
-      this.#brake(dt);
-      return false;
-    }
+    if (distance < 1e-3) return this.#coast(dt);
 
     // Steer the direction of travel rather than snapping it to the bearing of the next grid
     // point. This is what turns the 0.7 m A* polyline into a path a body could have walked.
@@ -1827,7 +1925,8 @@ export class Enemy {
       this.#pathIndex >= this.#path.length - 1
         ? MathUtils.clamp(distance / ARRIVE_DISTANCE, ARRIVE_FLOOR, 1)
         : 1;
-    const wanted = speed * this.#gait * cornering * arriving;
+    const wanted =
+      Math.min(speed * this.#gait, this.#clipPaceCap(crouched)) * cornering * arriving;
     const gained = MathUtils.clamp(wanted - this.#pace, -WALK_DECEL * dt, WALK_ACCEL * dt);
     this.#pace += gained;
     this.#paceRate = dt > 0 ? gained / dt : 0;
@@ -1840,6 +1939,7 @@ export class Enemy {
       this.#replanIn = 0;
       // He walked into something. A body that hits a wall does not keep its momentum.
       this.#pace *= 0.3;
+      this.#decelExempt = true;
       return false;
     }
     this.group.position.set(nextX, this.group.position.y, nextZ);
@@ -1897,6 +1997,7 @@ export class Enemy {
     if (this.health <= 0) {
       this.health = 0;
       this.phase = "dead";
+    this.#decelExempt = true;
       this.voice?.death(this.group.position);
       this.#deadFor = 0;
       this.#deathObserved = true;
@@ -2115,7 +2216,9 @@ export class Enemy {
         }
         if (this.#patrolPause > 0) {
           this.#patrolPause -= dt;
-          this.#playLocomotion(false, false, dt);
+          // Coasting, not stopping: he sheds the pace he was carrying over WALK_DECEL and the
+          // legs stay under him until the body has actually come to rest.
+          this.#playLocomotion(this.#coast(dt), false, dt);
           break;
         }
         this.#playLocomotion(this.#step(dt, this.#target.x, this.#target.z, WALK_SPEED), false, dt);
@@ -2153,7 +2256,7 @@ export class Enemy {
         if (this.group.position.distanceTo(this.#lastSeen) >= 1.6 && this.#alertTimer <= 7) {
           // Closing on a position someone was just shooting from: move low and quick.
           this.#playLocomotion(
-            this.#step(dt, this.#lastSeen.x, this.#lastSeen.z, CHASE_SPEED * 0.85),
+            this.#step(dt, this.#lastSeen.x, this.#lastSeen.z, CHASE_SPEED * 0.85, true, true),
             true,
             dt,
           );
@@ -2380,7 +2483,7 @@ export class Enemy {
 
     if (this.#reaction > 0) {
       // Detection means pursuit immediately; tactical spacing begins only after reacting.
-      moved = this.#step(dt, knownTarget.x, knownTarget.z, CHASE_SPEED * settle, false);
+      moved = this.#step(dt, knownTarget.x, knownTarget.z, CHASE_SPEED * settle, false, crouched);
     } else {
       // Every later combat route is still derived from the player: close distance when far,
       // back off when rushed, and flank rather than running straight into the muzzle.
@@ -2402,6 +2505,7 @@ export class Enemy {
         combatGoal.z,
         (flatDistance > ENGAGE_RANGE ? CHASE_SPEED : WALK_SPEED) * settle,
         false,
+        crouched,
       );
     }
     // Facing is the engage branch's, not `#step`'s. Standing, he squares up on the player;
@@ -2497,6 +2601,7 @@ export class Enemy {
     crouching: boolean;
     suppressed: number;
     animation: string | null;
+    decelPeakMs2: number;
     groundSpeed: number;
     locomotionRate: number;
     locomotionRatePeak: number;
@@ -2574,6 +2679,7 @@ export class Enemy {
       // how far the clip carries the body at rate 1, and the ratio of the last two to the
       // first. `strideErrorPeak` is sticky because a scenario samples on step boundaries and
       // would otherwise miss the frames where the feet were skating hardest.
+      decelPeakMs2: this.#decelPeak,
       groundSpeed: this.#groundSpeed,
       locomotionRate: this.#locomotionRate,
       // Sticky: a scenario samples on step boundaries and would otherwise land on an idle
