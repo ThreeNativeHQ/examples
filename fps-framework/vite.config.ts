@@ -1,14 +1,13 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { optimizeModels } from "create-threenative";
+import { createEngineFreshnessPlugin } from "create-threenative";
 import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [
-    // Regenerates public/assets/*.glb from assets/models/ at build time
-    // whenever a source is newer (quantize + WebP + separate vertex layout).
-    // Disable: optimizeModels({ disabled: true }) or TN_NO_OPTIMIZE_MODELS=1.
-    optimizeModels(),
+    // The engine installs from a tarball whose filename never changes; this calls out and
+    // re-bundles when the installed engine's bytes changed under that name.
+    createEngineFreshnessPlugin(),
     react(),
     tailwindcss(),
   ],
