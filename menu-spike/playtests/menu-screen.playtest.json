@@ -1,0 +1,25 @@
+{
+  "name": "menu-screen",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 30,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "menu-holds",
+      "waitTicks": 40,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    }
+  }
+}
