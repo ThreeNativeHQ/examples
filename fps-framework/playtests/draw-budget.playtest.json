@@ -15,9 +15,20 @@
       "noNetworkErrors": true,
       "runtimeReady": true
     },
-    "performance": {
-      "maxDrawCalls": 450
-    },
+    "components": [
+      {
+        "entity": "render",
+        "component": "drawCalls",
+        "lte": 550,
+        "allowTrivial": "drawCalls is the renderer's world-pass total captured inside the frame callback (a between-frames read sees zeros, since renderer.info resets at each render) and is zero only before the first draw. The settled spawn view carried 780 draws before geometry sharing and 492 after: the town root built 363 meshes with 363 unique geometry identities, which the projection correctly declined to batch (notWorthwhile: 835 of 835), and sharing canonical unit geometries drops it to 619 candidates with 11 instanced batches. 550 is the budget the collapsed scene meets with margin while everything below the batching floor keeps its own draw."
+      },
+      {
+        "entity": "render",
+        "component": "triangles",
+        "gte": 400000,
+        "allowTrivial": "triangles is zero before the first draw. The town submits roughly a million triangles a frame; a floor catches the zero-opacity/prewarm class of defect where a scene draws only its sky and every cheapness assertion turns green."
+      }
+    ],
     "visual": [
       {
         "region": {

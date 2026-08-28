@@ -18,6 +18,7 @@ import {
   type Material,
   MathUtils,
   Mesh,
+  PlaneGeometry,
   SphereGeometry,
   TorusKnotGeometry,
   Vector3,
@@ -25,6 +26,36 @@ import {
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 
 const roundedCache = new Map<string, BufferGeometry>();
+
+// Canonical primitives: ONE geometry object per shape, sized per mesh through
+// `mesh.scale`. A plain `new BoxGeometry(w, h, d)` per mesh is pixel-identical
+// to a shared unit box scaled by (w, h, d) — positions are linear in the
+// dimensions and the axis-aligned normals survive a diagonal scale — but the
+// per-mesh version gives every mesh its own geometry identity, and identity is
+// what instancing keys on. A town that builds 200 solids this way draws 200
+// times where it could draw once; these exist so that never happens again.
+let unitBoxGeometry: BufferGeometry | undefined;
+export function unitBox(): BufferGeometry {
+  unitBoxGeometry ??= new BoxGeometry(1, 1, 1);
+  return unitBoxGeometry;
+}
+
+let unitPlaneGeometry: BufferGeometry | undefined;
+export function unitPlane(): BufferGeometry {
+  unitPlaneGeometry ??= new PlaneGeometry(1, 1);
+  return unitPlaneGeometry;
+}
+
+const unitCylinderCache = new Map<number, BufferGeometry>();
+/** A radius-1, height-1 cylinder scaled by (r, h, r); segments are part of the shape. */
+export function unitCylinder(segments: number): BufferGeometry {
+  let geometry = unitCylinderCache.get(segments);
+  if (geometry === undefined) {
+    geometry = new CylinderGeometry(1, 1, 1, segments);
+    unitCylinderCache.set(segments, geometry);
+  }
+  return geometry;
+}
 
 /**
  * A box with rounded edges: every vertex of a segmented box pushed outward

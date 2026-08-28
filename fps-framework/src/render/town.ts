@@ -41,6 +41,7 @@ import {
   type Face,
 } from "./facade.js";
 import { addPalms, type PalmPlacement } from "./palm.js";
+import { unitBox, unitCylinder } from "./shapes.js";
 // Impact surfaces are stamped here at construction so audio, VFX and any later
 // consumer read one tag off the mesh instead of re-deriving name tables.
 import { tagSurfaces } from "../surfaces.js";
@@ -328,7 +329,10 @@ function addSolid(
   at: readonly [number, number, number],
   name?: string,
 ): Mesh {
-  const mesh = new Mesh(new BoxGeometry(size[0], size[1], size[2]), material);
+  // Shared unit geometry, dimensions through scale: solids are what the
+  // projection instances, and instancing keys on geometry identity.
+  const mesh = new Mesh(unitBox(), material);
+  mesh.scale.set(size[0], size[1], size[2]);
   if (name !== undefined) mesh.name = name;
   mesh.position.set(at[0], at[1], at[2]);
   mesh.castShadow = true;
@@ -350,12 +354,32 @@ function addProp(
   at: readonly [number, number, number],
   name?: string,
 ): Mesh {
-  const mesh = new Mesh(new BoxGeometry(size[0], size[1], size[2]), material);
+  const mesh = new Mesh(unitBox(), material);
+  mesh.scale.set(size[0], size[1], size[2]);
   if (name !== undefined) mesh.name = name;
   mesh.position.set(at[0], at[1], at[2]);
   mesh.castShadow = false;
   group.add(mesh);
   return mesh;
+}
+
+// Frustum cylinders cannot share the unit cylinder's scale form, but the same
+// frustum is built many times (bollards, pier posts), so they cache by shape —
+// identical reasoning to `roundedBox`'s cache, one floor up.
+const frustumCache = new Map<string, CylinderGeometry>();
+function frustumCylinder(
+  radiusTop: number,
+  radiusBottom: number,
+  height: number,
+  segments: number,
+): CylinderGeometry {
+  const key = `${radiusTop},${radiusBottom},${height},${segments}`;
+  let geometry = frustumCache.get(key);
+  if (geometry === undefined) {
+    geometry = new CylinderGeometry(radiusTop, radiusBottom, height, segments);
+    frustumCache.set(key, geometry);
+  }
+  return geometry;
 }
 
 function addCylinderProp(
@@ -369,10 +393,14 @@ function addCylinderProp(
   name?: string,
   castsShadow = false,
 ): Mesh {
+  // A straight cylinder is a shared unit cylinder scaled by (r, h, r); a
+  // frustum (top radius ≠ bottom) has no scale form and keeps its own geometry.
+  const frustum = radiusTop !== radiusBottom;
   const mesh = new Mesh(
-    new CylinderGeometry(radiusTop, radiusBottom, height, segments),
+    frustum ? frustumCylinder(radiusTop, radiusBottom, height, segments) : unitCylinder(segments),
     material,
   );
+  if (!frustum) mesh.scale.set(radiusTop, height, radiusTop);
   if (name !== undefined) mesh.name = name;
   mesh.position.set(at[0], at[1], at[2]);
   mesh.castShadow = castsShadow;
@@ -381,12 +409,18 @@ function addCylinderProp(
 }
 
 /** Flat painted ring plus an extruded flat letter, both from box geometry. */
+let siteRingGeometry: RingGeometry | undefined;
+function ringGeometry(): RingGeometry {
+  siteRingGeometry ??= new RingGeometry(2.1, 2.75, 48);
+  return siteRingGeometry;
+}
+
 function addSiteMark(
   group: Group,
   materials: TownMaterials,
   mark: (typeof SITE_MARKS)[number],
 ): void {
-  const ring = new Mesh(new RingGeometry(2.1, 2.75, 48), materials.siteMark);
+  const ring = new Mesh(ringGeometry(), materials.siteMark);
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(mark.at[0], 0.015, mark.at[1]);
   ring.receiveShadow = true;
@@ -399,7 +433,8 @@ function addSiteMark(
     at: readonly [number, number],
     tilt = 0,
   ): void => {
-    const leg = new Mesh(new BoxGeometry(size[0], size[1], 0.03), materials.siteMark);
+    const leg = new Mesh(unitBox(), materials.siteMark);
+    leg.scale.set(size[0], size[1], 0.03);
     leg.rotation.x = -Math.PI / 2;
     leg.rotation.z = tilt;
     leg.position.set(at[0], 0.026, at[1]);
@@ -461,7 +496,8 @@ function addStairs(
       height,
       uz !== 0 ? depth : width,
     ];
-    const mesh = new Mesh(new BoxGeometry(...size), material);
+    const mesh = new Mesh(unitBox(), material);
+    mesh.scale.set(size[0], size[1], size[2]);
     mesh.name = "stair-step";
     mesh.position.set(centreX, baseY + height / 2, centreZ);
     mesh.castShadow = false;
@@ -598,10 +634,8 @@ export function buildTown(materials: TownMaterials): Town {
   // Plaza tints read a shade apart from the lanes — kerb-edged slabs, never
   // painted bitmaps (CanvasTexture samples black under WebGPURenderer).
   for (const plaza of PLAZAS) {
-    const slab = new Mesh(
-      new BoxGeometry(plaza.x[1] - plaza.x[0], 0.03, plaza.z[1] - plaza.z[0]),
-      materials[plaza.finish],
-    );
+    const slab = new Mesh(unitBox(), materials[plaza.finish]);
+    slab.scale.set(plaza.x[1] - plaza.x[0], 0.03, plaza.z[1] - plaza.z[0]);
     slab.name = "plaza";
     slab.position.set(
       (plaza.x[0] + plaza.x[1]) / 2,
@@ -622,7 +656,8 @@ export function buildTown(materials: TownMaterials): Town {
   water.rotation.x = -Math.PI / 2;
   water.position.set(WATER_X + 108, -1.1, -10);
   group.add(water);
-  const shallows = new Mesh(new BoxGeometry(5.5, 0.04, 260), materials.shallow);
+  const shallows = new Mesh(unitBox(), materials.shallow);
+  shallows.scale.set(5.5, 0.04, 260);
   shallows.position.set(WATER_X + 2.75, -0.96, -10);
   group.add(shallows);
 
@@ -636,10 +671,8 @@ export function buildTown(materials: TownMaterials): Town {
   // Dock pier: plank deck on posts, running east into the water at the
   // north-east waterfront from the PIER span above — the same numbers the
   // schematic's centre-line draws.
-  const pierDeck = new Mesh(
-    new BoxGeometry(PIER.x1 - PIER.x0, 0.24, 4.4),
-    materials.deckWood,
-  );
+  const pierDeck = new Mesh(unitBox(), materials.deckWood);
+  pierDeck.scale.set(PIER.x1 - PIER.x0, 0.24, 4.4);
   pierDeck.name = "pier-deck";
   pierDeck.position.set((PIER.x0 + PIER.x1) / 2, 0.12, PIER.z);
   pierDeck.castShadow = true;
@@ -652,7 +685,7 @@ export function buildTown(materials: TownMaterials): Town {
   });
   for (let index = 0; index < 4; index += 1) {
     for (const side of [-1, 1]) {
-      const post = new Mesh(new CylinderGeometry(0.18, 0.22, 2.4, 6), materials.deckWood);
+      const post = new Mesh(frustumCylinder(0.18, 0.22, 2.4, 6), materials.deckWood);
       post.name = "pier-post";
       post.position.set(PIER.x0 + 2.5 + index * 5, -1.08, PIER.z + side * 1.9);
       post.castShadow = true;
@@ -660,7 +693,8 @@ export function buildTown(materials: TownMaterials): Town {
     }
   }
   for (const side of [-1, 1]) {
-    const railBeam = new Mesh(new BoxGeometry(PIER.x1 - PIER.x0, 0.07, 0.07), materials.steelMast);
+    const railBeam = new Mesh(unitBox(), materials.steelMast);
+    railBeam.scale.set(PIER.x1 - PIER.x0, 0.07, 0.07);
     railBeam.name = "pier-rail";
     railBeam.position.set((PIER.x0 + PIER.x1) / 2, 1.16, PIER.z + side * 2.05);
     group.add(railBeam);
@@ -756,13 +790,11 @@ export function buildTown(materials: TownMaterials): Town {
   addStairs(group, colliders, hittable, materials.deckWood, 3.2, [17.5, 0, -25], [20, 4.8, -25]);
 
   // Catwalk bridge on posts from the back plat's south-east corner to B site.
-  const catwalkDeck = new Mesh(
-    new BoxGeometry(
-      CATWALK_DECK.maxX - CATWALK_DECK.minX,
-      0.22,
-      CATWALK_DECK.maxZ - CATWALK_DECK.minZ,
-    ),
-    materials.deckWood,
+  const catwalkDeck = new Mesh(unitBox(), materials.deckWood);
+  catwalkDeck.scale.set(
+    CATWALK_DECK.maxX - CATWALK_DECK.minX,
+    0.22,
+    CATWALK_DECK.maxZ - CATWALK_DECK.minZ,
   );
   catwalkDeck.name = "catwalk-deck";
   catwalkDeck.position.set(
@@ -780,7 +812,8 @@ export function buildTown(materials: TownMaterials): Town {
   });
   for (const z of [-14.6, -9, -3.4]) {
     for (const side of [-1, 1]) {
-      const post = new Mesh(new BoxGeometry(0.22, 2.18, 0.22), materials.steelPost);
+      const post = new Mesh(unitBox(), materials.steelPost);
+      post.scale.set(0.22, 2.18, 0.22);
       post.name = "catwalk-post";
       post.position.set(25 + side * 1.1, 1.09, z);
       post.castShadow = true;
@@ -842,7 +875,8 @@ export function buildTown(materials: TownMaterials): Town {
     }
   });
   for (const [x, z] of BARRELS) {
-    const barrel = new Mesh(new CylinderGeometry(0.32, 0.32, 0.92, 10), materials.barrel);
+    const barrel = new Mesh(unitCylinder(10), materials.barrel);
+    barrel.scale.set(0.32, 0.92, 0.32);
     barrel.name = "barrel";
     barrel.position.set(x, 0.46, z);
     barrel.castShadow = true;

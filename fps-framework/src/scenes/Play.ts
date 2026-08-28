@@ -797,9 +797,20 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       triangles: number;
       invisibleMeshes: number;
     } => {
-      const info = ctx.renderer.info as
-        | { render?: { drawCalls?: number; triangles?: number } }
-        | undefined;
+      // drawCalls/triangles are the totals captured inside the frame callback
+      // (top of the returned frame callback below), because `renderer.info`
+      // resets at the start of each render — a between-frames read sees zeros.
+      // The capture lags one frame, which a settled assertion does not care about.
+      const invisibleMeshes = countInvisibleMeshes();
+      return {
+        drawCalls: lastWorldDraws,
+        triangles: lastWorldTriangles,
+        invisibleMeshes,
+      };
+    };
+    let lastWorldDraws = 0;
+    let lastWorldTriangles = 0;
+    const countInvisibleMeshes = (): number => {
       // Meshes the renderer is still drawing that cannot possibly show up: fully transparent.
       //
       // Counting pixels does not catch this. A scene whose materials are all at zero opacity
@@ -819,11 +830,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
           if ((material.opacity ?? 1) <= 0) invisibleMeshes += 1;
         }
       });
-      return {
-        drawCalls: info?.render?.drawCalls ?? 0,
-        triangles: info?.render?.triangles ?? 0,
-        invisibleMeshes,
-      };
+      return invisibleMeshes;
     };
     ctx.entities.remove("render");
     ctx.entities.add("render", { debug: renderInfo });
@@ -834,6 +841,14 @@ export class Play extends Scene<GameState, IPhysicsContext> {
 
     return (frameCtx, dt) => {
       const frameEntered = clock();
+      // The totals of the frame that just finished, read before this frame's
+      // render resets `renderer.info` — the `render` entity serves these to the
+      // draw-budget scenario. A between-frames read would see zeros.
+      const lastInfo = ctx.renderer.info as
+        | { render?: { drawCalls?: number; triangles?: number } }
+        | undefined;
+      lastWorldDraws = lastInfo?.render?.drawCalls ?? 0;
+      lastWorldTriangles = lastInfo?.render?.triangles ?? 0;
       frameStats.begin(frameEntered);
       frameStats.markFrame(frameEntered);
       if (warmupLeft > 0) {
