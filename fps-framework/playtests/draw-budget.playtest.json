@@ -19,8 +19,8 @@
       {
         "entity": "render",
         "component": "drawCalls",
-        "lte": 550,
-        "allowTrivial": "drawCalls is the renderer's world-pass total captured inside the frame callback (a between-frames read sees zeros, since renderer.info resets at each render) and is zero only before the first draw. The settled spawn view carried 780 draws before geometry sharing and 492 after: the town root built 363 meshes with 363 unique geometry identities, which the projection correctly declined to batch (notWorthwhile: 835 of 835), and sharing canonical unit geometries drops it to 619 candidates with 11 instanced batches. 550 is the budget the collapsed scene meets with margin while everything below the batching floor keeps its own draw."
+        "lte": 245,
+        "allowTrivial": "drawCalls is the renderer's world-pass total captured inside the frame callback (a between-frames read sees zeros, since renderer.info resets at each render) and is zero only before the first draw. The settled spawn view carries 315 draws when animated soldiers and small moving targets enter the 2048 px sun pass. Keeping dominant static town casters while excluding those moving sub-pixel silhouettes settles at 232; 245 catches their accidental reintroduction with 13 draws of margin."
       },
       {
         "entity": "render",

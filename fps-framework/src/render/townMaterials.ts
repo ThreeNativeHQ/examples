@@ -69,6 +69,7 @@ import {
   mx_noise_float,
   normalMap,
   normalWorldGeometry,
+  pmremTexture,
   positionWorld,
   saturate,
   saturation,
@@ -412,7 +413,7 @@ function worldSurface(
   return material;
 }
 
-export function createTownMaterials(textures: TownTextures): TownMaterials {
+export function createTownMaterials(textures: TownTextures, environment?: Texture): TownMaterials {
   // Whitewash: bright, but a step under paper so the sun has somewhere to go.
   // The alt tint is the sandy hand of render the reference frames alternate
   // with the cold white one; `patch` decides which facade gets which.
@@ -504,7 +505,7 @@ export function createTownMaterials(textures: TownTextures): TownMaterials {
 
   const anySize = (material: Material) => (): Material => material;
 
-  return {
+  const materials: TownMaterials = {
     ground: street,
     plaster: anySize(plaster),
     brick: anySize(brick),
@@ -603,4 +604,17 @@ export function createTownMaterials(textures: TownTextures): TownMaterials {
     plazaCool: paving(0xacb0a6, 0xb7bab0),
     plazaPale: paving(0xc4bfb1, 0xcec9bb),
   };
+
+  if (environment !== undefined) {
+    // These surfaces are overwhelmingly rough. Their live roughness values land between PMREM
+    // levels and make every radiance lookup blend two texels. Roughness 0.8 is an authored PMREM
+    // boundary, so each town IBL lookup needs one fetch while keeping directional sky light.
+    const townEnvironment = pmremTexture(environment, undefined, float(0.8));
+    for (const entry of Object.values(materials)) {
+      const material = typeof entry === "function" ? entry(1) : entry;
+      if (material instanceof MeshStandardNodeMaterial) material.envNode = townEnvironment;
+    }
+  }
+
+  return materials;
 }

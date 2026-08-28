@@ -750,7 +750,7 @@ export class Enemy {
       const mesh = object as Mesh;
       if (mesh.isMesh === true) {
         this.#bodyMeshes.push(mesh);
-        mesh.castShadow = true;
+        mesh.castShadow = false;
         mesh.receiveShadow = false;
       }
     });
@@ -908,7 +908,7 @@ export class Enemy {
     weapon.traverse((object) => {
       const mesh = object as Mesh;
       if (mesh.isMesh === true) {
-        mesh.castShadow = true;
+        mesh.castShadow = false;
         mesh.receiveShadow = false;
       }
     });

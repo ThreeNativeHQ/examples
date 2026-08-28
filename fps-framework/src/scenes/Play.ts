@@ -264,7 +264,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     audio.startAmbience();
 
     phase("render-setup");
-    const materials = createTownMaterials(assets.town);
+    const materials = createTownMaterials(assets.town, assets.skyIbl);
     const town: Town = buildTown(materials);
     ctx.add(town.group);
     // DIAGNOSTIC (temporary): GPU-attribution ablation gates, read from the

@@ -195,7 +195,9 @@ export class BreakableField {
       // material is built during loading rather than on the frame a pot bursts.
       mesh.scale.setScalar(0.0001);
       mesh.visible = true;
-      mesh.castShadow = true;
+      // Flying shards are centimetres wide and short-lived; submitting each to
+      // the town-wide sun map costs a draw for a sub-pixel silhouette.
+      mesh.castShadow = false;
       mesh.frustumCulled = false;
       scene.add(mesh);
       this.#shards.push({ mesh, material, body: undefined, age: 0, live: false });
@@ -230,7 +232,9 @@ export class BreakableField {
         roughness: style.roughness,
       }),
     );
-    shell.castShadow = true;
+    // The vessels are small moving props. Keep their lit volume and received
+    // town shadows, but leave the 2048 px sun pass to architectural casters.
+    shell.castShadow = false;
     shell.receiveShadow = true;
     group.add(shell);
 

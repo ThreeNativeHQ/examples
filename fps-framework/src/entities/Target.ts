@@ -158,6 +158,13 @@ export class Target {
       mount.castShadow = true;
       this.group.add(mount);
     }
+
+    // These small plates move when struck and sit metres from the player; their
+    // sun-map silhouettes are sub-pixel while each caster group costs a pass.
+    this.group.traverse((object) => {
+      const mesh = object as Mesh;
+      if (mesh.isMesh === true) mesh.castShadow = false;
+    });
   }
 
   get scorable(): boolean {
