@@ -48,7 +48,10 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
 
   // A trim on top of the environment: sky blue down, warm stone bounce up, so
   // north-facing plaster keeps a little colour instead of crushing to grey.
-  scene.add(new HemisphereLight(palette.skyHigh, palette.sand, 0.34));
-  scene.add(new AmbientLight(0xffffff, 0.05));
+  // With TN_NO_IBL the hemisphere IS the fill (see sky.ts), so it carries the
+  // environment's own intensity instead of being a trim on top of it.
+  const iblFill = globalThis.localStorage?.getItem("TN_NO_IBL") !== "1";
+  scene.add(new HemisphereLight(palette.skyHigh, palette.sand, iblFill ? 0.34 : 2.2));
+  scene.add(new AmbientLight(0xffffff, iblFill ? 0.05 : 0.22));
   return sun;
 }

@@ -267,6 +267,13 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const materials = createTownMaterials(assets.town);
     const town: Town = buildTown(materials);
     ctx.add(town.group);
+    // DIAGNOSTIC (temporary): GPU-attribution ablation gates, read from the
+    // host's localStorage so a device arm flips them without a rebuild.
+    const ablate = (key: string): boolean =>
+      globalThis.localStorage?.getItem(key) === "1";
+    if (ablate("TN_ABLATE_TOWN")) town.group.visible = false;
+    if (ablate("TN_ABLATE_SKY")) ctx.scene.background = null;
+    if (ablate("TN_ABLATE_IBL")) ctx.scene.environment = null;
     phase("town");
     // Plates are raycast targets like any solid: without them in the list a round flies
     // straight through and scores whatever soldier happens to stand behind the plate.
@@ -448,6 +455,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         soldier.group.updateWorldMatrix(true, true);
       }
       ctx.add(soldier.group);
+      if (ablate("TN_ABLATE_SOLDIERS")) soldier.group.visible = false;
       ctx.entities.add(index === 0 ? "enemy" : `enemy-${index}`, soldier);
       // Shouted callouts on spotting, hearing rounds and being hit; the audio
       // sink throttles so five men reacting never stack into a wall of shouting.

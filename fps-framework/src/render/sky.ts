@@ -58,14 +58,27 @@ export function setupSky(scene: Scene, background?: Texture, environment?: Textu
     background.mapping = EquirectangularReflectionMapping;
     scene.background = background;
 
-    const light = environment ?? background;
-    light.colorSpace = SRGBColorSpace;
-    light.mapping = EquirectangularReflectionMapping;
-    scene.environment = light;
+    // The image-based light is the most expensive per-pixel thing in the frame on a
+    // phone: PMREM sampling runs inside every PBR fragment, and draining the GPU with
+    // everything else ablated measured it at ~6 ms of a ~28 ms 720p frame on the
+    // reference device (runtime-perf-state §1.3.2). Every surface in this town is
+    // dielectric and rough (metalness 0.02, roughness 0.68-0.96), so the specular
+    // half of the IBL barely exists and the diffuse half is a sky-coloured
+    // hemisphere gradient to good approximation. TN_NO_IBL swaps the PMREM for that
+    // hemisphere, which lighting.ts trims to a complement; the sky background, fog
+    // and every material stay exactly as authored.
+    const legacyFill = globalThis.localStorage?.getItem("TN_NO_IBL") === "1";
+    if (!legacyFill) {
+      const light = environment ?? background;
+      light.colorSpace = SRGBColorSpace;
+      light.mapping = EquirectangularReflectionMapping;
+      scene.environment = light;
 
-    // The sky is now the main fill: it carries the blue that shaded plaster
-    // bounces, so the hemisphere light in lighting.ts drops back to a trim.
-    scene.environmentIntensity = 0.92;
+      // The sky is now the main fill: it carries the blue that shaded plaster
+      // bounces, so the hemisphere light in lighting.ts drops back to a trim.
+      scene.environmentIntensity = 0.92;
+    }
+
     // A hair under the environment so the horizon does not out-punch whitewash
     // that is taking direct sun.
     scene.backgroundIntensity = 1.0;

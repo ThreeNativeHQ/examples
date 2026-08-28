@@ -55,6 +55,13 @@ import {
 } from "three";
 import { MeshStandardNodeMaterial } from "three/webgpu";
 import {
+  Fn,
+  max,
+  min,
+  select,
+  vec4,
+} from "three/tsl";
+import {
   color,
   float,
   mix,
@@ -267,6 +274,43 @@ type WorldSurfaceOptions = {
 };
 
 /**
+ * Triplanar sampling that fetches only the two dominant axes.
+ *
+ * `triplanarTexture` issues three fetches per sample and multiplies two of them
+ * by ~zero here: this town is axis-aligned boxes, whose face normals are exact
+ * axes, so three's blend weights are (1, 0, 0) on every wall and the two extra
+ * fetches multiply into nothing — at up to 24 fetches a fragment they were the
+ * whole GPU frame on a phone. This keeps three's exact blend (abs world normal,
+ * L1-normalised), drops the smallest axis, and renormalises the pair it keeps:
+ * the retained pair carry their exact relative mix, axis-aligned faces are
+ * pixel-identical, and curved props give up only the smallest contributor at
+ * their 45° bands.
+ */
+const triTop2 = (
+  mapNode: ReturnType<typeof texture>,
+  // A uniform scale (float) or an anisotropic one (vec2), as `triplanarTexture` takes.
+  scaleNode: any,
+  positionNode = positionWorld,
+  normalNode = normalWorldGeometry,
+): any => {
+  const b = normalNode.abs().normalize();
+  const floorW = min(b.x, min(b.y, b.z));
+  const keepSum = max(
+    b.x.sub(floorW).add(b.y.sub(floorW)).add(b.z.sub(floorW)),
+    1e-4,
+  );
+  const uvX = positionNode.yz.mul(scaleNode);
+  const uvY = positionNode.zx.mul(scaleNode);
+  const uvZ = positionNode.xy.mul(scaleNode);
+  const xFirst = b.x.greaterThanEqual(b.y);
+  const uv1 = select(xFirst, uvX, uvY);
+  const uv2 = select(b.z.greaterThanEqual(min(b.x, b.y)), uvZ, select(xFirst, uvY, uvX));
+  const w1 = max(b.x, b.y).sub(floorW).div(keepSum);
+  const w2 = max(b.z, min(b.x, b.y)).sub(floorW).div(keepSum);
+  return texture(mapNode.value, uv1).mul(w1).add(texture(mapNode.value, uv2).mul(w2));
+};
+
+/**
  * A surface sampled triplanar from world position. Two meshes of any size or
  * orientation that share one of these show the texture at the same scale, and
  * meshes that abut in world space continue each other's pattern.
@@ -277,10 +321,8 @@ function worldSurface(
   options: WorldSurfaceOptions = {},
 ): MeshStandardNodeMaterial {
   const project = (source: Texture, srgb: boolean, metresU: number, metresV = metresU) =>
-    triplanarTexture(
+    triTop2(
       texture(prepare(source, srgb)),
-      null,
-      null,
       options.tileMetresV === undefined
         ? float(1 / metresU)
         : vec2(float(1 / metresU), float(1 / metresV)),
@@ -299,22 +341,32 @@ function worldSurface(
   // between them is never a line.
   const BREAKUP = 1.618;
   const blend = mx_noise_float(positionWorld.mul(0.065)).mul(0.5).add(0.5);
-  const sample = (source: Texture, srgb: boolean) =>
-    mix(
-      project(source, srgb, tileMetres, options.tileMetresV ?? tileMetres),
-      project(
-        source,
-        srgb,
-        tileMetres * BREAKUP,
-        (options.tileMetresV ?? tileMetres) * BREAKUP,
-      ),
-      smoothstep(0.35, 0.65, blend),
-    );
+  // The breakup crossfade exists to hide a visible repeat in the COLOUR map; a
+  // normal or roughness repeat never reads at these scales, so those maps take
+  // one projection and half the fetches.
+  const sample = (source: Texture, srgb: boolean, breakup = true) =>
+    breakup
+      ? mix(
+          project(source, srgb, tileMetres, options.tileMetresV ?? tileMetres),
+          project(
+            source,
+            srgb,
+            tileMetres * BREAKUP,
+            (options.tileMetresV ?? tileMetres) * BREAKUP,
+          ),
+          smoothstep(0.35, 0.65, blend),
+        )
+      : project(source, srgb, tileMetres, options.tileMetresV ?? tileMetres);
 
   const material = new MeshStandardNodeMaterial({
     side: options.side ?? FrontSide,
     metalness: options.metalness ?? 0.02,
   });
+  if (globalThis.localStorage?.getItem("TN_FLAT_TOWN") === "1") {
+    material.colorNode = color(0xbbbbbb);
+    material.roughnessNode = float(0.9);
+    return material;
+  }
 
   // Two noise fields, both in world space so they cross building boundaries the
   // way real weather does rather than stopping at a mesh edge.
@@ -343,18 +395,20 @@ function worldSurface(
   const shaded =
     maps.ao === undefined
       ? photo
-      : photo.mul(mix(float(1 - (options.occlusion ?? 0.55)), float(1), sample(maps.ao, false).r));
+      : photo.mul(
+          mix(float(1 - (options.occlusion ?? 0.55)), float(1), sample(maps.ao, false, false).r),
+        );
   material.colorNode = shaded.mul(paint).mul(value).mul(worn).mul(dirt).mul(wash);
 
   if (maps.normal !== undefined) {
     const relief = options.normalScale ?? 1;
-    material.normalNode = normalMap(vec3(sample(maps.normal, false)), vec2(relief, relief));
+    material.normalNode = normalMap(vec3(sample(maps.normal, false, false)), vec2(relief, relief));
   }
   const [low, high] = options.roughness ?? [0.68, 0.96];
   material.roughnessNode =
     maps.rough === undefined
       ? float((low + high) / 2)
-      : mix(float(low), float(high), saturate(sample(maps.rough, false).r));
+      : mix(float(low), float(high), saturate(sample(maps.rough, false, false).r));
   return material;
 }
 
