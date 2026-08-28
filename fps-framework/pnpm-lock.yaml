@@ -801,7 +801,7 @@ packages:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
   '@threenative/core@file:../.packages/threenative-core-0.3.0.tgz':
-    resolution: {integrity: sha512-kt6XyoWzHH5s4lVfGor2e6tRbhqZXDVSu806XL/u5ZTLXEM/RaphWvqiw59eTxYuQ/IvnrgeY4qtuGlh7YqICw==, tarball: file:../.packages/threenative-core-0.3.0.tgz}
+    resolution: {integrity: sha512-9KHKJRq8rmSTptp2T5+Gv+d2hmE07bNiZE+oVk8Km3u5jcBbwHsVoZfQmtT7VZOB1WhsF5ez2yoKUqkIAtnu2A==, tarball: file:../.packages/threenative-core-0.3.0.tgz}
     version: 0.3.0
     peerDependencies:
       '@threenative/playtest': '>=0.3.0 <0.4.0'

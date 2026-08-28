@@ -209,6 +209,12 @@ function TouchAction({
 	return (
 		<button
 			type="button"
+			// The host decides on pointer-down whether a press belongs to the UI or falls through to
+			// the game, and it decides from the rectangles the page publishes for elements marked
+			// this way. Without it the button is drawn, is styled `pointer-events-auto`, and still
+			// never receives the press on native: the platform hands the gesture to the game before
+			// any CSS runs. `pointer-events-auto` is a web-only half of the story.
+			data-tn-interactive
 			// `onPointerDown`, not `onClick`: a click needs a press and a release inside the same
 			// element and waits out the gesture, which on a phone is a control that feels broken.
 			onPointerDown={(event) => {

@@ -5,6 +5,20 @@
 Instructions for the AI agent working in this game. This project was scaffolded with
 `create-threenative`. `CLAUDE.md` is a copy of this file; edit this one.
 
+## Probing this game on a device
+
+Bayview's applicationId is **`com.threenative.bayview`** (`threenative.config.ts` -> `app.id`), not
+`com.threenative.game`. That other package is a conformance harness and it is installed on the
+measurement phone: it shows a dark screen with a yellow `SCORE 0000` HUD at 120 FPS, which reads as
+a working game and is not this one. A probe against it produces confident nonsense — that mistake
+has been made twice, and cost a whole measurement session once.
+
+    adb -s <device> shell am start -W -n com.threenative.bayview/com.threenative.runtime.MystralActivity
+
+After installing, check the APK carries your change before you measure it: `strings` the packaged
+`lib/arm64-v8a/libmystral-runtime.so` for a native marker, or grep `assets/scripts/main.js` for a
+JS one. A build that silently reused a prebuilt looks identical to one that did not.
+
 ## What the framework owns, and what you own
 
 ThreeNative owns the plumbing: renderer bootstrap and WebGPU fallback, the fixed-step loop,
