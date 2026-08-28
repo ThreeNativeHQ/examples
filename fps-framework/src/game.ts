@@ -2,6 +2,7 @@ import {
 	type ICtx,
 	type IGamePluginRuntime,
 	defineGame,
+	getPlatform,
 	replay,
 } from "@threenative/core";
 import { playtest } from "@threenative/core/playtest";
@@ -14,6 +15,17 @@ import { Play } from "./scenes/Play.js";
 import type { GameState } from "./state.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
+
+const platform = getPlatform();
+const androidNativeResolutionScale =
+	platform.runtime === "native" && platform.os === "android" ? 0.6 : 1;
+console.info(
+	`TN_RENDER_SCALE:${JSON.stringify({
+		platform: platform.os,
+		resolutionScale: androidNativeResolutionScale,
+		runtime: platform.runtime,
+	})}`,
+);
 
 // Entity-derived component keys do not exist until Play.enter() finishes. Advertising the
 // already-provided runtime observation here keeps the runner from rejecting a component scenario
@@ -83,7 +95,7 @@ const game = defineGame<GameState, IPhysicsContext>({
 		playtest(),
 	],
 	render: config.renderer,
-	renderer: { antialias: false },
+	renderer: { antialias: false, resolutionScale: androidNativeResolutionScale },
 	scenes: { play: Play },
 	seed: 90210,
 	start: "play",
