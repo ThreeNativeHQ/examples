@@ -1,0 +1,33 @@
+{
+  "name": "draw-budget",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 30,
+  "artifacts": { "screenshots": true },
+  "steps": [
+    { "kind": "wait", "label": "settle", "waitTicks": 120 },
+    { "kind": "wait", "label": "measure", "waitTicks": 240, "screenshot": "draw-budget" }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "performance": {
+      "maxDrawCalls": 450
+    },
+    "visual": [
+      {
+        "region": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "minNonblankPixelRatio": 0.01
+        }
+      }
+    ]
+  }
+}
