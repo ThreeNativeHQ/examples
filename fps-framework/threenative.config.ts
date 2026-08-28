@@ -16,6 +16,7 @@ export default {
     orientation: "landscape", // Mobile viewport orientation.
     fullscreen: true, // Keep the game surface edge to edge.
     keepScreenOn: true, // Do not dim during a play session.
+    maxFps: 120, // Use the Pixel 8's high-refresh mode when Android can honor it.
   },
   window: {
     title: "Bayview — 5v5 Bomb Defusal", // Desktop window title.
