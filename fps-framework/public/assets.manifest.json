@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "entries": {
+    "generated/player-viewmodel-clean.glb": {
+      "bytes": 4277724,
+      "kind": "model",
+      "output": "generated/player-viewmodel-clean.1e1a2f8b.glb",
+      "passes": []
+    },
+    "imported/polyhaven/sky.outdoor-cloudy/environment.jpg": {
+      "bytes": 150695,
+      "kind": "texture",
+      "output": "imported/polyhaven/sky.outdoor-cloudy/environment.9cf04058.jpg",
+      "passes": []
+    },
+    "imported/polyhaven/sky.outdoor-cloudy/provenance.json": {
+      "bytes": 1547,
+      "kind": "other",
+      "output": "imported/polyhaven/sky.outdoor-cloudy/provenance.0bd5f9fa.json",
+      "passes": []
+    },
+    "models/enemy-terrorist.glb": {
+      "bytes": 3757604,
+      "kind": "model",
+      "output": "models/enemy-terrorist.6d3f1ff4.glb",
+      "passes": []
+    },
+    "models/enemy-terrorist.provenance.json": {
+      "bytes": 1479,
+      "kind": "other",
+      "output": "models/enemy-terrorist.provenance.0d97cbcf.json",
+      "passes": []
+    },
+    "models/player-viewmodel.glb": {
+      "bytes": 7495528,
+      "kind": "model",
+      "output": "models/player-viewmodel.db875e7e.glb",
+      "passes": []
+    },
+    "models/player-viewmodel.provenance.json": {
+      "bytes": 1486,
+      "kind": "other",
+      "output": "models/player-viewmodel.provenance.0577de50.json",
+      "passes": []
+    },
+    "models/weapon-ak47.glb": {
+      "bytes": 11751004,
+      "kind": "model",
+      "output": "models/weapon-ak47.78562e01.glb",
+      "passes": []
+    },
+    "models/weapon-ak47.provenance.json": {
+      "bytes": 1403,
+      "kind": "other",
+      "output": "models/weapon-ak47.provenance.d20aac81.json",
+      "passes": []
+    },
+    "textures/range-target-face-hit.png": {
+      "bytes": 240077,
+      "kind": "texture",
+      "output": "textures/range-target-face-hit.c1738e9a.png",
+      "passes": []
+    },
+    "textures/range-target-face.png": {
+      "bytes": 239057,
+      "kind": "texture",
+      "output": "textures/range-target-face.4f8fdbba.png",
+      "passes": []
+    },
+    "textures/ue-test-surface.jpg": {
+      "bytes": 321573,
+      "kind": "texture",
+      "output": "textures/ue-test-surface.8d07c75a.jpg",
+      "passes": []
+    }
+  }
+}

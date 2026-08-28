@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>node churn probe</title>
+  </head>
+  <body style="margin: 0">
+    <div id="root"></div>
+    <script type="module">
+      // PRD-227 lane-2 probe: count node-system build vs per-frame dispatch on the live game.
+      const three = await import("three/webgpu");
+      const { uniform } = await import("three/tsl");
+
+      let proto = Object.getPrototypeOf(uniform(1));
+      while (proto !== null && proto.constructor && proto.constructor.name !== "Node") {
+        proto = Object.getPrototypeOf(proto);
+      }
+      if (proto === null) throw new Error("Node base class not found");
+
+      const counts = {
+        build: 0,
+        buildByStage: { setup: 0, analyze: 0, generate: 0, other: 0 },
+        getNodeType: 0,
+        updateNode: 0,
+        updateForRender: 0,
+        needsRefreshCalls: 0,
+        needsRefreshTrue: 0,
+        renderObjects: new Set(),
+        frame: 0,
+        perFrame: [],
+        bootBuild: 0,
+      };
+
+      const origBuild = proto.build;
+      proto.build = function (builder, output) {
+        counts.build += 1;
+        if (counts.frame === 0) counts.bootBuild += 1;
+        const stage = builder && builder.buildStage ? builder.buildStage : "other";
+        counts.buildByStage[stage] = (counts.buildByStage[stage] ?? 0) + 1;
+        return origBuild.call(this, builder, output);
+      };
+      const origGetNodeType = proto.getNodeType;
+      proto.getNodeType = function (builder, output) {
+        counts.getNodeType += 1;
+        return origGetNodeType.call(this, builder, output);
+      };
+
+      const nfProto = Object.getPrototypeOf(new three.NodeFrame());
+      const origUpdateNode = nfProto.updateNode;
+      nfProto.updateNode = function (node, frame) {
+        counts.updateNode += 1;
+        return origUpdateNode.call(this, node, frame);
+      };
+
+      let monitorPatched = false;
+      const WGPUR = three.WebGPURenderer.prototype;
+      const origRender = WGPUR.render;
+      WGPUR.render = function (scene, camera) {
+        if (!monitorPatched && this._nodes) {
+          const p = Object.getPrototypeOf(this._nodes);
+          const origUpdateForRender = p.updateForRender;
+          p.updateForRender = function (renderObject) {
+            counts.updateForRender += 1;
+            counts.renderObjects.add(renderObject.id);
+            return origUpdateForRender.call(this, renderObject);
+          };
+          const nmr = Object.getPrototypeOf(this._nodes).needsRefresh;
+          // needsRefresh lives on NodeManager: wrap to count outcomes.
+          p.needsRefresh = function (renderObject) {
+            counts.needsRefreshCalls += 1;
+            const r = nmr.call(this, renderObject);
+            if (r) counts.needsRefreshTrue += 1;
+            return r;
+          };
+          monitorPatched = true;
+        }
+        const b0 = counts.build, u0 = counts.updateNode, r0 = counts.updateForRender;
+        const t0 = performance.now();
+        const result = origRender.call(this, scene, camera);
+        const dt = performance.now() - t0;
+        counts.frame += 1;
+        counts.perFrame.push({
+          frame: counts.frame,
+          build: counts.build - b0,
+          updateNode: counts.updateNode - u0,
+          updateForRender: counts.updateForRender - r0,
+          ms: Math.round(dt),
+        });
+        if (counts.perFrame.length > 4000) counts.perFrame.shift();
+        return result;
+      };
+
+      window.__PROBE__ = { counts };
+      await import("/src/main.ts");
+      console.log("[probe] game module loaded");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "asset": "player-viewmodel.glb",
+  "license": "user-provided; verify upstream pack terms before redistribution",
+  "source": {
+    "kind": "user-provided-local-file",
+    "name": "animated_fps_hands_rifle_animation_pack.glb",
+    "path": "/home/joao/Downloads/animated_fps_hands_rifle_animation_pack.glb",
+    "sha256": "42437d6c76664e4303d25c179ea49ce509ca67d3e6b8ded06fbb67527266c905"
+  },
+  "runtimeTransform": {
+    "owner": "scripts/import-fps-viewmodel.mjs",
+    "command": "node scripts/import-fps-viewmodel.mjs --source <source.glb>",
+    "outputSha256": "d8236d3add7e1bc0b32748a5b5a18b2b1810fdad936b214aa2b3e2fb629c2865",
+    "tools": [
+      "@gltf-transform/core 4.4.0",
+      "@gltf-transform/extensions 4.4.0",
+      "sharp 0.35.2"
+    ],
+    "clips": [
+      "Idle",
+      "Reload",
+      "Run",
+      "Shoot",
+      "Walk"
+    ],
+    "summary": "Preserved the supplied model, skeleton, hands, rifle, silencer, scope, magazine, materials and textures; kept the idle, walk, run, shoot and reload clips under stable ids and dropped the unused draw, one-shot and inspect clips; rebound the six magazine vertices the source left with no skin weight onto their mesh's dominant joint, which is what stretched the magazine across the frame during playback; replaced the glove metallic-roughness map with matte factors (metallic 0.02, roughness 0.78) because the packed map read as wet plastic under the arena environment light; downsampled embedded textures to 512px."
+  }
+}
