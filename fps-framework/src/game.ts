@@ -18,7 +18,7 @@ type GameCtx = ICtx<GameState, IPhysicsContext>;
 
 const platform = getPlatform();
 const androidNativeResolutionScale =
-	platform.runtime === "native" && platform.os === "android" ? 0.44 : 1;
+	platform.runtime === "native" && platform.os === "android" ? 0.36 : 1;
 console.info(
 	`TN_RENDER_SCALE:${JSON.stringify({
 		platform: platform.os,
