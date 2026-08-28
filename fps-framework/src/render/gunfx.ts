@@ -517,6 +517,7 @@ export class MuzzleFlash {
   #roll = 0;
   readonly #baseSize: number;
   readonly #forwardOffset: number;
+  #settled = false;
 
   constructor(
     parent: Object3D,
@@ -546,6 +547,7 @@ export class MuzzleFlash {
     this.#card.visible = true;
     this.#card.frustumCulled = false;
     this.#card.renderOrder = 28;
+    this.#settled = false;
     parent.add(this.#card);
     this.#light = new PointLight(
       options.lightColour ?? 0xffc46a,
@@ -562,9 +564,22 @@ export class MuzzleFlash {
     this.#light.position.copy(this.#card.position).addScaledVector(direction, 0.4);
     this.#roll = rng() * Math.PI * 2;
     this.#card.scale.setScalar(this.#baseSize * (0.85 + rng() * 0.5));
+    this.#card.visible = true;
     (this.#card.material as MeshBasicMaterial).opacity = 1;
     this.#light.intensity = this.#peakIntensity;
     this.#life = this.#maxLife;
+  }
+
+  /**
+   * Stop submitting the card while no flash is alive.
+   *
+   * The card is resident from construction at zero opacity so its pipeline compiles during
+   * loading; the cost is a draw per idle flash forever, and on a phone the draw call is the
+   * expensive part. Once compiled the pipeline is cached, so `spawn` re-showing it is free.
+   */
+  settle(): void {
+    this.#settled = true;
+    if (this.#life <= 0) this.#card.visible = false;
   }
 
   /** Current card opacity. Zero means retired — the playtest gate for a stuck flash reads this. */
@@ -576,6 +591,7 @@ export class MuzzleFlash {
     this.#life = Math.max(0, this.#life - dt);
     if (this.#life <= 0) {
       (this.#card.material as MeshBasicMaterial).opacity = 0;
+      if (this.#settled) this.#card.visible = false;
       this.#light.intensity = 0;
       return;
     }
@@ -631,6 +647,11 @@ export class MuzzleFlashPool {
     const slot = this.#slots[this.#cursor % this.#slots.length];
     this.#cursor += 1;
     slot?.spawn(at, direction, rng);
+  }
+
+  /** Stop submitting every idle slot's card. See `MuzzleFlash.settle`. */
+  settle(): void {
+    for (const slot of this.#slots) slot.settle();
   }
 
   /** Every slot, every frame. Call this outside any gameplay-phase gate — see `Play`. */

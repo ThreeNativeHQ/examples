@@ -166,6 +166,8 @@ export class BreakableField {
   #shardCursor = 0;
   #broken = 0;
   #liveShards = 0;
+  /** Dead shards stop being submitted once their pipeline exists. See `settle`. */
+  #settled = false;
 
   constructor(
     scene: Object3D,
@@ -292,6 +294,21 @@ export class BreakableField {
     }
   }
 
+  /**
+   * Stop submitting the shards that are not flying.
+   *
+   * Every shard is resident from frame one at a size nothing can see, so its pipeline compiles
+   * during loading; the cost is a draw per dead shard forever, and on a phone the draw call is the
+   * expensive part, not the triangles. Once compiled the pipeline is cached, so `#launchShard`
+   * re-showing a shard is free.
+   */
+  settle(): void {
+    this.#settled = true;
+    for (const shard of this.#shards) {
+      if (!shard.live) shard.mesh.visible = false;
+    }
+  }
+
   /** Registered as an entity so a scenario can assert a shot vessel came apart and cleaned up. */
   debug(): { broken: number; liveShards: number; props: number; shardCapacity: number } {
     return {
@@ -339,6 +356,7 @@ export class BreakableField {
     const size = 0.045 + rng() ** 3 * 0.075;
     const thickness = size * (0.3 + rng() * 0.25);
     shard.mesh.scale.set(size, thickness, size * (0.75 + rng() * 0.7));
+    shard.mesh.visible = true;
     // Spread the pieces around the vessel's own body rather than all from the bullet's entry —
     // a pot that comes apart only where it was hit reads as a decal, not a break.
     const around = (index / style.shardCount) * Math.PI * 2;
@@ -384,6 +402,7 @@ export class BreakableField {
     shard.age = 0;
     shard.material.opacity = 0;
     shard.mesh.scale.setScalar(0.0001);
+    if (this.#settled) shard.mesh.visible = false;
     this.#liveShards = Math.max(0, this.#liveShards - 1);
   }
 }

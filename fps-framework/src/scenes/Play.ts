@@ -365,6 +365,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       smoke.settle();
       impacts.settle();
       rifle.settlePools();
+      breakables.settle();
+      enemyFlashes.settle();
+      playerTracers.settle();
+      enemyTracers.settle();
     });
 
     const touch = new TouchControls();
@@ -834,6 +838,56 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     };
     ctx.entities.remove("render");
     ctx.entities.add("render", { debug: renderInfo });
+    // DIAGNOSTIC (temporary): which (geometry, material, castShadow, receiveShadow, layers)
+    // groups sit below the projection's 4-member floor and on the exact lane? Prints once a
+    // few seconds in, from the live scene, so draw-cut work targets real populations.
+    ctx.after(6, () => {
+      const groups = new Map<string, { count: number; names: Set<string> }>();
+      const pathOf = (object: { name?: string; parent?: unknown }): string => {
+        const parts: string[] = [];
+        let node: { name?: string; parent?: unknown } | undefined = object;
+        while (node !== undefined && node !== null && parts.length < 3) {
+          if (node.name) parts.unshift(node.name);
+          node = node.parent as { name?: string; parent?: unknown } | undefined;
+        }
+        return parts.join("/") || "(root)";
+      };
+      ctx.scene.traverse((object) => {
+        const mesh = object as {
+          isMesh?: boolean; geometry?: { uuid?: string }; material?: unknown;
+          castShadow?: boolean; receiveShadow?: boolean; visible?: boolean; layers?: { mask: number };
+          renderOrder?: number; name?: string; parent?: unknown;
+        };
+        if (mesh.isMesh !== true || mesh.geometry === undefined) return;
+        if ((mesh as unknown as { visible?: boolean }).visible !== true) return;
+        const material = mesh.material as { uuid?: string } | undefined;
+        if (material === undefined || Array.isArray(mesh.material)) return;
+        const key = [
+          mesh.geometry?.uuid?.slice(0, 8) ?? "?",
+          material.uuid?.slice(0, 8) ?? "?",
+          mesh.castShadow === true ? 1 : 0,
+          mesh.receiveShadow === true ? 1 : 0,
+        ].join("|");
+        const entry = groups.get(key) ?? { count: 0, names: new Set<string>() };
+        entry.count += 1;
+        const own = (mesh as unknown as { name?: string }).name;
+        entry.names.add(own || `⟨${pathOf(mesh)}⟩`);
+        groups.set(key, entry);
+      });
+      const summary = new Map<string, number>();
+      for (const g of groups.values()) {
+        if (g.count >= 4) continue;
+        for (const name of g.names) summary.set(name, (summary.get(name) ?? 0) + g.count);
+      }
+      const ranked = [...summary.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
+      console.info(
+        `TN_DRAW_DIAG:${JSON.stringify({
+          groups: groups.size,
+          belowFloorMeshes: [...groups.values()].filter((g) => g.count < 4).reduce((n, g) => n + g.count, 0),
+          byMeshName: Object.fromEntries(ranked),
+        })}`,
+      );
+    });
     const clock = (): number => globalThis.performance?.now() ?? 0;
     // Startup is not gameplay: pipeline compilation and every material's first draw land in the
     // opening second and cannot hitch twice. Measuring them alongside play hides real stalls.
