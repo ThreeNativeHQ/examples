@@ -252,13 +252,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     setupSky(ctx.scene, assets.sky, assets.skyIbl);
     setupLighting(ctx.scene, ctx.renderer.raw as Parameters<typeof setupLighting>[1]);
     setupPost(ctx.renderer);
-    // The native host's 60 Hz software deadline landed at 56–59 fps after scheduling overhead,
-    // even though Bayview's measured work fit in the 16.67 ms cell. Ask slightly above the target;
-    // the Pixel's 120 Hz FIFO still quantizes this to 60 presents/s rather than allowing 62.
-    const presentationCap = (
-      globalThis as typeof globalThis & { __tnPresentationCap?: (hz: number) => number }
-    ).__tnPresentationCap;
-    presentationCap?.(62);
     ctx.add(camera);
 
     // The bus rides the camera's listener and registers as an entity so the dev
@@ -803,7 +796,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       drawCalls: number;
       triangles: number;
       invisibleMeshes: number;
-      nodeMaterials: number;
     } => {
       const info = ctx.renderer.info as
         | { render?: { drawCalls?: number; triangles?: number } }
@@ -817,18 +809,12 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // assertion passed on it. The invariant that actually holds is simpler: nothing in this
       // game's level is supposed to be invisible, so any solid mesh at zero opacity is a defect.
       let invisibleMeshes = 0;
-      const nodeMaterials = new Set<unknown>();
       ctx.scene.traverse((object) => {
         const mesh = object as { isMesh?: boolean; material?: unknown };
         if (mesh.isMesh !== true || mesh.material === undefined) return;
         const surfaces = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         for (const surface of surfaces) {
-          const material = surface as {
-            isNodeMaterial?: boolean;
-            opacity?: number;
-            visible?: boolean;
-          };
-          if (material.isNodeMaterial === true) nodeMaterials.add(surface);
+          const material = surface as { opacity?: number; visible?: boolean };
           if (material.visible === false) continue;
           if ((material.opacity ?? 1) <= 0) invisibleMeshes += 1;
         }
@@ -837,7 +823,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         drawCalls: info?.render?.drawCalls ?? 0,
         triangles: info?.render?.triangles ?? 0,
         invisibleMeshes,
-        nodeMaterials: nodeMaterials.size,
       };
     };
     ctx.entities.remove("render");
