@@ -1,0 +1,95 @@
+{
+  "name": "first-light-signal",
+  "schemaVersion": 1,
+  "target": "web",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 30,
+  "subject": "runner",
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "night",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "to-spur",
+      "press": "ArrowRight",
+      "holdTicks": 100,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "wait-for-gold",
+      "waitTicks": 60,
+      "release": true,
+      "screenshot": "first-light.png"
+    },
+    {
+      "kind": "input",
+      "label": "fire",
+      "press": "Space",
+      "holdTicks": 6,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settled",
+      "waitTicks": 20,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "warmth",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "skyRadianceRed",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "onSpur",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "shots",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "bestShot",
+        "gte": 56,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "outcome",
+        "atSteps": [
+          {
+            "label": "night",
+            "equals": "playing"
+          },
+          {
+            "label": "settled",
+            "equals": "signalled"
+          }
+        ]
+      }
+    ]
+  }
+}
