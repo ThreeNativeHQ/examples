@@ -1,0 +1,156 @@
+{
+  "name": "mined-features",
+  "schemaVersion": 1,
+  "target": "web",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 30,
+  "subject": "player",
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "startup",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "label": "light-centre",
+      "at": {
+        "entity": "beacon-1"
+      },
+      "release": true,
+      "waitTicks": 6
+    },
+    {
+      "kind": "wait",
+      "label": "shake-decays",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "zoom-out",
+      "wheel": {
+        "deltaY": 240
+      },
+      "holdTicks": 12,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk",
+      "press": "ArrowRight",
+      "holdTicks": 34,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "label": "light-left",
+      "at": {
+        "entity": "beacon-0"
+      },
+      "release": true,
+      "waitTicks": 6
+    },
+    {
+      "kind": "click",
+      "label": "light-right",
+      "at": {
+        "entity": "beacon-2"
+      },
+      "release": true,
+      "waitTicks": 6
+    },
+    {
+      "kind": "wait",
+      "label": "settled",
+      "waitTicks": 40,
+      "release": true,
+      "screenshot": "mined-features.png"
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "beaconsLit",
+        "changed": true,
+        "atSteps": [
+          {
+            "label": "startup",
+            "equals": 0
+          },
+          {
+            "label": "light-centre",
+            "equals": 1
+          },
+          {
+            "label": "light-right",
+            "equals": 3
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "beaconHoverEvents",
+        "gte": 1,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "shakePeak",
+        "gte": 0.02,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "cameraDistance",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "flameAdvances",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "computeSteps",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "bvhTriangles",
+        "changed": true,
+        "atSteps": [
+          {
+            "label": "startup",
+            "equals": 36
+          },
+          {
+            "label": "light-right",
+            "equals": 42
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "sunTransmittanceRed",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "billboardFacingWorst",
+        "gte": 0.98,
+        "changed": true
+      }
+    ]
+  }
+}

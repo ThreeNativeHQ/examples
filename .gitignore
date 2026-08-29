@@ -45,3 +45,6 @@ artifacts/
 
 
 .claude
+
+# Playtest run output; regenerate by running the scenarios.
+artifacts/

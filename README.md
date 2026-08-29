@@ -11,6 +11,7 @@ sealed brief for the current build and the package staging, and every game lives
 | --- | --- |
 | `crate-vault/` | Physics puzzle — shove crates onto the pad to light the goal, with a determinism replay on `V`. Framework arm, on the published `@threenative/*` 0.2.x |
 | `fox-game/` | Platformer — run, jump, collect the coin line, reach the goal. Plain Three.js arm, no framework packages |
+| `mined-features/` | Exploration — click three beacons to light them. Exists to prove the 2026-08-28 mined features work through the public API: atmosphere, pointer events, the portable zoom axis, billboards, camera shake, sprite atlases, the shared compute lifetime and the GPU scene BVH. One playtest asserts all eight |
 
 ## Running one
 
