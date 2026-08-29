@@ -1,0 +1,295 @@
+{
+  "name": "clear-the-field",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 90,
+  "steps": [
+    {
+      "kind": "input",
+      "label": "drive-out-0",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-1",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-2",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-3",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-4",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-5",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-6",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true,
+      "screenshot": "mid-harvest"
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-7",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-8",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-9",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-10",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-out-11",
+      "press": "ArrowRight",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-0",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-1",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-2",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-3",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-4",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-5",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-6",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-7",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-8",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-9",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-10",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "drive-up-11",
+      "press": "ArrowUp",
+      "holdTicks": 25,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-0",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-1",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-2",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-3",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-4",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-5",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-6",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-7",
+      "waitTicks": 30,
+      "release": true,
+      "screenshot": "after-harvest"
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "GameState",
+        "path": "candidateCount",
+        "equals": 1048576,
+        "allowTrivial": "The candidate count is a held invariant: the field is built with exactly 1,048,576 candidates and must still report that number at the end, so it is deliberately true at step zero too."
+      },
+      {
+        "id": "GameState",
+        "path": "cpuCandidateWrites",
+        "equals": 0,
+        "throughoutSteps": true,
+        "allowTrivial": "Zero CPU candidate writes is a held invariant, not a transition. A million blades touched per frame on the CPU would still render correctly, just slowly, so nothing but this number says otherwise \u2014 and it must be zero at step zero as well."
+      },
+      {
+        "id": "GameState",
+        "path": "indirectBound",
+        "equals": 1,
+        "throughoutSteps": true,
+        "allowTrivial": "The geometry carrying its compute-written indirect buffer is a held invariant; if the projection or anything else swapped it, the draw count would come from the CPU and the field would still appear to draw."
+      },
+      {
+        "id": "GameState",
+        "path": "resetDispatches",
+        "gte": 400,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "cullDispatches",
+        "gte": 400,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "cutTotal",
+        "gte": 10000,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "standingNow",
+        "gte": 50000,
+        "changed": true,
+        "allowTrivial": "The drawn survivor count is a held invariant with a floor, not a transition: a fixed-radius cull circle contains a near-constant number of blades however far the harvester drives, which is what makes it the right number to draw with and the wrong number to play with. A field that stopped culling, or a count the CPU supplied, would not hold it."
+      },
+      {
+        "id": "GameState",
+        "path": "driven",
+        "gte": 50,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "outcome",
+        "equals": "cleared",
+        "changed": true
+      }
+    ]
+  }
+}
