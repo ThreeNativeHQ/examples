@@ -1,0 +1,82 @@
+{
+  "name": "ride-the-crest",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 120,
+  "steps": [
+    {
+      "kind": "input",
+      "label": "steer-out",
+      "press": "ArrowRight",
+      "holdTicks": 200,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "ride",
+      "waitTicks": 900,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "GameState",
+        "path": "oceanSteps",
+        "gte": 600,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "heightSamples",
+        "gte": 50,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "gateCrest",
+        "gte": 0.55,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "gateRange",
+        "gte": 0.5,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "staleFrames",
+        "lte": 400,
+        "throughoutSteps": true,
+        "allowTrivial": "Bounded staleness is a held invariant, not a transition: the contract is that the CPU height never falls further behind the drawn surface than this bound, which must be true at step zero as well. A readback that stopped landing would climb past it without bound. Checked after every labelled step."
+      },
+      {
+        "id": "GameState",
+        "path": "steered",
+        "gte": 15,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "gatesCleared",
+        "gte": 1,
+        "changed": true
+      },
+      {
+        "id": "GameState",
+        "path": "outcome",
+        "equals": "won",
+        "changed": true
+      }
+    ]
+  }
+}
