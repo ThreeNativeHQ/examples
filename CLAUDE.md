@@ -40,6 +40,25 @@ it** — heavy lifting is always the engine's, so the next game's agent never ha
 7. Fix an engine bug in `packages/` and reinstall — never patch `node_modules/`, never route around it in game code.
 8. Write down a rejected adoption and why; that sentence is the engine's next design constraint.
 
+## A new game is committed and pushed, always
+
+This folder is a git repository with a remote (`ThreeNativeHQ/examples`, public), and it is the
+framework's only end-to-end evidence that it builds something a player would look at. **Whenever a
+new game is added here, commit it and push it back to the remote** — not at the end of the session,
+but as soon as it runs, and again on every visible improvement.
+
+```sh
+git -C /home/joao/projects/threenative/sandbox add <name>
+git -C /home/joao/projects/threenative/sandbox commit -m "feat(sandbox): <Name> — <the rule the game proves>"
+git -C /home/joao/projects/threenative/sandbox push
+```
+
+A game that only exists on this disk is one `rm -rf` from gone, and an unpushed game cannot be read
+by the next agent, on the next machine, or by anyone judging whether the framework works. Commit the
+screenshots too — they are the record of the visual loop. Do not commit `node_modules/`, `dist/`,
+`.packages/` or `.pnpm-store/`; `.gitignore` already excludes them. Only your own game folder goes in
+the commit: a sibling folder with uncommitted work belongs to another lane.
+
 ## Working here
 
 Every command runs inside a game folder — there is no root build.
