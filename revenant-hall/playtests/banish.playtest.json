@@ -1,0 +1,191 @@
+{
+  "name": "revenant-hall-banish",
+  "schemaVersion": 1,
+  "target": "web",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 30,
+  "subject": "warden",
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "hall-awake",
+      "waitTicks": 40,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "waitTicks": 26,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "at": {
+        "entity": "revenant-0"
+      },
+      "waitTicks": 8,
+      "release": true,
+      "label": "banish-1",
+      "screenshot": "revenant-hall.png"
+    },
+    {
+      "kind": "input",
+      "label": "dodge",
+      "press": "ArrowLeft",
+      "holdTicks": 16,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "waitTicks": 26,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "at": {
+        "entity": "revenant-1"
+      },
+      "waitTicks": 8,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "waitTicks": 26,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "at": {
+        "entity": "revenant-2"
+      },
+      "waitTicks": 8,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "waitTicks": 26,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "at": {
+        "entity": "revenant-3"
+      },
+      "waitTicks": 8,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "waitTicks": 26,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "at": {
+        "entity": "revenant-4"
+      },
+      "waitTicks": 8,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "waitTicks": 26,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "at": {
+        "entity": "revenant-5"
+      },
+      "waitTicks": 8,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "waitTicks": 26,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "at": {
+        "entity": "revenant-6"
+      },
+      "waitTicks": 8,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "waitTicks": 26,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "at": {
+        "entity": "revenant-7"
+      },
+      "waitTicks": 8,
+      "release": true,
+      "label": "last-swing"
+    },
+    {
+      "kind": "wait",
+      "label": "settled",
+      "waitTicks": 40,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "banished",
+        "gte": 6,
+        "changed": true,
+        "atSteps": [
+          {
+            "label": "hall-awake",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "outcome",
+        "atSteps": [
+          {
+            "label": "hall-awake",
+            "equals": "playing"
+          },
+          {
+            "label": "settled",
+            "equals": "won"
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "shakePeak",
+        "gte": 0.05,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "spriteAdvances",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "billboardFacingWorst",
+        "gte": 0.98,
+        "changed": true
+      }
+    ]
+  }
+}
