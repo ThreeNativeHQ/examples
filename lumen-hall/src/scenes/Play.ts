@@ -37,7 +37,7 @@ import {
   type IFirstPerson,
 } from "../first-person.js";
 import { buildStaticColliders } from "../collision.js";
-import { applySurfaces, loadSurfaces } from "../render/surfaces.js";
+import { applyFurnishings, applySurfaces, loadSurfaces } from "../render/surfaces.js";
 import { ball, block, makeRandom, roundedBox, spike, tube } from "../render/shapes.js";
 import { setupSky } from "../render/sky.js";
 import type { GameState } from "../state.js";
@@ -211,7 +211,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // Collision is read off the building rather than hand-listed, so it cannot drift out of
     // step with geometry this file does not own.
     buildStaticColliders(ctx, cathedral);
-    const furnishings = createFurnishings();
+    // Dressed separately from the shell on purpose. `applySurfaces`'s stone rules classify
+    // by metalness and colour luminance, and several furnishings materials — the carpet at
+    // 0x51201d among them — are unmetallic and dark enough that they would be dressed as
+    // vault stone.
+    const furnishings = applyFurnishings(createFurnishings());
     // The authored glTF figure stands in the slot `furnishings.ts` leaves empty for it:
     // bay 7 on the +X side, x = 6.95, z = 21. Its procedural neighbours in bays 3 and 5 are
     // untouched, so the two kinds stand in the same aisle under the same light.
