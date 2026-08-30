@@ -3,7 +3,6 @@
 // Every appearance decision in this game is in this file. `WorldEnvironment` decides which
 // stages run, in what order, and reports what actually ran; it decides none of the numbers
 // below.
-import { isNative } from "@threenative/core";
 import type { Camera, DirectionalLight, Scene } from "three";
 import { WorldEnvironment } from "./WorldEnvironment.js";
 
@@ -30,20 +29,50 @@ function stageOff(name: string): boolean {
   return off.split(",").some((entry) => entry.trim() === name);
 }
 
+type WebGPUBackedRenderer = {
+  backend?: {
+    device?: { features?: { has(name: string): boolean } };
+  };
+};
+
+/**
+ * The one optional feature three's SSGI needs. Its GI target is an rg11b10ufloat texture with
+ * RENDER_ATTACHMENT usage and no reduced-quality fallback — `SSGINode` never checks — so a
+ * device without `rg11b10ufloat-renderable` cannot run the stage at all: Dawn rejects the
+ * render pass and the device is lost. Asked from the device, never from the platform: the
+ * native runtime now requests the feature whenever its adapter has it (the
+ * `threenative-rg11b10-renderable-test` contract), so web and native answer the same question.
+ * A missing backend, device or feature reads as false — the stage stays off and the report
+ * names the reason.
+ */
+function rg11b10Renderable(renderer: OutputRenderer): boolean {
+  const raw = renderer.raw as WebGPUBackedRenderer | undefined;
+  return raw?.backend?.device?.features?.has("rg11b10ufloat-renderable") ?? false;
+}
+
 export function setupPost(
   renderer: OutputRenderer,
   scene: Scene,
   camera: Camera,
   sun: DirectionalLight,
 ): void {
+  // The nave has exactly one light and it comes in sideways through the clerestory.
+  // With indirect light off the aisles behind the columns receive nothing at all — the
+  // shafts stay identical and everything they are not touching goes black.
+  //
+  // Gated on the device feature, not on the platform. SSGI's target format needs the
+  // optional `rg11b10ufloat-renderable` feature, and a device without it used to lose the
+  // whole WebGPU device — which is why this used to read `!isNative()`, dropping GI on
+  // native wholesale even after the runtime started requesting the feature its adapter
+  // advertises (threenative-rg11b10-renderable-test proves both surfaces now answer).
+  // Trusting the device keeps the stage on wherever it can run, web or native, and names
+  // the reason in the stage report where it cannot.
+  const ssgiDeviceReady = rg11b10Renderable(renderer);
   const environment = new WorldEnvironment({
-    // The nave has exactly one light and it comes in sideways through the clerestory.
-    // With indirect light off the aisles behind the columns receive nothing at all — the
-    // shafts stay identical and everything they are not touching goes black.
-    // Native Dawn on this desktop does not expose `rg11b10ufloat-renderable`, which
-    // Three's SSGI target requires. Requesting it loses the WebGPU device instead of
-    // producing a reduced-quality frame, so keep the other portable stages and omit GI.
-    ssgiEnabled: !isNative() && !stageOff("ssgi"),
+    ssgiEnabled: ssgiDeviceReady && !stageOff("ssgi"),
+    ssgiDisabledReason: ssgiDeviceReady
+      ? "ssgiEnabled is false"
+      : "device lacks rg11b10ufloat-renderable",
     // Measured by ablation on this scene at 1600x900: "high" (3 slices x 16 steps = 96
     // samples per pixel) costs more than every other stage in the chain put together —
     // 42.9 fps with it against 107 without. "medium" is 32 samples for the same shape of

@@ -73,6 +73,8 @@ const SSGI_QUALITY: Record<SsgiQuality, { sliceCount: number; stepCount: number 
 export interface IWorldEnvironmentOptions {
   /** Screen-space indirect diffuse light. Godot calls this `ssil_enabled`. */
   readonly ssgiEnabled?: boolean;
+  /** Why ssgi is off, reported verbatim in the stage report when `ssgiEnabled` is false. */
+  readonly ssgiDisabledReason?: string;
   readonly ssgiQuality?: SsgiQuality;
   /** How much of the gathered indirect light reaches the frame. Godot's `ssil_intensity`. */
   readonly ssgiIntensity?: number;
@@ -239,6 +241,7 @@ export class WorldEnvironment {
     }
     this.#options = {
       ssgiEnabled: options.ssgiEnabled ?? true,
+      ssgiDisabledReason: options.ssgiDisabledReason ?? "ssgiEnabled is false",
       ssgiQuality: quality,
       ssgiIntensity: options.ssgiIntensity ?? 1,
       ssgiRadius: options.ssgiRadius ?? 12,
@@ -360,7 +363,7 @@ export class WorldEnvironment {
       lit = chain(exposed.mul(ao.r).add(exposed.mul(indirect.rgb).mul(options.ssgiIntensity)));
       stages.push({ stage: "ssgi", applied: true });
     } else {
-      off("ssgi", "ssgiEnabled is false");
+      off("ssgi", options.ssgiDisabledReason ?? "ssgiEnabled is false");
       off("denoise", "nothing to denoise with ssgi off");
     }
 
