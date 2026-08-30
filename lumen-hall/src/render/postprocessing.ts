@@ -3,6 +3,7 @@
 // Every appearance decision in this game is in this file. `WorldEnvironment` decides which
 // stages run, in what order, and reports what actually ran; it decides none of the numbers
 // below.
+import { isNative } from "@threenative/core";
 import type { Camera, DirectionalLight, Scene } from "three";
 import { WorldEnvironment } from "./WorldEnvironment.js";
 
@@ -39,7 +40,10 @@ export function setupPost(
     // The nave has exactly one light and it comes in sideways through the clerestory.
     // With indirect light off the aisles behind the columns receive nothing at all — the
     // shafts stay identical and everything they are not touching goes black.
-    ssgiEnabled: !stageOff("ssgi"),
+    // Native Dawn on this desktop does not expose `rg11b10ufloat-renderable`, which
+    // Three's SSGI target requires. Requesting it loses the WebGPU device instead of
+    // producing a reduced-quality frame, so keep the other portable stages and omit GI.
+    ssgiEnabled: !isNative() && !stageOff("ssgi"),
     // Measured by ablation on this scene at 1600x900: "high" (3 slices x 16 steps = 96
     // samples per pixel) costs more than every other stage in the chain put together —
     // 42.9 fps with it against 107 without. "medium" is 32 samples for the same shape of

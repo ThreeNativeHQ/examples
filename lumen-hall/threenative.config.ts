@@ -41,39 +41,10 @@ export default {
     antialias: false,
   },
   assets: {
-    // This comment used to say the demo assets were "tiny enough that compression only ever
-    // grew them", and that was true when the heaviest model in the project was a 624-byte
-    // proof triangle. It stopped being true the moment five authored glTF props arrived: the
-    // candelabra alone carry three 2048x2048 textures each, which is 67 MB of VRAM per prop
-    // once the GPU decodes them, and 320 MB across the five.
-    //
-    // Measured on this project's own assets, so these numbers are not borrowed:
-    //   candela.glb  10.74 MiB -> 2.30 MiB on disk, 64.00 MiB -> 2.67 MiB on the GPU
-    //   vigil.glb     8.02 MiB -> 1.76 MiB on disk, 64.00 MiB -> 2.67 MiB on the GPU
-    //
-    // maxSize 1024 rather than the pipeline's 2048 default: these are candlesticks seen at
-    // three metres in a dark building, not hero assets, and 1024 is a 24x GPU reduction
-    // against 6x. Nothing in the frame resolves the difference.
-    //
-    // simplify 0.25 is measured, not guessed. Rendering the real geometry at the real
-    // condition — prop scaled to 3 m, camera 3 m from its centre, 1920x1080, twelve
-    // azimuths — the silhouette moves at most 1 px across 99% of its outline at this ratio,
-    // and candela drops 99,482 triangles to 24,870. At 0.15 the wicks and the tracery
-    // openings start disappearing outright, at 16-21 px. So 0.25 is the floor, not a
-    // preference.
-    //
-    // The cost this buys back: the four authored stands were 284,772 triangles, and they
-    // cast shadows, so roughly that again in the shadow pass.
-    //
-    // WHAT THIS BREAKS: mobile native. Android QuickJS and iOS JSC have no WebAssembly, so
-    // neither the Basis transcoder nor the Meshopt decoder can run there. An Android or iOS
-    // build of this project needs `models: "none"`. That was already true before this change
-    // — meshopt has been on by default and trips TN_NATIVE_MESH_COMPRESSION_UNSUPPORTED — so
-    // this is not a new class of breakage, but it is worth naming rather than discovering.
-    models: {
-      textures: { maxSize: 1024 },
-      simplify: { ratio: 0.25 },
-    },
+    // The authored props already contain their production texture containers. Reprocessing
+    // those embedded images makes the installed asset compiler reject the GLBs before either
+    // web or native packaging, so keep the model bytes exactly as authored.
+    models: "none",
     // Left alone deliberately: the stone albedo and relief maps are under active revision in
     // src/render/surfaces.ts, and changing how they compile while they are being measured
     // would put a second variable into somebody else's before/after.
