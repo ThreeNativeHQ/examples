@@ -216,11 +216,14 @@ const materials = {
    * far half of the curve turns its back to the camera.
    */
   banner: new MeshStandardMaterial({
-    // Far darker than the flat version, not lighter. The banners hang on the west faces of
-    // the piers, which is the one orientation in this building the sun hits square on, and
-    // a bowed cloth turns most of its width toward it. At 0x232d54 the cloth clipped to a
-    // pale blue-grey; the indigo has to come most of the way down to survive the exposure.
-    color: 0x0f1430,
+    // Almost black, and it has to be. The banners hang facing +Z, which is the one
+    // orientation the sun in this building hits square on, and the sun is intensity 9 —
+    // the lit stone around them sits near white. At 0x232d54 and again at 0x0f1430 the
+    // cloth clipped: every part of it landed at the top of the tone curve, so the bow's
+    // normals swept through the light and produced *no gradient at all*. That is what made
+    // it read as a flat slab even after it stopped being one. The fix is not more curvature,
+    // it is an albedo low enough that the curvature has somewhere to go.
+    color: 0x060a1c,
     roughness: 0.88,
     metalness: 0,
     side: DoubleSide,
@@ -366,6 +369,16 @@ const SCREEN_Z = CHANCEL_Z - 0.8;
 const ALTAR_Z = CHANCEL_Z - 6.5;
 /** Half-width of the platform. Outside this the chancel fittings stand on the nave floor. */
 const CHANCEL_HALF_WIDTH = 5.8;
+/**
+ * Where a banner hangs, and it is *not* `PIER_X`.
+ *
+ * Centring a two-metre cloth on the pier axis buries its outer half in the arcade wall,
+ * whose nave face is around 7.5. Every banner rendered as a one-metre sliver with the gold
+ * device floating over a lit pier beside it — which is most of why they read as a flat
+ * pale slab. 6.4 puts the whole width in open air: the outer edge clears the wall, the
+ * inner edge sits just proud of the vault shafts the pier stands into the nave.
+ */
+const BANNER_X = NAVE.width / 2 - 1.6;
 
 // ---------------------------------------------------------------------------------------
 // the pieces
@@ -1061,10 +1074,10 @@ export function createFurnishings(): Group {
   // sharing would hang four identically creased cloths on four piers. Four banners is four
   // draws either way.
   for (const [x, z, phase] of [
-    [-PIER_X, -3.5, 0.7],
-    [-PIER_X, 10.5, 2.3],
-    [PIER_X, 3.5, 4.1],
-    [PIER_X, -10.5, 5.6],
+    [-BANNER_X, -3.5, 0.7],
+    [-BANNER_X, 10.5, 2.3],
+    [BANNER_X, 3.5, 4.1],
+    [BANNER_X, -10.5, 5.6],
   ] as ReadonlyArray<readonly [number, number, number]>) {
     // 11.6, not the 13.0 these hung at. The near pier is ten metres from a lens whose
     // frustum tops out around y 10 there, so at 13.0 the only banner properly broadside to

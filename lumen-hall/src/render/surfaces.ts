@@ -65,6 +65,7 @@ import { palette } from "./palette.js";
 
 /** Every texture this file needs, by the name the asset pipeline knows it as. */
 export const SURFACE_SOURCES = {
+  banner: "cathedral-banner.png",
   floorRough: "cathedral-floor-rough.png",
   glassCool: "cathedral-glass-clerestory-cool.png",
   glassLancet: "cathedral-glass-lancet.png",
@@ -144,6 +145,21 @@ interface IStone {
   relief: Texture;
   tileMetres: number;
 }
+
+/**
+ * The banner cloth, and the mean linear luminance the map's *cloth* was authored to.
+ *
+ * Measured over the cloth only — not the device, not the braid, not the texels outside the
+ * swallowtail. The gold device replaces five boxes that were separate meshes with their own
+ * gold material, so averaging it into the reference would darken the cloth to pay for gold
+ * it never used to carry.
+ *
+ * The material's `emissive` floor is untouched: it is added after lighting and `colorNode`
+ * does not reach it, which is what keeps a navy cloth on an unlit pier from rounding to
+ * black whether or not it has a map.
+ */
+const BANNER_COLOUR = 0x232d54;
+const BANNER_CLOTH_LUMINANCE = 0.02206;
 
 /** Roughness, read off the relief: the recessed mortar in a wall is also the rough part. */
 const ROUGH_PROUD = 0.74;
@@ -425,6 +441,63 @@ function fitPanel(map: Texture, geometry: BufferGeometry, panelAspect: number): 
   const rows = Math.min(1, height / panelHeight);
   map.repeat.set(columns, rows);
   map.offset.set(0, 1 - rows);
+}
+
+/**
+ * Dresses the furnishings that carry a texture, and returns the group so the call site
+ * stays one expression. Today that is the banners and nothing else.
+ *
+ * Deliberately *not* part of `applySurfaces`: the stone rules there classify by metalness
+ * and colour luminance, and half the furnishings — the carpet, the pews, the plinths — are
+ * unmetallic and dark enough that they would be dressed as vault stone.
+ */
+export function applyFurnishings(furnishings: Group, textures?: ISurfaceTextures): Group {
+  const maps = textures ?? loaded;
+  if (maps === undefined) {
+    throw new Error("TN_SURFACES_NOT_LOADED: call loadSurfaces() from Scene.load() first.");
+  }
+  const cloths = new Set<MeshStandardMaterial>();
+  const panels = new Set<BufferGeometry>();
+  furnishings.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const material = object.material;
+    // Matched on the exact colour `furnishings.ts` builds the banner with. Recolour the
+    // cloth there and it silently goes back to flat navy, which is what the count below is
+    // in the log for.
+    if (!(material instanceof MeshStandardMaterial)) return;
+    if (material.color.getHex() !== BANNER_COLOUR) return;
+    cloths.add(material);
+    panels.add(object.geometry);
+  });
+  // Extruded from a swallowtail shape, so the UVs arrive in metres and mixed with the side
+  // walls' own. One rewrite covers every banner: they share the geometry.
+  for (const geometry of panels) projectPanelUV(geometry);
+  for (const material of cloths) dressBanner(material, maps.banner);
+  console.info(`TN_SURFACES_BANNERS:${JSON.stringify({ cloths: cloths.size })}`);
+  return furnishings;
+}
+
+/** Navy damask, a gold cross patty, and a braid that follows the swallowtail hem. */
+function dressBanner(material: MeshStandardMaterial, map: Texture): void {
+  map.colorSpace = SRGBColorSpace;
+  map.anisotropy = 8;
+  map.wrapS = ClampToEdgeWrapping;
+  map.wrapT = ClampToEdgeWrapping;
+  map.needsUpdate = true;
+
+  // The material's own colour is still what decides how dark the cloth is; the map only
+  // says how it varies and where the gold goes. Read at apply time, so re-tinting the
+  // banner in `furnishings.ts` still moves it.
+  const gain = luminance(material.color) / BANNER_CLOTH_LUMINANCE;
+  // Same two corrections the glass needs, and for the same reasons: V because these arrive
+  // as KTX2 and a compressed texture cannot be flipped at upload, U on back faces because
+  // the cloth is `DoubleSide` and a heraldic device is not left-right symmetric.
+  const panel = vec2(uv().x, uv().y.oneMinus());
+  const facing = frontFacing.select(panel, vec2(panel.x.oneMinus(), panel.y));
+
+  const nodes = material as unknown as INodeMaterial;
+  nodes.colorNode = textureNode(map, facing).rgb.mul(gain);
+  material.needsUpdate = true;
 }
 
 /** Anything smaller than this and a disc of glass is the rose's eye, not the rose. */
