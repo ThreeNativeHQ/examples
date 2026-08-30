@@ -1,0 +1,3141 @@
+{
+  "source": "/home/joao/projects/threenative/sandbox/fps-framework",
+  "source_git_root": "/home/joao/projects/threenative/sandbox",
+  "source_remote": "https://github.com/ThreeNativeHQ/examples.git",
+  "source_head": "b394778f97830dbc9f61ed541cf82443087a86c6",
+  "source_branch": "main",
+  "engine_root": "/home/joao/projects/threenative/worktrees/prd259-upscaler",
+  "engine_head": "e8754ab24e8e227ab472690a3d8d7b6d2cd53550",
+  "files": [
+    {
+      "path": ".asset-backups/player-viewmodel.glb.99cbfd79.orig",
+      "sha256": "d8236d3add7e1bc0b32748a5b5a18b2b1810fdad936b214aa2b3e2fb629c2865",
+      "bytes": 7495528
+    },
+    {
+      "path": ".asset-backups/player-viewmodel.glb.db875e7e.orig",
+      "sha256": "d8236d3add7e1bc0b32748a5b5a18b2b1810fdad936b214aa2b3e2fb629c2865",
+      "bytes": 7495528
+    },
+    {
+      "path": ".asset-backups/player-viewmodel.glb.orig",
+      "sha256": "d8236d3add7e1bc0b32748a5b5a18b2b1810fdad936b214aa2b3e2fb629c2865",
+      "bytes": 7495528
+    },
+    {
+      "path": ".asset-backups/weapon-ak47.glb.78562e01.orig",
+      "sha256": "c6b71dbc3145029484a2e82e63fc9cd1d288346cf69eb5ba021194532c273b24",
+      "bytes": 11751004
+    },
+    {
+      "path": ".asset-backups/weapon-ak47.glb.9b420d74.orig",
+      "sha256": "c6b71dbc3145029484a2e82e63fc9cd1d288346cf69eb5ba021194532c273b24",
+      "bytes": 11751004
+    },
+    {
+      "path": ".asset-backups/weapon-ak47.glb.orig",
+      "sha256": "c6b71dbc3145029484a2e82e63fc9cd1d288346cf69eb5ba021194532c273b24",
+      "bytes": 11751004
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "fe79a31379284350df5605644eda11311f03dd901e0ae522ee913c5c1a03c372",
+      "bytes": 1457
+    },
+    {
+      "path": ".mcp.json",
+      "sha256": "7067c02485d63ea3fa8b314f57bb1f5536f8634ba9740f98d05e576d407b0b8d",
+      "bytes": 405
+    },
+    {
+      "path": ".threenative/build/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": ".threenative/build/app-icon-192.png",
+      "sha256": "9ce88e220b81c8815ce0e38fcf3dac7558b61e9aeb1e5126910e0ce77848bf91",
+      "bytes": 1421
+    },
+    {
+      "path": ".threenative/build/app-icon-512.png",
+      "sha256": "d8e150f523d52e242814939f475836257429785e620d88a30b18f04986021fb2",
+      "bytes": 4113
+    },
+    {
+      "path": ".threenative/build/assets/bayview-barrel.glb",
+      "sha256": "ac47c9c9a377d5911c739338bef0cc8cdd325975a739668cecc21bf78029863b",
+      "bytes": 573188
+    },
+    {
+      "path": ".threenative/build/assets/bayview-brick.jpg",
+      "sha256": "464c1917d8e309fd5cb6ffc1bf9609867cbe36561e207d874cab61dd88a10eeb",
+      "bytes": 551577
+    },
+    {
+      "path": ".threenative/build/assets/bayview-buoy.glb",
+      "sha256": "2ef93076825e644f08c421c42fdf6d5ddc1d4ae17e89a9ed2f5e66ab20be4ff1",
+      "bytes": 652268
+    },
+    {
+      "path": ".threenative/build/assets/bayview-concrete-normal.jpg",
+      "sha256": "d9b231792ccb7d1bd8bdd3b00b0357b883168b6d3f68d2822c8d8874b1e784a4",
+      "bytes": 134392
+    },
+    {
+      "path": ".threenative/build/assets/bayview-concrete-rough.jpg",
+      "sha256": "72e71ff931fdbae902fb691738549c0f4dc794ed30d4757f5c71a488c7cafa4a",
+      "bytes": 258795
+    },
+    {
+      "path": ".threenative/build/assets/bayview-concrete.jpg",
+      "sha256": "24f4ebcf8650c515cae0305c1b22a30c63857bb88fa6145885b3571a1d57285d",
+      "bytes": 230807
+    },
+    {
+      "path": ".threenative/build/assets/bayview-flagstone-ao.jpg",
+      "sha256": "3c49e0e76157ad187791e079adecf21fae5c7cc9bef8212155ebd9a532c2b5b8",
+      "bytes": 192833
+    },
+    {
+      "path": ".threenative/build/assets/bayview-flagstone-normal.jpg",
+      "sha256": "de36b3354ee21ee28bdf98bc69f551f9f5e14b1a060da1cc79306ca88710d17b",
+      "bytes": 511894
+    },
+    {
+      "path": ".threenative/build/assets/bayview-flagstone-rough.jpg",
+      "sha256": "66bc10c26e11404164c5fe51bf3e3e9419155afd9e3e12e7ec90ac72fcce668a",
+      "bytes": 175615
+    },
+    {
+      "path": ".threenative/build/assets/bayview-flagstone.jpg",
+      "sha256": "3f65b3d62d5bb40c6d72e177fa34ab82bdb36921e9ded6dbac4894388a71d44c",
+      "bytes": 438006
+    },
+    {
+      "path": ".threenative/build/assets/bayview-gutter.glb",
+      "sha256": "0bf3ed5ce58d26ec38196ebf69611b33ac8778ca759296b6c1d31b88775ffde0",
+      "bytes": 651888
+    },
+    {
+      "path": ".threenative/build/assets/bayview-paving-normal.jpg",
+      "sha256": "1d922864dec77b67b8af1403f5802c80880ada32a68148e584135d4c686804aa",
+      "bytes": 359087
+    },
+    {
+      "path": ".threenative/build/assets/bayview-paving-rough.jpg",
+      "sha256": "05a9bcdea514c82eac13156d6a1e0aa9d8e06ed55435b97a995476e0ead25295",
+      "bytes": 142556
+    },
+    {
+      "path": ".threenative/build/assets/bayview-paving.jpg",
+      "sha256": "a2599eed3e2b5af2a6c31866683fb291838cdf5d25a2ca2ef45ade1e75d41f81",
+      "bytes": 181787
+    },
+    {
+      "path": ".threenative/build/assets/bayview-peeling-normal.jpg",
+      "sha256": "c751f935d085a86727b66d5b622d389fd77c583423072306dfe9b9b19709d24c",
+      "bytes": 1062495
+    },
+    {
+      "path": ".threenative/build/assets/bayview-peeling-rough.jpg",
+      "sha256": "fbfcb0e0ba0742a9f758ff430c955393b2fa0f9fc13870ab50f6fba55e2c8729",
+      "bytes": 259481
+    },
+    {
+      "path": ".threenative/build/assets/bayview-peeling.jpg",
+      "sha256": "9ba19d104326033138ec4395f624fd3764a42a01f8b842c266c7ec1e9fc0d2a3",
+      "bytes": 271062
+    },
+    {
+      "path": ".threenative/build/assets/bayview-quaystone-normal.jpg",
+      "sha256": "2744364b998cf0ec1c3e6e73af31ea49550bc7e561eee52f54d7d6622205c750",
+      "bytes": 483269
+    },
+    {
+      "path": ".threenative/build/assets/bayview-quaystone-rough.jpg",
+      "sha256": "bb3c4472b04ab13d4eed43326e7499b2d59696e394fa99f8b51374d00793d6b8",
+      "bytes": 113861
+    },
+    {
+      "path": ".threenative/build/assets/bayview-quaystone.jpg",
+      "sha256": "c8947e2dab033a67774e7b8e368acd8dbf0fbb45e5ab3bf55fd41dc73910fca7",
+      "bytes": 233994
+    },
+    {
+      "path": ".threenative/build/assets/bayview-sky-ibl.jpg",
+      "sha256": "5978a55a5b5028a5387e170399f598563e7834cf735e223f64a30d232bf75aee",
+      "bytes": 77047
+    },
+    {
+      "path": ".threenative/build/assets/bayview-sky.jpg",
+      "sha256": "dad8607c493870698a5b15ea769983d249fedb30f713d68178c1614817830cb0",
+      "bytes": 342253
+    },
+    {
+      "path": ".threenative/build/assets/bayview-steel-metal.jpg",
+      "sha256": "912d38d875ef6cac50885357ce46fe9f335982f690ef3b153cebb4850c5cf74a",
+      "bytes": 6672
+    },
+    {
+      "path": ".threenative/build/assets/bayview-steel-normal.jpg",
+      "sha256": "b7a2df74b6241a1a7b733531ef8a4792538594b0099084c8b25e306a01871cbd",
+      "bytes": 73409
+    },
+    {
+      "path": ".threenative/build/assets/bayview-steel-rough.jpg",
+      "sha256": "c994691c8e9dcf590000133fb1542722a2afbb2af08506a28a2682029a608c2f",
+      "bytes": 30278
+    },
+    {
+      "path": ".threenative/build/assets/bayview-steel.jpg",
+      "sha256": "18767f1b2343f63cd66f4af8701126f0c8dbbe148688024c8ea8649eb34e50b4",
+      "bytes": 18322
+    },
+    {
+      "path": ".threenative/build/assets/bayview-walllamp.glb",
+      "sha256": "deae5473454ace5902a8d6cabecb13be32ceed06a7063b51718ca24678ce4c93",
+      "bytes": 435080
+    },
+    {
+      "path": ".threenative/build/assets/bayview-whitewash-normal.jpg",
+      "sha256": "d7d64894b72e0fe4f5c334838cd05dd1085c454b9f6996544861d1f7a28fcc6c",
+      "bytes": 562569
+    },
+    {
+      "path": ".threenative/build/assets/bayview-whitewash-rough.jpg",
+      "sha256": "3e3c21fc4c657674ace23a5ba454326860f9ace48e69df55b4f05112159d9730",
+      "bytes": 317085
+    },
+    {
+      "path": ".threenative/build/assets/bayview-whitewash.jpg",
+      "sha256": "72cff948a66f6a7481e67e85628cebe8322a31d8b2637294f74f8a31eaafd3a0",
+      "bytes": 257407
+    },
+    {
+      "path": ".threenative/build/assets/bayview-wood-normal.jpg",
+      "sha256": "868c153165ecaa7dd7259cb58214f06f6f86c80ac71fc92a827dff07708be077",
+      "bytes": 516860
+    },
+    {
+      "path": ".threenative/build/assets/bayview-wood.jpg",
+      "sha256": "8dfae22286fa9bb0ed62ce7326e8bc14c284e567d38fd64b5a453838080ecf19",
+      "bytes": 570668
+    },
+    {
+      "path": ".threenative/build/assets/enemy-terrorist.glb",
+      "sha256": "583e063fb924d9e8a227f6a47c388c95d84c442db164c664de948fc1bca4a610",
+      "bytes": 1594264
+    },
+    {
+      "path": ".threenative/build/assets/player-viewmodel.glb",
+      "sha256": "0d2a14e6579a0dd49ffded4eea02578b37d9712ceeba6f9aafec179b05e67f77",
+      "bytes": 1454824
+    },
+    {
+      "path": ".threenative/build/assets/weapon-ak47.glb",
+      "sha256": "a77b24521db0315fa946582eb456f7a2f0fe5370bcddc8bfedf8aff2580be696",
+      "bytes": 1444752
+    },
+    {
+      "path": ".threenative/build/assets.manifest.json",
+      "sha256": "174e0b3ecb099521f220f5f2f2885ef69038f96165283869d92f89101f27750f",
+      "bytes": 2215
+    },
+    {
+      "path": ".threenative/build/audio/ambience-harbour.ogg",
+      "sha256": "99b5005d4f65e213cf1b803f0ebf3b7218d49e8c2003a074076faaebb194722c",
+      "bytes": 279313
+    },
+    {
+      "path": ".threenative/build/audio/bark-chase-1.ogg",
+      "sha256": "eea93db0abe192d12bac62c837f26b7460f9f37f9a8cf0b91d1facf94f318b95",
+      "bytes": 12576
+    },
+    {
+      "path": ".threenative/build/audio/bark-chase-2.ogg",
+      "sha256": "36ba0f3d40a59f6a968d0315bf9e63c2b4c7fc504143eb6a6b7f1bd96be03869",
+      "bytes": 15762
+    },
+    {
+      "path": ".threenative/build/audio/bark-chase-3.ogg",
+      "sha256": "de6756d60770a3403d0492f2d005f4f912e52f7e0ed3d4534f1fc8325e00a4a3",
+      "bytes": 11362
+    },
+    {
+      "path": ".threenative/build/audio/bark-death-1.ogg",
+      "sha256": "4cee76ecfc03949d4509e1b799c7cb86ffcfec7e587f12fec610c4d62f8d5051",
+      "bytes": 19444
+    },
+    {
+      "path": ".threenative/build/audio/bark-death-2.ogg",
+      "sha256": "9edc1917440694b6a3c7944ef1a28d923b0910e63c3c36bacf7a02e8cf527db4",
+      "bytes": 18739
+    },
+    {
+      "path": ".threenative/build/audio/bark-pain-1.ogg",
+      "sha256": "7b88fe64c7181f4d1bcc28ea4c8d841ba15f86069898c72b75d2c08dc96f5fa3",
+      "bytes": 9590
+    },
+    {
+      "path": ".threenative/build/audio/bark-pain-2.ogg",
+      "sha256": "e690e51e2b22f219581c77a466e75da24212c2cf4576cde5c6ba572b09180815",
+      "bytes": 11252
+    },
+    {
+      "path": ".threenative/build/audio/bark-spot-1.ogg",
+      "sha256": "37c4d3a609079096e79c0d3f0c0bf560f350b36d4e30b62bfc2b62d235fa8df3",
+      "bytes": 16104
+    },
+    {
+      "path": ".threenative/build/audio/bark-spot-2.ogg",
+      "sha256": "bb2946244842f67f87a32985eecc60666b2e55727ce9ed8faf55f2c2d312ee3b",
+      "bytes": 21818
+    },
+    {
+      "path": ".threenative/build/audio/bark-spot-3.ogg",
+      "sha256": "faa360c2b931b744c39ef312a5b17a11b6fdd6e4a792ac2f2a8c3960a4d4b5f1",
+      "bytes": 18900
+    },
+    {
+      "path": ".threenative/build/audio/bullet-whizz.ogg",
+      "sha256": "56feeb5d25855576332bc8becf8f0544e8d8f4fc0cde8199283b204df9d713d0",
+      "bytes": 13791
+    },
+    {
+      "path": ".threenative/build/audio/clock-tick.ogg",
+      "sha256": "869442f54214be902ec7437f79e400dc91c1bfd90d18a6dd2d5b7e41ffbf457b",
+      "bytes": 4514
+    },
+    {
+      "path": ".threenative/build/audio/hit-impact.ogg",
+      "sha256": "c5cf7261894aabb6bdba19e090b3afe8fbedec2ad2ed64b5913fc7515663e99c",
+      "bytes": 8807
+    },
+    {
+      "path": ".threenative/build/audio/impact-plaster.ogg",
+      "sha256": "b2f50c7ac83ec392a104ed07e01375abb81e3438cde6fa9135b26a3628442b01",
+      "bytes": 9325
+    },
+    {
+      "path": ".threenative/build/audio/impact-steel.ogg",
+      "sha256": "39cabedb3ebb18119b754ffad4b294f016d69354acf08eb3b54e6b360c49cdfd",
+      "bytes": 10318
+    },
+    {
+      "path": ".threenative/build/audio/impact-stone.ogg",
+      "sha256": "f03e431c97a74351fff8b59c31635b884edb3bb95ef869ec4bdf41448d3a15ab",
+      "bytes": 9732
+    },
+    {
+      "path": ".threenative/build/audio/impact-wood.ogg",
+      "sha256": "4e0be3c5c4c922f0cba9c58c317519053bbf8fa7d5207f7f80b92e5d1b99ea01",
+      "bytes": 9136
+    },
+    {
+      "path": ".threenative/build/audio/reload-magin.ogg",
+      "sha256": "a0ef8f7f33ab01421b5a9f292d3a009b3a076b88407379301092a88c9bd14d3f",
+      "bytes": 11464
+    },
+    {
+      "path": ".threenative/build/audio/reload-magout.ogg",
+      "sha256": "f4d1a634fd0b97bf3c809aeedcddc2d0a35a42b9e55cd5d2497b6ec0008ffcb2",
+      "bytes": 10997
+    },
+    {
+      "path": ".threenative/build/audio/round-complete.ogg",
+      "sha256": "063564703b6094d70718a3e787a55cc9141611e4ecd6b6637f8828f79b4a8c3a",
+      "bytes": 8968
+    },
+    {
+      "path": ".threenative/build/audio/round-failed.ogg",
+      "sha256": "a97513d7fd2b12b1210c423be943b4c1ab0e899b11db95855e9b74836e646ae0",
+      "bytes": 8288
+    },
+    {
+      "path": ".threenative/build/audio/shot-enemy.ogg",
+      "sha256": "979878b225f40328051029ea0a4a346b34c1e4899e1496829974586bd89fe96a",
+      "bytes": 16371
+    },
+    {
+      "path": ".threenative/build/audio/shot-player.ogg",
+      "sha256": "13a2a6f276deda02aae06eb545f87d99d3a2ce6f3c8e29f9fccd13e4bfa5a95e",
+      "bytes": 13049
+    },
+    {
+      "path": ".threenative/build/audio/step-stone-1.ogg",
+      "sha256": "081f9793a09f60e57548833b090c880d687cd36ff4c439621cd2add235913283",
+      "bytes": 8604
+    },
+    {
+      "path": ".threenative/build/audio/step-stone-2.ogg",
+      "sha256": "6020fb10934725ff167f6bd9ae14c967664a31bbdc368930a69d2e58f31f2956",
+      "bytes": 8913
+    },
+    {
+      "path": ".threenative/build/audio/step-stone-3.ogg",
+      "sha256": "718e33771b5cfbbf512f24a5fd5cdff8c81016519d264c84016bc215f27bfa92",
+      "bytes": 8856
+    },
+    {
+      "path": ".threenative/build/audio/step-stone-4.ogg",
+      "sha256": "02a41232afc114c3cd11f66c29d29b3391e50896e6cf483e00b0b1859dce9fe0",
+      "bytes": 8931
+    },
+    {
+      "path": ".threenative/build/audio/ui-click.ogg",
+      "sha256": "ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9",
+      "bytes": 4876
+    },
+    {
+      "path": ".threenative/build/basis/basis_transcoder.js",
+      "sha256": "8478b5b6d6b74e7d3082b89f6417321d8d1dc0307f2b30d4484bb11b441696a1",
+      "bytes": 57529
+    },
+    {
+      "path": ".threenative/build/basis/basis_transcoder.wasm",
+      "sha256": "6cf17dc889352c42e9acf8897107978d127005fe3386c36a0e3845e27967630a",
+      "bytes": 527333
+    },
+    {
+      "path": ".threenative/build/build-ui.mjs",
+      "sha256": "eee5c81bb825e2d4583da16642ddda05596d18afee4ba408abaff46d43b7009f",
+      "bytes": 638
+    },
+    {
+      "path": ".threenative/build/config.json",
+      "sha256": "37b54be6068ba20881849becdd94de06a200da3ad5a701a012716ec9deeac194",
+      "bytes": 680
+    },
+    {
+      "path": ".threenative/build/favicon.svg",
+      "sha256": "2d208c58ea4c25b3bef0208ff84c5847eab49455481e001275ddd0aa7d7746bb",
+      "bytes": 179
+    },
+    {
+      "path": ".threenative/build/game.js",
+      "sha256": "51c65985e82a104ab02da67f8ed4ee59fa966dded5303eaa5eaaeb14c85d7207",
+      "bytes": 4701053
+    },
+    {
+      "path": ".threenative/build/generated/player-viewmodel-clean.1e1a2f8b.glb",
+      "sha256": "dbc6c37955b2db73182e85cd6d3370fdb0e5636845ded1cc61134744ec404c21",
+      "bytes": 4277724
+    },
+    {
+      "path": ".threenative/build/generated/player-viewmodel-clean.a6f29099.glb",
+      "sha256": "9eded68eeddec54fc735977b8480db31712d9e3b323e72d1c61c6daf7f4c619e",
+      "bytes": 3707904
+    },
+    {
+      "path": ".threenative/build/icon.png",
+      "sha256": "1c99d4289ebcfb1f5820a616f93fab2b68759f6864774cafa9cbd25d56dfa7b2",
+      "bytes": 150
+    },
+    {
+      "path": ".threenative/build/imported/polyhaven/sky.outdoor-cloudy/environment.685fea00.ktx2",
+      "sha256": "b5a68fb9bc7b378f3921a50bd280e5d5abbe4647854529fc7546efbbb03ab72f",
+      "bytes": 207713
+    },
+    {
+      "path": ".threenative/build/imported/polyhaven/sky.outdoor-cloudy/environment.9cf04058.jpg",
+      "sha256": "7907550a1d29f59ed74cea2c35b6bb7a3d153a76fa7f400fa6463c590c50e66d",
+      "bytes": 150695
+    },
+    {
+      "path": ".threenative/build/imported/polyhaven/sky.outdoor-cloudy/provenance.0bd5f9fa.json",
+      "sha256": "08b58956576079d1d82724348436ffbd2163d463972ab7f8368a15480cfb26cb",
+      "bytes": 1547
+    },
+    {
+      "path": ".threenative/build/imported/polyhaven/sky.outdoor-cloudy/provenance.1e2b1bcc.json",
+      "sha256": "08b58956576079d1d82724348436ffbd2163d463972ab7f8368a15480cfb26cb",
+      "bytes": 1547
+    },
+    {
+      "path": ".threenative/build/models/enemy-terrorist.178ab54e.glb",
+      "sha256": "1f8ef8d8fc6019cba6e95d165d751daa2c05f0c526b2ddd2bb7f225df921facd",
+      "bytes": 1530152
+    },
+    {
+      "path": ".threenative/build/models/enemy-terrorist.6d3f1ff4.glb",
+      "sha256": "c9f938d92dd9fa4a1ab5e7ee350eb0c6ea1e6c1052254ccc935c6a702eb0a261",
+      "bytes": 3763508
+    },
+    {
+      "path": ".threenative/build/models/enemy-terrorist.provenance.0d97cbcf.json",
+      "sha256": "a53809a40b28e4b55e43e7d5bcc379b13d54b2b09f35a0b34483d6c0bc0770ec",
+      "bytes": 1479
+    },
+    {
+      "path": ".threenative/build/models/enemy-terrorist.provenance.8a3e47e3.json",
+      "sha256": "a53809a40b28e4b55e43e7d5bcc379b13d54b2b09f35a0b34483d6c0bc0770ec",
+      "bytes": 1479
+    },
+    {
+      "path": ".threenative/build/models/player-viewmodel.99cbfd79.glb",
+      "sha256": "8ad21568e92aca3625c54031f6b6aa39bc1d377dafe1e9547aa3b98a5027c3f5",
+      "bytes": 5597644
+    },
+    {
+      "path": ".threenative/build/models/player-viewmodel.db875e7e.glb",
+      "sha256": "119bf964734eea882ec88ad5bfa474e286375e8c14318205daa05e714db33eee",
+      "bytes": 7486876
+    },
+    {
+      "path": ".threenative/build/models/player-viewmodel.provenance.0577de50.json",
+      "sha256": "cd61fbd62b6693e04f69d32a72c14496b8831856f9bad52c1c19acef5c2e77eb",
+      "bytes": 1486
+    },
+    {
+      "path": ".threenative/build/models/player-viewmodel.provenance.148254ea.json",
+      "sha256": "cd61fbd62b6693e04f69d32a72c14496b8831856f9bad52c1c19acef5c2e77eb",
+      "bytes": 1486
+    },
+    {
+      "path": ".threenative/build/models/weapon-ak47.78562e01.glb",
+      "sha256": "832d39ccae9701a46baa42d23c9c9d96197a9d603dfe9f39b32f8a6c940b18a9",
+      "bytes": 11751136
+    },
+    {
+      "path": ".threenative/build/models/weapon-ak47.9b420d74.glb",
+      "sha256": "118734cb7f096f71d992e4deccfbe31e89e0a75c36f76ea235a5243af6da9214",
+      "bytes": 7481320
+    },
+    {
+      "path": ".threenative/build/models/weapon-ak47.provenance.9168ff80.json",
+      "sha256": "f139f76385a5e0d194943d11be7de86d8a5ea80c33c05fa6596e466941aef1a9",
+      "bytes": 1403
+    },
+    {
+      "path": ".threenative/build/models/weapon-ak47.provenance.d20aac81.json",
+      "sha256": "f139f76385a5e0d194943d11be7de86d8a5ea80c33c05fa6596e466941aef1a9",
+      "bytes": 1403
+    },
+    {
+      "path": ".threenative/build/native-proof.glb",
+      "sha256": "cd9c2dc154ddf5b75a6a8624234f3370ab1e30849754d1a2cb2356f55df54893",
+      "bytes": 624
+    },
+    {
+      "path": ".threenative/build/native-proof.png",
+      "sha256": "1c99d4289ebcfb1f5820a616f93fab2b68759f6864774cafa9cbd25d56dfa7b2",
+      "bytes": 150
+    },
+    {
+      "path": ".threenative/build/pickup.ogg",
+      "sha256": "423dffa92e96695a3d38f76b281a87af396b1d18dbb59bf18bae9e2a6f4c4c83",
+      "bytes": 3945
+    },
+    {
+      "path": ".threenative/build/player-viewmodel.glb.99cbfd79.orig",
+      "sha256": "d8236d3add7e1bc0b32748a5b5a18b2b1810fdad936b214aa2b3e2fb629c2865",
+      "bytes": 7495528
+    },
+    {
+      "path": ".threenative/build/player-viewmodel.glb.db875e7e.orig",
+      "sha256": "d8236d3add7e1bc0b32748a5b5a18b2b1810fdad936b214aa2b3e2fb629c2865",
+      "bytes": 7495528
+    },
+    {
+      "path": ".threenative/build/textures/range-target-face-hit.872461c2.ktx2",
+      "sha256": "cf0884fe75270c0f82961a9573000af1e80a446ebc2dc6b59bba90d0b264f8da",
+      "bytes": 45271
+    },
+    {
+      "path": ".threenative/build/textures/range-target-face-hit.c1738e9a.png",
+      "sha256": "c720161786b735ad9d1a6dcc54db534b1f9574778a3d0842ae3eb0ec25063798",
+      "bytes": 240077
+    },
+    {
+      "path": ".threenative/build/textures/range-target-face.4f8fdbba.png",
+      "sha256": "4d141729e8981fa74455530d9bf475e9e28e89cac273af289ccb5487fd7008e9",
+      "bytes": 239057
+    },
+    {
+      "path": ".threenative/build/textures/range-target-face.55959b28.ktx2",
+      "sha256": "90a652ab7822e1e96907e8806183c57c114ce98c7da8798c734ee13d0655e27c",
+      "bytes": 44392
+    },
+    {
+      "path": ".threenative/build/textures/ue-test-surface.7b689ac2.ktx2",
+      "sha256": "61e667d383ed10af8d6de52016f3f15ce049758fb94b7f572e6843bf36c9f856",
+      "bytes": 246082
+    },
+    {
+      "path": ".threenative/build/textures/ue-test-surface.8d07c75a.jpg",
+      "sha256": "8ee6644858f6dcc82294450e2938596887b7f5cef7d7e8c3e4d408e76fd6fd56",
+      "bytes": 321573
+    },
+    {
+      "path": ".threenative/build/ui/assets/index-BCjGY4Kd.css",
+      "sha256": "a1caf461c6c431167b6bd962ce373bc4fa80dd3bbf89e6b51fe182b382015af1",
+      "bytes": 26627
+    },
+    {
+      "path": ".threenative/build/ui/assets/index-Bavf2JP1.js",
+      "sha256": "ac5f2464878f1bf42300eae3b829d2d1c4bee307d84beafcab7f26501714d17c",
+      "bytes": 299621
+    },
+    {
+      "path": ".threenative/build/ui/index.html",
+      "sha256": "cc3d8c1ed1df15cc22fd1608108f0101edfd4995f122a3c81644e368e12d335b",
+      "bytes": 466
+    },
+    {
+      "path": ".threenative/build/weapon-ak47.glb.78562e01.orig",
+      "sha256": "c6b71dbc3145029484a2e82e63fc9cd1d288346cf69eb5ba021194532c273b24",
+      "bytes": 11751004
+    },
+    {
+      "path": ".threenative/build/weapon-ak47.glb.9b420d74.orig",
+      "sha256": "c6b71dbc3145029484a2e82e63fc9cd1d288346cf69eb5ba021194532c273b24",
+      "bytes": 11751004
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "6cff5e7d79b47a2cf1b9cf66d5cc5732cc943cab2dbb2c3eb21cf1b1402dc9b2",
+      "bytes": 26832
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "c5ebaecb02e5e026493d43c407ef5ef72424ae2b7d1b100f414ef739160fca53",
+      "bytes": 26902
+    },
+    {
+      "path": "CREDITS.md",
+      "sha256": "d7b29b971d6dae0e21e786ed17956a8528e144874779dcc0ec476c9359bd06a5",
+      "bytes": 15478
+    },
+    {
+      "path": "FRICTION.md",
+      "sha256": "a0ce48ef10d41d5c066f32d50ef6923b58341539d4097367a925683c18859e4c",
+      "bytes": 5510
+    },
+    {
+      "path": "SETUP.md",
+      "sha256": "908137857834cbd307ff7c3623c70e4d88ca44b016e4dfb806eefd23472917c1",
+      "bytes": 966
+    },
+    {
+      "path": "adapter-probe-tmp.mjs",
+      "sha256": "8a77dbbdb9c341c2175f6119886008b57f806f56b4c0f660bc0863f03199a911",
+      "bytes": 921
+    },
+    {
+      "path": "arch-shot-tmp.mjs",
+      "sha256": "eafa26aefdb67ce8b9909f4f5b19d75db5edde3ede6a3a1a4165043090652f08",
+      "bytes": 5752
+    },
+    {
+      "path": "assets/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "assets/generated/player-viewmodel-clean.glb",
+      "sha256": "dbc6c37955b2db73182e85cd6d3370fdb0e5636845ded1cc61134744ec404c21",
+      "bytes": 4277724
+    },
+    {
+      "path": "assets/imported/polyhaven/sky.outdoor-cloudy/environment.jpg",
+      "sha256": "7907550a1d29f59ed74cea2c35b6bb7a3d153a76fa7f400fa6463c590c50e66d",
+      "bytes": 150695
+    },
+    {
+      "path": "assets/imported/polyhaven/sky.outdoor-cloudy/provenance.json",
+      "sha256": "08b58956576079d1d82724348436ffbd2163d463972ab7f8368a15480cfb26cb",
+      "bytes": 1547
+    },
+    {
+      "path": "assets/models/enemy-terrorist.glb",
+      "sha256": "795f89b17d7a7eb07a43c77130ae3011912dd1e2599cc359ea65ced89964ef8c",
+      "bytes": 3757604
+    },
+    {
+      "path": "assets/models/enemy-terrorist.provenance.json",
+      "sha256": "a53809a40b28e4b55e43e7d5bcc379b13d54b2b09f35a0b34483d6c0bc0770ec",
+      "bytes": 1479
+    },
+    {
+      "path": "assets/models/player-viewmodel.glb",
+      "sha256": "d8236d3add7e1bc0b32748a5b5a18b2b1810fdad936b214aa2b3e2fb629c2865",
+      "bytes": 7495528
+    },
+    {
+      "path": "assets/models/player-viewmodel.provenance.json",
+      "sha256": "cd61fbd62b6693e04f69d32a72c14496b8831856f9bad52c1c19acef5c2e77eb",
+      "bytes": 1486
+    },
+    {
+      "path": "assets/models/weapon-ak47.glb",
+      "sha256": "c6b71dbc3145029484a2e82e63fc9cd1d288346cf69eb5ba021194532c273b24",
+      "bytes": 11751004
+    },
+    {
+      "path": "assets/models/weapon-ak47.provenance.json",
+      "sha256": "f139f76385a5e0d194943d11be7de86d8a5ea80c33c05fa6596e466941aef1a9",
+      "bytes": 1403
+    },
+    {
+      "path": "assets/textures/range-target-face-hit.png",
+      "sha256": "c720161786b735ad9d1a6dcc54db534b1f9574778a3d0842ae3eb0ec25063798",
+      "bytes": 240077
+    },
+    {
+      "path": "assets/textures/range-target-face.png",
+      "sha256": "4d141729e8981fa74455530d9bf475e9e28e89cac273af289ccb5487fd7008e9",
+      "bytes": 239057
+    },
+    {
+      "path": "assets/textures/ue-test-surface.jpg",
+      "sha256": "8ee6644858f6dcc82294450e2938596887b7f5cef7d7e8c3e4d408e76fd6fd56",
+      "bytes": 321573
+    },
+    {
+      "path": "boot-shot-tmp.mjs",
+      "sha256": "2fa86cf2c9f592e5ae134fdf75f40fa7a3965a54824e760ed68a6c4359de73b3",
+      "bytes": 1163
+    },
+    {
+      "path": "brief.md",
+      "sha256": "434e153fb9d19487df99e83780b2507c48548ef305e497c057963328352c521b",
+      "bytes": 4646
+    },
+    {
+      "path": "capabilities.json",
+      "sha256": "159014b246ed8e1a08fec330c8dcf2b0849dc624f6e0560c77ad6d4a91926830",
+      "bytes": 78423
+    },
+    {
+      "path": "captures/fps-fire-and-reload-proof-after.png",
+      "sha256": "a67280f54f870912267b07c96a453b2cc20f49650ea9868456b0bc737efdbdcf",
+      "bytes": 1026803
+    },
+    {
+      "path": "captures/fps-fire-and-reload-proof-before.png",
+      "sha256": "ad93f5635d5980f992a1e8f17de4bafab4ca7248a517d2b0ec61aae41dd80de8",
+      "bytes": 1024865
+    },
+    {
+      "path": "captures/fps-move-and-hit-proof-after.png",
+      "sha256": "63d191b58b3d6cdd726c5cae3c1e066791e54995892c303f0b7ad334c2e16a84",
+      "bytes": 1020402
+    },
+    {
+      "path": "captures/fps-move-and-hit-proof-before.png",
+      "sha256": "4201e0d154d4bc5b04cc60bf5cf62b516bf25158190231ca75892dca931d0dbf",
+      "bytes": 1025905
+    },
+    {
+      "path": "captures/index.json",
+      "sha256": "72713bfbb95a5c9ceaa8ea8b38bfaaf7e07bf990b2eed9d60204e51606ec4374",
+      "bytes": 1454
+    },
+    {
+      "path": "clip-coverage.mjs",
+      "sha256": "cfcecc2ebddcc7994b1ae3cd208ba2ec6c40ace2db55ddfa69e378b80e8c4395",
+      "bytes": 2071
+    },
+    {
+      "path": "closeup.mjs",
+      "sha256": "c147d716eb5b477f3f38f61917d4a1a38b149b4bcbde05b2c0701c87b86c3310",
+      "bytes": 928
+    },
+    {
+      "path": "dist-native/bayview-batchedpass",
+      "sha256": "8102459816a50b7da1d9dba1e8c2560fbab8bc484463165e8f53fa9d8949f812",
+      "bytes": 213145393
+    },
+    {
+      "path": "dist-native/bayview-bridge-fix",
+      "sha256": "8f9259c22eacc0e3c413f6dd62815b8c2f0dc03ee45c1c31cab236321968cd61",
+      "bytes": 202340515
+    },
+    {
+      "path": "dist-native/bayview-head-0eec59b6",
+      "sha256": "aa477a5d34bce17698b5b3a26c6ed1c48c6cc22d10f2ba83cf3c11a20ad7a790",
+      "bytes": 202331171
+    },
+    {
+      "path": "dist-native/bayview-latency3",
+      "sha256": "bc47cebcbaa8c50bd4dc48266b9ca417d54333c62f2de04b2bbb5ee32136fd43",
+      "bytes": 213131921
+    },
+    {
+      "path": "dist-native/fps-framework",
+      "sha256": "04dddde57f364c631f98c9f8d51fe5ead99d2f40c03182bbe3dd716e461f0822",
+      "bytes": 229264280
+    },
+    {
+      "path": "dist-native/ui/assets/index-BCjGY4Kd.css",
+      "sha256": "a1caf461c6c431167b6bd962ce373bc4fa80dd3bbf89e6b51fe182b382015af1",
+      "bytes": 26627
+    },
+    {
+      "path": "dist-native/ui/assets/index-Bavf2JP1.js",
+      "sha256": "ac5f2464878f1bf42300eae3b829d2d1c4bee307d84beafcab7f26501714d17c",
+      "bytes": 299621
+    },
+    {
+      "path": "dist-native/ui/index.html",
+      "sha256": "cc3d8c1ed1df15cc22fd1608108f0101edfd4995f122a3c81644e368e12d335b",
+      "bytes": 466
+    },
+    {
+      "path": "dist-verify/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "dist-verify/assets/GLTFLoader-D96EqOWZ.js",
+      "sha256": "c53b4ae5a3c664f2461bdfa945ac95ae96531148bcd3a5bcb28bd8ed18907c0c",
+      "bytes": 42885
+    },
+    {
+      "path": "dist-verify/assets/bayview-barrel.glb",
+      "sha256": "ac47c9c9a377d5911c739338bef0cc8cdd325975a739668cecc21bf78029863b",
+      "bytes": 573188
+    },
+    {
+      "path": "dist-verify/assets/bayview-brick.jpg",
+      "sha256": "464c1917d8e309fd5cb6ffc1bf9609867cbe36561e207d874cab61dd88a10eeb",
+      "bytes": 551577
+    },
+    {
+      "path": "dist-verify/assets/bayview-buoy.glb",
+      "sha256": "2ef93076825e644f08c421c42fdf6d5ddc1d4ae17e89a9ed2f5e66ab20be4ff1",
+      "bytes": 652268
+    },
+    {
+      "path": "dist-verify/assets/bayview-concrete-normal.jpg",
+      "sha256": "d9b231792ccb7d1bd8bdd3b00b0357b883168b6d3f68d2822c8d8874b1e784a4",
+      "bytes": 134392
+    },
+    {
+      "path": "dist-verify/assets/bayview-concrete-rough.jpg",
+      "sha256": "72e71ff931fdbae902fb691738549c0f4dc794ed30d4757f5c71a488c7cafa4a",
+      "bytes": 258795
+    },
+    {
+      "path": "dist-verify/assets/bayview-concrete.jpg",
+      "sha256": "24f4ebcf8650c515cae0305c1b22a30c63857bb88fa6145885b3571a1d57285d",
+      "bytes": 230807
+    },
+    {
+      "path": "dist-verify/assets/bayview-flagstone-ao.jpg",
+      "sha256": "3c49e0e76157ad187791e079adecf21fae5c7cc9bef8212155ebd9a532c2b5b8",
+      "bytes": 192833
+    },
+    {
+      "path": "dist-verify/assets/bayview-flagstone-normal.jpg",
+      "sha256": "de36b3354ee21ee28bdf98bc69f551f9f5e14b1a060da1cc79306ca88710d17b",
+      "bytes": 511894
+    },
+    {
+      "path": "dist-verify/assets/bayview-flagstone-rough.jpg",
+      "sha256": "66bc10c26e11404164c5fe51bf3e3e9419155afd9e3e12e7ec90ac72fcce668a",
+      "bytes": 175615
+    },
+    {
+      "path": "dist-verify/assets/bayview-flagstone.jpg",
+      "sha256": "3f65b3d62d5bb40c6d72e177fa34ab82bdb36921e9ded6dbac4894388a71d44c",
+      "bytes": 438006
+    },
+    {
+      "path": "dist-verify/assets/bayview-gutter.glb",
+      "sha256": "0bf3ed5ce58d26ec38196ebf69611b33ac8778ca759296b6c1d31b88775ffde0",
+      "bytes": 651888
+    },
+    {
+      "path": "dist-verify/assets/bayview-paving-normal.jpg",
+      "sha256": "1d922864dec77b67b8af1403f5802c80880ada32a68148e584135d4c686804aa",
+      "bytes": 359087
+    },
+    {
+      "path": "dist-verify/assets/bayview-paving-rough.jpg",
+      "sha256": "05a9bcdea514c82eac13156d6a1e0aa9d8e06ed55435b97a995476e0ead25295",
+      "bytes": 142556
+    },
+    {
+      "path": "dist-verify/assets/bayview-paving.jpg",
+      "sha256": "a2599eed3e2b5af2a6c31866683fb291838cdf5d25a2ca2ef45ade1e75d41f81",
+      "bytes": 181787
+    },
+    {
+      "path": "dist-verify/assets/bayview-peeling-normal.jpg",
+      "sha256": "c751f935d085a86727b66d5b622d389fd77c583423072306dfe9b9b19709d24c",
+      "bytes": 1062495
+    },
+    {
+      "path": "dist-verify/assets/bayview-peeling-rough.jpg",
+      "sha256": "fbfcb0e0ba0742a9f758ff430c955393b2fa0f9fc13870ab50f6fba55e2c8729",
+      "bytes": 259481
+    },
+    {
+      "path": "dist-verify/assets/bayview-peeling.jpg",
+      "sha256": "9ba19d104326033138ec4395f624fd3764a42a01f8b842c266c7ec1e9fc0d2a3",
+      "bytes": 271062
+    },
+    {
+      "path": "dist-verify/assets/bayview-quaystone-normal.jpg",
+      "sha256": "2744364b998cf0ec1c3e6e73af31ea49550bc7e561eee52f54d7d6622205c750",
+      "bytes": 483269
+    },
+    {
+      "path": "dist-verify/assets/bayview-quaystone-rough.jpg",
+      "sha256": "bb3c4472b04ab13d4eed43326e7499b2d59696e394fa99f8b51374d00793d6b8",
+      "bytes": 113861
+    },
+    {
+      "path": "dist-verify/assets/bayview-quaystone.jpg",
+      "sha256": "c8947e2dab033a67774e7b8e368acd8dbf0fbb45e5ab3bf55fd41dc73910fca7",
+      "bytes": 233994
+    },
+    {
+      "path": "dist-verify/assets/bayview-sky.jpg",
+      "sha256": "dad8607c493870698a5b15ea769983d249fedb30f713d68178c1614817830cb0",
+      "bytes": 342253
+    },
+    {
+      "path": "dist-verify/assets/bayview-steel-metal.jpg",
+      "sha256": "912d38d875ef6cac50885357ce46fe9f335982f690ef3b153cebb4850c5cf74a",
+      "bytes": 6672
+    },
+    {
+      "path": "dist-verify/assets/bayview-steel-normal.jpg",
+      "sha256": "b7a2df74b6241a1a7b733531ef8a4792538594b0099084c8b25e306a01871cbd",
+      "bytes": 73409
+    },
+    {
+      "path": "dist-verify/assets/bayview-steel-rough.jpg",
+      "sha256": "c994691c8e9dcf590000133fb1542722a2afbb2af08506a28a2682029a608c2f",
+      "bytes": 30278
+    },
+    {
+      "path": "dist-verify/assets/bayview-steel.jpg",
+      "sha256": "18767f1b2343f63cd66f4af8701126f0c8dbbe148688024c8ea8649eb34e50b4",
+      "bytes": 18322
+    },
+    {
+      "path": "dist-verify/assets/bayview-walllamp.glb",
+      "sha256": "deae5473454ace5902a8d6cabecb13be32ceed06a7063b51718ca24678ce4c93",
+      "bytes": 435080
+    },
+    {
+      "path": "dist-verify/assets/bayview-whitewash-normal.jpg",
+      "sha256": "d7d64894b72e0fe4f5c334838cd05dd1085c454b9f6996544861d1f7a28fcc6c",
+      "bytes": 562569
+    },
+    {
+      "path": "dist-verify/assets/bayview-whitewash-rough.jpg",
+      "sha256": "3e3c21fc4c657674ace23a5ba454326860f9ace48e69df55b4f05112159d9730",
+      "bytes": 317085
+    },
+    {
+      "path": "dist-verify/assets/bayview-whitewash.jpg",
+      "sha256": "72cff948a66f6a7481e67e85628cebe8322a31d8b2637294f74f8a31eaafd3a0",
+      "bytes": 257407
+    },
+    {
+      "path": "dist-verify/assets/bayview-wood-normal.jpg",
+      "sha256": "868c153165ecaa7dd7259cb58214f06f6f86c80ac71fc92a827dff07708be077",
+      "bytes": 516860
+    },
+    {
+      "path": "dist-verify/assets/bayview-wood.jpg",
+      "sha256": "8dfae22286fa9bb0ed62ce7326e8bc14c284e567d38fd64b5a453838080ecf19",
+      "bytes": 570668
+    },
+    {
+      "path": "dist-verify/assets/enemy-terrorist.glb",
+      "sha256": "583e063fb924d9e8a227f6a47c388c95d84c442db164c664de948fc1bca4a610",
+      "bytes": 1594264
+    },
+    {
+      "path": "dist-verify/assets/index-DQHJl8Sf.js",
+      "sha256": "e23e281b7ed008f7ef662c3c280a2677a47a27ba15b85899dc01e511b1186c77",
+      "bytes": 3711179
+    },
+    {
+      "path": "dist-verify/assets/index-DdizFysY.css",
+      "sha256": "3fba53fd37c47f3657946519ae8aa1c153c2ca2bfbc5960e87675f4b952d72be",
+      "bytes": 23514
+    },
+    {
+      "path": "dist-verify/assets/player-viewmodel.glb",
+      "sha256": "0d2a14e6579a0dd49ffded4eea02578b37d9712ceeba6f9aafec179b05e67f77",
+      "bytes": 1454824
+    },
+    {
+      "path": "dist-verify/assets/three.core-BNdhvUhN.js",
+      "sha256": "62011ccddff6a37c31b650b4a62354b071fa24eb3e51d35a89810c7bfa7ecbef",
+      "bytes": 292300
+    },
+    {
+      "path": "dist-verify/assets/weapon-ak47.glb",
+      "sha256": "a77b24521db0315fa946582eb456f7a2f0fe5370bcddc8bfedf8aff2580be696",
+      "bytes": 1444752
+    },
+    {
+      "path": "dist-verify/audio/ambience-harbour.ogg",
+      "sha256": "99b5005d4f65e213cf1b803f0ebf3b7218d49e8c2003a074076faaebb194722c",
+      "bytes": 279313
+    },
+    {
+      "path": "dist-verify/audio/bark-chase-1.ogg",
+      "sha256": "eea93db0abe192d12bac62c837f26b7460f9f37f9a8cf0b91d1facf94f318b95",
+      "bytes": 12576
+    },
+    {
+      "path": "dist-verify/audio/bark-chase-2.ogg",
+      "sha256": "36ba0f3d40a59f6a968d0315bf9e63c2b4c7fc504143eb6a6b7f1bd96be03869",
+      "bytes": 15762
+    },
+    {
+      "path": "dist-verify/audio/bark-chase-3.ogg",
+      "sha256": "de6756d60770a3403d0492f2d005f4f912e52f7e0ed3d4534f1fc8325e00a4a3",
+      "bytes": 11362
+    },
+    {
+      "path": "dist-verify/audio/bark-death-1.ogg",
+      "sha256": "4cee76ecfc03949d4509e1b799c7cb86ffcfec7e587f12fec610c4d62f8d5051",
+      "bytes": 19444
+    },
+    {
+      "path": "dist-verify/audio/bark-death-2.ogg",
+      "sha256": "9edc1917440694b6a3c7944ef1a28d923b0910e63c3c36bacf7a02e8cf527db4",
+      "bytes": 18739
+    },
+    {
+      "path": "dist-verify/audio/bark-pain-1.ogg",
+      "sha256": "7b88fe64c7181f4d1bcc28ea4c8d841ba15f86069898c72b75d2c08dc96f5fa3",
+      "bytes": 9590
+    },
+    {
+      "path": "dist-verify/audio/bark-pain-2.ogg",
+      "sha256": "e690e51e2b22f219581c77a466e75da24212c2cf4576cde5c6ba572b09180815",
+      "bytes": 11252
+    },
+    {
+      "path": "dist-verify/audio/bark-spot-1.ogg",
+      "sha256": "37c4d3a609079096e79c0d3f0c0bf560f350b36d4e30b62bfc2b62d235fa8df3",
+      "bytes": 16104
+    },
+    {
+      "path": "dist-verify/audio/bark-spot-2.ogg",
+      "sha256": "bb2946244842f67f87a32985eecc60666b2e55727ce9ed8faf55f2c2d312ee3b",
+      "bytes": 21818
+    },
+    {
+      "path": "dist-verify/audio/bark-spot-3.ogg",
+      "sha256": "faa360c2b931b744c39ef312a5b17a11b6fdd6e4a792ac2f2a8c3960a4d4b5f1",
+      "bytes": 18900
+    },
+    {
+      "path": "dist-verify/audio/bullet-whizz.ogg",
+      "sha256": "56feeb5d25855576332bc8becf8f0544e8d8f4fc0cde8199283b204df9d713d0",
+      "bytes": 13791
+    },
+    {
+      "path": "dist-verify/audio/clock-tick.ogg",
+      "sha256": "869442f54214be902ec7437f79e400dc91c1bfd90d18a6dd2d5b7e41ffbf457b",
+      "bytes": 4514
+    },
+    {
+      "path": "dist-verify/audio/hit-impact.ogg",
+      "sha256": "c5cf7261894aabb6bdba19e090b3afe8fbedec2ad2ed64b5913fc7515663e99c",
+      "bytes": 8807
+    },
+    {
+      "path": "dist-verify/audio/impact-plaster.ogg",
+      "sha256": "b2f50c7ac83ec392a104ed07e01375abb81e3438cde6fa9135b26a3628442b01",
+      "bytes": 9325
+    },
+    {
+      "path": "dist-verify/audio/impact-steel.ogg",
+      "sha256": "39cabedb3ebb18119b754ffad4b294f016d69354acf08eb3b54e6b360c49cdfd",
+      "bytes": 10318
+    },
+    {
+      "path": "dist-verify/audio/impact-stone.ogg",
+      "sha256": "f03e431c97a74351fff8b59c31635b884edb3bb95ef869ec4bdf41448d3a15ab",
+      "bytes": 9732
+    },
+    {
+      "path": "dist-verify/audio/impact-wood.ogg",
+      "sha256": "4e0be3c5c4c922f0cba9c58c317519053bbf8fa7d5207f7f80b92e5d1b99ea01",
+      "bytes": 9136
+    },
+    {
+      "path": "dist-verify/audio/reload-magin.ogg",
+      "sha256": "a0ef8f7f33ab01421b5a9f292d3a009b3a076b88407379301092a88c9bd14d3f",
+      "bytes": 11464
+    },
+    {
+      "path": "dist-verify/audio/reload-magout.ogg",
+      "sha256": "f4d1a634fd0b97bf3c809aeedcddc2d0a35a42b9e55cd5d2497b6ec0008ffcb2",
+      "bytes": 10997
+    },
+    {
+      "path": "dist-verify/audio/round-complete.ogg",
+      "sha256": "063564703b6094d70718a3e787a55cc9141611e4ecd6b6637f8828f79b4a8c3a",
+      "bytes": 8968
+    },
+    {
+      "path": "dist-verify/audio/round-failed.ogg",
+      "sha256": "a97513d7fd2b12b1210c423be943b4c1ab0e899b11db95855e9b74836e646ae0",
+      "bytes": 8288
+    },
+    {
+      "path": "dist-verify/audio/shot-enemy.ogg",
+      "sha256": "979878b225f40328051029ea0a4a346b34c1e4899e1496829974586bd89fe96a",
+      "bytes": 16371
+    },
+    {
+      "path": "dist-verify/audio/shot-player.ogg",
+      "sha256": "13a2a6f276deda02aae06eb545f87d99d3a2ce6f3c8e29f9fccd13e4bfa5a95e",
+      "bytes": 13049
+    },
+    {
+      "path": "dist-verify/audio/step-stone-1.ogg",
+      "sha256": "081f9793a09f60e57548833b090c880d687cd36ff4c439621cd2add235913283",
+      "bytes": 8604
+    },
+    {
+      "path": "dist-verify/audio/step-stone-2.ogg",
+      "sha256": "6020fb10934725ff167f6bd9ae14c967664a31bbdc368930a69d2e58f31f2956",
+      "bytes": 8913
+    },
+    {
+      "path": "dist-verify/audio/step-stone-3.ogg",
+      "sha256": "718e33771b5cfbbf512f24a5fd5cdff8c81016519d264c84016bc215f27bfa92",
+      "bytes": 8856
+    },
+    {
+      "path": "dist-verify/audio/step-stone-4.ogg",
+      "sha256": "02a41232afc114c3cd11f66c29d29b3391e50896e6cf483e00b0b1859dce9fe0",
+      "bytes": 8931
+    },
+    {
+      "path": "dist-verify/audio/ui-click.ogg",
+      "sha256": "ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9",
+      "bytes": 4876
+    },
+    {
+      "path": "dist-verify/favicon.svg",
+      "sha256": "2d208c58ea4c25b3bef0208ff84c5847eab49455481e001275ddd0aa7d7746bb",
+      "bytes": 179
+    },
+    {
+      "path": "dist-verify/icon.png",
+      "sha256": "1c99d4289ebcfb1f5820a616f93fab2b68759f6864774cafa9cbd25d56dfa7b2",
+      "bytes": 150
+    },
+    {
+      "path": "dist-verify/index.html",
+      "sha256": "125d1542def8fe89b214d7f75bee489b402966c0c3f56567735035925e9d96ec",
+      "bytes": 538
+    },
+    {
+      "path": "dist-verify/native-proof.glb",
+      "sha256": "cd9c2dc154ddf5b75a6a8624234f3370ab1e30849754d1a2cb2356f55df54893",
+      "bytes": 624
+    },
+    {
+      "path": "dist-verify/native-proof.png",
+      "sha256": "1c99d4289ebcfb1f5820a616f93fab2b68759f6864774cafa9cbd25d56dfa7b2",
+      "bytes": 150
+    },
+    {
+      "path": "dist-verify/pickup.ogg",
+      "sha256": "423dffa92e96695a3d38f76b281a87af396b1d18dbb59bf18bae9e2a6f4c4c83",
+      "bytes": 3945
+    },
+    {
+      "path": "docs/PRDs/2026-08-18-fps-fidelity-fixes.md",
+      "sha256": "41cf619c25ee934434949d98fa825f93bed8d2165bbae9f4bce989cc4a4a0152",
+      "bytes": 45567
+    },
+    {
+      "path": "docs/abstraction-ideas-2026-08-22.md",
+      "sha256": "825d3377a9850cb997c333033ad6586e3b0da20f7786e7bbd63b4251d141bc83",
+      "bytes": 40672
+    },
+    {
+      "path": "docs/asset-manifest.md",
+      "sha256": "53c7376813cd78efcb5dc4059a83dc76f6bec0a6a8ee46359d31e2e519180447",
+      "bytes": 19931
+    },
+    {
+      "path": "docs/bayview-design.md",
+      "sha256": "6bcbdc74f11cefc2644555863ed45969546fd0c457d1e646cb535de2b08a2ae3",
+      "bytes": 7204
+    },
+    {
+      "path": "docs/bayview-next-steps.md",
+      "sha256": "cfa496497ca883272dc805ab9a4c6592964b02e5b0843a863bbc452f149ee5a3",
+      "bytes": 21273
+    },
+    {
+      "path": "docs/session-retro-2026-08-22.md",
+      "sha256": "4c1ccee32e18287d7e8037c1a0bebebf82b5cb300917702607c644cc0e729fb1",
+      "bytes": 21688
+    },
+    {
+      "path": "enemy-probe-tmp.mjs",
+      "sha256": "3ddc3e5ab344686fc656352e3444b002b6a894d5e7b906d6e09a3026426857aa",
+      "bytes": 2075
+    },
+    {
+      "path": "enemy-probe.mjs",
+      "sha256": "518e1987a646a4afb976e6c3e1adf1de3e466918be4fa1f059e8b7e5c97f76d6",
+      "bytes": 1568
+    },
+    {
+      "path": "err-probe.mjs",
+      "sha256": "3bae6542f070bb7fb0ddbb45bd7a89afe5bd082554943c45b356efa6ead94f10",
+      "bytes": 1126
+    },
+    {
+      "path": "err-trace-dev-tmp.mjs",
+      "sha256": "5bf1f4d218b470ae472b9bf0f48902ac1af68f963fb9c5de2a43ea0fa3edf669",
+      "bytes": 747
+    },
+    {
+      "path": "err-trace-tmp.mjs",
+      "sha256": "aba5c705f875b003cc783f1ea32e688c5389167d5a7bbf5f6ad51cf500fcfc84",
+      "bytes": 881
+    },
+    {
+      "path": "facade-audit-tmp.mjs",
+      "sha256": "393ae9eddd10bd996d6184ad257efcffd215a281b10c48f1989ebe13916b5233",
+      "bytes": 3129
+    },
+    {
+      "path": "facade-shots-tmp.mjs",
+      "sha256": "d752b558c22f7b5570732f10162f5f10b96bcc08a051e0fd5bc775c70c69627b",
+      "bytes": 10188
+    },
+    {
+      "path": "fire.mjs",
+      "sha256": "21779567bf901bcef2d3e6958451723a5eae92f8f41764bd7379e024326b35cc",
+      "bytes": 1684
+    },
+    {
+      "path": "fps-probe.mjs",
+      "sha256": "6e00b9e869a8bd068d4841c26b8de6806e7bcfd9afe1d532e103a4ce1d877e8d",
+      "bytes": 2427
+    },
+    {
+      "path": "giant-probe-tmp.mjs",
+      "sha256": "77950cac9061dfb4c63c673b8981a8ab9dab548cdc55eb784e808ff554cb0b22",
+      "bytes": 3602
+    },
+    {
+      "path": "globals.mjs",
+      "sha256": "24f7e3183009b65c6510c80dff0203c01dbf9686e3c8a1d2d620579500ad6947",
+      "bytes": 1117
+    },
+    {
+      "path": "gpu-xvfb-probe-tmp.mjs",
+      "sha256": "bb5a04018c9c82992b7d5e413b80c858dc010cb8041a6e22cdca1e2563c99a8f",
+      "bytes": 2668
+    },
+    {
+      "path": "grip-shot.mjs",
+      "sha256": "37fbe3642828b6403df9e50d75ac41ad8362a573c86bc089ace46cf8addb801c",
+      "bytes": 4170
+    },
+    {
+      "path": "grip-sweep.mjs",
+      "sha256": "364adca8c5cc25279cffa4c174cba2b016424d29b2c5ed714de55b4cc142fcce",
+      "bytes": 2883
+    },
+    {
+      "path": "ground-audit.mjs",
+      "sha256": "65906854252cf159850b163099314570208d92810aa8c7b068d121031d318dd0",
+      "bytes": 2137
+    },
+    {
+      "path": "host-probe-tmp.mjs",
+      "sha256": "44905fe04f66647767762a1421f78529510044308d587d899a8783e919f6db8f",
+      "bytes": 799
+    },
+    {
+      "path": "hud-shot-tmp.mjs",
+      "sha256": "451155e722977f3bac1e5782173e5bf55645cb4fe3004871a5d297ec91186f43",
+      "bytes": 937
+    },
+    {
+      "path": "idle.mjs",
+      "sha256": "4e2ac61265fd5d1c02e9b3b02296701f85e2790bad70ce7325d54904344933ae",
+      "bytes": 848
+    },
+    {
+      "path": "image.png",
+      "sha256": "ffce21c81b03e46625d1f76b9ee1e5f95fb761d1fd99be916ef5e33b969b2e74",
+      "bytes": 442494
+    },
+    {
+      "path": "index.html",
+      "sha256": "6dd2636790884a555125d6dd642577341833f720e65e19a3e63183969ad66483",
+      "bytes": 358
+    },
+    {
+      "path": "kit.json",
+      "sha256": "4d187f57ed2a33e8a942e98e75d8074b314b6220f03a9d641d2b5ed48e87d7d2",
+      "bytes": 179
+    },
+    {
+      "path": "lock-tmp.mjs",
+      "sha256": "e25ff3894cdb24f560e713d2a1546f63ce5dc64a15a5bc632b00266b568c8104",
+      "bytes": 1804
+    },
+    {
+      "path": "lockprobe-tmp.mjs",
+      "sha256": "e5299c63791faaf302ea237cfed0fc00f35a1ccb0e57191c1edb3cc46dbac863",
+      "bytes": 1994
+    },
+    {
+      "path": "look-shape-tmp.mjs",
+      "sha256": "42060d38702b3aca6c7e16f9a401e60ca65fdc5462051ec5111418d56d8cc4d9",
+      "bytes": 756
+    },
+    {
+      "path": "look.mjs",
+      "sha256": "75dc548c8bd16410153a73985b32edc70bbe99cff05fe51e242665175fd14b7f",
+      "bytes": 1088
+    },
+    {
+      "path": "measure.mjs",
+      "sha256": "8ddf317955cd50074e3feaa15a3da653e544dfe83052de5ce5f158506aa564fa",
+      "bytes": 1224
+    },
+    {
+      "path": "mouse-probe.mjs",
+      "sha256": "65bd8ffa5853098f42c0d8c5b50a27e737202a5eac1b9f339c09d11828ea422f",
+      "bytes": 2106
+    },
+    {
+      "path": "node-churn-probe-tmp.html",
+      "sha256": "3185a37cb18de7f943ddab06dca66db101f0650023e4969722c47aa734b9e016",
+      "bytes": 3603
+    },
+    {
+      "path": "node-dispatch-microbench-tmp.mjs",
+      "sha256": "5e574817d25ccf9efb1cdfdb9b531c769d77fb2103e44f658cf9893c96300d34",
+      "bytes": 4038
+    },
+    {
+      "path": "package.json",
+      "sha256": "eafe61f5b3e651cb44ab932382d3d41e09d5f94bfb3685a61d4ad2d3a321a5bb",
+      "bytes": 7117
+    },
+    {
+      "path": "palm-measure-tmp.mjs",
+      "sha256": "d8d15c1631501ef48eb06e4d0be8d82c5eee2f19521e5bd285a8dabf6afb3ee8",
+      "bytes": 12775
+    },
+    {
+      "path": "palm-shot-tmp.mjs",
+      "sha256": "2617506347d3ef3351e10bcc6f566c22268df04e256bbbd3b2d20891872e3564",
+      "bytes": 3074
+    },
+    {
+      "path": "palm-sil-tmp.mjs",
+      "sha256": "39d349fa40056ca28e1d2d77f9b20d5992b7fe025e4d3c599135f133ea1a9e9b",
+      "bytes": 12509
+    },
+    {
+      "path": "palm-tour-tmp.mjs",
+      "sha256": "4b5deb975279e903f0ecce9e1da3049a01a4048380491f10ccfaaf3ef5007625",
+      "bytes": 6117
+    },
+    {
+      "path": "perf-tour-tmp.mjs",
+      "sha256": "57295a5b0ba3e785078916ca21ebd0816033d25442f4438350875f4820e3ca2d",
+      "bytes": 10351
+    },
+    {
+      "path": "perf.mjs",
+      "sha256": "4382957d11fe588fe38eaef65327199f9ef8ea0863489769c18fde2a68977543",
+      "bytes": 2387
+    },
+    {
+      "path": "phone-web-tmp.mjs",
+      "sha256": "1ac31dd9079606b6b55b6891c040cb679e96b6855102dc176c58ccc06870197f",
+      "bytes": 2521
+    },
+    {
+      "path": "playtests/aim-alignment.playtest.json",
+      "sha256": "7817f2feea20d4cb81e2e344eac2fbc5c4aef63a88128fb5d0af3da44a802acb",
+      "bytes": 1238
+    },
+    {
+      "path": "playtests/audio-fires-a-voice.playtest.json",
+      "sha256": "7e4e01296f6e296f504f74525264816ce4d79acc9f260bebffefa48efe213b0d",
+      "bytes": 1463
+    },
+    {
+      "path": "playtests/audio-voices-bounded.playtest.json",
+      "sha256": "72aee114ea6f8c9a3ce6bc62a826ae988c7991084e64c887004f617fb6009cd2",
+      "bytes": 1920
+    },
+    {
+      "path": "playtests/breakable-shatters.playtest.json",
+      "sha256": "64ebfdbee930004d97810fd90cd7898b307c372f997740e53927826adb85c5dd",
+      "bytes": 1404
+    },
+    {
+      "path": "playtests/bullet-holes.playtest.json",
+      "sha256": "3346ade48491062a8aadd9e414ce9ff00ee21d8cc7a60477d6a74da860828281",
+      "bytes": 1334
+    },
+    {
+      "path": "playtests/camera-tracks-body-vertically.playtest.json",
+      "sha256": "da34a9e7fc9b55c556106d71239e6d2a6f46787eaba09652dd86db3c8e01e616",
+      "bytes": 2072
+    },
+    {
+      "path": "playtests/crouch-lowers-the-eye.playtest.json",
+      "sha256": "2276816e63361849503bf2b6f1e6b91f3bdd76268accda80aeb9ef337d969243",
+      "bytes": 1056
+    },
+    {
+      "path": "playtests/death-no-snap.playtest.json",
+      "sha256": "ef26fca131748d8efd0acf98940252f381fce0247238cff1fef920d1aa4d46d5",
+      "bytes": 2088
+    },
+    {
+      "path": "playtests/debug-ads.playtest.json",
+      "sha256": "ff44040b7ffaf6049b3e63d84a93eb7d143dc6c9e57a08a3dd9ac09187c1ab08",
+      "bytes": 1177
+    },
+    {
+      "path": "playtests/debug-clear.playtest.json",
+      "sha256": "b3c7b6b6dbce13ad24ea059a03d1d66b0e540fcb2888a150528b28b6fe9baf6f",
+      "bytes": 6921
+    },
+    {
+      "path": "playtests/debug-endurance.playtest.json",
+      "sha256": "ea06ba971dc887535f8c8787dac8b78d819b299b6b5af06500e6a873bd4ecd6a",
+      "bytes": 1073
+    },
+    {
+      "path": "playtests/debug-fire.playtest.json",
+      "sha256": "ffaa905a644fe5cda82c0b8223c246e64b84f018276f6bd3a7beefb2b6168945",
+      "bytes": 2121
+    },
+    {
+      "path": "playtests/debug-restart.playtest.json",
+      "sha256": "3435eb07b01c468b380b48f689bed6667ed9f5255fee8f377196f267501db9b3",
+      "bytes": 1013
+    },
+    {
+      "path": "playtests/draw-budget.playtest.json",
+      "sha256": "2c7a31f83be07c22b91905a86473fa7eeace591547c933710cc8ad0ef3caaf47",
+      "bytes": 1673
+    },
+    {
+      "path": "playtests/enemy-death-settles-native.playtest.json",
+      "sha256": "edf06eff958d2f5f41002871a7fa629cc7385a3f5745efab74697579f6d93b97",
+      "bytes": 1798
+    },
+    {
+      "path": "playtests/enemy-death-settles.playtest.json",
+      "sha256": "d048efe068c0af5a6668df77d00ef4114c3d400dad5e171b9157db70340472c0",
+      "bytes": 1881
+    },
+    {
+      "path": "playtests/enemy-flinches-when-hit.playtest.json",
+      "sha256": "b9a45e2811056952916057c45a50750f68b0eea1aab05674c22ff85705c39c26",
+      "bytes": 1491
+    },
+    {
+      "path": "playtests/enemy-foot-contact.playtest.json",
+      "sha256": "17cabeb882021842468154a235dc624982b9439a3a74fa30b9233b5f959cfa22",
+      "bytes": 777
+    },
+    {
+      "path": "playtests/enemy-reaches-walkway.playtest.json",
+      "sha256": "ff1b696cc53fcba992488ad9b765c6cfaca3692fa82e81697fa691048799c7f6",
+      "bytes": 1446
+    },
+    {
+      "path": "playtests/enemy-scale.playtest.json",
+      "sha256": "76b0db8e3e87c68b357fe60898c1c676b0a6d8ef29a5ac955684890a4388c407",
+      "bytes": 1237
+    },
+    {
+      "path": "playtests/enemy-stops-without-snapping.playtest.json",
+      "sha256": "73cbd7a7161597041b549c3667d381c9d25fa28015a7c2ac1b1f1b06ad96435d",
+      "bytes": 9371
+    },
+    {
+      "path": "playtests/enemy-stride-matches-speed.playtest.json",
+      "sha256": "38ac7d04a576ec4a742022c2578ad1d425ed3209ebe8e9e677193b2daf2acf66",
+      "bytes": 5017
+    },
+    {
+      "path": "playtests/enemy-stride-under-crouch.playtest.json",
+      "sha256": "87d6512a8c85734fda33c7f2fd95af207b8f3a5e6be176acb1c92343d04a97f8",
+      "bytes": 1891
+    },
+    {
+      "path": "playtests/enemy-uses-crouch-clips.playtest.json",
+      "sha256": "9a8752aa84011468342fa8bdec2761cc1ed46c654b7abc935f216bc168a7f040",
+      "bytes": 1410
+    },
+    {
+      "path": "playtests/five-soldiers.playtest.json",
+      "sha256": "50bfbd91721e2256560b72514ff2510fcff888f2a6ca9df0c23cd5439f6591e0",
+      "bytes": 2121
+    },
+    {
+      "path": "playtests/flash-retires.playtest.json",
+      "sha256": "dbb8a7b569465bbf0350d13ac07bd7d29ca2cdae680489ce833933b04e02d351",
+      "bytes": 1367
+    },
+    {
+      "path": "playtests/frame-smoothness.playtest.json",
+      "sha256": "3f22b8308b251492338dfa41b57a2e96f26d28de8749d8f250e6a2ba5ecd176b",
+      "bytes": 2000
+    },
+    {
+      "path": "playtests/headshot-hits-head.playtest.json",
+      "sha256": "24cf7b38204067c1446ad49851d84fe7316864935120f92eeeb0cf97cceea511",
+      "bytes": 2736
+    },
+    {
+      "path": "playtests/hold-to-fire.playtest.json",
+      "sha256": "03fd1609a7ab97a9d007032f3446493e0a85ef4ec694f358d23165785ec76d08",
+      "bytes": 1027
+    },
+    {
+      "path": "playtests/minimap-state.playtest.json",
+      "sha256": "294eb0a587ca66bea59719d8b4f955a36f0ad1aa3a3ad2e4a8fca7416b135de2",
+      "bytes": 1635
+    },
+    {
+      "path": "playtests/native-frame-profile.playtest.json",
+      "sha256": "d060157d7bad35673d5fcfc6b3208fd509e59d81770acae112cb7a21fe6f78c7",
+      "bytes": 2547
+    },
+    {
+      "path": "playtests/native-react-hud.playtest.json",
+      "sha256": "56e135a2941fdda9138358010ef5fb9afa16346f6e426cc1f7eddf854c400bc0",
+      "bytes": 1899
+    },
+    {
+      "path": "playtests/round-clock.playtest.json",
+      "sha256": "ce38c67784aefd615ab8122b4d308fe76904e54bc7a14e580de3bb805daf0c53",
+      "bytes": 590
+    },
+    {
+      "path": "playtests/shot-tracks-crosshair.playtest.json",
+      "sha256": "271dff3019b8806ee9fd61ee9d29ef98e99b044a880e154d485cb83552f92ff0",
+      "bytes": 1574
+    },
+    {
+      "path": "playtests/survives.playtest.json",
+      "sha256": "55af3ba2265a97ff65dd8b8f23d77e77d006c8cfc0640ec6c6317a73fa66322d",
+      "bytes": 1850
+    },
+    {
+      "path": "playtests/walkway-reachable.playtest.json",
+      "sha256": "e641dfd278daa572f5dbc5b3c69990e13dd301d72b50bb255e527158109a27c5",
+      "bytes": 1216
+    },
+    {
+      "path": "playtests/zone-contrast-body.playtest.json",
+      "sha256": "74fe0b22b0e5518037a79edcba162b78112d38e8f57f914f4955d22f5947ccf1",
+      "bytes": 2509
+    },
+    {
+      "path": "playtests/zone-contrast-head.playtest.json",
+      "sha256": "6e5cd62fa4562e2d19e27724fb4967dd5f72f1ce9516574f58b853d36506c5e9",
+      "bytes": 2267
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "b923e1fb464e8c6c62ad9dadf1a180a1202e3f7de62d04774e68d0f3b745b6af",
+      "bytes": 133947
+    },
+    {
+      "path": "pose-probe.mjs",
+      "sha256": "cc63ef317e41f53dc44a002d193809f787a28f816707501943df4e4c25b2163c",
+      "bytes": 5532
+    },
+    {
+      "path": "pose-recipes/enemy-ak47.pose.json",
+      "sha256": "a0ab6ee08a605b2f22be6e51471b79c7deb9b8e40457dce6f49b97de05db7afc",
+      "bytes": 4716
+    },
+    {
+      "path": "prd224-web-tmp.mjs",
+      "sha256": "5bae46cb5f990a46a7bc24cf1ab223cec18a37a8327ea14f100ac0e86d2c68fe",
+      "bytes": 1972
+    },
+    {
+      "path": "probe-town-tmp.mjs",
+      "sha256": "9d78e748954a8a68cbac58427f4bb86248a3424da7a43434b800d03a64e50b02",
+      "bytes": 1111
+    },
+    {
+      "path": "probe.mjs",
+      "sha256": "04acf2eb609c70363bcd7fdd224c82a17e254fb01e78c420cc10be04099e3f89",
+      "bytes": 4446
+    },
+    {
+      "path": "profile-cpu.mjs",
+      "sha256": "17471a64d71812f064040c5c2f16aa32e9afc124a2c86ee15150f52b2064b5ae",
+      "bytes": 2218
+    },
+    {
+      "path": "proof-artifacts/0/after.png",
+      "sha256": "a67280f54f870912267b07c96a453b2cc20f49650ea9868456b0bc737efdbdcf",
+      "bytes": 1026803
+    },
+    {
+      "path": "proof-artifacts/0/before.png",
+      "sha256": "ad93f5635d5980f992a1e8f17de4bafab4ca7248a517d2b0ec61aae41dd80de8",
+      "bytes": 1024865
+    },
+    {
+      "path": "proof-artifacts/0/capture.json",
+      "sha256": "ae454d71bb05e59e6dadcb5b9e6564cf9c0d246bccaf767a2c50d5d01b2de160",
+      "bytes": 1071
+    },
+    {
+      "path": "proof-artifacts/0/console.json",
+      "sha256": "b375c3f19588d0afd8937afbbe40a19b9543ae0e67c831dccf650a427c573abc",
+      "bytes": 1466
+    },
+    {
+      "path": "proof-artifacts/0/runner-report.json",
+      "sha256": "563e8fd7f17b3ba955d988c9c912fcd7bf64a4444b017439eaa47fb2c81bda38",
+      "bytes": 18954
+    },
+    {
+      "path": "proof-artifacts/0/runner-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "proof-artifacts/1/after.png",
+      "sha256": "63d191b58b3d6cdd726c5cae3c1e066791e54995892c303f0b7ad334c2e16a84",
+      "bytes": 1020402
+    },
+    {
+      "path": "proof-artifacts/1/before.png",
+      "sha256": "4201e0d154d4bc5b04cc60bf5cf62b516bf25158190231ca75892dca931d0dbf",
+      "bytes": 1025905
+    },
+    {
+      "path": "proof-artifacts/1/capture.json",
+      "sha256": "ae454d71bb05e59e6dadcb5b9e6564cf9c0d246bccaf767a2c50d5d01b2de160",
+      "bytes": 1071
+    },
+    {
+      "path": "proof-artifacts/1/console.json",
+      "sha256": "b375c3f19588d0afd8937afbbe40a19b9543ae0e67c831dccf650a427c573abc",
+      "bytes": 1466
+    },
+    {
+      "path": "proof-artifacts/1/runner-report.json",
+      "sha256": "8b8d36ddf5249a0b6bb2dd9c2ca8c061683be006a90b622cd5b497dabf84ba52",
+      "bytes": 18938
+    },
+    {
+      "path": "proof-artifacts/1/runner-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "proof-artifacts/gates/aim-alignment.json",
+      "sha256": "28a84903b8bfb1c000b4cfffe0daa68d8f7bd181c0380e08f39b015deb991ab1",
+      "bytes": 176314
+    },
+    {
+      "path": "proof-artifacts/gates/audio-fires-a-voice.json",
+      "sha256": "0d77aab0f05e8f03871e0d819785893dc2882f248b963e4d393164673c81b708",
+      "bytes": 205595
+    },
+    {
+      "path": "proof-artifacts/gates/audio-voices-bounded.json",
+      "sha256": "4e5506c74938d34cc2ad1e55bc360c65f61cbe15aea8ad6757b0c166b7b3ffcb",
+      "bytes": 247157
+    },
+    {
+      "path": "proof-artifacts/gates/breakable-shatters.json",
+      "sha256": "e78a5fd85beb1a975e033f9a393013deb8eeeb774969bdf45dd687a4a80da586",
+      "bytes": 177363
+    },
+    {
+      "path": "proof-artifacts/gates/bullet-holes.json",
+      "sha256": "b0447e6d70a96723cab027765876612f4559c939facd138a8ef1e950932262bb",
+      "bytes": 144365
+    },
+    {
+      "path": "proof-artifacts/gates/camera-tracks-body-vertically.json",
+      "sha256": "c87bc46a2b94964a389d40b49373b9ed67aaf1859f409cbe57841ab328e0ca94",
+      "bytes": 160402
+    },
+    {
+      "path": "proof-artifacts/gates/crouch-lowers-the-eye.json",
+      "sha256": "580abdd9c499c63835d08b1cbc6dfe24e5db59455c494b58544a198bb9568933",
+      "bytes": 144855
+    },
+    {
+      "path": "proof-artifacts/gates/death-no-snap.json",
+      "sha256": "3a0e6f97144f7d176ff1527ddf3d5c2788e57c2653c14a8de2d4118270cd13c3",
+      "bytes": 147526
+    },
+    {
+      "path": "proof-artifacts/gates/debug-ads.json",
+      "sha256": "918460b78631a83de2ce37c174ff14447a1fa81501291e1bd74bbb02224a81a3",
+      "bytes": 144845
+    },
+    {
+      "path": "proof-artifacts/gates/debug-clear.json",
+      "sha256": "c5083b37da9af67ca7561ca560ce48a474480dab45829d9ecafd2ed8f7165aaf",
+      "bytes": 1791804
+    },
+    {
+      "path": "proof-artifacts/gates/debug-endurance.json",
+      "sha256": "bc7afa511ac43fdd83c80dbbb81a889db37140dd1d71019c94be2adcb795d485",
+      "bytes": 243530
+    },
+    {
+      "path": "proof-artifacts/gates/debug-fire.json",
+      "sha256": "1027cb2836c8a6f5d5f37a921f408a06a79765ae12d48c75b1100e51e5b3d74f",
+      "bytes": 379383
+    },
+    {
+      "path": "proof-artifacts/gates/debug-restart.json",
+      "sha256": "d66720fc0c58b4c9684b2a1e21a16ecd24e5ed974530acf56211a9187fff00a0",
+      "bytes": 278178
+    },
+    {
+      "path": "proof-artifacts/gates/enemy-death-settles.json",
+      "sha256": "a49f4bd4b8b4a7a739f595237bef883faa9257bfcdb3c0e047e18632f163ddf6",
+      "bytes": 147375
+    },
+    {
+      "path": "proof-artifacts/gates/enemy-foot-contact.json",
+      "sha256": "97dfce750a180ff91985cd036f86f00d9a3854ddf7e1cf5b72a400583f6711a0",
+      "bytes": 111587
+    },
+    {
+      "path": "proof-artifacts/gates/enemy-reaches-walkway.json",
+      "sha256": "6d7b28014603b5aebe9f78fcdb439ba9549927afb58934a23e23c4eac57a0d57",
+      "bytes": 312481
+    },
+    {
+      "path": "proof-artifacts/gates/enemy-scale.json",
+      "sha256": "6cf876c0697430efcbe5b58524cba9ea096e36a6ae7cd885920d02650c8d244c",
+      "bytes": 111220
+    },
+    {
+      "path": "proof-artifacts/gates/enemy-stride-matches-speed.json",
+      "sha256": "7d91af8766beb81622c00c0021eca64a287cbd52f98f6b5210bf638b04af719c",
+      "bytes": 923326
+    },
+    {
+      "path": "proof-artifacts/gates/enemy-uses-crouch-clips.json",
+      "sha256": "c84783966f2ca01d1789a49a3ad7e8d6882113001b8dac0260115c4c5acf5853",
+      "bytes": 315153
+    },
+    {
+      "path": "proof-artifacts/gates/five-soldiers.json",
+      "sha256": "5e874b51cb27cffc8e441a49163997a52f4548e75787cf4dab1f190563d2bff1",
+      "bytes": 115484
+    },
+    {
+      "path": "proof-artifacts/gates/flash-retires.json",
+      "sha256": "a4af2d185f5497ee0345605bce3b21bfb0b7f3aadaca3298f349387d5205d1ae",
+      "bytes": 179221
+    },
+    {
+      "path": "proof-artifacts/gates/frame-smoothness.json",
+      "sha256": "6fa19a17d5ac6ffd3103fdf3e951a0b7c86f87c89a5c0b8d3565adefa0bd0bc1",
+      "bytes": 280889
+    },
+    {
+      "path": "proof-artifacts/gates/headshot-hits-head.json",
+      "sha256": "807ed1045148bf5cae123ee0268c71731252eb736bc4d1a691a98d41043b5d05",
+      "bytes": 381726
+    },
+    {
+      "path": "proof-artifacts/gates/hold-to-fire.json",
+      "sha256": "5a02b21de24ca0ebf9cfa13942ba6ab14f2d7dc5e1ce5b18b344dde1648d14d7",
+      "bytes": 143686
+    },
+    {
+      "path": "proof-artifacts/gates/minimap-state.json",
+      "sha256": "3a1b3a722839ad94f51c54e724168b6a6f9862a801128c129017aeeda843cecb",
+      "bytes": 174752
+    },
+    {
+      "path": "proof-artifacts/gates/round-clock.json",
+      "sha256": "751499d1ce8c263f8b1ed816759d2fe65c41df40ade30260b203c923da592074",
+      "bytes": 110073
+    },
+    {
+      "path": "proof-artifacts/gates/shot-tracks-crosshair.json",
+      "sha256": "7466576db9efd72bba4b76050fc838a9fc40ee9dd7d8f64a5c524139c5217818",
+      "bytes": 183133
+    },
+    {
+      "path": "proof-artifacts/gates/stairs-camera-tracks-body.json",
+      "sha256": "86574039bd58ff55c0ce0a93b256d260f77a3ab2673fa5ec7cfd6d3ebfc70a04",
+      "bytes": 147253
+    },
+    {
+      "path": "proof-artifacts/gates/survives.json",
+      "sha256": "afdf0e5e9091380242b594b4e921a999dffbb2bb1196fb190d3967075bfb054b",
+      "bytes": 144599
+    },
+    {
+      "path": "proof-artifacts/gates/walkway-reachable.json",
+      "sha256": "357a02721d6747a5ffe58c39987cd8d903220a6596298a55a8ca7486f43a4aeb",
+      "bytes": 279663
+    },
+    {
+      "path": "proof-artifacts/gates/zone-contrast-body.json",
+      "sha256": "6057ab2e91218726e3ec36730f0922b303a7f891c2b6c7e334e38dab65c55ff8",
+      "bytes": 174942
+    },
+    {
+      "path": "proof-artifacts/gates/zone-contrast-head.json",
+      "sha256": "eefc8dc41fb6f94f35cc257bf44c89b9e89de1de21879b115c74ad17014960ea",
+      "bytes": 174462
+    },
+    {
+      "path": "proof-artifacts/gates-locomotion/enemy-death-settles.json",
+      "sha256": "05473deaed8be069e0d42cf434ad7aec869caba341dd9554b947c3cba51fe5a8",
+      "bytes": 146368
+    },
+    {
+      "path": "proof-artifacts/gates-locomotion/enemy-foot-contact.json",
+      "sha256": "2086d6836acb5b95ca56474433df0d006cfb78775afd6e317174e4cd670b42c8",
+      "bytes": 110872
+    },
+    {
+      "path": "proof-artifacts/gates-locomotion/enemy-reaches-walkway.json",
+      "sha256": "beee5750bf1f44ca0262c9986029df543e8bc952b723ccc79ca37bf3b920b331",
+      "bytes": 310645
+    },
+    {
+      "path": "proof-artifacts/gates-locomotion/enemy-scale.json",
+      "sha256": "b1457eabecadfeee2f34f56c1f9c5acca8f9878e0fb7be850e3e9a647b0ad6bb",
+      "bytes": 112006
+    },
+    {
+      "path": "proof-artifacts/gates-locomotion/enemy-stride-matches-speed.json",
+      "sha256": "1288c7db37e4ae845b6c3bd41bd000a247b2f76c3ad253f263a2efad59bfb4fe",
+      "bytes": 915736
+    },
+    {
+      "path": "proof-artifacts/gates-locomotion/enemy-uses-crouch-clips.json",
+      "sha256": "d990dab0a4dae6d1c174dd3362270abe224a2a357a9c623d2188d37f795e3dd9",
+      "bytes": 313163
+    },
+    {
+      "path": "proof-artifacts/gates-locomotion/five-soldiers.json",
+      "sha256": "8a7cd9f6bd08d3453f6fc535ca63a371ed110bac96bb7a3e18c6485a47a50e10",
+      "bytes": 114727
+    },
+    {
+      "path": "proof-artifacts/gates-locomotion/walkway-reachable.json",
+      "sha256": "984696b0c05695fd3bcebef789d93bcf0232de39da2773063387701de0b24c52",
+      "bytes": 279219
+    },
+    {
+      "path": "proof-artifacts/gates-prod/frame-smoothness.json",
+      "sha256": "732e13531bd10cd62034da0246c77ce080778e928eff6a9d4f272d2734092ffd",
+      "bytes": 284622
+    },
+    {
+      "path": "proof.json",
+      "sha256": "468f47bd926571b0fbe722a2d8ddf59907c8cb3a5df262a5950d671d1f642f27",
+      "bytes": 4118
+    },
+    {
+      "path": "public/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "public/assets/bayview-barrel.glb",
+      "sha256": "ac47c9c9a377d5911c739338bef0cc8cdd325975a739668cecc21bf78029863b",
+      "bytes": 573188
+    },
+    {
+      "path": "public/assets/bayview-brick.jpg",
+      "sha256": "464c1917d8e309fd5cb6ffc1bf9609867cbe36561e207d874cab61dd88a10eeb",
+      "bytes": 551577
+    },
+    {
+      "path": "public/assets/bayview-buoy.glb",
+      "sha256": "2ef93076825e644f08c421c42fdf6d5ddc1d4ae17e89a9ed2f5e66ab20be4ff1",
+      "bytes": 652268
+    },
+    {
+      "path": "public/assets/bayview-concrete-normal.jpg",
+      "sha256": "d9b231792ccb7d1bd8bdd3b00b0357b883168b6d3f68d2822c8d8874b1e784a4",
+      "bytes": 134392
+    },
+    {
+      "path": "public/assets/bayview-concrete-rough.jpg",
+      "sha256": "72e71ff931fdbae902fb691738549c0f4dc794ed30d4757f5c71a488c7cafa4a",
+      "bytes": 258795
+    },
+    {
+      "path": "public/assets/bayview-concrete.jpg",
+      "sha256": "24f4ebcf8650c515cae0305c1b22a30c63857bb88fa6145885b3571a1d57285d",
+      "bytes": 230807
+    },
+    {
+      "path": "public/assets/bayview-flagstone-ao.jpg",
+      "sha256": "3c49e0e76157ad187791e079adecf21fae5c7cc9bef8212155ebd9a532c2b5b8",
+      "bytes": 192833
+    },
+    {
+      "path": "public/assets/bayview-flagstone-normal.jpg",
+      "sha256": "de36b3354ee21ee28bdf98bc69f551f9f5e14b1a060da1cc79306ca88710d17b",
+      "bytes": 511894
+    },
+    {
+      "path": "public/assets/bayview-flagstone-rough.jpg",
+      "sha256": "66bc10c26e11404164c5fe51bf3e3e9419155afd9e3e12e7ec90ac72fcce668a",
+      "bytes": 175615
+    },
+    {
+      "path": "public/assets/bayview-flagstone.jpg",
+      "sha256": "3f65b3d62d5bb40c6d72e177fa34ab82bdb36921e9ded6dbac4894388a71d44c",
+      "bytes": 438006
+    },
+    {
+      "path": "public/assets/bayview-gutter.glb",
+      "sha256": "0bf3ed5ce58d26ec38196ebf69611b33ac8778ca759296b6c1d31b88775ffde0",
+      "bytes": 651888
+    },
+    {
+      "path": "public/assets/bayview-paving-normal.jpg",
+      "sha256": "1d922864dec77b67b8af1403f5802c80880ada32a68148e584135d4c686804aa",
+      "bytes": 359087
+    },
+    {
+      "path": "public/assets/bayview-paving-rough.jpg",
+      "sha256": "05a9bcdea514c82eac13156d6a1e0aa9d8e06ed55435b97a995476e0ead25295",
+      "bytes": 142556
+    },
+    {
+      "path": "public/assets/bayview-paving.jpg",
+      "sha256": "a2599eed3e2b5af2a6c31866683fb291838cdf5d25a2ca2ef45ade1e75d41f81",
+      "bytes": 181787
+    },
+    {
+      "path": "public/assets/bayview-peeling-normal.jpg",
+      "sha256": "c751f935d085a86727b66d5b622d389fd77c583423072306dfe9b9b19709d24c",
+      "bytes": 1062495
+    },
+    {
+      "path": "public/assets/bayview-peeling-rough.jpg",
+      "sha256": "fbfcb0e0ba0742a9f758ff430c955393b2fa0f9fc13870ab50f6fba55e2c8729",
+      "bytes": 259481
+    },
+    {
+      "path": "public/assets/bayview-peeling.jpg",
+      "sha256": "9ba19d104326033138ec4395f624fd3764a42a01f8b842c266c7ec1e9fc0d2a3",
+      "bytes": 271062
+    },
+    {
+      "path": "public/assets/bayview-quaystone-normal.jpg",
+      "sha256": "2744364b998cf0ec1c3e6e73af31ea49550bc7e561eee52f54d7d6622205c750",
+      "bytes": 483269
+    },
+    {
+      "path": "public/assets/bayview-quaystone-rough.jpg",
+      "sha256": "bb3c4472b04ab13d4eed43326e7499b2d59696e394fa99f8b51374d00793d6b8",
+      "bytes": 113861
+    },
+    {
+      "path": "public/assets/bayview-quaystone.jpg",
+      "sha256": "c8947e2dab033a67774e7b8e368acd8dbf0fbb45e5ab3bf55fd41dc73910fca7",
+      "bytes": 233994
+    },
+    {
+      "path": "public/assets/bayview-sky-ibl.jpg",
+      "sha256": "5978a55a5b5028a5387e170399f598563e7834cf735e223f64a30d232bf75aee",
+      "bytes": 77047
+    },
+    {
+      "path": "public/assets/bayview-sky.jpg",
+      "sha256": "dad8607c493870698a5b15ea769983d249fedb30f713d68178c1614817830cb0",
+      "bytes": 342253
+    },
+    {
+      "path": "public/assets/bayview-steel-metal.jpg",
+      "sha256": "912d38d875ef6cac50885357ce46fe9f335982f690ef3b153cebb4850c5cf74a",
+      "bytes": 6672
+    },
+    {
+      "path": "public/assets/bayview-steel-normal.jpg",
+      "sha256": "b7a2df74b6241a1a7b733531ef8a4792538594b0099084c8b25e306a01871cbd",
+      "bytes": 73409
+    },
+    {
+      "path": "public/assets/bayview-steel-rough.jpg",
+      "sha256": "c994691c8e9dcf590000133fb1542722a2afbb2af08506a28a2682029a608c2f",
+      "bytes": 30278
+    },
+    {
+      "path": "public/assets/bayview-steel.jpg",
+      "sha256": "18767f1b2343f63cd66f4af8701126f0c8dbbe148688024c8ea8649eb34e50b4",
+      "bytes": 18322
+    },
+    {
+      "path": "public/assets/bayview-walllamp.glb",
+      "sha256": "deae5473454ace5902a8d6cabecb13be32ceed06a7063b51718ca24678ce4c93",
+      "bytes": 435080
+    },
+    {
+      "path": "public/assets/bayview-whitewash-normal.jpg",
+      "sha256": "d7d64894b72e0fe4f5c334838cd05dd1085c454b9f6996544861d1f7a28fcc6c",
+      "bytes": 562569
+    },
+    {
+      "path": "public/assets/bayview-whitewash-rough.jpg",
+      "sha256": "3e3c21fc4c657674ace23a5ba454326860f9ace48e69df55b4f05112159d9730",
+      "bytes": 317085
+    },
+    {
+      "path": "public/assets/bayview-whitewash.jpg",
+      "sha256": "72cff948a66f6a7481e67e85628cebe8322a31d8b2637294f74f8a31eaafd3a0",
+      "bytes": 257407
+    },
+    {
+      "path": "public/assets/bayview-wood-normal.jpg",
+      "sha256": "868c153165ecaa7dd7259cb58214f06f6f86c80ac71fc92a827dff07708be077",
+      "bytes": 516860
+    },
+    {
+      "path": "public/assets/bayview-wood.jpg",
+      "sha256": "8dfae22286fa9bb0ed62ce7326e8bc14c284e567d38fd64b5a453838080ecf19",
+      "bytes": 570668
+    },
+    {
+      "path": "public/assets/enemy-terrorist.glb",
+      "sha256": "583e063fb924d9e8a227f6a47c388c95d84c442db164c664de948fc1bca4a610",
+      "bytes": 1594264
+    },
+    {
+      "path": "public/assets/player-viewmodel.glb",
+      "sha256": "0d2a14e6579a0dd49ffded4eea02578b37d9712ceeba6f9aafec179b05e67f77",
+      "bytes": 1454824
+    },
+    {
+      "path": "public/assets/weapon-ak47.glb",
+      "sha256": "a77b24521db0315fa946582eb456f7a2f0fe5370bcddc8bfedf8aff2580be696",
+      "bytes": 1444752
+    },
+    {
+      "path": "public/assets.manifest.json",
+      "sha256": "174e0b3ecb099521f220f5f2f2885ef69038f96165283869d92f89101f27750f",
+      "bytes": 2215
+    },
+    {
+      "path": "public/audio/ambience-harbour.ogg",
+      "sha256": "99b5005d4f65e213cf1b803f0ebf3b7218d49e8c2003a074076faaebb194722c",
+      "bytes": 279313
+    },
+    {
+      "path": "public/audio/bark-chase-1.ogg",
+      "sha256": "eea93db0abe192d12bac62c837f26b7460f9f37f9a8cf0b91d1facf94f318b95",
+      "bytes": 12576
+    },
+    {
+      "path": "public/audio/bark-chase-2.ogg",
+      "sha256": "36ba0f3d40a59f6a968d0315bf9e63c2b4c7fc504143eb6a6b7f1bd96be03869",
+      "bytes": 15762
+    },
+    {
+      "path": "public/audio/bark-chase-3.ogg",
+      "sha256": "de6756d60770a3403d0492f2d005f4f912e52f7e0ed3d4534f1fc8325e00a4a3",
+      "bytes": 11362
+    },
+    {
+      "path": "public/audio/bark-death-1.ogg",
+      "sha256": "4cee76ecfc03949d4509e1b799c7cb86ffcfec7e587f12fec610c4d62f8d5051",
+      "bytes": 19444
+    },
+    {
+      "path": "public/audio/bark-death-2.ogg",
+      "sha256": "9edc1917440694b6a3c7944ef1a28d923b0910e63c3c36bacf7a02e8cf527db4",
+      "bytes": 18739
+    },
+    {
+      "path": "public/audio/bark-pain-1.ogg",
+      "sha256": "7b88fe64c7181f4d1bcc28ea4c8d841ba15f86069898c72b75d2c08dc96f5fa3",
+      "bytes": 9590
+    },
+    {
+      "path": "public/audio/bark-pain-2.ogg",
+      "sha256": "e690e51e2b22f219581c77a466e75da24212c2cf4576cde5c6ba572b09180815",
+      "bytes": 11252
+    },
+    {
+      "path": "public/audio/bark-spot-1.ogg",
+      "sha256": "37c4d3a609079096e79c0d3f0c0bf560f350b36d4e30b62bfc2b62d235fa8df3",
+      "bytes": 16104
+    },
+    {
+      "path": "public/audio/bark-spot-2.ogg",
+      "sha256": "bb2946244842f67f87a32985eecc60666b2e55727ce9ed8faf55f2c2d312ee3b",
+      "bytes": 21818
+    },
+    {
+      "path": "public/audio/bark-spot-3.ogg",
+      "sha256": "faa360c2b931b744c39ef312a5b17a11b6fdd6e4a792ac2f2a8c3960a4d4b5f1",
+      "bytes": 18900
+    },
+    {
+      "path": "public/audio/bullet-whizz.ogg",
+      "sha256": "56feeb5d25855576332bc8becf8f0544e8d8f4fc0cde8199283b204df9d713d0",
+      "bytes": 13791
+    },
+    {
+      "path": "public/audio/clock-tick.ogg",
+      "sha256": "869442f54214be902ec7437f79e400dc91c1bfd90d18a6dd2d5b7e41ffbf457b",
+      "bytes": 4514
+    },
+    {
+      "path": "public/audio/hit-impact.ogg",
+      "sha256": "c5cf7261894aabb6bdba19e090b3afe8fbedec2ad2ed64b5913fc7515663e99c",
+      "bytes": 8807
+    },
+    {
+      "path": "public/audio/impact-plaster.ogg",
+      "sha256": "b2f50c7ac83ec392a104ed07e01375abb81e3438cde6fa9135b26a3628442b01",
+      "bytes": 9325
+    },
+    {
+      "path": "public/audio/impact-steel.ogg",
+      "sha256": "39cabedb3ebb18119b754ffad4b294f016d69354acf08eb3b54e6b360c49cdfd",
+      "bytes": 10318
+    },
+    {
+      "path": "public/audio/impact-stone.ogg",
+      "sha256": "f03e431c97a74351fff8b59c31635b884edb3bb95ef869ec4bdf41448d3a15ab",
+      "bytes": 9732
+    },
+    {
+      "path": "public/audio/impact-wood.ogg",
+      "sha256": "4e0be3c5c4c922f0cba9c58c317519053bbf8fa7d5207f7f80b92e5d1b99ea01",
+      "bytes": 9136
+    },
+    {
+      "path": "public/audio/reload-magin.ogg",
+      "sha256": "a0ef8f7f33ab01421b5a9f292d3a009b3a076b88407379301092a88c9bd14d3f",
+      "bytes": 11464
+    },
+    {
+      "path": "public/audio/reload-magout.ogg",
+      "sha256": "f4d1a634fd0b97bf3c809aeedcddc2d0a35a42b9e55cd5d2497b6ec0008ffcb2",
+      "bytes": 10997
+    },
+    {
+      "path": "public/audio/round-complete.ogg",
+      "sha256": "063564703b6094d70718a3e787a55cc9141611e4ecd6b6637f8828f79b4a8c3a",
+      "bytes": 8968
+    },
+    {
+      "path": "public/audio/round-failed.ogg",
+      "sha256": "a97513d7fd2b12b1210c423be943b4c1ab0e899b11db95855e9b74836e646ae0",
+      "bytes": 8288
+    },
+    {
+      "path": "public/audio/shot-enemy.ogg",
+      "sha256": "979878b225f40328051029ea0a4a346b34c1e4899e1496829974586bd89fe96a",
+      "bytes": 16371
+    },
+    {
+      "path": "public/audio/shot-player.ogg",
+      "sha256": "13a2a6f276deda02aae06eb545f87d99d3a2ce6f3c8e29f9fccd13e4bfa5a95e",
+      "bytes": 13049
+    },
+    {
+      "path": "public/audio/step-stone-1.ogg",
+      "sha256": "081f9793a09f60e57548833b090c880d687cd36ff4c439621cd2add235913283",
+      "bytes": 8604
+    },
+    {
+      "path": "public/audio/step-stone-2.ogg",
+      "sha256": "6020fb10934725ff167f6bd9ae14c967664a31bbdc368930a69d2e58f31f2956",
+      "bytes": 8913
+    },
+    {
+      "path": "public/audio/step-stone-3.ogg",
+      "sha256": "718e33771b5cfbbf512f24a5fd5cdff8c81016519d264c84016bc215f27bfa92",
+      "bytes": 8856
+    },
+    {
+      "path": "public/audio/step-stone-4.ogg",
+      "sha256": "02a41232afc114c3cd11f66c29d29b3391e50896e6cf483e00b0b1859dce9fe0",
+      "bytes": 8931
+    },
+    {
+      "path": "public/audio/ui-click.ogg",
+      "sha256": "ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9",
+      "bytes": 4876
+    },
+    {
+      "path": "public/basis/basis_transcoder.js",
+      "sha256": "8478b5b6d6b74e7d3082b89f6417321d8d1dc0307f2b30d4484bb11b441696a1",
+      "bytes": 57529
+    },
+    {
+      "path": "public/basis/basis_transcoder.wasm",
+      "sha256": "6cf17dc889352c42e9acf8897107978d127005fe3386c36a0e3845e27967630a",
+      "bytes": 527333
+    },
+    {
+      "path": "public/favicon.svg",
+      "sha256": "2d208c58ea4c25b3bef0208ff84c5847eab49455481e001275ddd0aa7d7746bb",
+      "bytes": 179
+    },
+    {
+      "path": "public/generated/player-viewmodel-clean.1e1a2f8b.glb",
+      "sha256": "dbc6c37955b2db73182e85cd6d3370fdb0e5636845ded1cc61134744ec404c21",
+      "bytes": 4277724
+    },
+    {
+      "path": "public/generated/player-viewmodel-clean.a6f29099.glb",
+      "sha256": "9eded68eeddec54fc735977b8480db31712d9e3b323e72d1c61c6daf7f4c619e",
+      "bytes": 3707904
+    },
+    {
+      "path": "public/icon.png",
+      "sha256": "1c99d4289ebcfb1f5820a616f93fab2b68759f6864774cafa9cbd25d56dfa7b2",
+      "bytes": 150
+    },
+    {
+      "path": "public/imported/polyhaven/sky.outdoor-cloudy/environment.685fea00.ktx2",
+      "sha256": "b5a68fb9bc7b378f3921a50bd280e5d5abbe4647854529fc7546efbbb03ab72f",
+      "bytes": 207713
+    },
+    {
+      "path": "public/imported/polyhaven/sky.outdoor-cloudy/environment.9cf04058.jpg",
+      "sha256": "7907550a1d29f59ed74cea2c35b6bb7a3d153a76fa7f400fa6463c590c50e66d",
+      "bytes": 150695
+    },
+    {
+      "path": "public/imported/polyhaven/sky.outdoor-cloudy/provenance.0bd5f9fa.json",
+      "sha256": "08b58956576079d1d82724348436ffbd2163d463972ab7f8368a15480cfb26cb",
+      "bytes": 1547
+    },
+    {
+      "path": "public/imported/polyhaven/sky.outdoor-cloudy/provenance.1e2b1bcc.json",
+      "sha256": "08b58956576079d1d82724348436ffbd2163d463972ab7f8368a15480cfb26cb",
+      "bytes": 1547
+    },
+    {
+      "path": "public/models/enemy-terrorist.178ab54e.glb",
+      "sha256": "1f8ef8d8fc6019cba6e95d165d751daa2c05f0c526b2ddd2bb7f225df921facd",
+      "bytes": 1530152
+    },
+    {
+      "path": "public/models/enemy-terrorist.6d3f1ff4.glb",
+      "sha256": "c9f938d92dd9fa4a1ab5e7ee350eb0c6ea1e6c1052254ccc935c6a702eb0a261",
+      "bytes": 3763508
+    },
+    {
+      "path": "public/models/enemy-terrorist.provenance.0d97cbcf.json",
+      "sha256": "a53809a40b28e4b55e43e7d5bcc379b13d54b2b09f35a0b34483d6c0bc0770ec",
+      "bytes": 1479
+    },
+    {
+      "path": "public/models/enemy-terrorist.provenance.8a3e47e3.json",
+      "sha256": "a53809a40b28e4b55e43e7d5bcc379b13d54b2b09f35a0b34483d6c0bc0770ec",
+      "bytes": 1479
+    },
+    {
+      "path": "public/models/player-viewmodel.99cbfd79.glb",
+      "sha256": "8ad21568e92aca3625c54031f6b6aa39bc1d377dafe1e9547aa3b98a5027c3f5",
+      "bytes": 5597644
+    },
+    {
+      "path": "public/models/player-viewmodel.db875e7e.glb",
+      "sha256": "119bf964734eea882ec88ad5bfa474e286375e8c14318205daa05e714db33eee",
+      "bytes": 7486876
+    },
+    {
+      "path": "public/models/player-viewmodel.provenance.0577de50.json",
+      "sha256": "cd61fbd62b6693e04f69d32a72c14496b8831856f9bad52c1c19acef5c2e77eb",
+      "bytes": 1486
+    },
+    {
+      "path": "public/models/player-viewmodel.provenance.148254ea.json",
+      "sha256": "cd61fbd62b6693e04f69d32a72c14496b8831856f9bad52c1c19acef5c2e77eb",
+      "bytes": 1486
+    },
+    {
+      "path": "public/models/weapon-ak47.78562e01.glb",
+      "sha256": "832d39ccae9701a46baa42d23c9c9d96197a9d603dfe9f39b32f8a6c940b18a9",
+      "bytes": 11751136
+    },
+    {
+      "path": "public/models/weapon-ak47.9b420d74.glb",
+      "sha256": "118734cb7f096f71d992e4deccfbe31e89e0a75c36f76ea235a5243af6da9214",
+      "bytes": 7481320
+    },
+    {
+      "path": "public/models/weapon-ak47.provenance.9168ff80.json",
+      "sha256": "f139f76385a5e0d194943d11be7de86d8a5ea80c33c05fa6596e466941aef1a9",
+      "bytes": 1403
+    },
+    {
+      "path": "public/models/weapon-ak47.provenance.d20aac81.json",
+      "sha256": "f139f76385a5e0d194943d11be7de86d8a5ea80c33c05fa6596e466941aef1a9",
+      "bytes": 1403
+    },
+    {
+      "path": "public/native-proof.glb",
+      "sha256": "cd9c2dc154ddf5b75a6a8624234f3370ab1e30849754d1a2cb2356f55df54893",
+      "bytes": 624
+    },
+    {
+      "path": "public/native-proof.png",
+      "sha256": "1c99d4289ebcfb1f5820a616f93fab2b68759f6864774cafa9cbd25d56dfa7b2",
+      "bytes": 150
+    },
+    {
+      "path": "public/pickup.ogg",
+      "sha256": "423dffa92e96695a3d38f76b281a87af396b1d18dbb59bf18bae9e2a6f4c4c83",
+      "bytes": 3945
+    },
+    {
+      "path": "public/player-viewmodel.glb.db875e7e.orig",
+      "sha256": "d8236d3add7e1bc0b32748a5b5a18b2b1810fdad936b214aa2b3e2fb629c2865",
+      "bytes": 7495528
+    },
+    {
+      "path": "public/textures/range-target-face-hit.872461c2.ktx2",
+      "sha256": "cf0884fe75270c0f82961a9573000af1e80a446ebc2dc6b59bba90d0b264f8da",
+      "bytes": 45271
+    },
+    {
+      "path": "public/textures/range-target-face-hit.c1738e9a.png",
+      "sha256": "c720161786b735ad9d1a6dcc54db534b1f9574778a3d0842ae3eb0ec25063798",
+      "bytes": 240077
+    },
+    {
+      "path": "public/textures/range-target-face.4f8fdbba.png",
+      "sha256": "4d141729e8981fa74455530d9bf475e9e28e89cac273af289ccb5487fd7008e9",
+      "bytes": 239057
+    },
+    {
+      "path": "public/textures/range-target-face.55959b28.ktx2",
+      "sha256": "90a652ab7822e1e96907e8806183c57c114ce98c7da8798c734ee13d0655e27c",
+      "bytes": 44392
+    },
+    {
+      "path": "public/textures/ue-test-surface.7b689ac2.ktx2",
+      "sha256": "61e667d383ed10af8d6de52016f3f15ce049758fb94b7f572e6843bf36c9f856",
+      "bytes": 246082
+    },
+    {
+      "path": "public/textures/ue-test-surface.8d07c75a.jpg",
+      "sha256": "8ee6644858f6dcc82294450e2938596887b7f5cef7d7e8c3e4d408e76fd6fd56",
+      "bytes": 321573
+    },
+    {
+      "path": "public/weapon-ak47.glb.78562e01.orig",
+      "sha256": "c6b71dbc3145029484a2e82e63fc9cd1d288346cf69eb5ba021194532c273b24",
+      "bytes": 11751004
+    },
+    {
+      "path": "raw.mjs",
+      "sha256": "89dc131ac5347030f073939ce82c08046d471ee48e5d30103af5dc8b8f729f62",
+      "bytes": 1163
+    },
+    {
+      "path": "ray-probe-tmp.mjs",
+      "sha256": "c657b7f2554c7dd888e7f92ad95a8aac2399655b3eeca5cbc17b094cf3ce52f8",
+      "bytes": 4602
+    },
+    {
+      "path": "reference.png",
+      "sha256": "982e5428620764ae12effe1020b5ad252f6bdf96b9f78d0a665c0cedc5f54515",
+      "bytes": 1407191
+    },
+    {
+      "path": "references/0400ed3d-0289-4f4a-97cb-5e4ef87e8c22.png",
+      "sha256": "a5379d75750edc90e2524c34c27d0a117b909f178e67d73c8012ad7e469f1db9",
+      "bytes": 2497725
+    },
+    {
+      "path": "references/2e6abeab-a473-474c-83d0-ca9b03a88fab.png",
+      "sha256": "a972e8c97a6fae68a764563f8de29d8735f672be1defb4631cc9711538154fd2",
+      "bytes": 2686053
+    },
+    {
+      "path": "references/3d1b1f23-b317-4439-bec5-c32b0ae34fc5.png",
+      "sha256": "ee316ad73dfac2c0561827eb59402b5867e3236e9b3dc65c9de9a4b83c4a23e2",
+      "bytes": 3088825
+    },
+    {
+      "path": "references/4aa4e46f-7146-455e-b5ea-62ee0d6db4e1.png",
+      "sha256": "7e312b9267a0f29270bd705a82321c7a1ee8fb7b44e3a3b2d34cc174fb4dccd4",
+      "bytes": 2542836
+    },
+    {
+      "path": "references/f5ed99e9-91be-4cc7-bbdc-5b71e7e3175e.png",
+      "sha256": "2b5e12daeabc32e094a498ce3bc0e7934033e7bbe54e091f9590917a611f2378",
+      "bytes": 3422209
+    },
+    {
+      "path": "references/floor-texture.png",
+      "sha256": "f08b4a4815b14c49fe91a3285355626f9e37ba1c4604ea8c41a774f738135ad5",
+      "bytes": 3258483
+    },
+    {
+      "path": "references/game_ready_crate_pbr.zip",
+      "sha256": "2799a9ca32004de599c7453f758529290a0cebb4b1730b639ee8cc67a17d6d83",
+      "bytes": 17806319
+    },
+    {
+      "path": "references/house-wall.png",
+      "sha256": "ff9076d2ec8598ac3bb3e19a095ab9a746df681d64e2ccea013b5d470f5cc962",
+      "bytes": 3606092
+    },
+    {
+      "path": "regress-watch-tmp.mjs",
+      "sha256": "ef69fed3d07d4565a49f05afb969839c05e4b1a94e813e7e501c5cffce2526dd",
+      "bytes": 1161
+    },
+    {
+      "path": "renderer-check-tmp.mjs",
+      "sha256": "61825db3bcef8e3020464551596b781c3636aca394c39f31e0ebc5c42093d1af",
+      "bytes": 1496
+    },
+    {
+      "path": "respawn-probe.mjs",
+      "sha256": "8cbc42d31e8a72d941b656005df7fbd06812d3bd80deff200ab00d85187ac3b3",
+      "bytes": 3733
+    },
+    {
+      "path": "restart-scale-probe.mjs",
+      "sha256": "9cd8bbfee9141f921e50d4229b82c6689757f6f861563cdf2271ea4013b18923",
+      "bytes": 1476
+    },
+    {
+      "path": "score-probe-tmp.mjs",
+      "sha256": "fd16c06d67a92030ff496f254209bff03544867688e5ccf761ee33764b799409",
+      "bytes": 972
+    },
+    {
+      "path": "screenshots/ads-check.png",
+      "sha256": "7b7918f07c4bc966fdca6ac1ce55150996d6285d3ba7fbb145ff6ea784dfa846",
+      "bytes": 336406
+    },
+    {
+      "path": "screenshots/after-fixes.png",
+      "sha256": "7cfe2d20cea9c219c7f9df4ba2acab73c93a608883a4ec2f25df88fd70e6c55e",
+      "bytes": 1046732
+    },
+    {
+      "path": "screenshots/aiming.png",
+      "sha256": "941e31fe3bbb5645ac1bc6beef910830c83a660aa4bcb71b6d613c9bad3565fb",
+      "bytes": 490770
+    },
+    {
+      "path": "screenshots/attachment-current.png",
+      "sha256": "4c37e6946faaee3a53e1b748ea82d25503e7e14676a79cbef52ee4fd5825e956",
+      "bytes": 652115
+    },
+    {
+      "path": "screenshots/attachment-roll-flipped.png",
+      "sha256": "6227be13d21cb8bce61b6aaae7c72701b8bb99bc8e4ff64ac2ec2a88eb53d7f3",
+      "bytes": 658560
+    },
+    {
+      "path": "screenshots/boot-current.png",
+      "sha256": "4605a3e23d6cd552e90b8fcd580138927c753aa5b1d3b0bdbf4a9dda1d1943b0",
+      "bytes": 739111
+    },
+    {
+      "path": "screenshots/chrome-performance-trace-morning.json",
+      "sha256": "88b2ed5de45cd44539305bd81291bfe225e99c6d35b1171f483c961343d06717",
+      "bytes": 9024536
+    },
+    {
+      "path": "screenshots/chrome-performance-trace.json",
+      "sha256": "ca0ea8e47ea6bb136bfda0b490f5d872640f2155ee5d170effeae802cd656adc",
+      "bytes": 25744662
+    },
+    {
+      "path": "screenshots/complete-overlay.png",
+      "sha256": "36f932c2ce661d3c63bc6d6406ae384606ece27725af207fb753d3688f52b515",
+      "bytes": 530334
+    },
+    {
+      "path": "screenshots/final.png",
+      "sha256": "1f014422cd61170e1dc7f8f54ce3b180a1de1d8682409f37abd6eaf6040f4f69",
+      "bytes": 1078863
+    },
+    {
+      "path": "screenshots/firing-line-round5.png",
+      "sha256": "dad17ea0bd783f4d009badb1e4ee01ace4c0dc1388a5a661443123732dd67945",
+      "bytes": 1085342
+    },
+    {
+      "path": "screenshots/firing.png",
+      "sha256": "57ce7dd2d1b465f3e721cc5a0443dc8940a6261cfa8a04e1482a7684b916b25f",
+      "bytes": 1032730
+    },
+    {
+      "path": "screenshots/grip-after.png",
+      "sha256": "5fa9d6145b2586df6d7379775022403546efc4a9a75c49dd42a1187b5f5caba1",
+      "bytes": 725401
+    },
+    {
+      "path": "screenshots/grip-after1.png",
+      "sha256": "83a1b9b40cb61de948204f2baa3358c00795260f8a595fc471d4b188eae9c971",
+      "bytes": 650261
+    },
+    {
+      "path": "screenshots/grip-before.png",
+      "sha256": "7b36622c2543a49dfd3c71becb2a50587d41664ca4a257460d2f9f037e7a5e4c",
+      "bytes": 495035
+    },
+    {
+      "path": "screenshots/grip-current-x-90.png",
+      "sha256": "361736213d5d44c929158abfca57aafbad98c307f919799616987be016feb63d",
+      "bytes": 400710
+    },
+    {
+      "path": "screenshots/grip-final.png",
+      "sha256": "001f09721755debeede595b62ceef7ad1760862f61fedd7f7a720be32af5b84c",
+      "bytes": 412261
+    },
+    {
+      "path": "screenshots/grip-front.png",
+      "sha256": "44cd660245db8ee04fae127a89d68c156320523b1c5bb0704c9777d648b54b73",
+      "bytes": 632471
+    },
+    {
+      "path": "screenshots/grip-x-90-y+90.png",
+      "sha256": "f6ca01e6c8adadd766720f16e89e56989720fd02d9cc7d03274db172c86c437d",
+      "bytes": 402375
+    },
+    {
+      "path": "screenshots/grip-x-90-y-90.png",
+      "sha256": "1be258b3ac3014f5bd633feac60557c2e9eab9cceabb8b2faaf521eecd35ad89",
+      "bytes": 396560
+    },
+    {
+      "path": "screenshots/grip-x-90-y180.png",
+      "sha256": "0613a5c0f9a8c48b316ee33ef7e6e3aaa5c8c6451ee735f01ddf9ef017433e52",
+      "bytes": 400117
+    },
+    {
+      "path": "screenshots/grip-x-90-z+90.png",
+      "sha256": "9c5a610da50e23d9cabab7a9c606c60855dc11252b63a33d1a3970e86e2fa8c6",
+      "bytes": 398082
+    },
+    {
+      "path": "screenshots/grip-x-90-z-90.png",
+      "sha256": "506ac37921d5c487bf2c329ef60021bb0999a437c2f521d8663bd03161847719",
+      "bytes": 400872
+    },
+    {
+      "path": "screenshots/grip-z90-y0.png",
+      "sha256": "001f09721755debeede595b62ceef7ad1760862f61fedd7f7a720be32af5b84c",
+      "bytes": 412261
+    },
+    {
+      "path": "screenshots/grip-z90-y180.png",
+      "sha256": "b6197c2d530758a99383e06f986908056b8e0ea4c8c1202ec7c396778749aa0c",
+      "bytes": 409804
+    },
+    {
+      "path": "screenshots/grip-z90-ym90.png",
+      "sha256": "281e733061a94c90781f788a7a6052b6c6502f2d0db7c35e70b74a0f1207468d",
+      "bytes": 414269
+    },
+    {
+      "path": "screenshots/grip-z90-yp45.png",
+      "sha256": "c407fc284109dd50f9034fa0a47a1c05b536a9ed37aa7141bc1813421ebe15d3",
+      "bytes": 410469
+    },
+    {
+      "path": "screenshots/grip-z90-yp90.png",
+      "sha256": "f3d5e0b967fef66e94c23cdb47120c2e4cdeec47444fff72cab264f025a6dcac",
+      "bytes": 410349
+    },
+    {
+      "path": "screenshots/hud-match.png",
+      "sha256": "6326c006ef5d2ef2a63434099ce9920fe947228644ada8536a1ad0198f7f6f62",
+      "bytes": 1023116
+    },
+    {
+      "path": "screenshots/iter-01.png",
+      "sha256": "3182e787b04a44f84c36da0378846f8c158f7b9cc2f5c820dec32a6c85794fae",
+      "bytes": 580203
+    },
+    {
+      "path": "screenshots/iter-02.png",
+      "sha256": "a906760f5c2bc4a8975e5ac4c0af869f67c748da171680fe5812e1d491fc8d39",
+      "bytes": 1035837
+    },
+    {
+      "path": "screenshots/iter-03.png",
+      "sha256": "7ce60609142e4aa98dcf4fb9a8227414a1cf362b02eda8ca435d6324ecda807d",
+      "bytes": 1055132
+    },
+    {
+      "path": "screenshots/iter-04.png",
+      "sha256": "b7dd97d66d8b524fd2773f7900ddbb8422437898b8a9e4aac6e3a03257ef407f",
+      "bytes": 1101841
+    },
+    {
+      "path": "screenshots/iter-05.png",
+      "sha256": "f313cfe6e195569ea46e436cb7911ae9c8218e5da74403c9e73e5381f91d9e52",
+      "bytes": 1126007
+    },
+    {
+      "path": "screenshots/iter-06.png",
+      "sha256": "8f846a7a1765fe647d4f9e9175f50829182b42889d95f76c0d2d84157d71f6d4",
+      "bytes": 1079077
+    },
+    {
+      "path": "screenshots/iter-07.png",
+      "sha256": "8eaff488368f76ec8fee9a430b6bc0e6eff475771ca52a4a154607bb8d392e26",
+      "bytes": 1076080
+    },
+    {
+      "path": "screenshots/iter-08.png",
+      "sha256": "84af307041fd8b24127d4d2a2b7e7319e3def18db199a167d7c1c05bef29b04c",
+      "bytes": 1078360
+    },
+    {
+      "path": "screenshots/iter-09.png",
+      "sha256": "ea09518933b5d6667f0eeb3682a15eea773c7a970106031fa1d61c07f4f8f92b",
+      "bytes": 1078197
+    },
+    {
+      "path": "screenshots/iter-10.png",
+      "sha256": "c400e47ffc50896a2b826682a6f3d49fe85ca26fdd118baafef40f402bc1ec50",
+      "bytes": 1043951
+    },
+    {
+      "path": "screenshots/iter-11.png",
+      "sha256": "2adffbbe4c57c7ffd227077c06910d3004526a52292a57efe2513ecfed87fd75",
+      "bytes": 1078800
+    },
+    {
+      "path": "screenshots/iter-12.png",
+      "sha256": "f7cb6c75f67456f46c76bff5be63ed4015385dfa45556bb41e375ba0d3708744",
+      "bytes": 1079517
+    },
+    {
+      "path": "screenshots/iter-13.png",
+      "sha256": "414f5741fbd2c3651d9b0c4ee4309bc7786df1b220b77a69717077b35f018c2a",
+      "bytes": 1078499
+    },
+    {
+      "path": "screenshots/perf-baseline.png",
+      "sha256": "be6c61bcffcec302e575e5dca6c3a9ce5ac2be08fa842a424c8a4f831f90e06b",
+      "bytes": 745761
+    },
+    {
+      "path": "screenshots/perf-no-post.png",
+      "sha256": "913b9a52cdf2e7d7a5c8f01a58836359d71182c58071a31beb4ded01ff83a658",
+      "bytes": 747283
+    },
+    {
+      "path": "screenshots/pose-probe-dead.png",
+      "sha256": "2dc6b0b813e905a1e949bc917b5ced220f0f35778104dbfb565d5e961306ee53",
+      "bytes": 543326
+    },
+    {
+      "path": "screenshots/pose-probe-standing.png",
+      "sha256": "0961ec293d8496cf0013999827015c0188fc252e1c56c2c27f9668bd0a222056",
+      "bytes": 544526
+    },
+    {
+      "path": "screenshots/pose-probe.png",
+      "sha256": "d071932f13b6f77c6e5b685d16cdc91e197c14799a283b213934e19829cb86a8",
+      "bytes": 681747
+    },
+    {
+      "path": "screenshots/probe-after-click-FIX2.png",
+      "sha256": "1038da0c9d99e738a4a81b0e18e181f7c78ae6bfeec8c5d58812d69cbfc7e625",
+      "bytes": 600491
+    },
+    {
+      "path": "screenshots/probe-after-click-FIXED.png",
+      "sha256": "a7c4cbe60b20da5b89f7f5e9508b5f5f26c4ff6978990dbe354e9180741ee8e6",
+      "bytes": 710764
+    },
+    {
+      "path": "screenshots/probe-after-click-FRAMEWORK.png",
+      "sha256": "ac52fd8aa83a7f34e0534ccc5ba4598c0dbd81188a2b26f4a2e8ef0565f6a48c",
+      "bytes": 699477
+    },
+    {
+      "path": "screenshots/probe-after-click-HOLD.png",
+      "sha256": "ce820764e2396d360d8c39ebddf9fdd907a61c0d76390d2eb554cd70854c184b",
+      "bytes": 712081
+    },
+    {
+      "path": "screenshots/probe-after-click-current.png",
+      "sha256": "a6d9d9b5e7a17b9090dc820759a0e5344036cae8009273de4b749a8879870814",
+      "bytes": 694362
+    },
+    {
+      "path": "screenshots/probe-after-space-FIX2.png",
+      "sha256": "85c3f1f2eda99b9a16935239f2e055b48ae8890e92a81cb7dc9036da4a3a5447",
+      "bytes": 908494
+    },
+    {
+      "path": "screenshots/probe-after-space-FIXED.png",
+      "sha256": "76ce57e51bab6caba20f1419225a14b3bbc721e809bc92e7c3671a501b7ec85e",
+      "bytes": 708855
+    },
+    {
+      "path": "screenshots/probe-after-space-FRAMEWORK.png",
+      "sha256": "c98a6d86dd263912bb3d407ddc60a129fba3dda0a01ea73215f665b3c0c916c3",
+      "bytes": 699536
+    },
+    {
+      "path": "screenshots/probe-after-space-HOLD.png",
+      "sha256": "c5f7b28402181374b7d1dcedfaa7a8646ec2181b3d42cecf0af2662e321219c9",
+      "bytes": 709273
+    },
+    {
+      "path": "screenshots/probe-after-space-current.png",
+      "sha256": "8e67723704d87ed342458e13767d2fb2d5732adc624fc6ac2ee6fd6faac13a70",
+      "bytes": 692370
+    },
+    {
+      "path": "screenshots/reference-match-round2.png",
+      "sha256": "8bb6f1328fddfe04698b798ff40394a2a51d3e9345600c575c197224278b1c20",
+      "bytes": 1104505
+    },
+    {
+      "path": "screenshots/reference-match-round3.png",
+      "sha256": "a259d7ee991d391bb6acd958b7ddcb12b886201d9661ab333302fa46e7fdb0de",
+      "bytes": 1107356
+    },
+    {
+      "path": "screenshots/reference-match-round4.png",
+      "sha256": "e4c2457a672615a21ba49c0fcb5301773a5d70fa6e21b6b6fcff3ddf7b8f9d37",
+      "bytes": 1106652
+    },
+    {
+      "path": "screenshots/reference-match.png",
+      "sha256": "652be87b107d5afc83c21c4416b80cb34d578532d56faa2c672a48d8cd3e022c",
+      "bytes": 1105937
+    },
+    {
+      "path": "screenshots/scale-audit.json",
+      "sha256": "219b64687574023927dd0796a2c9b00a59d855950b48392eaac9fd81044cf9eb",
+      "bytes": 23780
+    },
+    {
+      "path": "screenshots/scale-ruler.png",
+      "sha256": "eb380788961c3b54ceaaf245407a40b64d9c743f0233068b7273551aa0da9c0a",
+      "bytes": 686631
+    },
+    {
+      "path": "screenshots/shot-after-18.png",
+      "sha256": "e18a16c498b6527bde717c644eb23cfee87e34a6a2d8aca1a49ee458c1141e6f",
+      "bytes": 1085140
+    },
+    {
+      "path": "screenshots/shot-after-52.png",
+      "sha256": "f698024626b8917a890103eb4ea3179dd09598fb74f74a887fb33d0770ffc0b2",
+      "bytes": 1081090
+    },
+    {
+      "path": "screenshots/shot-before-42.png",
+      "sha256": "85a3579e33d3ef3362cce834ff258cd5be9aebba8744fedb1cf65da7d6dd87df",
+      "bytes": 1084788
+    },
+    {
+      "path": "screenshots/shot-before.png",
+      "sha256": "0a769127a6652efc8ec85cada3d2103af6005b8b8543333a63591985d8ec360b",
+      "bytes": 6897
+    },
+    {
+      "path": "screenshots/viewmodel-raw.png",
+      "sha256": "e5f3d070080192f56a0d5a473c3e2406a67c560f6c1ae23d6be7bfcee5c793d7",
+      "bytes": 1091921
+    },
+    {
+      "path": "screenshots/wall-grid-round6.png",
+      "sha256": "65b1adef188559068cbb579b0c94aa8d39303ed954273de19a0487b82caf616c",
+      "bytes": 1091445
+    },
+    {
+      "path": "shape.mjs",
+      "sha256": "75367e02367a746b4f6ddbbe081de1af50a7766c1d51e641c1383b871f6c1eb1",
+      "bytes": 1104
+    },
+    {
+      "path": "shot-hitch.mjs",
+      "sha256": "94ac51e4cfd042fbcfd5b2b9ef6b34fd56d9713fbc2bafcc787e673dfb7290cf",
+      "bytes": 1851
+    },
+    {
+      "path": "shot-town-tmp.mjs",
+      "sha256": "2d3ee05b20e858cc84fb3927cdd006105e756495f6a18f19d48008a57c38cda6",
+      "bytes": 2603
+    },
+    {
+      "path": "shot.mjs",
+      "sha256": "8215521bae6b7c9637701a4a98ae4d9d0f8ddd7d65fca7f50c23a4527a8300a6",
+      "bytes": 1344
+    },
+    {
+      "path": "src/audio/GameAudio.ts",
+      "sha256": "fe4e2ff21290852fc642187eb6d9b9d17938731372e6cd305eaa6f4072d3f9db",
+      "bytes": 16396
+    },
+    {
+      "path": "src/entities/Enemy.ts",
+      "sha256": "abb6239d95e326936bedf21ceafcf631231178d37f1b5f8e6b86de82a3919785",
+      "bytes": 123787
+    },
+    {
+      "path": "src/entities/FpsPlayer.ts",
+      "sha256": "bf5eeaeb715c2da2d67c6ec876cad384dcc4927a24a3c2875d0a57e917542eaf",
+      "bytes": 11286
+    },
+    {
+      "path": "src/entities/Rifle.ts",
+      "sha256": "bc260504ad3912f94f0128ddebd276defcd6c536f32e155473f1bb4931744986",
+      "bytes": 16714
+    },
+    {
+      "path": "src/entities/Target.ts",
+      "sha256": "8c8f68568ba2fbddcd2a28122ee60cd43fdc9b44bccd63e2d5fedbedd0652265",
+      "bytes": 8491
+    },
+    {
+      "path": "src/entities/TouchControls.ts",
+      "sha256": "6db4b64c7c8c02825ab4026ecde7fe840fa26d16e5eec9c9f4fc81e1d8061c53",
+      "bytes": 10366
+    },
+    {
+      "path": "src/game.ts",
+      "sha256": "5ee884b5476e6a8512e962f78326d1c335f7c5f96443bb46a12c0c538a14a256",
+      "bytes": 4233
+    },
+    {
+      "path": "src/main.ts",
+      "sha256": "66564d9e54a4e71aa19adc08ebc4db7d49ad77b1b24c8e7295caaad20055d994",
+      "bytes": 654
+    },
+    {
+      "path": "src/perf.ts",
+      "sha256": "3ee6f091f8697df9e8d237c86ab78cc3cbedcfda8c95d36070bd3f1af2fba58e",
+      "bytes": 7818
+    },
+    {
+      "path": "src/postPhysics.ts",
+      "sha256": "45a948952bf7693b1db4f148f9194da11bfc4faeb64c7555a51eb9ac100c034a",
+      "bytes": 2005
+    },
+    {
+      "path": "src/render/breakables.ts",
+      "sha256": "ee61d473c4f78fdc913c11131ffcabd067b7cb3af03e9cd4cbc344c95f96695d",
+      "bytes": 14397
+    },
+    {
+      "path": "src/render/camera.ts",
+      "sha256": "3b21068a15a1031c7ec7e24aa77944af9794171579b9e51500532f045051cfc4",
+      "bytes": 2305
+    },
+    {
+      "path": "src/render/decals.ts",
+      "sha256": "f10cd1d8c4937cef351917d15c46629008a7e7d3bf4002e68ad74cab098dca4d",
+      "bytes": 11053
+    },
+    {
+      "path": "src/render/facade.ts",
+      "sha256": "a585671c11f55e4ab91a59f92a55fc3b35717b8853ab8a55b2859901525c82da",
+      "bytes": 52790
+    },
+    {
+      "path": "src/render/glyphs.ts",
+      "sha256": "d77bd0b09fdc839f80dbc14103f8fa5ecb6a5d2511a52cbf6f554fb3e024ba97",
+      "bytes": 4601
+    },
+    {
+      "path": "src/render/gunfx.ts",
+      "sha256": "4b7103732f93b07c308115031afa9ec9291dc42def88186b6c753affd4a69f0a",
+      "bytes": 24161
+    },
+    {
+      "path": "src/render/lighting.ts",
+      "sha256": "3b2a79aa0117f405b28c34c10e0884bb713f4204d20ad57d8a1440303c79db30",
+      "bytes": 2297
+    },
+    {
+      "path": "src/render/occlusion.ts",
+      "sha256": "3d88fb8009c4df4fe43e16fcd46b707376de08d2ca0baabe7beadfc4c509906d",
+      "bytes": 4224
+    },
+    {
+      "path": "src/render/palette.ts",
+      "sha256": "7b1472d79b254e88d275d9e3ea5d5751854932dbce443a4b0a7049820942a839",
+      "bytes": 629
+    },
+    {
+      "path": "src/render/palm.ts",
+      "sha256": "ad96d073eaec3b1f6abad594310b032fbb3e93718454415bbffe8df9e951cb75",
+      "bytes": 17997
+    },
+    {
+      "path": "src/render/pooled-billboards.ts",
+      "sha256": "4e9a1344d9bc5a69dfc13dc79074007182afd6f1c0c1ff09c6857e3b5013e12e",
+      "bytes": 4634
+    },
+    {
+      "path": "src/render/postprocessing.ts",
+      "sha256": "e077f16ae16a372874ad613c044f742179fb7ba2cffe8b9da738a555734d46ae",
+      "bytes": 761
+    },
+    {
+      "path": "src/render/scale.ts",
+      "sha256": "16b6ba091cdc9dba21c7f3c982df1600af2f103ec5dc4a00bb06da87d002d96f",
+      "bytes": 5936
+    },
+    {
+      "path": "src/render/shapes.ts",
+      "sha256": "57cc819b78b2a60dfa179c96f2d687e567739976dae77ab1b901d4ff26fa2449",
+      "bytes": 6514
+    },
+    {
+      "path": "src/render/sky.ts",
+      "sha256": "3445392c36467240bd1d8c3d3d3d6e32a4affe25d82a560463796df6cc4215f3",
+      "bytes": 4999
+    },
+    {
+      "path": "src/render/town-schematic.ts",
+      "sha256": "a34724a0fa2ed6b68db6341bacde10ed7ac1adfdd08cf9a9e548a27fe1388aa5",
+      "bytes": 4822
+    },
+    {
+      "path": "src/render/town.ts",
+      "sha256": "e8063394b010977e22e38f583df6b44b5c2e8ccfb1c2d6ad566cccc1f4578419",
+      "bytes": 36408
+    },
+    {
+      "path": "src/render/townMaterials.ts",
+      "sha256": "51f9ef9e8ae45efc433d9494e2deb977d4d5bb37b7b9639ea518da355bc38413",
+      "bytes": 25705
+    },
+    {
+      "path": "src/render/vehicles.ts",
+      "sha256": "b0f0a8a82d735b0147b290cae29dc34e5f69cd40fd5dda9471a7b4a461af08e7",
+      "bytes": 28106
+    },
+    {
+      "path": "src/scenes/Play.ts",
+      "sha256": "0ede7cf214507268f3309e222f96e1a323ca307da608c434727fbddbd619637c",
+      "bytes": 47039
+    },
+    {
+      "path": "src/state.ts",
+      "sha256": "25c2044cc960ab05641553ce5453dc48c91b4923e311bba78eb796e1d17dca7e",
+      "bytes": 1034
+    },
+    {
+      "path": "src/style.css",
+      "sha256": "bdac713379189418466616ce6d97e2131c197d564b63e4c236564475c342a5c4",
+      "bytes": 6969
+    },
+    {
+      "path": "src/surfaces.ts",
+      "sha256": "5711274cd2269baeb3b7053894946e306d091f516517b1d26de7f74c36b7e747",
+      "bytes": 4913
+    },
+    {
+      "path": "src/ui/App.tsx",
+      "sha256": "06b349cffb954556236dcdccc3140bb54186ef8f7711617daa91f29bf9935c89",
+      "bytes": 1120
+    },
+    {
+      "path": "src/ui/Crosshair.tsx",
+      "sha256": "af92aeca13fb61ef14f1f88fb326792612004ab1b4867541d95a7a0d29311d1a",
+      "bytes": 1087
+    },
+    {
+      "path": "src/ui/GameUi.tsx",
+      "sha256": "2cbcdc8383803eb219670b7d3d29500bcff37c307f3fefbf4f2f75bfea8cf1a0",
+      "bytes": 698
+    },
+    {
+      "path": "src/ui/Hud.tsx",
+      "sha256": "9776ccdabaa94379e7e9c254d31ff74fa193087b9051cdff9b9d1ccc129d4b17",
+      "bytes": 18664
+    },
+    {
+      "path": "src/ui/Minimap.tsx",
+      "sha256": "cb493c613223d0e9dd33bab53357b3580b1884ea4dc3bdc25a468934e6de6233",
+      "bytes": 5141
+    },
+    {
+      "path": "src/ui/TouchOverlay.tsx",
+      "sha256": "1857d989e2c51d422902a87ae1cfbea1da5d8c7237604d6155790edc9497f944",
+      "bytes": 2104
+    },
+    {
+      "path": "src/ui/hudReadouts.ts",
+      "sha256": "209963866e751716135d549418d95e21b4fd4471a8846c393aa19916e4c70aaf",
+      "bytes": 1665
+    },
+    {
+      "path": "src/ui/main.tsx",
+      "sha256": "bfad2dbf1461f09e160f64ce7789cab7777396995b326abf591a2ae6acfe7b69",
+      "bytes": 554
+    },
+    {
+      "path": "sweep.json",
+      "sha256": "a1733a1618085838a3043ad4a046acc24ae74b4e5c7de9e0fc77b53cfb5325fb",
+      "bytes": 323
+    },
+    {
+      "path": "tailwind.config.ts",
+      "sha256": "2ee9094df128007761372ef78737416078ed575ee0ab97d05a65903b29871208",
+      "bytes": 94
+    },
+    {
+      "path": "threenative-playtest-0.2.0.tgz",
+      "sha256": "e3331f60b6ac7fb1fcdf513382116069d140482853af8b61f4fbbfeb73d82bf1",
+      "bytes": 252984
+    },
+    {
+      "path": "threenative.config.ts",
+      "sha256": "1791b885d4381f0decec12ee6537ae713663bcdce403f626e127d6d58bd64be1",
+      "bytes": 1208
+    },
+    {
+      "path": "tools/capture-lock.sh",
+      "sha256": "d709350ad2826428e5e6fa60e1ac636e98a10703fece4e5b9a183457228fef75",
+      "bytes": 5435
+    },
+    {
+      "path": "tools/capture.mjs",
+      "sha256": "2eaf262faea6b283c0f8a6a4a18036f783f63467fc506c1585aa65ff15039cc9",
+      "bytes": 3977
+    },
+    {
+      "path": "tools/capture.sh",
+      "sha256": "ec12fad3bbcb073bba2e17e0bce50091439f2ab7814406ad11d19e240c016123",
+      "bytes": 1877
+    },
+    {
+      "path": "tools/gate-prod.sh",
+      "sha256": "f91d7bbc113c31f323c9ff6d5e72bc8b9ec4743e37a20dcfa599ac0568f148c8",
+      "bytes": 1026
+    },
+    {
+      "path": "tools/gate.sh",
+      "sha256": "d4ff99fbd777dff41383831592f756006a06940538fbb769c6f3885cbc945662",
+      "bytes": 1021
+    },
+    {
+      "path": "tools/gpu-request-probe.mjs",
+      "sha256": "aedc6671632138c71eeeedc681b2fa175c39a8a440e801d1f5784a47854dcc96",
+      "bytes": 9116
+    },
+    {
+      "path": "tools/optimize-models.sh",
+      "sha256": "198404b8b51d8f4dc31327a449522e4a6273c72e391a937d55eab595a81b2bb5",
+      "bytes": 2213
+    },
+    {
+      "path": "tools/pmrem-size-probe.mjs",
+      "sha256": "76af62d19aa84a7fc96fe235488756f0287f52391f395d7c58665f81d418b9ed",
+      "bytes": 8514
+    },
+    {
+      "path": "tools/prd228-arm-long.sh",
+      "sha256": "9c2f38d87d02f6464e153ae4b341090889d7b253ec89d1424fab466e5e0adc39",
+      "bytes": 4820
+    },
+    {
+      "path": "tools/prd228-arm.sh",
+      "sha256": "3df840af69de0c8e463972a3035d4bb777c4457fa3c5e1c7b6eb2a4eb5b36e5b",
+      "bytes": 4819
+    },
+    {
+      "path": "tools/prd228-auto-arm.sh",
+      "sha256": "328600c6199baec2951c5fee7831f99027cc5f5c97740d52012ed70345457ab8",
+      "bytes": 4813
+    },
+    {
+      "path": "tools/prd228-ladder.sh",
+      "sha256": "920b2ed43d0920eda74c9585b1351c5b2396ffbb2bef181bd270aec5442379d3",
+      "bytes": 2006
+    },
+    {
+      "path": "tools/prd228-read.mjs",
+      "sha256": "5c07d6ca5f26ddfc05bdbb8359eafd651d507c2ab6f7537feaaaf7475f0a0e20",
+      "bytes": 5997
+    },
+    {
+      "path": "tools/scale-audit.mjs",
+      "sha256": "6d52dc9b5d4170d44da8ab50db11cde0e1646293bf3c51ff643fe17b12db7cb6",
+      "bytes": 14786
+    },
+    {
+      "path": "tools/write-scenarios.mjs",
+      "sha256": "c3de8647a1180b7c5290172b518a5b896bda758aa763327955afcb4f8758a73f",
+      "bytes": 7808
+    },
+    {
+      "path": "tour-tmp.mjs",
+      "sha256": "210c47aa3079c07a28fb634f084fca96f3a68ecee2573949f3f47dc93d102889",
+      "bytes": 4992
+    },
+    {
+      "path": "trace-profile.mjs",
+      "sha256": "1439cabc0935d525dce530399f906b3af6b20f7af8f23de137f8bd09a51b26d8",
+      "bytes": 3375
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "ae972664b1bb9e7daffa4f8104108e469ae48c1bcf3426d7633e8c913e26f58b",
+      "bytes": 451
+    },
+    {
+      "path": "veh-probe-tmp.ts",
+      "sha256": "6136b43911d9487c3374471ddf8afdacc07e9dc99c16c163310f37e65e7baf36",
+      "bytes": 1746
+    },
+    {
+      "path": "vehicle-shot-tmp.mjs",
+      "sha256": "daebced884a3be498ffbd8135c996d078686adc075c299ee9253817d9ef4f9df",
+      "bytes": 8232
+    },
+    {
+      "path": "verify-tmp.mjs",
+      "sha256": "e0a9df3a0509c3c39b9d20dd5c2b0982246883373ad787e4f0c3134715cd417e",
+      "bytes": 8527
+    },
+    {
+      "path": "vite.config.ts",
+      "sha256": "a2388d38ada0488c1faf5e57f02e4fc02aeb97210ea160979f2d6e51126a82bb",
+      "bytes": 1187
+    }
+  ]
+}

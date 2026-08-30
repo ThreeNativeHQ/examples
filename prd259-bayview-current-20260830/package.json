@@ -1,0 +1,55 @@
+{
+  "name": "fps-framework",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "studio": "threenative-studio",
+    "scale": "node tools/scale-audit.mjs",
+    "build": "threenative build",
+    "build:web": "threenative build --target web",
+    "build:desktop": "threenative build --target desktop",
+    "build:android": "threenative build --target android",
+    "build:ios": "threenative build --target ios",
+    "test:native": "pnpm build:desktop && node node_modules/@threenative/runtime-native/scripts/verify-starter-desktop.mjs",
+    "pretest": "playwright install chromium",
+    "test": "vite build && threenative-playtest --scenario playtests/survives.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-fire.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-restart.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-ads.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/aim-alignment.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/shot-tracks-crosshair.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/enemy-scale.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/enemy-foot-contact.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/headshot-hits-head.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/death-no-snap.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/walkway-reachable.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/enemy-reaches-walkway.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/enemy-uses-crouch-clips.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/five-soldiers.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/minimap-state.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/round-clock.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/enemy-stride-matches-speed.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/enemy-death-settles.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-clear.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/debug-endurance.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/audio-fires-a-voice.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/zone-contrast-body.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && threenative-playtest --scenario playtests/zone-contrast-head.playtest.json --url http://127.0.0.1:4175 --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port 4175 --strictPort\" && pnpm scale",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@pmndrs/upscaler": "0.2.0",
+    "@threenative/core": "workspace:*",
+    "@threenative/physics": "workspace:*",
+    "@threenative/ui": "workspace:*",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-reconciler": "0.33.0",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.4.2",
+    "@tailwindcss/vite": "4.3.3",
+    "@threenative/playtest": "workspace:*",
+    "@threenative/runtime-native": "workspace:*",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "@types/react-reconciler": "0.32.1",
+    "@types/three": "0.185.3",
+    "@vitejs/plugin-react": "6.0.5",
+    "create-threenative": "workspace:*",
+    "esbuild": "0.27.0",
+    "playwright": "1.62.1",
+    "tailwindcss": "4.3.3",
+    "threenative-asset-mcp": "0.4.0",
+    "threenative-sculpt-mcp": "0.1.0",
+    "typescript": "5.9.3",
+    "vite": "8.2.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@threenative/runtime-native"
+    ],
+    "overrides": {}
+  }
+}

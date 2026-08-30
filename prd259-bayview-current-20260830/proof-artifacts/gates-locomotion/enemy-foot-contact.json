@@ -1,0 +1,4174 @@
+capture-lock: display busy — pid=2757255 started=2026-08-23T00:33:32-07:00 cmd=npx threenative-playtest --scenario playtests/stairs-climb-probe.playtest.json --url http://127.0.0.1:4301 --browser-recipe webgpu --headed --server-command pnpm dev --host 127.0.0.1 --port 4301 --strictPort; 1 waiting; holding for up to 900s…
+{"captureLock":{"detail":"no competing runner detected","mode":"none"}}
+{"captureDisplay":{"display":":1","strategy":"existing"}}
+{
+  "diagnostics": [],
+  "diagnosticsPolicy": {
+    "noConsoleErrors": true,
+    "noNetworkErrors": true,
+    "noRuntimeDiagnostics": true,
+    "runtimeReady": true
+  },
+  "distance": 0,
+  "entity": "enemy",
+  "expectMoved": false,
+  "frames": 200,
+  "trivialityOptOuts": [
+    {
+      "id": "component.enemy.footClearance.value",
+      "reason": "grounded soldier contact is a standing invariant of the patrol loop"
+    }
+  ],
+  "observations": {
+    "components": {
+      "audio": {
+        "barksPlayed": {
+          "before": 0,
+          "after": 0
+        },
+        "peakVoices": {
+          "before": 0,
+          "after": 0
+        },
+        "playerShots": {
+          "before": 0,
+          "after": 0
+        },
+        "queued": {
+          "before": 1,
+          "after": 11
+        },
+        "sceneVoiceNodes": {
+          "before": 0,
+          "after": 6
+        },
+        "voicePoolSize": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "target-0": {
+        "value": {
+          "before": 250,
+          "after": 250
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            -30.5,
+            1.65,
+            7.9
+          ],
+          "after": [
+            -30.5,
+            1.65,
+            7.9
+          ]
+        }
+      },
+      "target-1": {
+        "value": {
+          "before": 300,
+          "after": 300
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            -25.5,
+            2.35,
+            -5.6
+          ],
+          "after": [
+            -25.5,
+            2.35,
+            -5.6
+          ]
+        }
+      },
+      "target-2": {
+        "value": {
+          "before": 150,
+          "after": 150
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            0,
+            1.6,
+            9.9
+          ],
+          "after": [
+            0,
+            1.6,
+            9.9
+          ]
+        }
+      },
+      "target-3": {
+        "value": {
+          "before": 100,
+          "after": 100
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            9.9,
+            1.55,
+            4
+          ],
+          "after": [
+            9.9,
+            1.55,
+            4
+          ]
+        }
+      },
+      "target-4": {
+        "value": {
+          "before": 250,
+          "after": 250
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            24,
+            1.65,
+            9.9
+          ],
+          "after": [
+            24,
+            1.65,
+            9.9
+          ]
+        }
+      },
+      "target-5": {
+        "value": {
+          "before": 300,
+          "after": 300
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            30.5,
+            2.35,
+            -0.5
+          ],
+          "after": [
+            30.5,
+            2.35,
+            -0.5
+          ]
+        }
+      },
+      "target-6": {
+        "value": {
+          "before": 250,
+          "after": 250
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            25,
+            3.9,
+            -2.6
+          ],
+          "after": [
+            25,
+            3.9,
+            -2.6
+          ]
+        }
+      },
+      "target-7": {
+        "value": {
+          "before": 150,
+          "after": 150
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            36.9,
+            1.65,
+            18
+          ],
+          "after": [
+            36.9,
+            1.65,
+            18
+          ]
+        }
+      },
+      "target-8": {
+        "value": {
+          "before": 100,
+          "after": 100
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            35,
+            1.55,
+            29.5
+          ],
+          "after": [
+            35,
+            1.55,
+            29.5
+          ]
+        }
+      },
+      "target-9": {
+        "value": {
+          "before": 150,
+          "after": 150
+        },
+        "scorable": {
+          "before": true,
+          "after": true
+        },
+        "position": {
+          "before": [
+            -11.9,
+            1.65,
+            22
+          ],
+          "after": [
+            -11.9,
+            1.65,
+            22
+          ]
+        }
+      },
+      "player": {
+        "cameraLagPeak": {
+          "before": 0,
+          "after": 0
+        },
+        "crouching": {
+          "before": 0,
+          "after": 0
+        },
+        "health": {
+          "before": 100,
+          "after": 100
+        },
+        "position": {
+          "before": [
+            -0.0000011392802434784244,
+            0.8947762250900269,
+            31.999998092651367
+          ],
+          "after": [
+            -0.000006686384949716739,
+            0.9000793695449829,
+            32
+          ]
+        },
+        "positionY": {
+          "before": 0.8947762250900269,
+          "after": 0.9000793695449829
+        },
+        "yaw": {
+          "before": 0,
+          "after": 0
+        },
+        "pitch": {
+          "before": 0,
+          "after": 0
+        },
+        "damageShake": {
+          "before": 0,
+          "after": 0
+        },
+        "damageShakePeak": {
+          "before": 0,
+          "after": 0
+        },
+        "aimDivergenceDeg": {
+          "before": 180,
+          "after": 180
+        }
+      },
+      "rifle": {
+        "barrelAxisErrorDeg": {
+          "before": 0.9687817779389969,
+          "after": 0.9681522474267253
+        },
+        "flashOpacity": {
+          "before": 0,
+          "after": 0
+        },
+        "muzzleLocal": {
+          "before": [
+            0.0014831119418850535,
+            0.03176297710514559,
+            -0.6968408923093882
+          ],
+          "after": [
+            0.0014831119418850535,
+            0.03176297710514559,
+            -0.6968408923093882
+          ]
+        },
+        "tipGapToGeometry": {
+          "before": 0,
+          "after": 0
+        },
+        "opticScreen": {
+          "before": {
+            "x": 0.8605382610395785,
+            "y": 0.9337813818651748
+          },
+          "after": {
+            "x": 0.8592668994274567,
+            "y": 0.9345920710165125
+          }
+        },
+        "viewmodelLength": {
+          "before": 0.8800000000000001,
+          "after": 0.8800000000000001
+        }
+      },
+      "enemy": {
+        "health": {
+          "before": 36,
+          "after": 36
+        },
+        "phase": {
+          "before": "patrol",
+          "after": "patrol"
+        },
+        "position": {
+          "before": [
+            0,
+            -0.017371030424943798,
+            0
+          ],
+          "after": [
+            4.267035466384577,
+            -0.04641858383756772,
+            1.3129339896567944
+          ]
+        },
+        "deadFor": {
+          "before": 0,
+          "after": 0
+        },
+        "armed": {
+          "before": true,
+          "after": true
+        },
+        "reaction": {
+          "before": 0,
+          "after": 0
+        },
+        "bodyClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "footClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "modelHeight": {
+          "before": 1.7673948513604898,
+          "after": 1.7760321344711414
+        },
+        "hitboxHeight": {
+          "before": 1.7799999999999998,
+          "after": 1.7799999999999998
+        },
+        "headZoneMinY": {
+          "before": 1.4583728963190452,
+          "after": 1.4227240486277546
+        },
+        "legZoneMaxY": {
+          "before": 0.9367965662438207,
+          "after": 0.9054548665311402
+        },
+        "underWalkway": {
+          "before": false,
+          "after": false
+        },
+        "deathObserved": {
+          "before": false,
+          "after": false
+        },
+        "deathAnkleDelta": {
+          "before": 0,
+          "after": 0
+        },
+        "wounded": {
+          "before": false,
+          "after": false
+        },
+        "suppressedPeak": {
+          "before": 0,
+          "after": 0
+        },
+        "crouchClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clipsPlayed": {
+          "before": [
+            "RifleIdle"
+          ],
+          "after": [
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "groundSnap": {
+          "before": true,
+          "after": true
+        },
+        "deathFallDot": {
+          "before": null,
+          "after": null
+        },
+        "crouching": {
+          "before": false,
+          "after": false
+        },
+        "suppressed": {
+          "before": 0,
+          "after": 0
+        },
+        "animation": {
+          "before": "RifleIdle",
+          "after": "RifleWalk"
+        },
+        "groundSpeed": {
+          "before": 0,
+          "after": 2.3127856581285755
+        },
+        "locomotionRate": {
+          "before": 1,
+          "after": 1.7700933093138138
+        },
+        "locomotionRatePeak": {
+          "before": 0,
+          "after": 1.7700933093138138
+        },
+        "clipGroundSpeed": {
+          "before": 0,
+          "after": 1.306589684260848
+        },
+        "strideErrorRatio": {
+          "before": 1,
+          "after": 1
+        },
+        "strideErrorPeak": {
+          "before": 0,
+          "after": 2.220446049250313e-16
+        },
+        "deathRiseM": {
+          "before": 0,
+          "after": 0
+        },
+        "deathClip": {
+          "before": null,
+          "after": null
+        },
+        "deathClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clips": {
+          "before": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ],
+          "after": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "envelopeErrorM": {
+          "before": null,
+          "after": null
+        },
+        "maxEnvelopeRadius": {
+          "before": 0.45260329617431694,
+          "after": 0.45260329617431694
+        },
+        "lastHitMultiplier": {
+          "before": 1,
+          "after": 1
+        },
+        "navigation": {
+          "before": {
+            "goal": [
+              0,
+              0,
+              0
+            ],
+            "next": null,
+            "remaining": 0
+          },
+          "after": {
+            "goal": [
+              13,
+              0,
+              4
+            ],
+            "next": [
+              13,
+              0,
+              4
+            ],
+            "remaining": 1
+          }
+        },
+        "rifleForward": {
+          "before": [
+            0.807304553247565,
+            -0.5587204194740908,
+            -0.1899759226019064
+          ],
+          "after": [
+            0.7056395930892877,
+            -0.31008049342970806,
+            -0.6371207517097314
+          ]
+        },
+        "rifleForwardDot": {
+          "before": 0.7157355151826011,
+          "after": 0.48706731371928236
+        },
+        "clipMarkerDownDot": {
+          "before": -0.05076754655591088,
+          "after": -0.31578726490081815
+        },
+        "rifleLength": {
+          "before": 0.8799999999999977,
+          "after": 0.8799999999999977
+        },
+        "rightHandToGrip": {
+          "before": 2.423651445728339e-16,
+          "after": 7.021666937153402e-16
+        },
+        "leftHandToRifle": {
+          "before": 0.14117850881130353,
+          "after": 0.07867924251510784
+        },
+        "weaponNodes": {
+          "before": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ],
+          "after": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ]
+        },
+        "bodyJoints": {
+          "before": {
+            "mixamorigHips_01": [
+              -0.04492295592178937,
+              0.9859174199446944,
+              -0.013827728209161666
+            ],
+            "mixamorigHead_06": [
+              -0.032514433446212555,
+              1.5683728963190453,
+              -0.008641341311111935
+            ],
+            "mixamorigHeadTop_End_07": [
+              0.05085813157998347,
+              1.750023820935546,
+              0.03712049979296579
+            ],
+            "mixamorigLeftUpLeg_00": [
+              0.0028147443037606495,
+              0.9367965662438207,
+              -0.08569647573309948
+            ],
+            "mixamorigLeftLeg_056": [
+              0.14378839887038608,
+              0.5395643009327264,
+              -0.10204588929732357
+            ],
+            "mixamorigLeftFoot_057": [
+              0.09056729027137064,
+              0.11801071950518865,
+              -0.13331211649023905
+            ],
+            "mixamorigLeftToeBase_058": [
+              0.21382664055194367,
+              0.008874880902175558,
+              -0.18829514723635798
+            ],
+            "mixamorigLeftToe_End_059": [
+              0.2821037666535633,
+              0.009015911953806938,
+              -0.22374650572402527
+            ],
+            "mixamorigRightUpLeg_060": [
+              -0.06089749223557878,
+              0.9280788275944839,
+              0.06506856859029878
+            ],
+            "mixamorigRightLeg_061": [
+              -0.11442767513637336,
+              0.510449766628456,
+              0.09087058397910944
+            ],
+            "mixamorigRightFoot_062": [
+              -0.30534255346227207,
+              0.13985483902261664,
+              0.00290223045068759
+            ],
+            "mixamorigRightToeBase_063": [
+              -0.27354157612452185,
+              0.027479270433779276,
+              0.1318875694771084
+            ],
+            "mixamorigRightToe_End_064": [
+              -0.258809174841212,
+              0.029908226537291235,
+              0.20644816814867972
+            ]
+          },
+          "after": {
+            "mixamorigHips_01": [
+              4.222255336450348,
+              0.9568647435303979,
+              1.2991491405766502
+            ],
+            "mixamorigHead_06": [
+              4.292553011709425,
+              1.5327240486277547,
+              1.34618827170296
+            ],
+            "mixamorigHeadTop_End_07": [
+              4.344075527208363,
+              1.7296135506335737,
+              1.3711310764946045
+            ],
+            "mixamorigLeftUpLeg_00": [
+              4.253436871576629,
+              0.9054548665311402,
+              1.2201453458837601
+            ],
+            "mixamorigLeftLeg_056": [
+              4.190763350221361,
+              0.48881765075441874,
+              1.2406347337574828
+            ],
+            "mixamorigLeftFoot_057": [
+              3.9827329593610505,
+              0.11746071751948339,
+              1.2589343613372372
+            ],
+            "mixamorigLeftToeBase_058": [
+              4.114547595985217,
+              0.008874880902175614,
+              1.227939997411081
+            ],
+            "mixamorigLeftToe_End_059": [
+              4.188215482719709,
+              0.008482651689790625,
+              1.2057707997617648
+            ],
+            "mixamorigRightUpLeg_060": [
+              4.215626400231237,
+              0.8992152833079432,
+              1.3795090258728944
+            ],
+            "mixamorigRightLeg_061": [
+              4.483673728470263,
+              0.5860949439688979,
+              1.4692393995431534
+            ],
+            "mixamorigRightFoot_062": [
+              4.596888663702358,
+              0.17575538008635655,
+              1.4510365744487457
+            ],
+            "mixamorigRightToeBase_063": [
+              4.71067452633862,
+              0.09243168924680477,
+              1.552951874812922
+            ],
+            "mixamorigRightToe_End_064": [
+              4.7532840988745315,
+              0.11364601832884208,
+              1.6122528272358398
+            ]
+          }
+        }
+      },
+      "enemy-1": {
+        "health": {
+          "before": 36,
+          "after": 36
+        },
+        "phase": {
+          "before": "patrol",
+          "after": "patrol"
+        },
+        "position": {
+          "before": [
+            -28,
+            -0.017371030424945325,
+            0
+          ],
+          "after": [
+            -24.389909634343596,
+            -0.12527947761447955,
+            3.0084086380470922
+          ]
+        },
+        "deadFor": {
+          "before": 0,
+          "after": 0
+        },
+        "armed": {
+          "before": true,
+          "after": true
+        },
+        "reaction": {
+          "before": 0,
+          "after": 0
+        },
+        "bodyClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "footClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "modelHeight": {
+          "before": 1.7673948513604896,
+          "after": 1.7776295669415991
+        },
+        "hitboxHeight": {
+          "before": 1.7799999999999998,
+          "after": 1.7799999999999998
+        },
+        "headZoneMinY": {
+          "before": 1.4583728963190434,
+          "after": 1.3452159489097189
+        },
+        "legZoneMaxY": {
+          "before": 0.9367965662438191,
+          "after": 0.8256512187239751
+        },
+        "underWalkway": {
+          "before": false,
+          "after": false
+        },
+        "deathObserved": {
+          "before": false,
+          "after": false
+        },
+        "deathAnkleDelta": {
+          "before": 0,
+          "after": 0
+        },
+        "wounded": {
+          "before": false,
+          "after": false
+        },
+        "suppressedPeak": {
+          "before": 0,
+          "after": 0
+        },
+        "crouchClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clipsPlayed": {
+          "before": [
+            "RifleIdle"
+          ],
+          "after": [
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "groundSnap": {
+          "before": true,
+          "after": true
+        },
+        "deathFallDot": {
+          "before": null,
+          "after": null
+        },
+        "crouching": {
+          "before": false,
+          "after": false
+        },
+        "suppressed": {
+          "before": 0,
+          "after": 0
+        },
+        "animation": {
+          "before": "RifleIdle",
+          "after": "RifleWalk"
+        },
+        "groundSpeed": {
+          "before": 0,
+          "after": 2.447584016829678
+        },
+        "locomotionRate": {
+          "before": 1,
+          "after": 1.8732613966826954
+        },
+        "locomotionRatePeak": {
+          "before": 0,
+          "after": 1.8732613966826954
+        },
+        "clipGroundSpeed": {
+          "before": 0,
+          "after": 1.306589684260848
+        },
+        "strideErrorRatio": {
+          "before": 1,
+          "after": 1
+        },
+        "strideErrorPeak": {
+          "before": 0,
+          "after": 2.220446049250313e-16
+        },
+        "deathRiseM": {
+          "before": 0,
+          "after": 0
+        },
+        "deathClip": {
+          "before": null,
+          "after": null
+        },
+        "deathClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clips": {
+          "before": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ],
+          "after": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "envelopeErrorM": {
+          "before": null,
+          "after": null
+        },
+        "maxEnvelopeRadius": {
+          "before": 0.45260329617431694,
+          "after": 0.45260329617431694
+        },
+        "lastHitMultiplier": {
+          "before": 1,
+          "after": 1
+        },
+        "navigation": {
+          "before": {
+            "goal": [
+              -28,
+              0,
+              0
+            ],
+            "next": null,
+            "remaining": 0
+          },
+          "after": {
+            "goal": [
+              -16,
+              0,
+              10
+            ],
+            "next": [
+              -16,
+              0,
+              10
+            ],
+            "remaining": 1
+          }
+        },
+        "rifleForward": {
+          "before": [
+            0.8180752944461612,
+            -0.5587204199440786,
+            0.13632426399705685
+          ],
+          "after": [
+            0.89135506613301,
+            -0.28955683873512844,
+            -0.34877354145739964
+          ]
+        },
+        "rifleForwardDot": {
+          "before": 0.715735516613088,
+          "after": 0.46147854922354903
+        },
+        "clipMarkerDownDot": {
+          "before": -0.050767546555911286,
+          "after": -0.33642399000303463
+        },
+        "rifleLength": {
+          "before": 0.8799999999999977,
+          "after": 0.8799999999999977
+        },
+        "rightHandToGrip": {
+          "before": 9.694605782913356e-16,
+          "after": 5.102196573270515e-15
+        },
+        "leftHandToRifle": {
+          "before": 0.13936581233202597,
+          "after": 0.07845582105991289
+        },
+        "weaponNodes": {
+          "before": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ],
+          "after": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ]
+        },
+        "bodyJoints": {
+          "before": {
+            "mixamorigHips_01": [
+              -28.03610544128897,
+              0.9859174199446928,
+              -0.0300944371189461
+            ],
+            "mixamorigHead_06": [
+              -28.026660039595882,
+              1.5683728963190435,
+              -0.020520805313860434
+            ],
+            "mixamorigHeadTop_End_07": [
+              -27.967409133928793,
+              1.7500238209355443,
+              0.05387315195359541
+            ],
+            "mixamorigLeftUpLeg_00": [
+              -27.964328635663602,
+              0.9367965662438191,
+              -0.0779702668005517
+            ],
+            "mixamorigLeftLeg_056": [
+              -27.827967682827794,
+              0.5395643009327249,
+              -0.038643874295324614
+            ],
+            "mixamorigLeftFoot_057": [
+              -27.86499790703722,
+              0.1180107195051871,
+              -0.08802834410504053
+            ],
+            "mixamorigLeftToeBase_058": [
+              -27.73006802127598,
+              0.008874880902174004,
+              -0.0911790630826362
+            ],
+            "mixamorigLeftToe_End_059": [
+              -27.653398563134957,
+              0.009015911953805383,
+              -0.09753193296007201
+            ],
+            "mixamorigRightUpLeg_060": [
+              -28.0812924217502,
+              0.9280788275944823,
+              0.03652349031733483
+            ],
+            "mixamorigRightLeg_061": [
+              -28.140633364023046,
+              0.5104497666284544,
+              0.03966626770167372
+            ],
+            "mixamorigRightFoot_062": [
+              -28.282804411568925,
+              0.13985483902261509,
+              -0.11517014671173814
+            ],
+            "mixamorigRightToeBase_063": [
+              -28.303249531745355,
+              0.027479270433777722,
+              0.01609491682143549
+            ],
+            "mixamorigRightToe_End_064": [
+              -28.318435409996216,
+              0.02990822653728968,
+              0.09056447854691906
+            ]
+          },
+          "after": {
+            "mixamorigHips_01": [
+              -24.42587421635763,
+              0.8780001046963918,
+              2.9784334081122767
+            ],
+            "mixamorigHead_06": [
+              -24.38990125835966,
+              1.455215948909719,
+              3.0470278927255654
+            ],
+            "mixamorigHeadTop_End_07": [
+              -24.355007166550156,
+              1.6523500893271197,
+              3.091330512885033
+            ],
+            "mixamorigLeftUpLeg_00": [
+              -24.371124133330184,
+              0.8256512187239751,
+              2.914254862571564
+            ],
+            "mixamorigLeftLeg_056": [
+              -24.399606547869165,
+              0.4062542554526244,
+              2.8791932954382418
+            ],
+            "mixamorigLeftFoot_057": [
+              -24.730538530833005,
+              0.19195934306448387,
+              2.717702707483759
+            ],
+            "mixamorigLeftToeBase_058": [
+              -24.639345094399022,
+              0.045022193239540154,
+              2.702874734253293
+            ],
+            "mixamorigLeftToe_End_059": [
+              -24.563653334260326,
+              0.05877290013243896,
+              2.703385724804748
+            ],
+            "mixamorigRightUpLeg_060": [
+              -24.45756419594918,
+              0.8214944701847346,
+              3.053453223401874
+            ],
+            "mixamorigRightLeg_061": [
+              -24.23222563900239,
+              0.508319398635576,
+              3.2240086875658887
+            ],
+            "mixamorigRightFoot_062": [
+              -24.12953067431827,
+              0.09482665785856081,
+              3.2217681721984697
+            ],
+            "mixamorigRightToeBase_063": [
+              -24.067168976007594,
+              0.010252998570751154,
+              3.3604588412210505
+            ],
+            "mixamorigRightToe_End_064": [
+              -24.045695952227238,
+              0.028222437071056237,
+              3.4311570350200973
+            ]
+          }
+        }
+      },
+      "enemy-2": {
+        "health": {
+          "before": 36,
+          "after": 36
+        },
+        "phase": {
+          "before": "patrol",
+          "after": "patrol"
+        },
+        "position": {
+          "before": [
+            35,
+            -0.01737103042494427,
+            26
+          ],
+          "after": [
+            33.99320076294839,
+            -0.07215187381862886,
+            21.57008335697207
+          ]
+        },
+        "deadFor": {
+          "before": 0,
+          "after": 0
+        },
+        "armed": {
+          "before": true,
+          "after": true
+        },
+        "reaction": {
+          "before": 0,
+          "after": 0
+        },
+        "bodyClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "footClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "modelHeight": {
+          "before": 1.76739485136049,
+          "after": 1.777087960566735
+        },
+        "hitboxHeight": {
+          "before": 1.7799999999999998,
+          "after": 1.7799999999999998
+        },
+        "headZoneMinY": {
+          "before": 1.4583728963190448,
+          "after": 1.397968983158334
+        },
+        "legZoneMaxY": {
+          "before": 0.9367965662438202,
+          "after": 0.8802788746173134
+        },
+        "underWalkway": {
+          "before": false,
+          "after": false
+        },
+        "deathObserved": {
+          "before": false,
+          "after": false
+        },
+        "deathAnkleDelta": {
+          "before": 0,
+          "after": 0
+        },
+        "wounded": {
+          "before": false,
+          "after": false
+        },
+        "suppressedPeak": {
+          "before": 0,
+          "after": 0
+        },
+        "crouchClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clipsPlayed": {
+          "before": [
+            "RifleIdle"
+          ],
+          "after": [
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "groundSnap": {
+          "before": true,
+          "after": true
+        },
+        "deathFallDot": {
+          "before": null,
+          "after": null
+        },
+        "crouching": {
+          "before": false,
+          "after": false
+        },
+        "suppressed": {
+          "before": 0,
+          "after": 0
+        },
+        "animation": {
+          "before": "RifleIdle",
+          "after": "RifleWalk"
+        },
+        "groundSpeed": {
+          "before": 0,
+          "after": 2.357601080976281
+        },
+        "locomotionRate": {
+          "before": 1,
+          "after": 1.8043928475602513
+        },
+        "locomotionRatePeak": {
+          "before": 0,
+          "after": 1.8043928475604103
+        },
+        "clipGroundSpeed": {
+          "before": 0,
+          "after": 1.306589684260848
+        },
+        "strideErrorRatio": {
+          "before": 1,
+          "after": 1
+        },
+        "strideErrorPeak": {
+          "before": 0,
+          "after": 2.220446049250313e-16
+        },
+        "deathRiseM": {
+          "before": 0,
+          "after": 0
+        },
+        "deathClip": {
+          "before": null,
+          "after": null
+        },
+        "deathClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clips": {
+          "before": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ],
+          "after": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "envelopeErrorM": {
+          "before": null,
+          "after": null
+        },
+        "maxEnvelopeRadius": {
+          "before": 0.45260329617431744,
+          "after": 0.45260329617431744
+        },
+        "lastHitMultiplier": {
+          "before": 1,
+          "after": 1
+        },
+        "navigation": {
+          "before": {
+            "goal": [
+              35,
+              0,
+              26
+            ],
+            "next": null,
+            "remaining": 0
+          },
+          "after": {
+            "goal": [
+              30,
+              0,
+              4
+            ],
+            "next": [
+              30,
+              0,
+              4
+            ],
+            "remaining": 1
+          }
+        },
+        "rifleForward": {
+          "before": [
+            -0.5671948036549913,
+            -0.5587204199696995,
+            -0.60507978566108
+          ],
+          "after": [
+            -0.9105948938395306,
+            -0.2960148044198271,
+            -0.2884305373528706
+          ]
+        },
+        "rifleForwardDot": {
+          "before": 0.7157355177093206,
+          "after": 0.483065138881574
+        },
+        "clipMarkerDownDot": {
+          "before": -0.050767546555910766,
+          "after": -0.32995875491296184
+        },
+        "rifleLength": {
+          "before": 0.8799999999999977,
+          "after": 0.8799999999999977
+        },
+        "rightHandToGrip": {
+          "before": 7.847321480213184e-15,
+          "after": 7.160723346098895e-15
+        },
+        "leftHandToRifle": {
+          "before": 0.13986463533800234,
+          "after": 0.0787319854933411
+        },
+        "weaponNodes": {
+          "before": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ],
+          "after": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ]
+        },
+        "bodyJoints": {
+          "before": {
+            "mixamorigHips_01": [
+              35.01041192606777,
+              0.985917419944694,
+              26.045835246609318
+            ],
+            "mixamorigHead_06": [
+              35.008720862790476,
+              1.5683728963190449,
+              26.032493194890215
+            ],
+            "mixamorigHeadTop_End_07": [
+              35.00681984374303,
+              1.7500238209355456,
+              25.937406303959534
+            ],
+            "mixamorigLeftUpLeg_00": [
+              34.92431180629222,
+              0.9367965662438202,
+              26.04028779060489
+            ],
+            "mixamorigLeftLeg_056": [
+              34.83985098989977,
+              0.539564300932726,
+              25.926238480654828
+            ],
+            "mixamorigLeftFoot_057": [
+              34.8392840048739,
+              0.11801071950518821,
+              25.987961587279234
+            ],
+            "mixamorigLeftToeBase_058": [
+              34.73016642103813,
+              0.008874880902175114,
+              25.9085301451454
+            ],
+            "mixamorigLeftToe_End_059": [
+              34.665393375156526,
+              0.009015911953806494,
+              25.867020901662315
+            ],
+            "mixamorigRightUpLeg_060": [
+              35.08676686836818,
+              0.9280788275944835,
+              26.020345361450506
+            ],
+            "mixamorigRightLeg_061": [
+              35.135822786304146,
+              0.5104497666284555,
+              26.05388252583536
+            ],
+            "mixamorigRightFoot_062": [
+              35.1547575920116,
+              0.1398548390226162,
+              26.263234848778083
+            ],
+            "mixamorigRightToeBase_063": [
+              35.25071094948391,
+              0.027479270433778832,
+              26.171357359515547
+            ],
+            "mixamorigRightToe_End_064": [
+              35.307997271353564,
+              0.02990822653729079,
+              26.12141135018065
+            ]
+          },
+          "after": {
+            "mixamorigHips_01": [
+              34.00357676988497,
+              0.9311287719168075,
+              21.615762029957207
+            ],
+            "mixamorigHead_06": [
+              34.01243473349864,
+              1.507968983158334,
+              21.536334760762113
+            ],
+            "mixamorigHeadTop_End_07": [
+              34.007954290118086,
+              1.704936086748106,
+              21.479536214610988
+            ],
+            "mixamorigLeftUpLeg_00": [
+              33.919604810255564,
+              0.8802788746173134,
+              21.63058974395548
+            ],
+            "mixamorigLeftLeg_056": [
+              33.97531873445905,
+              0.47128064682537246,
+              21.717484827377085
+            ],
+            "mixamorigLeftFoot_057": [
+              34.10082035386752,
+              0.12028317396583083,
+              21.923804004745158
+            ],
+            "mixamorigLeftToeBase_058": [
+              34.008804428127135,
+              0.008874880902175183,
+              21.827638033549608
+            ],
+            "mixamorigLeftToe_End_059": [
+              33.952862043131965,
+              0.009447958341271375,
+              21.774829835318876
+            ],
+            "mixamorigRightUpLeg_060": [
+              34.07523043598955,
+              0.8729138434794542,
+              21.579680338409133
+            ],
+            "mixamorigRightLeg_061": [
+              34.015226274789796,
+              0.5716743575853365,
+              21.290544505590294
+            ],
+            "mixamorigRightFoot_062": [
+              33.92284245096564,
+              0.1683649238784803,
+              21.18888697969262
+            ],
+            "mixamorigRightToeBase_063": [
+              33.954075864585185,
+              0.11922212914351862,
+              21.02491671308878
+            ],
+            "mixamorigRightToe_End_064": [
+              33.98409370298027,
+              0.15146339783788804,
+              20.962935615853983
+            ]
+          }
+        }
+      },
+      "enemy-3": {
+        "health": {
+          "before": 36,
+          "after": 36
+        },
+        "phase": {
+          "before": "patrol",
+          "after": "patrol"
+        },
+        "position": {
+          "before": [
+            7,
+            -0.01737103042494488,
+            -27
+          ],
+          "after": [
+            5.746681301023492,
+            -0.07571657539528855,
+            -22.352514435843048
+          ]
+        },
+        "deadFor": {
+          "before": 0,
+          "after": 0
+        },
+        "armed": {
+          "before": true,
+          "after": true
+        },
+        "reaction": {
+          "before": 0,
+          "after": 0
+        },
+        "bodyClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "footClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "modelHeight": {
+          "before": 1.7673948513604896,
+          "after": 1.7773411188790729
+        },
+        "hitboxHeight": {
+          "before": 1.7799999999999998,
+          "after": 1.7799999999999998
+        },
+        "headZoneMinY": {
+          "before": 1.4583728963190439,
+          "after": 1.3942415511423594
+        },
+        "legZoneMaxY": {
+          "before": 0.9367965662438196,
+          "after": 0.8740787477367351
+        },
+        "underWalkway": {
+          "before": false,
+          "after": false
+        },
+        "deathObserved": {
+          "before": false,
+          "after": false
+        },
+        "deathAnkleDelta": {
+          "before": 0,
+          "after": 0
+        },
+        "wounded": {
+          "before": false,
+          "after": false
+        },
+        "suppressedPeak": {
+          "before": 0,
+          "after": 0
+        },
+        "crouchClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clipsPlayed": {
+          "before": [
+            "RifleIdle"
+          ],
+          "after": [
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "groundSnap": {
+          "before": true,
+          "after": true
+        },
+        "deathFallDot": {
+          "before": null,
+          "after": null
+        },
+        "crouching": {
+          "before": false,
+          "after": false
+        },
+        "suppressed": {
+          "before": 0,
+          "after": 0
+        },
+        "animation": {
+          "before": "RifleIdle",
+          "after": "RifleWalk"
+        },
+        "groundSpeed": {
+          "before": 0,
+          "after": 2.5192998583832766
+        },
+        "locomotionRate": {
+          "before": 1,
+          "after": 1.9281492030212009
+        },
+        "locomotionRatePeak": {
+          "before": 0,
+          "after": 1.9281492030212009
+        },
+        "clipGroundSpeed": {
+          "before": 0,
+          "after": 1.306589684260848
+        },
+        "strideErrorRatio": {
+          "before": 1,
+          "after": 1
+        },
+        "strideErrorPeak": {
+          "before": 0,
+          "after": 1.1102230246251565e-16
+        },
+        "deathRiseM": {
+          "before": 0,
+          "after": 0
+        },
+        "deathClip": {
+          "before": null,
+          "after": null
+        },
+        "deathClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clips": {
+          "before": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ],
+          "after": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "envelopeErrorM": {
+          "before": null,
+          "after": null
+        },
+        "maxEnvelopeRadius": {
+          "before": 0.4526032961743167,
+          "after": 0.4526032961743167
+        },
+        "lastHitMultiplier": {
+          "before": 1,
+          "after": 1
+        },
+        "navigation": {
+          "before": {
+            "goal": [
+              7,
+              0,
+              -27
+            ],
+            "next": null,
+            "remaining": 0
+          },
+          "after": {
+            "goal": [
+              -4,
+              0,
+              -16
+            ],
+            "next": [
+              5.299999999999997,
+              0,
+              -20.6
+            ],
+            "remaining": 3
+          }
+        },
+        "rifleForward": {
+          "before": [
+            -0.2098294692194711,
+            -0.5587204198239691,
+            0.8023734082824547
+          ],
+          "after": [
+            0.7042036911964221,
+            -0.3006660357745431,
+            0.6431928919359693
+          ]
+        },
+        "rifleForwardDot": {
+          "before": 0.715735518618148,
+          "after": 0.44933942890372636
+        },
+        "clipMarkerDownDot": {
+          "before": -0.050767546555910634,
+          "after": -0.32254030843254883
+        },
+        "rifleLength": {
+          "before": 0.8799999999999977,
+          "after": 0.8799999999999977
+        },
+        "rightHandToGrip": {
+          "before": 4.5288390936029406e-15,
+          "after": 6.936895214610187e-15
+        },
+        "leftHandToRifle": {
+          "before": 0.1392542016373108,
+          "after": 0.0783126604760356
+        },
+        "weaponNodes": {
+          "before": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ],
+          "after": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ]
+        },
+        "bodyJoints": {
+          "before": {
+            "mixamorigHips_01": [
+              7.033239678542519,
+              0.9859174199446933,
+              -27.03323254137991
+            ],
+            "mixamorigHead_06": [
+              7.0228502171776555,
+              1.568372896319044,
+              -27.024692685899215
+            ],
+            "mixamorigHeadTop_End_07": [
+              6.943397455584483,
+              1.7500238209355448,
+              -26.97242042389057
+            ],
+            "mixamorigLeftUpLeg_00": [
+              7.074420525430593,
+              0.9367965662438196,
+              -26.957416034318022
+            ],
+            "mixamorigLeftLeg_056": [
+              7.022910097703696,
+              0.5395643009327253,
+              -26.825175532046
+            ],
+            "mixamorigLeftFoot_057": [
+              7.0754443146671235,
+              0.11801071950518754,
+              -26.857582620953007
+            ],
+            "mixamorigLeftToeBase_058": [
+              7.066366116421574,
+              0.008874880902174448,
+              -26.722921611680714
+            ],
+            "mixamorigLeftToe_End_059": [
+              7.065751569782613,
+              0.009015911953805827,
+              -26.645991857360645
+            ],
+            "mixamorigRightUpLeg_060": [
+              6.970986374167235,
+              0.9280788275944828,
+              -27.084265252002286
+            ],
+            "mixamorigRightLeg_061": [
+              6.97322898000027,
+              0.5104497666284549,
+              -27.143647026972342
+            ],
+            "mixamorigRightFoot_062": [
+              7.1403010750836176,
+              0.13985483902261553,
+              -27.27121597708621
+            ],
+            "mixamorigRightToeBase_063": [
+              7.011426104272481,
+              0.027479270433778166,
+              -27.30346131383163
+            ],
+            "mixamorigRightToe_End_064": [
+              6.938637238478197,
+              0.029908226537290125,
+              -27.325326984144183
+            ]
+          },
+          "after": {
+            "mixamorigHips_01": [
+              5.7582433162540925,
+              0.9275615476044518,
+              -22.39786563298038
+            ],
+            "mixamorigHead_06": [
+              5.715138166176571,
+              1.5042415511423595,
+              -22.336270710679056
+            ],
+            "mixamorigHeadTop_End_07": [
+              5.6885385397863795,
+              1.7016245434837842,
+              -22.287540808929112
+            ],
+            "mixamorigLeftUpLeg_00": [
+              5.837830343105068,
+              0.8727579410351164,
+              -22.375076753547592
+            ],
+            "mixamorigLeftLeg_056": [
+              5.885960793837918,
+              0.4572769507231389,
+              -22.32036534465723
+            ],
+            "mixamorigLeftFoot_057": [
+              5.895693602455675,
+              0.3005056526708646,
+              -22.71640261110313
+            ],
+            "mixamorigLeftToeBase_058": [
+              5.948291147267605,
+              0.1381737342065953,
+              -22.748159123760225
+            ],
+            "mixamorigLeftToe_End_059": [
+              5.984090083314854,
+              0.13854362081833166,
+              -22.680064455203713
+            ],
+            "mixamorigRightUpLeg_060": [
+              5.674924155530384,
+              0.8740787477367351,
+              -22.393109395100556
+            ],
+            "mixamorigRightLeg_061": [
+              5.641113712516873,
+              0.5443049959138757,
+              -22.13224279395202
+            ],
+            "mixamorigRightFoot_062": [
+              5.682593153256412,
+              0.12184750351759233,
+              -22.095682623712918
+            ],
+            "mixamorigRightToeBase_063": [
+              5.594441153879136,
+              0.010252998570751362,
+              -21.995419570826673
+            ],
+            "mixamorigRightToe_End_064": [
+              5.5413332899983745,
+              0.010768087506597765,
+              -21.94099975979716
+            ]
+          }
+        }
+      },
+      "enemy-4": {
+        "health": {
+          "before": 36,
+          "after": 36
+        },
+        "phase": {
+          "before": "patrol",
+          "after": "patrol"
+        },
+        "position": {
+          "before": [
+            0,
+            -0.017371030424939024,
+            29
+          ],
+          "after": [
+            -1.6782771029119439,
+            -0.06371732320707167,
+            24.80430724272
+          ]
+        },
+        "deadFor": {
+          "before": 0,
+          "after": 0
+        },
+        "armed": {
+          "before": true,
+          "after": true
+        },
+        "reaction": {
+          "before": 0,
+          "after": 0
+        },
+        "bodyClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "footClearance": {
+          "before": 0,
+          "after": 0
+        },
+        "modelHeight": {
+          "before": 1.7673948513604896,
+          "after": 1.7770546906044242
+        },
+        "hitboxHeight": {
+          "before": 1.7799999999999998,
+          "after": 1.7799999999999998
+        },
+        "headZoneMinY": {
+          "before": 1.4583728963190496,
+          "after": 1.40618359203794
+        },
+        "legZoneMaxY": {
+          "before": 0.9367965662438255,
+          "after": 0.8885868818864824
+        },
+        "underWalkway": {
+          "before": false,
+          "after": false
+        },
+        "deathObserved": {
+          "before": false,
+          "after": false
+        },
+        "deathAnkleDelta": {
+          "before": 0,
+          "after": 0
+        },
+        "wounded": {
+          "before": false,
+          "after": false
+        },
+        "suppressedPeak": {
+          "before": 0,
+          "after": 0
+        },
+        "crouchClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clipsPlayed": {
+          "before": [
+            "RifleIdle"
+          ],
+          "after": [
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "groundSnap": {
+          "before": true,
+          "after": true
+        },
+        "deathFallDot": {
+          "before": null,
+          "after": null
+        },
+        "crouching": {
+          "before": false,
+          "after": false
+        },
+        "suppressed": {
+          "before": 0,
+          "after": 0
+        },
+        "animation": {
+          "before": "RifleIdle",
+          "after": "RifleWalk"
+        },
+        "groundSpeed": {
+          "before": 0,
+          "after": 2.3438948927299
+        },
+        "locomotionRate": {
+          "before": 1,
+          "after": 1.793902799757574
+        },
+        "locomotionRatePeak": {
+          "before": 0,
+          "after": 1.793902799757574
+        },
+        "clipGroundSpeed": {
+          "before": 0,
+          "after": 1.306589684260848
+        },
+        "strideErrorRatio": {
+          "before": 1,
+          "after": 1
+        },
+        "strideErrorPeak": {
+          "before": 0,
+          "after": 2.220446049250313e-16
+        },
+        "deathRiseM": {
+          "before": 0,
+          "after": 0
+        },
+        "deathClip": {
+          "before": null,
+          "after": null
+        },
+        "deathClipFrames": {
+          "before": 0,
+          "after": 0
+        },
+        "clips": {
+          "before": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ],
+          "after": [
+            "DeathBack",
+            "DeathFront",
+            "DeathHeadshot",
+            "FiringRifle",
+            "HitReaction",
+            "RifleCrouchWalk",
+            "RifleCrouchWalkToIdle",
+            "RifleIdle",
+            "RifleWalk"
+          ]
+        },
+        "envelopeErrorM": {
+          "before": null,
+          "after": null
+        },
+        "maxEnvelopeRadius": {
+          "before": 0.4526032961743168,
+          "after": 0.4526032961743168
+        },
+        "lastHitMultiplier": {
+          "before": 1,
+          "after": 1
+        },
+        "navigation": {
+          "before": {
+            "goal": [
+              0,
+              0,
+              29
+            ],
+            "next": null,
+            "remaining": 0
+          },
+          "after": {
+            "goal": [
+              -6,
+              0,
+              14
+            ],
+            "next": [
+              -6,
+              0,
+              14
+            ],
+            "remaining": 1
+          }
+        },
+        "rifleForward": {
+          "before": [
+            -0.6548416541592549,
+            -0.5587204198999624,
+            -0.5089340825340554
+          ],
+          "after": [
+            -0.942536186169309,
+            -0.30010730429980914,
+            -0.1468371331350339
+          ]
+        },
+        "rifleForwardDot": {
+          "before": 0.715735517672991,
+          "after": 0.4863840071419333
+        },
+        "clipMarkerDownDot": {
+          "before": -0.05076754655591065,
+          "after": -0.3257264923485098
+        },
+        "rifleLength": {
+          "before": 0.8799999999999977,
+          "after": 0.8799999999999977
+        },
+        "rightHandToGrip": {
+          "before": 6.705197908619356e-15,
+          "after": 3.580361673049448e-15
+        },
+        "leftHandToRifle": {
+          "before": 0.13938576511153764,
+          "after": 0.07901591462679272
+        },
+        "weaponNodes": {
+          "before": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ],
+          "after": [
+            "Armature",
+            "AK-47",
+            "Plane055-0",
+            "Plane055-0_1",
+            "Root_Bone",
+            "Grip_Bone",
+            "Trigger_Bone",
+            "Slide_Bone",
+            "Clip_Bone",
+            "neutral_bone"
+          ]
+        },
+        "bodyJoints": {
+          "before": {
+            "mixamorigHips_01": [
+              0.017451774387748045,
+              0.9859174199446992,
+              29.043643024722133
+            ],
+            "mixamorigHead_06": [
+              0.013695017999055979,
+              1.5683728963190497,
+              29.030729589063135
+            ],
+            "mixamorigHeadTop_End_07": [
+              -0.0030527957170331053,
+              1.7500238209355505,
+              28.937109925337968
+            ],
+            "mixamorigLeftUpLeg_00": [
+              -0.06845652159255959,
+              0.9367965662438255,
+              29.0516286101887
+            ],
+            "mixamorigLeftLeg_056": [
+              -0.16971377046328756,
+              0.5395643009327313,
+              28.95219097065067
+            ],
+            "mixamorigLeftFoot_057": [
+              -0.16062119765469735,
+              0.11801071950519354,
+              29.013243312809735
+            ],
+            "mixamorigLeftToeBase_058": [
+              -0.2808181175792902,
+              0.008874880902180443,
+              28.951853561692314
+            ],
+            "mixamorigLeftToe_End_059": [
+              -0.3512856371421276,
+              0.009015911953811823,
+              28.92098458934177
+            ],
+            "mixamorigRightUpLeg_060": [
+              0.08888101471840347,
+              0.9280788275944887,
+              29.00652597897635
+            ],
+            "mixamorigRightLeg_061": [
+              0.14257807233904415,
+              0.5104497666284609,
+              29.031978886126662
+            ],
+            "mixamorigRightFoot_062": [
+              0.1940195163134451,
+              0.13985483902262152,
+              29.235794243326563
+            ],
+            "mixamorigRightToeBase_063": [
+              0.27442399543058826,
+              0.02747927043378416,
+              29.130041514844986
+            ],
+            "mixamorigRightToe_End_064": [
+              0.32319465658444374,
+              0.02990822653729612,
+              29.071751300122003
+            ]
+          },
+          "after": {
+            "mixamorigHips_01": [
+              -1.6608841913068553,
+              0.9395640363141115,
+              24.847804612562225
+            ],
+            "mixamorigHead_06": [
+              -1.665590150494801,
+              1.51618359203794,
+              24.76707126581004
+            ],
+            "mixamorigHeadTop_End_07": [
+              -1.6785185594302745,
+              1.7133373673973527,
+              24.71224942510545
+            ],
+            "mixamorigLeftUpLeg_00": [
+              -1.7417128463532818,
+              0.8885868818864824,
+              24.874728977209028
+            ],
+            "mixamorigLeftLeg_056": [
+              -1.6759401966608634,
+              0.4772179696429312,
+              24.940940183223898
+            ],
+            "mixamorigLeftFoot_057": [
+              -1.523771409589113,
+              0.11894853815872336,
+              25.114160159216468
+            ],
+            "mixamorigLeftToeBase_058": [
+              -1.6301329004608105,
+              0.008874880902180332,
+              25.032320953410697
+            ],
+            "mixamorigLeftToe_End_059": [
+              -1.693637591217435,
+              0.008820954013853488,
+              24.988895891512396
+            ],
+            "mixamorigRightUpLeg_060": [
+              -1.595234938373531,
+              0.8814839105873071,
+              24.801522987601363
+            ],
+            "mixamorigRightLeg_061": [
+              -1.69708029775344,
+              0.575357003885241,
+              24.529752686043807
+            ],
+            "mixamorigRightFoot_062": [
+              -1.8001922405482165,
+              0.17253980448004852,
+              24.436834692779232
+            ],
+            "mixamorigRightToeBase_063": [
+              -1.7951692194957085,
+              0.11585514363247065,
+              24.27240109796898
+            ],
+            "mixamorigRightToe_End_064": [
+              -1.7751104097264045,
+              0.1458844424864938,
+              24.20548240264762
+            ]
+          }
+        }
+      },
+      "breakables": {
+        "broken": {
+          "before": 0,
+          "after": 0
+        },
+        "liveShards": {
+          "before": 0,
+          "after": 0
+        },
+        "props": {
+          "before": 10,
+          "after": 10
+        },
+        "shardCapacity": {
+          "before": 27,
+          "after": 27
+        }
+      },
+      "occluders": {
+        "boxes": {
+          "before": 143,
+          "after": 143
+        },
+        "tests": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "decals": {
+        "capacity": {
+          "before": 224,
+          "after": 224
+        },
+        "placed": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "enemy-flashes": {
+        "peakOpacity": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "frame": {
+        "frames": {
+          "before": 75,
+          "after": 275
+        },
+        "p50": {
+          "before": 1.7,
+          "after": 1
+        },
+        "p95": {
+          "before": 49.4,
+          "after": 43.7
+        },
+        "p99": {
+          "before": 55.2,
+          "after": 50.6
+        },
+        "worstMs": {
+          "before": 55.2,
+          "after": 55.2
+        },
+        "spikes": {
+          "before": 24,
+          "after": 25
+        },
+        "playSpikes": {
+          "before": 24,
+          "after": 0
+        },
+        "playFrames": {
+          "before": 75,
+          "after": 185
+        },
+        "peaks": {
+          "before": {
+            "effects": 0.3,
+            "audio": 0.1,
+            "player": 0.3,
+            "enemies": 4.5,
+            "state": 0.2,
+            "gameFrame": 6.2,
+            "outsideGame": 54.1
+          },
+          "after": {
+            "enemies": 16.2,
+            "outsideGame": 15.9,
+            "gameFrame": 16.5,
+            "effects": 0.1,
+            "player": 0.1,
+            "state": 0.2,
+            "audio": 0.1
+          }
+        },
+        "sectionP99": {
+          "before": {
+            "effects": 0.3,
+            "audio": 0.1,
+            "player": 0.3,
+            "enemies": 4.5,
+            "state": 0.2,
+            "gameFrame": 6.2,
+            "outsideGame": 54.1
+          },
+          "after": {
+            "effects": 0.1,
+            "audio": 0.1,
+            "player": 0.1,
+            "enemies": 1.6,
+            "state": 0.1,
+            "gameFrame": 1.6,
+            "outsideGame": 13.9
+          }
+        }
+      },
+      "squad": {
+        "canSee": {
+          "before": 0,
+          "after": 0.3
+        },
+        "ground": {
+          "before": 0.5,
+          "after": 0.4
+        },
+        "weapon": {
+          "before": 0.8,
+          "after": 0.5
+        },
+        "animation": {
+          "before": 2.1,
+          "after": 1
+        },
+        "brain": {
+          "before": 0.3,
+          "after": 14.8
+        },
+        "opacity": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "render": {
+        "drawCalls": {
+          "before": 1279,
+          "after": 1279
+        },
+        "triangles": {
+          "before": 702986,
+          "after": 702986
+        },
+        "invisibleMeshes": {
+          "before": 177,
+          "after": 177
+        }
+      }
+    },
+    "componentSeries": [
+      {
+        "label": "patrol",
+        "snapshots": {
+          "audio": {
+            "barksPlayed": 0,
+            "peakVoices": 0,
+            "playerShots": 0,
+            "queued": 11,
+            "sceneVoiceNodes": 6,
+            "voicePoolSize": 0
+          },
+          "target-0": {
+            "value": 250,
+            "scorable": true,
+            "position": [
+              -30.5,
+              1.65,
+              7.9
+            ]
+          },
+          "target-1": {
+            "value": 300,
+            "scorable": true,
+            "position": [
+              -25.5,
+              2.35,
+              -5.6
+            ]
+          },
+          "target-2": {
+            "value": 150,
+            "scorable": true,
+            "position": [
+              0,
+              1.6,
+              9.9
+            ]
+          },
+          "target-3": {
+            "value": 100,
+            "scorable": true,
+            "position": [
+              9.9,
+              1.55,
+              4
+            ]
+          },
+          "target-4": {
+            "value": 250,
+            "scorable": true,
+            "position": [
+              24,
+              1.65,
+              9.9
+            ]
+          },
+          "target-5": {
+            "value": 300,
+            "scorable": true,
+            "position": [
+              30.5,
+              2.35,
+              -0.5
+            ]
+          },
+          "target-6": {
+            "value": 250,
+            "scorable": true,
+            "position": [
+              25,
+              3.9,
+              -2.6
+            ]
+          },
+          "target-7": {
+            "value": 150,
+            "scorable": true,
+            "position": [
+              36.9,
+              1.65,
+              18
+            ]
+          },
+          "target-8": {
+            "value": 100,
+            "scorable": true,
+            "position": [
+              35,
+              1.55,
+              29.5
+            ]
+          },
+          "target-9": {
+            "value": 150,
+            "scorable": true,
+            "position": [
+              -11.9,
+              1.65,
+              22
+            ]
+          },
+          "player": {
+            "cameraLagPeak": 0,
+            "crouching": 0,
+            "health": 100,
+            "position": [
+              -0.000006686384949716739,
+              0.9000793695449829,
+              32
+            ],
+            "positionY": 0.9000793695449829,
+            "yaw": 0,
+            "pitch": 0,
+            "damageShake": 0,
+            "damageShakePeak": 0,
+            "aimDivergenceDeg": 180
+          },
+          "rifle": {
+            "barrelAxisErrorDeg": 0.9681522474267253,
+            "flashOpacity": 0,
+            "muzzleLocal": [
+              0.0014831119418850535,
+              0.03176297710514559,
+              -0.6968408923093882
+            ],
+            "tipGapToGeometry": 0,
+            "opticScreen": {
+              "x": 0.8592668994274567,
+              "y": 0.9345920710165125
+            },
+            "viewmodelLength": 0.8800000000000001
+          },
+          "enemy": {
+            "health": 36,
+            "phase": "patrol",
+            "position": [
+              4.267035466384577,
+              -0.04641858383756772,
+              1.3129339896567944
+            ],
+            "deadFor": 0,
+            "armed": true,
+            "reaction": 0,
+            "bodyClearance": 0,
+            "footClearance": 0,
+            "modelHeight": 1.7760321344711414,
+            "hitboxHeight": 1.7799999999999998,
+            "headZoneMinY": 1.4227240486277546,
+            "legZoneMaxY": 0.9054548665311402,
+            "underWalkway": false,
+            "deathObserved": false,
+            "deathAnkleDelta": 0,
+            "wounded": false,
+            "suppressedPeak": 0,
+            "crouchClipFrames": 0,
+            "clipsPlayed": [
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "groundSnap": true,
+            "deathFallDot": null,
+            "crouching": false,
+            "suppressed": 0,
+            "animation": "RifleWalk",
+            "groundSpeed": 2.3127856581285755,
+            "locomotionRate": 1.7700933093138138,
+            "locomotionRatePeak": 1.7700933093138138,
+            "clipGroundSpeed": 1.306589684260848,
+            "strideErrorRatio": 1,
+            "strideErrorPeak": 2.220446049250313e-16,
+            "deathRiseM": 0,
+            "deathClip": null,
+            "deathClipFrames": 0,
+            "clips": [
+              "DeathBack",
+              "DeathFront",
+              "DeathHeadshot",
+              "FiringRifle",
+              "HitReaction",
+              "RifleCrouchWalk",
+              "RifleCrouchWalkToIdle",
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "envelopeErrorM": null,
+            "maxEnvelopeRadius": 0.45260329617431694,
+            "lastHitMultiplier": 1,
+            "navigation": {
+              "goal": [
+                13,
+                0,
+                4
+              ],
+              "next": [
+                13,
+                0,
+                4
+              ],
+              "remaining": 1
+            },
+            "rifleForward": [
+              0.7056395930892877,
+              -0.31008049342970806,
+              -0.6371207517097314
+            ],
+            "rifleForwardDot": 0.48706731371928236,
+            "clipMarkerDownDot": -0.31578726490081815,
+            "rifleLength": 0.8799999999999977,
+            "rightHandToGrip": 7.021666937153402e-16,
+            "leftHandToRifle": 0.07867924251510784,
+            "weaponNodes": [
+              "Armature",
+              "AK-47",
+              "Plane055-0",
+              "Plane055-0_1",
+              "Root_Bone",
+              "Grip_Bone",
+              "Trigger_Bone",
+              "Slide_Bone",
+              "Clip_Bone",
+              "neutral_bone"
+            ],
+            "bodyJoints": {
+              "mixamorigHips_01": [
+                4.222255336450348,
+                0.9568647435303979,
+                1.2991491405766502
+              ],
+              "mixamorigHead_06": [
+                4.292553011709425,
+                1.5327240486277547,
+                1.34618827170296
+              ],
+              "mixamorigHeadTop_End_07": [
+                4.344075527208363,
+                1.7296135506335737,
+                1.3711310764946045
+              ],
+              "mixamorigLeftUpLeg_00": [
+                4.253436871576629,
+                0.9054548665311402,
+                1.2201453458837601
+              ],
+              "mixamorigLeftLeg_056": [
+                4.190763350221361,
+                0.48881765075441874,
+                1.2406347337574828
+              ],
+              "mixamorigLeftFoot_057": [
+                3.9827329593610505,
+                0.11746071751948339,
+                1.2589343613372372
+              ],
+              "mixamorigLeftToeBase_058": [
+                4.114547595985217,
+                0.008874880902175614,
+                1.227939997411081
+              ],
+              "mixamorigLeftToe_End_059": [
+                4.188215482719709,
+                0.008482651689790625,
+                1.2057707997617648
+              ],
+              "mixamorigRightUpLeg_060": [
+                4.215626400231237,
+                0.8992152833079432,
+                1.3795090258728944
+              ],
+              "mixamorigRightLeg_061": [
+                4.483673728470263,
+                0.5860949439688979,
+                1.4692393995431534
+              ],
+              "mixamorigRightFoot_062": [
+                4.596888663702358,
+                0.17575538008635655,
+                1.4510365744487457
+              ],
+              "mixamorigRightToeBase_063": [
+                4.71067452633862,
+                0.09243168924680477,
+                1.552951874812922
+              ],
+              "mixamorigRightToe_End_064": [
+                4.7532840988745315,
+                0.11364601832884208,
+                1.6122528272358398
+              ]
+            }
+          },
+          "enemy-1": {
+            "health": 36,
+            "phase": "patrol",
+            "position": [
+              -24.389909634343596,
+              -0.12527947761447955,
+              3.0084086380470922
+            ],
+            "deadFor": 0,
+            "armed": true,
+            "reaction": 0,
+            "bodyClearance": 0,
+            "footClearance": 0,
+            "modelHeight": 1.7776295669415991,
+            "hitboxHeight": 1.7799999999999998,
+            "headZoneMinY": 1.3452159489097189,
+            "legZoneMaxY": 0.8256512187239751,
+            "underWalkway": false,
+            "deathObserved": false,
+            "deathAnkleDelta": 0,
+            "wounded": false,
+            "suppressedPeak": 0,
+            "crouchClipFrames": 0,
+            "clipsPlayed": [
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "groundSnap": true,
+            "deathFallDot": null,
+            "crouching": false,
+            "suppressed": 0,
+            "animation": "RifleWalk",
+            "groundSpeed": 2.447584016829678,
+            "locomotionRate": 1.8732613966826954,
+            "locomotionRatePeak": 1.8732613966826954,
+            "clipGroundSpeed": 1.306589684260848,
+            "strideErrorRatio": 1,
+            "strideErrorPeak": 2.220446049250313e-16,
+            "deathRiseM": 0,
+            "deathClip": null,
+            "deathClipFrames": 0,
+            "clips": [
+              "DeathBack",
+              "DeathFront",
+              "DeathHeadshot",
+              "FiringRifle",
+              "HitReaction",
+              "RifleCrouchWalk",
+              "RifleCrouchWalkToIdle",
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "envelopeErrorM": null,
+            "maxEnvelopeRadius": 0.45260329617431694,
+            "lastHitMultiplier": 1,
+            "navigation": {
+              "goal": [
+                -16,
+                0,
+                10
+              ],
+              "next": [
+                -16,
+                0,
+                10
+              ],
+              "remaining": 1
+            },
+            "rifleForward": [
+              0.89135506613301,
+              -0.28955683873512844,
+              -0.34877354145739964
+            ],
+            "rifleForwardDot": 0.46147854922354903,
+            "clipMarkerDownDot": -0.33642399000303463,
+            "rifleLength": 0.8799999999999977,
+            "rightHandToGrip": 5.102196573270515e-15,
+            "leftHandToRifle": 0.07845582105991289,
+            "weaponNodes": [
+              "Armature",
+              "AK-47",
+              "Plane055-0",
+              "Plane055-0_1",
+              "Root_Bone",
+              "Grip_Bone",
+              "Trigger_Bone",
+              "Slide_Bone",
+              "Clip_Bone",
+              "neutral_bone"
+            ],
+            "bodyJoints": {
+              "mixamorigHips_01": [
+                -24.42587421635763,
+                0.8780001046963918,
+                2.9784334081122767
+              ],
+              "mixamorigHead_06": [
+                -24.38990125835966,
+                1.455215948909719,
+                3.0470278927255654
+              ],
+              "mixamorigHeadTop_End_07": [
+                -24.355007166550156,
+                1.6523500893271197,
+                3.091330512885033
+              ],
+              "mixamorigLeftUpLeg_00": [
+                -24.371124133330184,
+                0.8256512187239751,
+                2.914254862571564
+              ],
+              "mixamorigLeftLeg_056": [
+                -24.399606547869165,
+                0.4062542554526244,
+                2.8791932954382418
+              ],
+              "mixamorigLeftFoot_057": [
+                -24.730538530833005,
+                0.19195934306448387,
+                2.717702707483759
+              ],
+              "mixamorigLeftToeBase_058": [
+                -24.639345094399022,
+                0.045022193239540154,
+                2.702874734253293
+              ],
+              "mixamorigLeftToe_End_059": [
+                -24.563653334260326,
+                0.05877290013243896,
+                2.703385724804748
+              ],
+              "mixamorigRightUpLeg_060": [
+                -24.45756419594918,
+                0.8214944701847346,
+                3.053453223401874
+              ],
+              "mixamorigRightLeg_061": [
+                -24.23222563900239,
+                0.508319398635576,
+                3.2240086875658887
+              ],
+              "mixamorigRightFoot_062": [
+                -24.12953067431827,
+                0.09482665785856081,
+                3.2217681721984697
+              ],
+              "mixamorigRightToeBase_063": [
+                -24.067168976007594,
+                0.010252998570751154,
+                3.3604588412210505
+              ],
+              "mixamorigRightToe_End_064": [
+                -24.045695952227238,
+                0.028222437071056237,
+                3.4311570350200973
+              ]
+            }
+          },
+          "enemy-2": {
+            "health": 36,
+            "phase": "patrol",
+            "position": [
+              33.99320076294839,
+              -0.07215187381862886,
+              21.57008335697207
+            ],
+            "deadFor": 0,
+            "armed": true,
+            "reaction": 0,
+            "bodyClearance": 0,
+            "footClearance": 0,
+            "modelHeight": 1.777087960566735,
+            "hitboxHeight": 1.7799999999999998,
+            "headZoneMinY": 1.397968983158334,
+            "legZoneMaxY": 0.8802788746173134,
+            "underWalkway": false,
+            "deathObserved": false,
+            "deathAnkleDelta": 0,
+            "wounded": false,
+            "suppressedPeak": 0,
+            "crouchClipFrames": 0,
+            "clipsPlayed": [
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "groundSnap": true,
+            "deathFallDot": null,
+            "crouching": false,
+            "suppressed": 0,
+            "animation": "RifleWalk",
+            "groundSpeed": 2.357601080976281,
+            "locomotionRate": 1.8043928475602513,
+            "locomotionRatePeak": 1.8043928475604103,
+            "clipGroundSpeed": 1.306589684260848,
+            "strideErrorRatio": 1,
+            "strideErrorPeak": 2.220446049250313e-16,
+            "deathRiseM": 0,
+            "deathClip": null,
+            "deathClipFrames": 0,
+            "clips": [
+              "DeathBack",
+              "DeathFront",
+              "DeathHeadshot",
+              "FiringRifle",
+              "HitReaction",
+              "RifleCrouchWalk",
+              "RifleCrouchWalkToIdle",
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "envelopeErrorM": null,
+            "maxEnvelopeRadius": 0.45260329617431744,
+            "lastHitMultiplier": 1,
+            "navigation": {
+              "goal": [
+                30,
+                0,
+                4
+              ],
+              "next": [
+                30,
+                0,
+                4
+              ],
+              "remaining": 1
+            },
+            "rifleForward": [
+              -0.9105948938395306,
+              -0.2960148044198271,
+              -0.2884305373528706
+            ],
+            "rifleForwardDot": 0.483065138881574,
+            "clipMarkerDownDot": -0.32995875491296184,
+            "rifleLength": 0.8799999999999977,
+            "rightHandToGrip": 7.160723346098895e-15,
+            "leftHandToRifle": 0.0787319854933411,
+            "weaponNodes": [
+              "Armature",
+              "AK-47",
+              "Plane055-0",
+              "Plane055-0_1",
+              "Root_Bone",
+              "Grip_Bone",
+              "Trigger_Bone",
+              "Slide_Bone",
+              "Clip_Bone",
+              "neutral_bone"
+            ],
+            "bodyJoints": {
+              "mixamorigHips_01": [
+                34.00357676988497,
+                0.9311287719168075,
+                21.615762029957207
+              ],
+              "mixamorigHead_06": [
+                34.01243473349864,
+                1.507968983158334,
+                21.536334760762113
+              ],
+              "mixamorigHeadTop_End_07": [
+                34.007954290118086,
+                1.704936086748106,
+                21.479536214610988
+              ],
+              "mixamorigLeftUpLeg_00": [
+                33.919604810255564,
+                0.8802788746173134,
+                21.63058974395548
+              ],
+              "mixamorigLeftLeg_056": [
+                33.97531873445905,
+                0.47128064682537246,
+                21.717484827377085
+              ],
+              "mixamorigLeftFoot_057": [
+                34.10082035386752,
+                0.12028317396583083,
+                21.923804004745158
+              ],
+              "mixamorigLeftToeBase_058": [
+                34.008804428127135,
+                0.008874880902175183,
+                21.827638033549608
+              ],
+              "mixamorigLeftToe_End_059": [
+                33.952862043131965,
+                0.009447958341271375,
+                21.774829835318876
+              ],
+              "mixamorigRightUpLeg_060": [
+                34.07523043598955,
+                0.8729138434794542,
+                21.579680338409133
+              ],
+              "mixamorigRightLeg_061": [
+                34.015226274789796,
+                0.5716743575853365,
+                21.290544505590294
+              ],
+              "mixamorigRightFoot_062": [
+                33.92284245096564,
+                0.1683649238784803,
+                21.18888697969262
+              ],
+              "mixamorigRightToeBase_063": [
+                33.954075864585185,
+                0.11922212914351862,
+                21.02491671308878
+              ],
+              "mixamorigRightToe_End_064": [
+                33.98409370298027,
+                0.15146339783788804,
+                20.962935615853983
+              ]
+            }
+          },
+          "enemy-3": {
+            "health": 36,
+            "phase": "patrol",
+            "position": [
+              5.746681301023492,
+              -0.07571657539528855,
+              -22.352514435843048
+            ],
+            "deadFor": 0,
+            "armed": true,
+            "reaction": 0,
+            "bodyClearance": 0,
+            "footClearance": 0,
+            "modelHeight": 1.7773411188790729,
+            "hitboxHeight": 1.7799999999999998,
+            "headZoneMinY": 1.3942415511423594,
+            "legZoneMaxY": 0.8740787477367351,
+            "underWalkway": false,
+            "deathObserved": false,
+            "deathAnkleDelta": 0,
+            "wounded": false,
+            "suppressedPeak": 0,
+            "crouchClipFrames": 0,
+            "clipsPlayed": [
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "groundSnap": true,
+            "deathFallDot": null,
+            "crouching": false,
+            "suppressed": 0,
+            "animation": "RifleWalk",
+            "groundSpeed": 2.5192998583832766,
+            "locomotionRate": 1.9281492030212009,
+            "locomotionRatePeak": 1.9281492030212009,
+            "clipGroundSpeed": 1.306589684260848,
+            "strideErrorRatio": 1,
+            "strideErrorPeak": 1.1102230246251565e-16,
+            "deathRiseM": 0,
+            "deathClip": null,
+            "deathClipFrames": 0,
+            "clips": [
+              "DeathBack",
+              "DeathFront",
+              "DeathHeadshot",
+              "FiringRifle",
+              "HitReaction",
+              "RifleCrouchWalk",
+              "RifleCrouchWalkToIdle",
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "envelopeErrorM": null,
+            "maxEnvelopeRadius": 0.4526032961743167,
+            "lastHitMultiplier": 1,
+            "navigation": {
+              "goal": [
+                -4,
+                0,
+                -16
+              ],
+              "next": [
+                5.299999999999997,
+                0,
+                -20.6
+              ],
+              "remaining": 3
+            },
+            "rifleForward": [
+              0.7042036911964221,
+              -0.3006660357745431,
+              0.6431928919359693
+            ],
+            "rifleForwardDot": 0.44933942890372636,
+            "clipMarkerDownDot": -0.32254030843254883,
+            "rifleLength": 0.8799999999999977,
+            "rightHandToGrip": 6.936895214610187e-15,
+            "leftHandToRifle": 0.0783126604760356,
+            "weaponNodes": [
+              "Armature",
+              "AK-47",
+              "Plane055-0",
+              "Plane055-0_1",
+              "Root_Bone",
+              "Grip_Bone",
+              "Trigger_Bone",
+              "Slide_Bone",
+              "Clip_Bone",
+              "neutral_bone"
+            ],
+            "bodyJoints": {
+              "mixamorigHips_01": [
+                5.7582433162540925,
+                0.9275615476044518,
+                -22.39786563298038
+              ],
+              "mixamorigHead_06": [
+                5.715138166176571,
+                1.5042415511423595,
+                -22.336270710679056
+              ],
+              "mixamorigHeadTop_End_07": [
+                5.6885385397863795,
+                1.7016245434837842,
+                -22.287540808929112
+              ],
+              "mixamorigLeftUpLeg_00": [
+                5.837830343105068,
+                0.8727579410351164,
+                -22.375076753547592
+              ],
+              "mixamorigLeftLeg_056": [
+                5.885960793837918,
+                0.4572769507231389,
+                -22.32036534465723
+              ],
+              "mixamorigLeftFoot_057": [
+                5.895693602455675,
+                0.3005056526708646,
+                -22.71640261110313
+              ],
+              "mixamorigLeftToeBase_058": [
+                5.948291147267605,
+                0.1381737342065953,
+                -22.748159123760225
+              ],
+              "mixamorigLeftToe_End_059": [
+                5.984090083314854,
+                0.13854362081833166,
+                -22.680064455203713
+              ],
+              "mixamorigRightUpLeg_060": [
+                5.674924155530384,
+                0.8740787477367351,
+                -22.393109395100556
+              ],
+              "mixamorigRightLeg_061": [
+                5.641113712516873,
+                0.5443049959138757,
+                -22.13224279395202
+              ],
+              "mixamorigRightFoot_062": [
+                5.682593153256412,
+                0.12184750351759233,
+                -22.095682623712918
+              ],
+              "mixamorigRightToeBase_063": [
+                5.594441153879136,
+                0.010252998570751362,
+                -21.995419570826673
+              ],
+              "mixamorigRightToe_End_064": [
+                5.5413332899983745,
+                0.010768087506597765,
+                -21.94099975979716
+              ]
+            }
+          },
+          "enemy-4": {
+            "health": 36,
+            "phase": "patrol",
+            "position": [
+              -1.6782771029119439,
+              -0.06371732320707167,
+              24.80430724272
+            ],
+            "deadFor": 0,
+            "armed": true,
+            "reaction": 0,
+            "bodyClearance": 0,
+            "footClearance": 0,
+            "modelHeight": 1.7770546906044242,
+            "hitboxHeight": 1.7799999999999998,
+            "headZoneMinY": 1.40618359203794,
+            "legZoneMaxY": 0.8885868818864824,
+            "underWalkway": false,
+            "deathObserved": false,
+            "deathAnkleDelta": 0,
+            "wounded": false,
+            "suppressedPeak": 0,
+            "crouchClipFrames": 0,
+            "clipsPlayed": [
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "groundSnap": true,
+            "deathFallDot": null,
+            "crouching": false,
+            "suppressed": 0,
+            "animation": "RifleWalk",
+            "groundSpeed": 2.3438948927299,
+            "locomotionRate": 1.793902799757574,
+            "locomotionRatePeak": 1.793902799757574,
+            "clipGroundSpeed": 1.306589684260848,
+            "strideErrorRatio": 1,
+            "strideErrorPeak": 2.220446049250313e-16,
+            "deathRiseM": 0,
+            "deathClip": null,
+            "deathClipFrames": 0,
+            "clips": [
+              "DeathBack",
+              "DeathFront",
+              "DeathHeadshot",
+              "FiringRifle",
+              "HitReaction",
+              "RifleCrouchWalk",
+              "RifleCrouchWalkToIdle",
+              "RifleIdle",
+              "RifleWalk"
+            ],
+            "envelopeErrorM": null,
+            "maxEnvelopeRadius": 0.4526032961743168,
+            "lastHitMultiplier": 1,
+            "navigation": {
+              "goal": [
+                -6,
+                0,
+                14
+              ],
+              "next": [
+                -6,
+                0,
+                14
+              ],
+              "remaining": 1
+            },
+            "rifleForward": [
+              -0.942536186169309,
+              -0.30010730429980914,
+              -0.1468371331350339
+            ],
+            "rifleForwardDot": 0.4863840071419333,
+            "clipMarkerDownDot": -0.3257264923485098,
+            "rifleLength": 0.8799999999999977,
+            "rightHandToGrip": 3.580361673049448e-15,
+            "leftHandToRifle": 0.07901591462679272,
+            "weaponNodes": [
+              "Armature",
+              "AK-47",
+              "Plane055-0",
+              "Plane055-0_1",
+              "Root_Bone",
+              "Grip_Bone",
+              "Trigger_Bone",
+              "Slide_Bone",
+              "Clip_Bone",
+              "neutral_bone"
+            ],
+            "bodyJoints": {
+              "mixamorigHips_01": [
+                -1.6608841913068553,
+                0.9395640363141115,
+                24.847804612562225
+              ],
+              "mixamorigHead_06": [
+                -1.665590150494801,
+                1.51618359203794,
+                24.76707126581004
+              ],
+              "mixamorigHeadTop_End_07": [
+                -1.6785185594302745,
+                1.7133373673973527,
+                24.71224942510545
+              ],
+              "mixamorigLeftUpLeg_00": [
+                -1.7417128463532818,
+                0.8885868818864824,
+                24.874728977209028
+              ],
+              "mixamorigLeftLeg_056": [
+                -1.6759401966608634,
+                0.4772179696429312,
+                24.940940183223898
+              ],
+              "mixamorigLeftFoot_057": [
+                -1.523771409589113,
+                0.11894853815872336,
+                25.114160159216468
+              ],
+              "mixamorigLeftToeBase_058": [
+                -1.6301329004608105,
+                0.008874880902180332,
+                25.032320953410697
+              ],
+              "mixamorigLeftToe_End_059": [
+                -1.693637591217435,
+                0.008820954013853488,
+                24.988895891512396
+              ],
+              "mixamorigRightUpLeg_060": [
+                -1.595234938373531,
+                0.8814839105873071,
+                24.801522987601363
+              ],
+              "mixamorigRightLeg_061": [
+                -1.69708029775344,
+                0.575357003885241,
+                24.529752686043807
+              ],
+              "mixamorigRightFoot_062": [
+                -1.8001922405482165,
+                0.17253980448004852,
+                24.436834692779232
+              ],
+              "mixamorigRightToeBase_063": [
+                -1.7951692194957085,
+                0.11585514363247065,
+                24.27240109796898
+              ],
+              "mixamorigRightToe_End_064": [
+                -1.7751104097264045,
+                0.1458844424864938,
+                24.20548240264762
+              ]
+            }
+          },
+          "breakables": {
+            "broken": 0,
+            "liveShards": 0,
+            "props": 10,
+            "shardCapacity": 27
+          },
+          "occluders": {
+            "boxes": 143,
+            "tests": 0
+          },
+          "decals": {
+            "capacity": 224,
+            "placed": 0
+          },
+          "enemy-flashes": {
+            "peakOpacity": 0
+          },
+          "frame": {
+            "frames": 275,
+            "p50": 1,
+            "p95": 43.7,
+            "p99": 50.6,
+            "worstMs": 55.2,
+            "spikes": 25,
+            "playSpikes": 0,
+            "playFrames": 185,
+            "peaks": {
+              "enemies": 16.2,
+              "outsideGame": 15.9,
+              "gameFrame": 16.5,
+              "effects": 0.1,
+              "player": 0.1,
+              "state": 0.2,
+              "audio": 0.1
+            },
+            "sectionP99": {
+              "effects": 0.1,
+              "audio": 0.1,
+              "player": 0.1,
+              "enemies": 1.6,
+              "state": 0.1,
+              "gameFrame": 1.6,
+              "outsideGame": 13.9
+            }
+          },
+          "squad": {
+            "canSee": 0.3,
+            "ground": 0.4,
+            "weapon": 0.5,
+            "animation": 1,
+            "brain": 14.8,
+            "opacity": 0
+          },
+          "render": {
+            "drawCalls": 1279,
+            "triangles": 702986,
+            "invisibleMeshes": 177
+          }
+        },
+        "tick": 276
+      }
+    ],
+    "console": [
+      {
+        "source": "browser-console",
+        "text": "[vite] connecting...",
+        "type": "debug"
+      },
+      {
+        "source": "browser-console",
+        "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+        "type": "info"
+      },
+      {
+        "source": "browser-console",
+        "text": "[vite] connected.",
+        "type": "debug"
+      },
+      {
+        "source": "browser-console",
+        "text": "TN_FPS_ASSETS_LOADED:enemy(9 clips),viewmodel,sky,town textures,audio(30)",
+        "type": "info"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "THREE.Material: parameter 'map' has value of undefined.",
+        "type": "warning"
+      },
+      {
+        "source": "browser-console",
+        "text": "TN_FPS_BOOT_MS:{\"load\":237,\"render-setup\":1,\"town\":313,\"soldiers\":193,\"effects\":103,\"enterTotal\":610,\"sinceNavigation\":1563}",
+        "type": "info"
+      },
+      {
+        "source": "browser-console",
+        "text": "TN_RENDER_PROJECTION:{\"projecting\":false,\"reasonCode\":\"notWorthwhile\",\"reason\":\"projecting would draw 835 of 835 candidates, which is not worth its own cost\",\"sourceRenderables\":835,\"resultDrawCandidates\":835,\"batches\":0,\"projectedObjects\":0,\"exactObjects\":0,\"exact\":{}}",
+        "type": "info"
+      }
+    ],
+    "hud": {},
+    "network": [],
+    "resources": {
+      "state": {
+        "before": {
+          "aiming": false,
+          "ammo": 30,
+          "assetsLoaded": 27,
+          "assetsTotal": 27,
+          "blips": [
+            {
+              "alive": true,
+              "x": 0,
+              "z": 0
+            },
+            {
+              "alive": true,
+              "x": -28,
+              "z": 0
+            },
+            {
+              "alive": true,
+              "x": 35,
+              "z": 26
+            },
+            {
+              "alive": true,
+              "x": 7,
+              "z": -27
+            },
+            {
+              "alive": true,
+              "x": 0,
+              "z": 29
+            }
+          ],
+          "distanceMoved": 0.0000057302508445402495,
+          "health": 100,
+          "hitFlash": 0,
+          "phase": "playing",
+          "playerX": -0.0000011392802434784244,
+          "playerYaw": 0,
+          "playerZ": 31.999998092651367,
+          "ready": true,
+          "reloads": 0,
+          "reserve": 90,
+          "score": 0,
+          "shots": 0,
+          "targetsHit": 0,
+          "timeRemaining": 103.73333333333333
+        },
+        "after": {
+          "aiming": false,
+          "ammo": 30,
+          "assetsLoaded": 27,
+          "assetsTotal": 27,
+          "blips": [
+            {
+              "alive": true,
+              "x": 4.267035466384577,
+              "z": 1.3129339896567944
+            },
+            {
+              "alive": true,
+              "x": -24.389909634343596,
+              "z": 3.0084086380470922
+            },
+            {
+              "alive": true,
+              "x": 33.99320076294839,
+              "z": 21.57008335697207
+            },
+            {
+              "alive": true,
+              "x": 5.746681301023492,
+              "z": -22.352514435843048
+            },
+            {
+              "alive": true,
+              "x": -1.6782771029119439,
+              "z": 24.80430724272
+            }
+          ],
+          "distanceMoved": 0.00020735457536251965,
+          "health": 100,
+          "hitFlash": 0,
+          "phase": "playing",
+          "playerX": -0.00000477868252346525,
+          "playerYaw": 0,
+          "playerZ": 32,
+          "ready": true,
+          "reloads": 0,
+          "reserve": 90,
+          "score": 0,
+          "shots": 0,
+          "targetsHit": 0,
+          "timeRemaining": 100.4
+        }
+      },
+      "GameState": {
+        "before": {
+          "aiming": false,
+          "ammo": 30,
+          "assetsLoaded": 27,
+          "assetsTotal": 27,
+          "blips": [
+            {
+              "alive": true,
+              "x": 0,
+              "z": 0
+            },
+            {
+              "alive": true,
+              "x": -28,
+              "z": 0
+            },
+            {
+              "alive": true,
+              "x": 35,
+              "z": 26
+            },
+            {
+              "alive": true,
+              "x": 7,
+              "z": -27
+            },
+            {
+              "alive": true,
+              "x": 0,
+              "z": 29
+            }
+          ],
+          "distanceMoved": 0.0000057302508445402495,
+          "health": 100,
+          "hitFlash": 0,
+          "phase": "playing",
+          "playerX": -0.0000011392802434784244,
+          "playerYaw": 0,
+          "playerZ": 31.999998092651367,
+          "ready": true,
+          "reloads": 0,
+          "reserve": 90,
+          "score": 0,
+          "shots": 0,
+          "targetsHit": 0,
+          "timeRemaining": 103.73333333333333
+        },
+        "after": {
+          "aiming": false,
+          "ammo": 30,
+          "assetsLoaded": 27,
+          "assetsTotal": 27,
+          "blips": [
+            {
+              "alive": true,
+              "x": 4.267035466384577,
+              "z": 1.3129339896567944
+            },
+            {
+              "alive": true,
+              "x": -24.389909634343596,
+              "z": 3.0084086380470922
+            },
+            {
+              "alive": true,
+              "x": 33.99320076294839,
+              "z": 21.57008335697207
+            },
+            {
+              "alive": true,
+              "x": 5.746681301023492,
+              "z": -22.352514435843048
+            },
+            {
+              "alive": true,
+              "x": -1.6782771029119439,
+              "z": 24.80430724272
+            }
+          ],
+          "distanceMoved": 0.00020735457536251965,
+          "health": 100,
+          "hitFlash": 0,
+          "phase": "playing",
+          "playerX": -0.00000477868252346525,
+          "playerYaw": 0,
+          "playerZ": 32,
+          "ready": true,
+          "reloads": 0,
+          "reserve": 90,
+          "score": 0,
+          "shots": 0,
+          "targetsHit": 0,
+          "timeRemaining": 100.4
+        }
+      }
+    },
+    "resourceSeries": [
+      {
+        "label": "patrol",
+        "snapshots": {
+          "state": {
+            "aiming": false,
+            "ammo": 30,
+            "assetsLoaded": 27,
+            "assetsTotal": 27,
+            "blips": [
+              {
+                "alive": true,
+                "x": 4.267035466384577,
+                "z": 1.3129339896567944
+              },
+              {
+                "alive": true,
+                "x": -24.389909634343596,
+                "z": 3.0084086380470922
+              },
+              {
+                "alive": true,
+                "x": 33.99320076294839,
+                "z": 21.57008335697207
+              },
+              {
+                "alive": true,
+                "x": 5.746681301023492,
+                "z": -22.352514435843048
+              },
+              {
+                "alive": true,
+                "x": -1.6782771029119439,
+                "z": 24.80430724272
+              }
+            ],
+            "distanceMoved": 0.00020735457536251965,
+            "health": 100,
+            "hitFlash": 0,
+            "phase": "playing",
+            "playerX": -0.00000477868252346525,
+            "playerYaw": 0,
+            "playerZ": 32,
+            "ready": true,
+            "reloads": 0,
+            "reserve": 90,
+            "score": 0,
+            "shots": 0,
+            "targetsHit": 0,
+            "timeRemaining": 100.4
+          },
+          "GameState": {
+            "aiming": false,
+            "ammo": 30,
+            "assetsLoaded": 27,
+            "assetsTotal": 27,
+            "blips": [
+              {
+                "alive": true,
+                "x": 4.267035466384577,
+                "z": 1.3129339896567944
+              },
+              {
+                "alive": true,
+                "x": -24.389909634343596,
+                "z": 3.0084086380470922
+              },
+              {
+                "alive": true,
+                "x": 33.99320076294839,
+                "z": 21.57008335697207
+              },
+              {
+                "alive": true,
+                "x": 5.746681301023492,
+                "z": -22.352514435843048
+              },
+              {
+                "alive": true,
+                "x": -1.6782771029119439,
+                "z": 24.80430724272
+              }
+            ],
+            "distanceMoved": 0.00020735457536251965,
+            "health": 100,
+            "hitFlash": 0,
+            "phase": "playing",
+            "playerX": -0.00000477868252346525,
+            "playerYaw": 0,
+            "playerZ": 32,
+            "ready": true,
+            "reloads": 0,
+            "reserve": 90,
+            "score": 0,
+            "shots": 0,
+            "targetsHit": 0,
+            "timeRemaining": 100.4
+          }
+        },
+        "tick": 276
+      }
+    ],
+    "runtimeDiagnostics": {
+      "recentRuntimeErrors": [],
+      "runtimeReadouts": [],
+      "scene": {
+        "renderedEntities": []
+      }
+    },
+    "runtimeDiagnosticsBefore": {
+      "recentRuntimeErrors": [],
+      "runtimeReadouts": [],
+      "scene": {
+        "renderedEntities": []
+      }
+    },
+    "runtimeObservations": {
+      "gameplayBefore": {
+        "animation": {},
+        "contacts": [],
+        "states": {},
+        "tags": {},
+        "audio": {
+          "pooled": 0,
+          "queued": 0,
+          "voices": 0
+        },
+        "world": {
+          "seed": 90210,
+          "runtime": {
+            "agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "core": "0.2.0",
+            "randomState": 90210,
+            "rapier": "0.19.3",
+            "step": 0.016666666666666666
+          }
+        }
+      },
+      "gameplay": {
+        "animation": {},
+        "contacts": [],
+        "states": {},
+        "tags": {},
+        "audio": {
+          "pooled": 0,
+          "queued": 0,
+          "voices": 0
+        },
+        "world": {
+          "seed": 90210,
+          "runtime": {
+            "agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "core": "0.2.0",
+            "randomState": 90210,
+            "rapier": "0.19.3",
+            "step": 0.016666666666666666
+          }
+        }
+      },
+      "gameplaySeries": [
+        {
+          "gameplay": {
+            "animation": {},
+            "contacts": [],
+            "states": {},
+            "tags": {},
+            "audio": {
+              "pooled": 0,
+              "queued": 0,
+              "voices": 0
+            },
+            "world": {
+              "seed": 90210,
+              "runtime": {
+                "agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+                "core": "0.2.0",
+                "randomState": 90210,
+                "rapier": "0.19.3",
+                "step": 0.016666666666666666
+              }
+            }
+          },
+          "label": "patrol",
+          "tick": 276
+        }
+      ]
+    },
+    "signals": [],
+    "signalSeries": [
+      {
+        "label": "patrol",
+        "signals": [],
+        "tick": 276
+      }
+    ],
+    "visual": {}
+  },
+  "artifactDirectory": "/home/joao/projects/threenative/sandbox/fps-framework/artifacts/playtest",
+  "capture": {
+    "adapter": {
+      "architecture": "turing",
+      "vendor": "nvidia",
+      "features": "bgra8unorm-storage,chromium-experimental-multi-draw-indirect,chromium-experimental-subgroup-matrix,chromium-experimental-timestamp-query-inside-passes,clip-distances,core-features-and-limits,depth-clip-control,depth32float-stencil8,dual-source-blending,float32-blendable,float32-filterable,indirect-first-instance,primitive-index,rg11b10ufloat-renderable,subgroup-size-control,subgroups,texture-component-swizzle,texture-compression-bc,texture-compression-bc-sliced-3d,texture-formats-tier1,texture-formats-tier2,timestamp-query",
+      "limit.maxBindGroups": "4",
+      "limit.maxTextureDimension2D": "16384",
+      "limit.maxStorageBufferBindingSize": "2147483644"
+    },
+    "browserArgs": [
+      "--ozone-platform=x11",
+      "--enable-unsafe-webgpu",
+      "--disable-gpu-sandbox",
+      "--ignore-gpu-blocklist",
+      "--enable-features=Vulkan"
+    ],
+    "captureMethod": "page.screenshot",
+    "rendererKind": "webgpu",
+    "target": "web",
+    "viewport": {
+      "height": 720,
+      "width": 1280
+    }
+  },
+  "assertionResults": [
+    {
+      "details": {
+        "after": 4.267035466384577,
+        "before": 0,
+        "expected": {
+          "changed": true
+        },
+        "id": "state",
+        "path": "blips.0.x",
+        "trivial": false
+      },
+      "id": "resource.state.blips.0.x",
+      "pass": true
+    },
+    {
+      "details": {
+        "after": 0,
+        "before": 0,
+        "component": "footClearance",
+        "entity": "enemy",
+        "expected": {
+          "component": "footClearance",
+          "entity": "enemy",
+          "allowTrivial": "grounded soldier contact is a standing invariant of the patrol loop",
+          "lte": 0.03
+        },
+        "trivial": true,
+        "trivialityOptOut": true
+      },
+      "id": "component.enemy.footClearance.value",
+      "pass": true
+    },
+    {
+      "details": {
+        "consoleErrors": 0,
+        "networkErrors": 0,
+        "policy": {
+          "noConsoleErrors": true,
+          "noNetworkErrors": true,
+          "noRuntimeDiagnostics": true,
+          "runtimeReady": true
+        },
+        "runtimeDiagnostics": 0
+      },
+      "id": "diagnostics",
+      "pass": true
+    }
+  ],
+  "pass": true,
+  "runtime": "web",
+  "scenario": "enemy-foot-contact",
+  "target": "web",
+  "trivialityOptOutCount": 1,
+  "url": "http://127.0.0.1:4326"
+}
