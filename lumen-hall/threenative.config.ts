@@ -31,6 +31,14 @@ export default {
     // the scale it settled on in every `TN_FRAME_BUDGET` window. Replace with a number in (0, 1]
     // to pin it — the loop stops and the reporting does not. CSS, UI and camera framing never move.
     resolutionScale: "auto",
+    // Measured on this scene at 1600x900: 4x MSAA costs 19.92 ms of GPU against 8.87 ms
+    // without it — 55% of the whole frame. The beauty pass is a four-attachment rgba16float
+    // MRT (colour, normal, metalness, roughness) because the screen-space stages need those
+    // buffers, and every attachment pays the multisample cost. The post chain then resolves
+    // and works in screen space anyway, so most of what MSAA bought is thrown away.
+    //
+    // Turn this back on for a build with no post chain, where it is nearly free by comparison.
+    antialias: false,
   },
   assets: {
     // Mobile has no WebAssembly, so neither Basis-decoded textures nor Meshopt-decoded geometry
