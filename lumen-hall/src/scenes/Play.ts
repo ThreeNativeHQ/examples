@@ -142,7 +142,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // Where the walker starts: a few bays in from the west door, off the axis so the
     // colonnade runs away to one side rather than framing a symmetrical postcard.
     view.position.set(2.6, 1.7, 22);
-    view.lookAt(-1.4, 4.5, -31);
+    view.lookAt(-1.4, 7.5, -31);
     view.updateProjectionMatrix();
     // Walk the cathedral. Bounds are the interior, not a physics body: the floor is one
     // flat plane and clamping to the building is the entire collision model this needs.
