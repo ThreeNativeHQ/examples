@@ -142,6 +142,49 @@ const scratch = new Matrix4();
 const ARCADE_SPRING = 8;
 
 /**
+ * The clerestory window: the only opening in the building the sun actually comes through,
+ * and therefore the only geometry that decides whether the nave has shafts of light in it.
+ *
+ * A godray is raymarched against the sun's shadow map, so a beam exists only where the air
+ * *beside* it is in shadow. The previous window was a single 4.2 m opening on a 7 m bay —
+ * 60% of the upper wall was hole, most of the upper nave volume was lit, every view ray
+ * accumulated something, and the pass returned even haze instead of separate beams. Pushing
+ * godray density up made the haze brighter, not the beams sharper, which is the signature of
+ * an aperture problem rather than a post problem.
+ *
+ * So: two narrow lights per bay with 1.56 m of solid stone between them, 41% open against
+ * 59% solid at the aperture plane, plus a transom that cuts each shaft in half again. Four
+ * separated beams per bay rather than one lit volume.
+ */
+const CLERESTORY = {
+  /** Half-width of each light at the *outer* face — the hole the shadow map sees. */
+  aperture: 0.72,
+  /** Sill height. Clear of the triforium string course, and low enough for a 4:1 light. */
+  base: 20.2,
+  /** Centre of each light across the bay. Two, far enough apart to leave a real mullion. */
+  lights: [-1.5, 1.5],
+  /** Order depths from the nave face outward. 2.1 m of reveal in three steps. */
+  reveal: [0.9, 0.6, 0.6],
+  /**
+   * How much wider each order gets toward the nave.
+   *
+   * Each light is splayed on its own rather than grouped under one containing arch. A
+   * containing arch pinches fast near its own apex — at this band height it forced the
+   * lights down to a 2:1 stump — and per-light splay also gives every aperture its own
+   * taper, which is what makes a shaft start narrow at the glass and widen into the nave.
+   */
+  splay: 0.16,
+  springY: 4.5,
+  /** Height of the transom above the sill. */
+  transomY: 2.5,
+} as const;
+
+/** Height of one clerestory light, sill to apex, at the aperture plane. */
+const CLERESTORY_LIGHT_HEIGHT = CLERESTORY.springY + CLERESTORY.aperture * Math.sqrt(3);
+/** Total reveal depth, nave face to glass. */
+const CLERESTORY_DEPTH = CLERESTORY.reveal.reduce((total, step) => total + step, 0);
+
+/**
  * Tint every vertex, and drop the index while doing it.
  *
  * `mergeGeometries` refuses a mix of indexed and non-indexed inputs, and `ExtrudeGeometry`
@@ -578,45 +621,63 @@ function bayWall(): BufferGeometry {
     ),
   );
 
-  // -- clerestory, splayed ----------------------------------------------------------------
-  // Two panels, the outer one with a narrower opening. That step *is* the window splay: it
-  // is what makes each shaft of light start narrow at the glass and widen into the nave,
-  // and it costs one extra extrusion rather than a bevel the shadow map cannot resolve.
-  const clerestoryHeight = clerestoryTop - triforiumTop;
-  const innerHalf = bayPitch * 0.3;
-  const outerHalf = bayPitch * 0.222;
-  const clerestorySpring = clerestoryHeight * 0.45;
-  const clerestoryBase = triforiumTop + 0.63;
-  parts.push(
-    part(
-      piercedPanel(bayPitch, clerestoryHeight, 0.75, [
-        { halfWidth: innerHalf, springY: clerestorySpring },
-      ]).translate(0, clerestoryBase, 0),
-      TONE.upper,
-    ),
-  );
-  parts.push(
-    part(
-      piercedPanel(bayPitch, clerestoryHeight, 0.7, [
-        { halfWidth: outerHalf, springY: clerestorySpring },
-      ]).translate(0, clerestoryBase, 0.75),
-      TONE.upper,
-    ),
-  );
-  // Two mullions, so one window throws three shafts. Three shafts read as light; one reads
-  // as haze, and the godray pass raymarches whatever the shadow map hands it.
-  const lightHeight = clerestorySpring + outerHalf * SQRT3;
-  for (const mullionX of [-outerHalf / 3, outerHalf / 3]) {
+  // -- clerestory: a traceried window, not a hole ------------------------------------------
+  // Three orders, each light splayed individually, plus a transom and nook-shafts. Every
+  // number comes from `CLERESTORY` so the glass below is placed against the same aperture.
+  const clerestoryHeight = clerestoryTop - CLERESTORY.base;
+  let revealZ = 0;
+  CLERESTORY.reveal.forEach((depth, order) => {
+    // Order 0 sits on the nave face and is the widest; each order behind it steps in by one
+    // splay. The last one is the aperture, and it is the one the sun is measured against.
+    const halfWidth = CLERESTORY.aperture + CLERESTORY.splay * (CLERESTORY.reveal.length - 1 - order);
     parts.push(
       part(
-        new BoxGeometry(0.26, lightHeight * 0.96, 0.62).translate(
-          mullionX,
-          clerestoryBase + lightHeight * 0.48,
-          1.12,
-        ),
-        TONE.bright,
+        piercedPanel(
+          bayPitch,
+          clerestoryHeight,
+          depth,
+          CLERESTORY.lights.map((centre) => ({
+            centre,
+            halfWidth,
+            springY: CLERESTORY.springY,
+          })),
+        ).translate(0, CLERESTORY.base, revealZ),
+        TONE.upper,
       ),
     );
+    revealZ += depth;
+  });
+
+  // The transom. It crosses both lights in the two outer orders, so the shadow map sees it
+  // and each of the two shafts arrives in the nave as two — the horizontal break that reads
+  // in the reference and that no amount of godray density can manufacture.
+  parts.push(
+    part(
+      new BoxGeometry(
+        (Math.abs(CLERESTORY.lights[1] ?? 1.5) + CLERESTORY.aperture) * 2 + 0.4,
+        0.32,
+        CLERESTORY_DEPTH - CLERESTORY.reveal[0],
+      ).translate(0, CLERESTORY.base + CLERESTORY.transomY, CLERESTORY.reveal[0] ?? 0.9),
+      TONE.bright,
+    ),
+  );
+
+  // Nook-shafts in the jambs of each light. The splay is a stepped hole until something
+  // stands in the step; these are what make it read as carved from the nave floor.
+  const jambHalf = CLERESTORY.aperture + CLERESTORY.splay * (CLERESTORY.reveal.length - 1);
+  for (const centre of CLERESTORY.lights) {
+    for (const jamb of [-1, 1]) {
+      parts.push(
+        part(
+          new CylinderGeometry(0.14, 0.14, CLERESTORY.springY + 0.4, 8).translate(
+            centre + jamb * jambHalf,
+            CLERESTORY.base + 0.3 + (CLERESTORY.springY + 0.4) / 2,
+            0.34,
+          ),
+          TONE.bright,
+        ),
+      );
+    }
   }
 
   return weld(parts, "bay wall");
@@ -766,26 +827,35 @@ export function createCathedral(floorTexture?: Texture): Group {
   // Two clerestory materials rather than one with instance colours: `toneMapped: false` is
   // the whole trick here and a per-instance tint is one more thing that can quietly stop
   // being honoured under a node material.
-  const clerestoryHeight = clerestoryTop - triforiumTop;
-  const clerestorySpring = clerestoryHeight * 0.45;
-  const outerHalf = bayPitch * 0.222;
-  const paneHeight = clerestorySpring + outerHalf * SQRT3;
-  const paneGeometry = new PlaneGeometry(outerHalf * 2, paneHeight);
-  const paneY = triforiumTop + 0.63 + paneHeight * 0.5;
+  //
+  // One pane per *light*, and it stays a `PlaneGeometry`: the textures lane maps a whole
+  // stained-glass panel onto anything that already carries 0..1 UVs and reprojects one
+  // panel across anything that does not. Welding the two lights of a bay into one geometry
+  // would smear a single panel across both of them.
+  const paneGeometry = new PlaneGeometry(CLERESTORY.aperture * 2, CLERESTORY_LIGHT_HEIGHT);
+  const paneY = CLERESTORY.base + CLERESTORY_LIGHT_HEIGHT * 0.5;
+  // Just inside the aperture, so the reveal in front of it still shades the glass.
+  const paneX = halfWidth + CLERESTORY_DEPTH - 0.02;
   for (const [tint, parity] of [
     [palette.glassWarm, 0],
     [palette.glassCool, 1],
   ] as const) {
-    const count = Math.ceil(bays / 2) * 2;
+    const count = Math.ceil(bays / 2) * 2 * CLERESTORY.lights.length;
     const panes = new InstancedMesh(paneGeometry, glass(tint), count);
     let paneInstance = 0;
     for (const side of [-1, 1]) {
       for (let bay = 0; bay < bays; bay += 1) {
         if (bay % 2 !== parity) continue;
         const z = -halfDepth + bay * bayPitch + bayPitch / 2;
-        scratch.makeRotationY((side * Math.PI) / 2).setPosition(side * (halfWidth + 1.44), paneY, z);
-        panes.setMatrixAt(paneInstance, scratch);
-        paneInstance += 1;
+        for (const light of CLERESTORY.lights) {
+          // The lights sit symmetrically about the bay centre, so the same pair of world
+          // offsets is correct whichever way the panel was turned.
+          scratch
+            .makeRotationY((side * Math.PI) / 2)
+            .setPosition(side * paneX, paneY, z + light);
+          panes.setMatrixAt(paneInstance, scratch);
+          paneInstance += 1;
+        }
       }
     }
     panes.count = paneInstance;
@@ -1039,48 +1109,64 @@ export function createCathedral(floorTexture?: Texture): Group {
   nave.add(rose);
 
   const traceryParts: BufferGeometry[] = [];
-  // Sixteen spokes and three rings. The count is what separates a rose from a wheel: at
-  // eight the eye counts the spokes, at sixteen it reads a pattern and stops counting.
-  for (let spoke = 0; spoke < 16; spoke += 1) {
-    traceryParts.push(
-      part(
-        new BoxGeometry(0.2, roseRadius * 2, 0.26).rotateZ((spoke / 16) * Math.PI),
-        TONE.bright,
+  /** A radial bar between two rings: built at the origin, pushed out, then swung round. */
+  const spokeBetween = (from: number, to: number, angle: number, width: number) =>
+    part(
+      new BoxGeometry(width, (to - from) * roseRadius, 0.26)
+        .translate(0, ((from + to) / 2) * roseRadius, 0)
+        .rotateZ(angle),
+      TONE.bright,
+    );
+  /** A cusped light: a small circle of tracery, which is what a rose is actually made of. */
+  const cusp = (radiusRatio: number, sizeRatio: number, angle: number, tube: number) =>
+    part(
+      new TorusGeometry(roseRadius * sizeRatio, tube, 6, 14).translate(
+        Math.cos(angle) * roseRadius * radiusRatio,
+        Math.sin(angle) * roseRadius * radiusRatio,
+        0,
       ),
+      TONE.bright,
     );
-  }
-  for (const ratio of [0.24, 0.44, 0.62, 0.84]) {
+
+  // Four rings, and radial bars only *between* them — never across the whole wheel.
+  //
+  // Sixteen full-diameter spokes is a dartboard: every bar runs through the centre, the eye
+  // reads one flat star, and it fights the map behind it, which draws deep blue lights in
+  // concentric bands. Short bars that stop at a ring, with a cusped circle in each cell,
+  // give the wheel the two things a real rose has — a hub, and rings that each carry their
+  // own count of lights.
+  for (const ratio of [0.15, 0.36, 0.62, 0.88]) {
     traceryParts.push(
-      part(new RingGeometry(roseRadius * ratio - 0.11, roseRadius * ratio + 0.11, 40), TONE.bright),
+      part(new RingGeometry(roseRadius * ratio - 0.1, roseRadius * ratio + 0.1, 44), TONE.bright),
     );
   }
-  // Cusped lights around the rim: sixteen small circles are the detail that reads as petals
-  // when the wheel is only a hundred pixels across, which is all it ever is from the nave.
+  for (let spoke = 0; spoke < 8; spoke += 1) {
+    const angle = (spoke / 8) * Math.PI * 2;
+    traceryParts.push(spokeBetween(0.15, 0.36, angle, 0.17));
+  }
+  for (let spoke = 0; spoke < 16; spoke += 1) {
+    const angle = (spoke / 16) * Math.PI * 2 + Math.PI / 16;
+    traceryParts.push(spokeBetween(0.62, 0.88, angle, 0.15));
+  }
+  // The inner ring of eight lights, and the outer ring of sixteen. Doubling the count as
+  // the radius grows is what keeps every cell about the same size, and it is the reason a
+  // rose reads as a pattern rather than as a pie chart.
+  for (let petal = 0; petal < 8; petal += 1) {
+    const angle = (petal / 8) * Math.PI * 2 + Math.PI / 8;
+    traceryParts.push(cusp(0.49, 0.115, angle, 0.085));
+  }
   for (let petal = 0; petal < 16; petal += 1) {
     const angle = (petal / 16) * Math.PI * 2;
-    traceryParts.push(
-      part(
-        new TorusGeometry(roseRadius * 0.16, 0.09, 6, 14).translate(
-          Math.cos(angle) * roseRadius * 0.69,
-          Math.sin(angle) * roseRadius * 0.69,
-          0,
-        ),
-        TONE.bright,
-      ),
-    );
+    traceryParts.push(cusp(0.75, 0.085, angle, 0.07));
   }
-  traceryParts.push(
-    part(new RingGeometry(roseRadius, roseRadius + 1.1, 48), TONE.bright),
-  );
+  traceryParts.push(part(new RingGeometry(roseRadius, roseRadius + 1.1, 48), TONE.bright));
   const tracery = new Mesh(weld(traceryParts, "rose tracery"), materials.carved);
   tracery.position.set(0, roseY, roseZ + 0.22);
   nave.add(tracery);
 
-  // The eye at the centre, warm against the cool field. Every real rose has one and it is
-  // what gives the wheel a centre to be a wheel around.
-  const roseEye = new Mesh(new RingGeometry(0, roseRadius * 0.15, 20), glass(palette.glassWarm));
-  roseEye.position.set(0, roseY, roseZ + 0.3);
-  nave.add(roseEye);
+  // No separate eye disc. The rose map already draws one, and `surfaces.ts` deliberately
+  // leaves any disc under three metres untextured — so a mesh here is a flat warm lid over
+  // the middle of the wheel rather than a centre for it, which is exactly how it read.
 
   // The rose's own architecture: a gable over it and a shaft either side. A wheel pasted on
   // a blank plane reads as a decal; the gable is what tells the eye that the east wall has

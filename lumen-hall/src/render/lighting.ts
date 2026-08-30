@@ -43,7 +43,10 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
   // shape, and the godray pass then raymarches a soft edge into a soft shaft.
   renderer.shadowMap.type = PCFShadowMap;
 
-  const sun = new DirectionalLight(palette.sun, 9);
+  // Daylight, not candlelight. Once the godray floor stopped the pass washing the frame,
+  // the scene read as night lit only by its candles — the reference is a building full of
+  // afternoon sun with the candles as accents, and the sun has to dominate for that.
+  const sun = new DirectionalLight(palette.sun, 13);
   // Low and to the west, so it enters through the clerestory rather than the vault and
   // the shafts cross the nave at an angle instead of dropping straight down.
   // Steep enough that the shafts land on the floor between the columns rather than on the

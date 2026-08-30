@@ -109,7 +109,7 @@ export function setupPost(
     // Re-balanced once the stone carried real albedo maps. A photographed limestone
     // texture is far darker than the flat colour it replaced, so every exposure value
     // tuned against untextured stone reads two stops under once the maps land.
-    exposure: 1.45,
+    exposure: 0.98,
   });
   environment.apply(renderer, scene, camera, sun);
 }

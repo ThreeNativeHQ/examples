@@ -14,11 +14,12 @@ import { Crate } from "../entities/Crate.js";
 import { Goal } from "../entities/Goal.js";
 import { Player } from "../entities/Player.js";
 import { pickupRiseEase } from "../render/easing.js";
-import { setupLighting } from "../render/lighting.js";
+import { NAVE, setupLighting } from "../render/lighting.js";
 import { createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { createCathedral } from "../render/cathedral.js";
 import { createFurnishings } from "../render/furnishings.js";
+import { createFirstPerson, type IFirstPerson } from "../first-person.js";
 import { applySurfaces, loadSurfaces } from "../render/surfaces.js";
 import { ball, block, makeRandom, roundedBox, spike, tube } from "../render/shapes.js";
 import { setupSky } from "../render/sky.js";
@@ -32,6 +33,7 @@ const STARTING_LIVES = 3;
 export class Play extends Scene<GameState, IPhysicsContext> {
   #assetProof: Group | undefined;
   #floorTexture: Texture | undefined;
+  #walker: IFirstPerson | undefined;
 
   static override readonly initialState: GameState = {
     characterName: "",
@@ -101,6 +103,12 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     console.info("TN_NATIVE_STARTER_ASSETS_LOADED:texture,glb");
   }
 
+  /** Detach the pointer-lock and mousemove listeners when the scene is torn down. */
+  override exit(_ctx: GameCtx): void {
+    this.#walker?.dispose();
+    this.#walker = undefined;
+  }
+
   override enter(ctx: GameCtx): SceneFrame<GameState, IPhysicsContext> {
     if (this.#assetProof === undefined) throw new Error("Starter proof assets did not load.");
     const audio = ctx.entities.add("audio", new AudioBus({ camera: ctx.camera }));
@@ -131,12 +139,18 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // first column pair and two out-of-focus shafts of stone filled a third of the frame.
     // Standing in the nave a few bays west of the crossing, at eye height. The reference
     // is shot from about here: low enough that the floor reflection is half the frame.
-    // The reference is shot from low and slightly off the axis, with the rose window
-    // right of centre and one colonnade running away hard to the left. Standing dead on
-    // the axis makes a symmetrical postcard; standing a metre off it makes a room.
-    view.position.set(2.6, 2.6, 22);
-    view.lookAt(-1.4, 9.5, -31);
+    // Where the walker starts: a few bays in from the west door, off the axis so the
+    // colonnade runs away to one side rather than framing a symmetrical postcard.
+    view.position.set(2.6, 1.7, 22);
+    view.lookAt(-1.4, 4.5, -31);
     view.updateProjectionMatrix();
+    // Walk the cathedral. Bounds are the interior, not a physics body: the floor is one
+    // flat plane and clamping to the building is the entire collision model this needs.
+    const walker = createFirstPerson(view, ctx.renderer.domElement, {
+      halfWidth: NAVE.width / 2 + NAVE.aisleWidth - 1.2,
+      halfDepth: (NAVE.depth * 0.5) - 3,
+    });
+    this.#walker = walker;
 
     const materials = createMaterials();
     ctx.add(applySurfaces(createCathedral(this.#floorTexture)));
@@ -245,6 +259,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         void frameCtx.goto("play");
         return;
       }
+      walker.update(frameCtx.input.vector("move"), dt, frameCtx.input.pressed?.("jump") === true);
+
       const previous = frameCtx.state.getState();
       // A finished run stops simulating the character and keeps drawing the world behind
       // the banner. R, or the restart button, rebuilds the scene from `initialState`.
