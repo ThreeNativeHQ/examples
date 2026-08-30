@@ -104,7 +104,13 @@ export function setupPost(
     // 2.0: at 2.4 the beam-side band sat at p75 116 against the reference's 75 — the
     // shafts read, but the lit air between them glowed hotter than the stone.
     godraysIntensity: 2.0,
-    godraysSteps: 24,
+    // Back up from 24. That cut was made to buy frame time before MSAA was found to be
+    // costing 55% of the GPU; with that recovered there is budget for a smooth march, and
+    // 24 steps left visible slabs across the vault webs where each step boundary landed.
+    godraysSteps: 56,
+    // The blur GodraysNode's own docblock asks for, and the thing that actually removes the
+    // stepping. Bilateral, so the hard edge where a mullion cuts a shaft survives it.
+    godraysBlur: 2.5,
     // Low, because this number is what was washing the building out. The pass adds haze
     // to every pixel rather than only to the beams, so at 0.55 the darkest tenth of the
     // frame never went below 22% luminance and nothing in the nave read as shadow.

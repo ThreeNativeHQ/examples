@@ -66,7 +66,11 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
   // its size is a cost multiplier on the whole volumetric pass rather than a one-off. At a
   // 92-unit ortho extent 2048 still gives 22 texels per metre, which holds a hard pier edge
   // at this scale — and the pier edge is the only thing the shafts need it for.
-  sun.shadow.mapSize.set(2048, 2048);
+  // Back to 4096. The earlier cut to 2048 was to save the per-frame shadow pass, but that
+  // pass is now frozen — `autoUpdate = false` renders it exactly once — so resolution costs
+  // one render at startup and nothing per frame afterwards. The godray march samples this
+  // map, so a coarse one shows up directly as blocky shaft edges.
+  sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 220;
   // The shadow camera has to contain the whole building, not just what is on screen —

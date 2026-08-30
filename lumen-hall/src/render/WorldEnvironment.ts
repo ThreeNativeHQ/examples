@@ -21,9 +21,20 @@ import {
 import { bloom } from "three/addons/tsl/display/BloomNode.js";
 import { denoise } from "three/addons/tsl/display/DenoiseNode.js";
 import { ssgi } from "three/addons/tsl/display/SSGINode.js";
+import { bilateralBlur } from "three/addons/tsl/display/BilateralBlurNode.js";
 import { godrays } from "three/addons/tsl/display/GodraysNode.js";
 import { ssr } from "three/addons/tsl/display/SSRNode.js";
-import { color, convertToTexture, metalness, mrt, normalView, output, pass, roughness } from "three/tsl";
+import {
+  color,
+  convertToTexture,
+  metalness,
+  mrt,
+  normalView,
+  output,
+  pass,
+  roughness,
+  vec2,
+} from "three/tsl";
 
 // The TSL factories below (`ssgi`, `denoise`, `ssr`, `bloom`) all run their colour input
 // through `convertToTexture`, which accepts any node at runtime. `@types/three` types the
@@ -100,6 +111,19 @@ export interface IWorldEnvironmentOptions {
   readonly godraysFloor?: number;
   /** Multiplier applied after the floor, so beams can be bright without the haze returning. */
   readonly godraysIntensity?: number;
+  /**
+   * Radius, in pixels, of the separable bilateral blur applied to the shaft mask.
+   *
+   * `GodraysNode`'s own documentation asks for this: *"After the godrays have been computed,
+   * it's recommened to apply a Bilateral Blur to the result to mitigate raymarching and noise
+   * artifacts."* Skipping it leaves the raymarch's step boundaries visible as slabs across
+   * every surface a shaft crosses, which reads as low-resolution rather than as light.
+   *
+   * Bilateral rather than gaussian because it is edge-preserving: the point of a shaft is
+   * its hard edge where a mullion cuts it, and an ordinary blur would soften exactly that.
+   * Zero disables the blur.
+   */
+  readonly godraysBlur?: number;
   /**
    * Raymarch steps per pixel. `GodraysNode` defaults to 60.
    *
@@ -188,6 +212,7 @@ export class WorldEnvironment {
       godraysFloor: options.godraysFloor ?? 0,
       godraysIntensity: options.godraysIntensity ?? 1,
       godraysSteps: options.godraysSteps ?? 60,
+      godraysBlur: options.godraysBlur ?? 0,
       godraysMaxDensity: options.godraysMaxDensity ?? 0.5,
       bloomEnabled: options.bloomEnabled ?? true,
       bloomStrength: options.bloomStrength ?? 0.7,
