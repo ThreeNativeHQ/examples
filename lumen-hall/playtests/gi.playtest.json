@@ -1,0 +1,16 @@
+{
+  "name": "lumen-hall-gi-capture",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1600, "height": 900 },
+  "warmupFrames": 60,
+  "artifacts": { "screenshots": true },
+  "steps": [
+    { "kind": "wait", "label": "scene-loads", "waitTicks": 60, "release": true },
+    { "kind": "wait", "label": "gi-settles", "waitTicks": 60, "release": true },
+    { "kind": "wait", "label": "gi-settles-more", "waitTicks": 60, "release": true }
+  ],
+  "assert": {
+    "performance": { "maxDrawCalls": 40000 }
+  }
+}

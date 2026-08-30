@@ -1,0 +1,129 @@
+{
+  "schemaVersion": "2.1",
+  "targetName": "Gothic cathedral nave interior",
+  "suitability": "pass",
+  "coordinateFrame": {
+    "units": "metres",
+    "origin": "floor centre of the nave, on the axis, at the west crossing",
+    "forward": "-Z runs east toward the chancel and the rose window",
+    "up": "+Y",
+    "scale": "nave 16 m wide between arcade faces, 34 m to the vault crown, 62 m west to east"
+  },
+  "silhouette": {
+    "readsAs": "a tall narrow slot of light between two dark colonnades, closing on a lit apse",
+    "dominantProportion": "height to width about 2.1 to 1; the arcade occupies the lower third and the clerestory the upper third",
+    "negativeSpace": "the shafts of light are read as solid volumes and carry as much silhouette as the stone",
+    "keyContour": "the pointed arch repeated at three scales — arcade, triforium, clerestory"
+  },
+  "componentTree": [
+    {
+      "id": "nave-arcade",
+      "level": "macro",
+      "description": "Two opposed colonnades of clustered piers carrying pointed arches; the frame of every view down the nave.",
+      "localFeatures": [
+        { "id": "pier-shaft-cluster", "note": "five engaged shafts around a core, so the pier catches a rim of light on one side" },
+        { "id": "capital-foliage-band", "note": "a horizontal band at springing height that reads as a bright line across a dark pier" },
+        { "id": "arch-order-mouldings", "note": "three receding orders in the arch head, the source of the arcade's contact shadow" }
+      ]
+    },
+    {
+      "id": "clerestory-wall",
+      "level": "macro",
+      "description": "The upper wall above the triforium, pierced by lancet openings; the only light source in the building.",
+      "localFeatures": [
+        { "id": "lancet-tracery", "note": "mullions dividing each opening, which is what cuts one window into several shafts" },
+        { "id": "window-splay", "note": "the deep reveal that makes each shaft start narrow and widen into the nave" }
+      ]
+    },
+    {
+      "id": "ribbed-vault",
+      "level": "macro",
+      "description": "Quadripartite vault over each bay, springing from the pier capitals.",
+      "localFeatures": [
+        { "id": "diagonal-ribs", "note": "the X across each bay; catches bounce and nothing direct" },
+        { "id": "vault-boss", "note": "the keystone at each crossing of ribs" }
+      ]
+    },
+    {
+      "id": "nave-floor",
+      "level": "macro",
+      "description": "Polished patterned marble, the surface every shaft and every pier stands in.",
+      "localFeatures": [
+        { "id": "inlay-banding", "note": "alternating light and dark stone laid in bands across the axis" },
+        { "id": "step-platform", "note": "the raised chancel steps that break the reflection line" }
+      ]
+    },
+    {
+      "id": "east-end",
+      "level": "macro",
+      "description": "The chancel wall closing the view: rose window above, lancet triple below, altar in front.",
+      "localFeatures": [
+        { "id": "rose-tracery", "note": "radial spokes and cusped lights; the brightest object in the frame" }
+      ]
+    },
+    { "id": "pier-core", "level": "meso", "description": "The octagonal drum each pier is built around.", "localFeatures": [] },
+    { "id": "pier-base", "level": "meso", "description": "Stepped plinth at the floor; where ambient occlusion reads strongest.", "localFeatures": [] },
+    { "id": "pier-capital", "level": "meso", "description": "The block the arch and vault ribs both spring from.", "localFeatures": [] },
+    { "id": "arcade-arch", "level": "meso", "description": "The pointed arch between adjacent piers.", "localFeatures": [] },
+    { "id": "triforium-arcade", "level": "meso", "description": "The blind middle storey between arcade and clerestory.", "localFeatures": [] },
+    { "id": "lancet-window", "level": "meso", "description": "One pointed clerestory opening filled with glass.", "localFeatures": [] },
+    { "id": "rose-window", "level": "meso", "description": "The circular window over the chancel.", "localFeatures": [] },
+    { "id": "vault-web", "level": "meso", "description": "The shell between ribs in one bay.", "localFeatures": [] },
+    { "id": "altar-block", "level": "meso", "description": "A lit mass standing clear of every wall.", "localFeatures": [] },
+    { "id": "aisle-wall", "level": "meso", "description": "The outer wall behind each colonnade, in permanent shadow.", "localFeatures": [] }
+  ],
+  "materials": [
+    { "id": "pale-limestone", "note": "the building. Rough, near-white, no metalness. Carries all the bounce." },
+    { "id": "polished-marble-floor", "note": "low roughness, the screen-space reflection surface" },
+    { "id": "stained-glass", "note": "emissive past the tonemap ceiling; the only saturated colour in the scene" },
+    { "id": "dark-iron", "note": "chancel screen and fittings, near-black, reads as silhouette only" }
+  ],
+  "repetitionSystems": [
+    { "id": "bay-rhythm", "note": "pier, arch, triforium panel and clerestory opening all repeat on one 7 m bay pitch" },
+    { "id": "tracery-subdivision", "note": "each opening subdivided by mullions on a fixed ratio" }
+  ],
+  "proceduralStrategy": [
+    "Build one bay as a function of the bay pitch, then instance it down the nave; every proportion derives from the bay so the building cannot drift out of scale.",
+    "Model the pointed arch as an extruded two-centre profile rather than a half-cylinder — the pointed head is the single silhouette cue that separates gothic from romanesque.",
+    "Cut the clerestory openings by placing pier blocks between them rather than by CSG, so the shadow map sees clean geometry and each shaft has a hard edge.",
+    "Keep every window a separate emissive plane so bloom and screen-space GI both have a bright source to gather from.",
+    "Give the floor the lowest roughness in the scene; it is the only surface that can return a reflection."
+  ],
+  "preSpecAssessment": {
+    "complexity": { "tier": "complex" },
+    "detailInventory": {
+      "details": [
+        { "id": "primary-outline", "note": "tall slot between two colonnades" },
+        { "id": "dominant-proportion", "note": "vault crown at roughly twice the nave width" },
+        { "id": "material-break", "note": "matte stone against polished floor" },
+        { "id": "pointed-arch-profile", "note": "two-centre head, repeated at three scales" },
+        { "id": "clustered-pier-section", "note": "engaged shafts, not a plain cylinder" },
+        { "id": "bay-rhythm", "note": "even pitch down the nave" },
+        { "id": "clerestory-band", "note": "the only openings; everything below them is lit by bounce" },
+        { "id": "rose-window", "note": "single circular accent closing the axis" },
+        { "id": "volumetric-shafts", "note": "light entering from upper left, crossing the nave diagonally" },
+        { "id": "floor-reflection", "note": "piers and shafts doubled in the floor" },
+        { "id": "chancel-steps", "note": "horizontal break in the floor plane near the east end" },
+        { "id": "aisle-darkness", "note": "behind the colonnade receives no direct light at all" }
+      ]
+    }
+  },
+  "qualityContract": {
+    "minimumSpecDepth": {
+      "macroComponents": 3,
+      "mesoComponents": 8,
+      "microFeatureGroups": 5,
+      "materialLayers": 3,
+      "repetitionSystems": 1,
+      "reviewViewpoints": 4
+    }
+  },
+  "qualityTargets": {
+    "reviewViewpoints": [
+      "nave-axis-eye-height",
+      "three-quarter-into-the-aisle",
+      "looking-up-at-the-vault",
+      "low-angle-across-the-floor-reflection"
+    ]
+  }
+}
