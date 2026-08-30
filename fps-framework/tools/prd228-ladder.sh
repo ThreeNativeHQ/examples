@@ -35,7 +35,7 @@ for spec in "$@"; do
   IFS=: read -r label scale aa maxfps uncapped panel <<<"$spec"
   echo "=== arm $label (scale $scale, aa $aa, maxFps $maxfps, uncapped $uncapped, ${panel}Hz) ==="
   cool || { echo "ARM $label SKIPPED: device would not cool"; continue; }
-  tools/prd228-arm.sh "$label" "$scale" "$aa" "$maxfps" "$uncapped" "$panel" \
+  tools/prd228-arm-long.sh "$label" "$scale" "$aa" "$maxfps" "$uncapped" "$panel" \
     2>&1 | tail -8 || echo "ARM $label FAILED"
 done
 echo "LADDER COMPLETE"

@@ -28,7 +28,7 @@ export default {
   renderer: {
     preferWebGPU: true, // Use WebGPU when the host exposes it.
     // Preserve CSS/UI dimensions; only Android's 3D drawing buffer is scaled for frame budget.
-    android: { resolutionScale: 0.55 },
+    android: { resolutionScale: 0.44 },
   },
   // One UI on every target: src/ui/ renders through the platform's own browser-class renderer,
   // so the same React, Tailwind, CSS and SVG run on web, desktop, Android and iOS alike.
