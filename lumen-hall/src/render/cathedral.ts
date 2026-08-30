@@ -1323,7 +1323,9 @@ export function createCathedral(floorTexture?: Texture): Group {
   chancelFloor.receiveShadow = true;
   nave.add(chancelFloor);
 
-  const altar = new Mesh(part(new BoxGeometry(4.2, 1.35, 1.9), TONE.bright), materials.carved);
+  // The altar block is left out: `Play` stands an authored glTF sanctuary on this spot,
+  // and a procedural box inside it shows through the authored mensa.
+  const altar = new Mesh(part(new BoxGeometry(0.001, 0.001, 0.001), TONE.bright), materials.carved);
   altar.position.set(0, 1.08 + 0.68, chancelZ - 6.5);
   altar.castShadow = true;
   altar.receiveShadow = true;

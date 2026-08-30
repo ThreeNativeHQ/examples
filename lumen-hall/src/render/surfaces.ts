@@ -108,7 +108,7 @@ const GLASS_LUMINANCE: Record<GlassName, number> = {
   // halved every lancet in the building and quietly invalidated the exposure, SSGI and
   // godray values that were tuned against it.
   glassLancet: 0.126,
-  glassRose: 0.1968,
+  glassRose: 0.1856,
   glassWarm: 0.5209,
 };
 
@@ -193,6 +193,21 @@ type INodeMaterial = {
 /** Rec. 709 luminance of a colour already in linear working space. */
 function luminance(colour: Color): number {
   return 0.2126 * colour.r + 0.7152 * colour.g + 0.0722 * colour.b;
+}
+
+/**
+ * `?off=banner` leaves a surface in its flat material colour.
+ *
+ * The same trick `postprocessing.ts` uses on the render stages, and for the same reason: an
+ * A/B of a calibrated map against the colour it is calibrated to has to differ by the map
+ * and nothing else. Comparing two captures taken minutes apart is not that — this file, the
+ * geometry and the material all moved between them, and the first attempt at diagnosing a
+ * blown-out banner blamed the exposure on the strength of exactly that comparison.
+ */
+function surfaceOff(name: string): boolean {
+  if (typeof globalThis.location === "undefined") return false;
+  const off = new URLSearchParams(globalThis.location.search).get("off");
+  return off !== null && off.split(",").some((entry) => entry.trim() === name);
 }
 
 let loaded: ISurfaceTextures | undefined;
@@ -474,7 +489,7 @@ export function applyFurnishings(furnishings: Group, textures?: ISurfaceTextures
   // Extruded from a swallowtail shape, so the UVs arrive in metres and mixed with the side
   // walls' own. One rewrite covers every banner: they share the geometry.
   for (const geometry of panels) projectPanelUV(geometry);
-  for (const material of cloths) dressBanner(material, maps.banner);
+  if (!surfaceOff("banner")) for (const material of cloths) dressBanner(material, maps.banner);
   console.info(`TN_SURFACES_BANNERS:${JSON.stringify({ cloths: cloths.size })}`);
   return furnishings;
 }

@@ -941,83 +941,92 @@ export function createFurnishings(): Group {
   railing(kit, [-3.4, CHANCEL_Z + 3.6], [3.4, CHANCEL_Z + 3.6], 0.95, { pitch: 0.36 });
 
   // ---- the altar group ---------------------------------------------------------------
-  // Everything here stands on the sanctuary platform, so every y is measured from
-  // `CHANCEL_Y`. The shell's altar block is 1.35 tall centred at 1.76, which puts its top
-  // at 2.435 — the height every fitting below sits on.
-  const mensaY = 2.435;
+  //
+  // Replaced by an authored glTF sanctuary, placed by `Play` at the same ALTAR_Z. The
+  // procedural set below — mensa fittings, candlesticks, cross, reredos and tabernacle
+  // canopy — is kept rather than deleted because it is the fallback if that asset is ever
+  // removed, and because its measurements document what the authored one has to match.
+  const AUTHORED_SANCTUARY = true;
+  if (!AUTHORED_SANCTUARY) {
+    // Everything here stands on the sanctuary platform, so every y is measured from
+    // `CHANCEL_Y`. The shell's altar block is 1.35 tall centred at 1.76, which puts its top
+    // at 2.435 — the height every fitting below sits on.
+    const mensaY = 2.435;
 
-  const runner = new Mesh(new BoxGeometry(4.6, 0.03, 7.5), materials.carpet);
-  runner.position.set(0, CHANCEL_Y + 0.015, ALTAR_Z + 3.4);
-  runner.receiveShadow = true;
-  furnishings.add(runner);
+    const runner = new Mesh(new BoxGeometry(4.6, 0.03, 7.5), materials.carpet);
+    runner.position.set(0, CHANCEL_Y + 0.015, ALTAR_Z + 3.4);
+    runner.receiveShadow = true;
+    furnishings.add(runner);
 
-  // The mensa and its frontal. The linen is the brightest non-emissive surface in the
-  // building and it sits dead on the axis, which is what pulls the eye to the east end.
-  place(kit.stoneBox, [0, mensaY + 0.07, ALTAR_Z], [4.7, 0.14, 2.15]);
-  const frontal = new Mesh(new BoxGeometry(4.2, 1.3, 0.04), materials.linen);
-  frontal.position.set(0, 1.76, ALTAR_Z + 0.97);
-  furnishings.add(frontal);
-  place(kit.gold, [0, 2.36, ALTAR_Z + 0.98], [4.2, 0.08, 0.03]);
-  place(kit.gold, [0, 1.8, ALTAR_Z + 0.99], [0.1, 0.7, 0.03]);
-  place(kit.gold, [0, 1.96, ALTAR_Z + 0.99], [0.44, 0.1, 0.03]);
+    // The mensa and its frontal. The linen is the brightest non-emissive surface in the
+    // building and it sits dead on the axis, which is what pulls the eye to the east end.
+    place(kit.stoneBox, [0, mensaY + 0.07, ALTAR_Z], [4.7, 0.14, 2.15]);
+    const frontal = new Mesh(new BoxGeometry(4.2, 1.3, 0.04), materials.linen);
+    frontal.position.set(0, 1.76, ALTAR_Z + 0.97);
+    furnishings.add(frontal);
+    place(kit.gold, [0, 2.36, ALTAR_Z + 0.98], [4.2, 0.08, 0.03]);
+    place(kit.gold, [0, 1.8, ALTAR_Z + 0.99], [0.1, 0.7, 0.03]);
+    place(kit.gold, [0, 1.96, ALTAR_Z + 0.99], [0.44, 0.1, 0.03]);
 
-  // Six candlesticks and a cross: the standard altar set, and six small flames at the far
-  // end of a 55 m axis is exactly the cue that says something is happening down there.
-  const setZ = ALTAR_Z - 0.4;
-  for (let index = 0; index < 6; index += 1) {
-    const cx = -1.65 + index * 0.66;
-    rod(kit.bronzeRod, [cx, mensaY + 0.14, setZ], [cx, mensaY + 0.72, setZ], 0.035);
-    place(kit.knop, [cx, mensaY + 0.42, setZ], [0.075, 0.06, 0.075]);
-    place(kit.bronzeRod, [cx, mensaY + 0.75, setZ], [0.07, 0.07, 0.07]);
-    candle(kit, cx, mensaY + 0.79, setZ, 0.42, 0.04);
-  }
-  place(kit.gold, [0, mensaY + 1.35, setZ - 0.25], [0.08, 1.25, 0.08]);
-  place(kit.gold, [0, mensaY + 1.67, setZ - 0.25], [0.62, 0.08, 0.08]);
-
-  // The reredos behind the altar: five gabled panels, the centre one tallest.
-  for (let index = -2; index <= 2; index += 1) {
-    const panelHeight = 3.4 - Math.abs(index) * 0.45;
-    const panelZ = ALTAR_Z - 1.7;
-    place(kit.stoneBox, [index * 1.22, CHANCEL_Y + panelHeight / 2, panelZ], [1.14, panelHeight, 0.3]);
-    place(
-      kit.stoneSpike,
-      [index * 1.22, CHANCEL_Y + panelHeight + 0.42, panelZ],
-      [0.86, 0.85, 0.42],
-      [0, Math.PI / 4, 0],
-    );
-    if (index !== 0) continue;
-    place(kit.gold, [index * 1.22, CHANCEL_Y + panelHeight * 0.62, panelZ + 0.17], [0.6, 0.9, 0.04]);
-  }
-
-  // The tabernacle canopy: a slender spire over the altar, rising past the top of the
-  // screen. Everything else in the sanctuary sits below the screen's crest and is read
-  // through a lattice of iron bars; the spire is the one part of the group that clears
-  // them, and it is the reason the east end reads as a *place* rather than as a bright
-  // window with some candles in front of it.
-  const canopyFoot = CHANCEL_Y + 0.1;
-  const canopyTop = CHANCEL_Y + 5.6;
-  for (const cx of [-0.62, 0.62]) {
-    for (const cz of [-0.62, 0.62]) {
-      rod(kit.stoneBox, [cx, canopyFoot, ALTAR_Z + cz], [cx, canopyTop, ALTAR_Z + cz], 0.09);
+    // Six candlesticks and a cross: the standard altar set, and six small flames at the far
+    // end of a 55 m axis is exactly the cue that says something is happening down there.
+    const setZ = ALTAR_Z - 0.4;
+    for (let index = 0; index < 6; index += 1) {
+      const cx = -1.65 + index * 0.66;
+      rod(kit.bronzeRod, [cx, mensaY + 0.14, setZ], [cx, mensaY + 0.72, setZ], 0.035);
+      place(kit.knop, [cx, mensaY + 0.42, setZ], [0.075, 0.06, 0.075]);
+      place(kit.bronzeRod, [cx, mensaY + 0.75, setZ], [0.07, 0.07, 0.07]);
+      candle(kit, cx, mensaY + 0.79, setZ, 0.42, 0.04);
     }
+    place(kit.gold, [0, mensaY + 1.35, setZ - 0.25], [0.08, 1.25, 0.08]);
+    place(kit.gold, [0, mensaY + 1.67, setZ - 0.25], [0.62, 0.08, 0.08]);
+
+    // The reredos behind the altar: five gabled panels, the centre one tallest.
+    for (let index = -2; index <= 2; index += 1) {
+      const panelHeight = 3.4 - Math.abs(index) * 0.45;
+      const panelZ = ALTAR_Z - 1.7;
+      place(kit.stoneBox, [index * 1.22, CHANCEL_Y + panelHeight / 2, panelZ], [1.14, panelHeight, 0.3]);
+      place(
+        kit.stoneSpike,
+        [index * 1.22, CHANCEL_Y + panelHeight + 0.42, panelZ],
+        [0.86, 0.85, 0.42],
+        [0, Math.PI / 4, 0],
+      );
+      if (index !== 0) continue;
+      place(kit.gold, [index * 1.22, CHANCEL_Y + panelHeight * 0.62, panelZ + 0.17], [0.6, 0.9, 0.04]);
+    }
+
+    // The tabernacle canopy: a slender spire over the altar, rising past the top of the
+    // screen. Everything else in the sanctuary sits below the screen's crest and is read
+    // through a lattice of iron bars; the spire is the one part of the group that clears
+    // them, and it is the reason the east end reads as a *place* rather than as a bright
+    // window with some candles in front of it.
+    const canopyFoot = CHANCEL_Y + 0.1;
+    const canopyTop = CHANCEL_Y + 5.6;
+    for (const cx of [-0.62, 0.62]) {
+      for (const cz of [-0.62, 0.62]) {
+        rod(kit.stoneBox, [cx, canopyFoot, ALTAR_Z + cz], [cx, canopyTop, ALTAR_Z + cz], 0.09);
+      }
+    }
+    place(kit.stoneBox, [0, canopyTop, ALTAR_Z], [1.7, 0.22, 1.7]);
+    for (const [gx, gz, yaw] of [
+      [0, 0.85, 0],
+      [0, -0.85, 0],
+      [0.85, 0, Math.PI / 2],
+      [-0.85, 0, Math.PI / 2],
+    ] as ReadonlyArray<readonly [number, number, number]>) {
+      place(kit.stoneSpike, [gx, canopyTop + 0.5, ALTAR_Z + gz], [0.75, 0.9, 0.2], [0, yaw, 0]);
+    }
+    place(kit.stoneSpike, [0, canopyTop + 1.3, ALTAR_Z], [0.82, 1.9, 0.82], [0, Math.PI / 4, 0]);
+    // Crockets. Four knops up the spire are what stop a cone reading as a traffic bollard.
+    for (let step = 0; step < 4; step += 1) {
+      const t = 0.18 + step * 0.2;
+      place(kit.knop, [0, canopyTop + 0.35 + t * 1.9, ALTAR_Z], [0.1, 0.1, 0.1]);
+    }
+    place(kit.gold, [0, canopyTop + 2.5, ALTAR_Z], [0.09, 0.62, 0.09]);
+    place(kit.gold, [0, canopyTop + 2.6, ALTAR_Z], [0.34, 0.09, 0.09]);
+
   }
-  place(kit.stoneBox, [0, canopyTop, ALTAR_Z], [1.7, 0.22, 1.7]);
-  for (const [gx, gz, yaw] of [
-    [0, 0.85, 0],
-    [0, -0.85, 0],
-    [0.85, 0, Math.PI / 2],
-    [-0.85, 0, Math.PI / 2],
-  ] as ReadonlyArray<readonly [number, number, number]>) {
-    place(kit.stoneSpike, [gx, canopyTop + 0.5, ALTAR_Z + gz], [0.75, 0.9, 0.2], [0, yaw, 0]);
-  }
-  place(kit.stoneSpike, [0, canopyTop + 1.3, ALTAR_Z], [0.82, 1.9, 0.82], [0, Math.PI / 4, 0]);
-  // Crockets. Four knops up the spire are what stop a cone reading as a traffic bollard.
-  for (let step = 0; step < 4; step += 1) {
-    const t = 0.18 + step * 0.2;
-    place(kit.knop, [0, canopyTop + 0.35 + t * 1.9, ALTAR_Z], [0.1, 0.1, 0.1]);
-  }
-  place(kit.gold, [0, canopyTop + 2.5, ALTAR_Z], [0.09, 0.62, 0.09]);
-  place(kit.gold, [0, canopyTop + 2.6, ALTAR_Z], [0.34, 0.09, 0.09]);
 
   // Two sanctuary lamps on long chains, one either side of the altar. They hang where a
   // chandelier cannot — inside the chancel arch, below the apse vault — and they are the
@@ -1074,10 +1083,10 @@ export function createFurnishings(): Group {
       // invisible in three consecutive captures. Standing them against the arcade puts
       // them where the reference's are read from — in front of an opening, not behind one.
       const z = -HALF_DEPTH + bay * NAVE.bayPitch + NAVE.bayPitch / 2;
-      // Bay 7 on the +X side is left empty on purpose: `Play` stands an authored glTF
-      // figure there instead, so an authored statue and these procedural ones can be
+      // Bays 5 and 7 on the +X side are left empty on purpose: `Play` stands authored glTF
+      // figures there instead, so authored statues and these procedural ones can be
       // compared standing in the same light in the same aisle.
-      if (side > 0 && bay === 7) continue;
+      if (side > 0 && (bay === 5 || bay === 7)) continue;
       statue(kit, side * 6.95, z, side > 0 ? -Math.PI / 2 : Math.PI / 2);
     }
     for (const bay of [2, 4, 6]) {
