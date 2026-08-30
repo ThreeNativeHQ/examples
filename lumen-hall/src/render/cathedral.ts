@@ -645,7 +645,12 @@ function bayWall(): BufferGeometry {
   // -- clerestory: a traceried window, not a hole ------------------------------------------
   // Three orders, each light splayed individually, plus a transom and nook-shafts. Every
   // number comes from `CLERESTORY` so the glass below is placed against the same aperture.
-  const clerestoryHeight = clerestoryTop - CLERESTORY.base;
+  //
+  // The panel carries to the vault crown, not to the vault springing. The web's wall edge
+  // follows its own pointed profile up to the crown mid-bay, and a wall that stops at the
+  // springing leaves an open band between the two — from the nave floor the ceiling read
+  // as torn sheets with daylight slashing through.
+  const clerestoryHeight = NAVE.height - CLERESTORY.base;
   let revealZ = 0;
   CLERESTORY.reveal.forEach((depth, order) => {
     // Order 0 sits on the nave face and is the widest; each order behind it steps in by one
@@ -757,18 +762,11 @@ function vaultWeb(halfWidth: number, halfPitch: number, spring: number, rise: nu
  * Where a rib meets the springing, pulled off the ideal surface and onto the vault-shaft
  * corbel it visually lands on.
  *
- * The web springs from the wall face; the shafts stand two metres proud of it. Left alone
- * the ribs would die into a blank wall a shaft-width away from the corbel that is plainly
- * carrying them. The pull only acts over the last quarter of the curve, so the rib is still
- * exactly on the web everywhere the crease is visible.
+ * RETIRED: the pull acted over the last 28% of the curve and the Catmull-Rom sweep turned
+ * the kink into a drooping hook — from the floor the ribs read as tentacles curled off the
+ * vault, not as arches springing to a corbel. Ribs now ride the web crease exactly, crown
+ * to corner; the corbels stay as the string-course decoration they visually are.
  */
-function ribFoot(point: Vector3, along: number, inset: number, drop: number): Vector3 {
-  const pull = Math.max(0, (Math.abs(along) - 0.72) / 0.28);
-  if (pull === 0) return point;
-  point.x -= Math.sign(point.x) * inset * pull;
-  point.y -= drop * pull;
-  return point;
-}
 
 // ---- the building ------------------------------------------------------------------------
 
@@ -979,7 +977,6 @@ export function createCathedral(floorTexture?: Texture): Group {
   webs.receiveShadow = true;
 
   // ribs, per bay: two diagonals across the severy and two wall arcs against the clerestory
-  const shaftInset = halfWidth - (pierR * 1.52 + 0.44 + 0.3);
   const ribParts: BufferGeometry[] = [];
   const samples = 13;
   for (const lean of [1, -1]) {
@@ -987,15 +984,10 @@ export function createCathedral(floorTexture?: Texture): Group {
     for (let sample = 0; sample < samples; sample += 1) {
       const along = (sample / (samples - 1)) * 2 - 1;
       points.push(
-        ribFoot(
-          new Vector3(
-            along * halfWidth,
-            clerestoryTop + rise * pointedRise(along),
-            along * lean * halfPitch,
-          ),
-          along,
-          shaftInset,
-          0.7,
+        new Vector3(
+          along * halfWidth,
+          clerestoryTop + rise * pointedRise(along),
+          along * lean * halfPitch,
         ),
       );
     }
@@ -1026,12 +1018,7 @@ export function createCathedral(floorTexture?: Texture): Group {
   for (let sample = 0; sample < samples; sample += 1) {
     const along = (sample / (samples - 1)) * 2 - 1;
     transversePoints.push(
-      ribFoot(
-        new Vector3(along * halfWidth, clerestoryTop + rise * pointedRise(along), 0),
-        along,
-        shaftInset,
-        0.7,
-      ),
+      new Vector3(along * halfWidth, clerestoryTop + rise * pointedRise(along), 0),
     );
   }
   const transverse = new InstancedMesh(

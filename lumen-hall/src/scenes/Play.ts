@@ -152,6 +152,18 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     });
     this.#walker = walker;
 
+    // Camera vantages for `tools/look.mjs --vantage <name>=/`: named spots the screenshot
+    // tool can move the walker to before the shutter. The walker rewrites the camera's
+    // rotation from its own orientation every fixed step, so these go through
+    // `walker.teleport` — a hook that moved the camera directly would be snapped back
+    // before the frame was captured. Yaw 0 faces east, down the nave.
+    (globalThis as { __LOOK_VANTAGES__?: Record<string, () => void> }).__LOOK_VANTAGES__ = {
+      vault: () => walker.teleport(0, 6, 1.05, 0),
+      axis: () => walker.teleport(0, 24, 0.06, 0),
+      altar: () => walker.teleport(0, -12, 0.04, 0),
+      aisle: () => walker.teleport(10.5, 14, 0.05, -Math.PI / 2),
+    };
+
     const materials = createMaterials();
     ctx.add(applySurfaces(createCathedral(this.#floorTexture)));
     ctx.add(createFurnishings());

@@ -19,6 +19,14 @@ export interface IWalkerBounds {
 export interface IFirstPerson {
   /** Call once per fixed step. `move` is the game's `input.vector("move")`. */
   update(move: { x: number; y: number }, dt: number, sprinting: boolean): void;
+  /**
+   * Jump the walker to a spot on the floor and aim the view.
+   *
+   * The camera's rotation is written from the walker's own orientation every fixed step,
+   * so a vantage that moves the camera directly is snapped back within a frame; anything
+   * that wants to place the view must come through here.
+   */
+  teleport(x: number, z: number, pitch: number, yaw: number): void;
   /** Detach the pointer listeners. */
   dispose(): void;
 }
@@ -99,6 +107,13 @@ export function createFirstPerson(
       camera.position.x = Math.max(-bounds.halfWidth, Math.min(bounds.halfWidth, camera.position.x));
       camera.position.z = Math.max(-bounds.halfDepth, Math.min(bounds.halfDepth, camera.position.z));
     },
+
+    teleport(x, z, pitch, yaw) {
+      camera.position.set(x, EYE_HEIGHT, z);
+      orientation.set(pitch, yaw, 0, "YXZ");
+      velocity.set(0, 0, 0);
+    },
+
     dispose() {
       canvas.removeEventListener("click", onClick);
       document.removeEventListener("mousemove", onMouseMove);

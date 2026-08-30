@@ -1,10 +1,11 @@
 // Generated for you. This is ordinary Three.js — edit or delete it freely.
 // ThreeNative does not read this file.
 //
-// One sun, low and outside, and nothing else. Every other lit surface in the nave is lit
-// by that sun bouncing, which is the entire point of the scene: switch the indirect pass
-// off and the aisles go black while the shafts stay exactly as bright.
-import { DirectionalLight, PCFShadowMap, type Scene } from "three";
+// One sun, low and outside, plus one hemisphere standing in for the sky the clerestory
+// lets through. Every other lit surface in the nave is lit by that sun bouncing, which is
+// the entire point of the scene: switch the indirect pass off and the aisles go black
+// while the shafts stay exactly as bright.
+import { DirectionalLight, HemisphereLight, PCFShadowMap, type Scene } from "three";
 import { palette } from "./palette.js";
 
 type ShadowRenderer = { shadowMap: { enabled: boolean; type: number } };
@@ -80,7 +81,30 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
   sun.shadow.camera.bottom = -extent;
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.02;
+  // The sun does not move and neither does the building, so the 4096x4096 shadow pass is
+  // re-rendering an identical map every frame. Measured by wrapping the WebGPU encoder:
+  // freezing it removes 22 draws and 164,000 triangles per frame and costs 1.0 ms of a
+  // 16.3 ms GPU frame — 6%, entirely recoverable, one line.
+  //
+  // `needsUpdate` renders it exactly once. Anything that later animates *and* casts a
+  // shadow has to set `sun.shadow.needsUpdate = true` again; nothing in this scene does,
+  // because the candle flames are emissive quads rather than shadow casters.
+  sun.shadow.autoUpdate = false;
+  sun.shadow.needsUpdate = true;
+
   scene.add(sun);
   scene.add(sun.target);
+
+  // The fill the reference's quantiles demanded: its shadowed stone sits at p25 ≈ 23 of
+  // 255 — soft light through the building — where ours sat at 11 no matter what the
+  // screen-space gather was fed (measured: SSGI intensity 0.55 to 4, radius 8 to 14,
+  // moved p25 by one point; the gather cannot bridge a nave whose dark stone is metres
+  // from its lit patches). What actually fills a cathedral is the sky, through the same
+  // clerestory the sun comes through. A hemisphere stands in for it: warm from above,
+  // floor-bounce brown from below, and it lights only the standard materials — the glass
+  // is authored and stays untouched.
+  const sky = new HemisphereLight(palette.sun, 0x3a3630, 0.45);
+  scene.add(sky);
+
   return sun;
 }
