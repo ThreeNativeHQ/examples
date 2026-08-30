@@ -29,6 +29,13 @@ export type GameState = {
    * the banner has left the building.
    */
   bannerSway: number;
+  /**
+   * Footfalls played since the scene started.
+   *
+   * Audio's normal failure is a sound that is wired up and never fires, which looks
+   * identical to a working one in every capture. This is what a scenario asserts instead.
+   */
+  footsteps: number;
   respawns: number;
   score: number;
   /** The run: "playing" until the flag is reached ("won") or the last life is gone ("lost"). */

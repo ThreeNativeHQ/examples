@@ -36,6 +36,7 @@ import {
   createFurnishings,
 } from "../render/furnishings.js";
 import { findWickTips } from "../render/wicks.js";
+import { type ISoundscape, loadSoundscape } from "../audio/soundscape.js";
 import {
   BODY_HALF_HEIGHT,
   BODY_RADIUS,
@@ -62,6 +63,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   #sanctuary: Group | undefined;
   #candela: Group | undefined;
   #vigil: Group | undefined;
+  #soundscape: ISoundscape | undefined;
 
   static override readonly initialState: GameState = {
     characterName: "",
@@ -78,6 +80,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     walkerY: 1.7,
     walkerX: 2.6,
     bannerSway: 0,
+    footsteps: 0,
     respawns: 0,
     score: 0,
     screen: "playing",
@@ -149,11 +152,23 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   override exit(_ctx: GameCtx): void {
     this.#walker?.dispose();
     this.#walker = undefined;
+    // Voices outlive the scene otherwise: the ambience keeps looping over the menu.
+    this.#soundscape?.dispose();
+    this.#soundscape = undefined;
   }
 
   override enter(ctx: GameCtx): SceneFrame<GameState, IPhysicsContext> {
     if (this.#assetProof === undefined) throw new Error("Starter proof assets did not load.");
     const audio = ctx.entities.add("audio", new AudioBus({ camera: ctx.camera }));
+    // One bus, not two. `AudioBus` parents an `AudioListener` to the camera and a camera
+    // carrying two of them presents as doubled, phasing audio rather than as an error, so
+    // the soundscape borrows the scene's rather than making its own.
+    const soundscape = loadSoundscape({ bus: audio, assets: ctx.assets });
+    this.#soundscape = soundscape;
+    soundscape.startAmbience();
+    void soundscape.ready.catch((cause: unknown) => {
+      console.warn(`TN_SOUNDSCAPE_UNAVAILABLE:${String(cause)}`);
+    });
     const pickupAudio = ctx.assets.audio("pickup.wav");
     void pickupAudio.catch(() => undefined);
     setupSky(ctx.scene);
@@ -245,6 +260,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // stands would need a second flame system, a second pair of draw calls, and a second
     // thing to keep in step with the bloom threshold.
     const wicks: IFlamePlacement[] = [];
+    const standObjects: Group[] = [];
 
     // The authored glTF figure stands in the slot `furnishings.ts` leaves empty for it:
     // bay 7 on the +X side, x = 6.95, z = 21. Its procedural neighbours in bays 3 and 5 are
@@ -271,7 +287,12 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       const placed = placeAuthoredStand(source, stand);
       ctx.add(placed.group);
       wicks.push(...placed.wicks);
+      standObjects.push(placed.group);
     }
+    // The flame layer is positional and welded to the four stands, not a bed over the whole
+    // building. A single non-positional flicker across a 60 m nave reads as noise at the
+    // door, where there is no candle within twenty metres of the listener.
+    soundscape.startCandles(standObjects);
 
     const furnishings = applyFurnishings(createFurnishings(wicks));
     ctx.add(furnishings);
@@ -400,6 +421,12 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // The banners are simulated; publish how far the hem has moved so a scenario can
       // prove it rather than trusting a still frame.
       frameState.bannerSway = stepCloth?.(dt) ?? 0;
+      // Footsteps come off distance covered, not off a timer: a walker held against a wall
+      // has an input vector and no movement, and a timer would have it marching on the spot.
+      soundscape.travel(dt, view.position);
+      // The observable that proves the footsteps fire. A wired-up sound that never plays is
+      // indistinguishable from a working one in every screenshot.
+      frameState.footsteps = soundscape.debug().steps;
 
       const previous = frameCtx.state.getState();
       // A finished run stops simulating the character and keeps drawing the world behind

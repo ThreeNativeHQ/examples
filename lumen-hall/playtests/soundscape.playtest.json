@@ -1,0 +1,22 @@
+{
+  "name": "lumen-hall-the-building-is-audible",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 30,
+  "artifacts": { "screenshots": false },
+  "steps": [
+    { "kind": "wait", "label": "settle-in-silence", "waitTicks": 40, "release": true },
+    { "kind": "input", "label": "walk-the-nave", "press": "KeyW", "holdTicks": 120, "release": true },
+    { "kind": "wait", "label": "stop-and-listen", "waitTicks": 40, "release": true },
+    { "kind": "input", "label": "walk-some-more", "press": "KeyW", "holdTicks": 120, "release": true },
+    { "kind": "wait", "label": "settle", "waitTicks": 40, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "runtimeReady": true },
+    "resources": [
+      { "id": "state", "path": "footsteps", "changed": true, "gte": 4 },
+      { "id": "state", "path": "walkerZ", "changed": true, "lte": 16 }
+    ]
+  }
+}
