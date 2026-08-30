@@ -24,14 +24,14 @@
 import {
   AdditiveBlending,
   BoxGeometry,
-  type BufferGeometry,
+  BufferAttribute,
+  BufferGeometry,
   Color,
   ConeGeometry,
   CubeTexture,
   CylinderGeometry,
   DataTexture,
   DoubleSide,
-  ExtrudeGeometry,
   Group,
   InstancedMesh,
   LatheGeometry,
@@ -45,7 +45,6 @@ import {
   Object3D,
   PointLight,
   Quaternion,
-  Shape,
   SphereGeometry,
   SRGBColorSpace,
   TorusGeometry,
@@ -208,17 +207,22 @@ const materials = {
   /**
    * Banner cloth. Deep and unsaturated — the glass owns the colour in this room.
    *
-   * The `emissive` is not a glow, it is a floor. The sun travels +X/-Z, so a cloth hung
-   * flat against a pier receives no direct light at any angle, and the gathered indirect
-   * on a navy albedo rounds to black: the first capture showed the gold device floating
-   * with nothing behind it. The emissive term is what keeps the cloth a dark blue shape
-   * instead of a hole.
+   * The `emissive` floor this used to carry is gone. It was propping up a flat slab whose
+   * single normal faced away from every light in the building; the cloth now bows, so its
+   * normals sweep through the light and it holds its own shape. Propping a surface that
+   * can light itself only flattens it again.
+   *
+   * `DoubleSide` stays, and the bow is why: at the grazing angles this is seen from, the
+   * far half of the curve turns its back to the camera.
    */
   banner: new MeshStandardMaterial({
-    color: 0x232d54,
+    // Far darker than the flat version, not lighter. The banners hang on the west faces of
+    // the piers, which is the one orientation in this building the sun hits square on, and
+    // a bowed cloth turns most of its width toward it. At 0x232d54 the cloth clipped to a
+    // pale blue-grey; the indigo has to come most of the way down to survive the exposure.
+    color: 0x0f1430,
     roughness: 0.88,
     metalness: 0,
-    emissive: 0x0a0f22,
     side: DoubleSide,
   }),
   /** The sanctuary runner. Muted, so it warms the steps without competing with the rose. */
@@ -650,10 +654,82 @@ function railing(
 }
 
 /**
- * A heraldic banner hanging from the west face of a pier.
+/**
+ * The cloth of a banner, as a hanging surface rather than a flat outline.
  *
- * The bottom is a swallowtail rather than a straight hem: the notch is what separates a
- * banner from a rectangle of cloth, and at this distance the notch is most of the read.
+ * An `ExtrudeGeometry` of the outline is a slab: one normal over the whole face, a dead
+ * straight edge against the pier, and a hem that sits in a plane. Nothing about that says
+ * fabric, and no texture fixes it, because the tell is the silhouette. Three displacements
+ * turn it into cloth, in descending order of what they buy:
+ *
+ *   bow    cloth hung on a pole stands away from the wall in the middle and returns to it
+ *          at both edges. This alone kills the cardboard read: it gives the face a range
+ *          of normals, so the light across it varies instead of being one flat value.
+ *   folds  a low-frequency ripple that grows toward the hem and vanishes at the pole,
+ *          which is what makes the bottom edge wave in plan rather than sit in a line.
+ *   gather the cloth is narrower at the top, where the rings hold it bunched.
+ *
+ * `phase` shifts the fold pattern per banner. Four identical banners on four piers read as
+ * wallpaper however good one of them is.
+ */
+const CLOTH = {
+  halfWidth: 1.0,
+  height: 4.85,
+  /** Extra drop at the centre of the hem — the point that makes it a banner, not a towel. */
+  tail: 0.55,
+  bow: 0.26,
+  fold: 0.11,
+  /** Deliberately not a whole number: an integer count mirrors the two halves exactly. */
+  folds: 3.5,
+} as const;
+
+/** Depth of the cloth surface at `u` across (0..1) and `v` down (0..1). */
+function clothDepth(u: number, v: number, phase: number): number {
+  // Ramped in over the top fifth: the rings hold the cloth flat where they grip it, and a
+  // bow that starts at full amplitude under the pole reads as a bulge, not a hang.
+  const grip = Math.min(1, v / 0.2);
+  const bow = Math.sin(Math.PI * u) * CLOTH.bow * grip;
+  const folds = Math.sin(u * Math.PI * CLOTH.folds + phase) * CLOTH.fold * v ** 1.6;
+  return bow + folds;
+}
+
+function clothGeometry(phase: number): BufferGeometry {
+  const across = 16;
+  const down = 22;
+  const positions = new Float32Array((across + 1) * (down + 1) * 3);
+  const indices: number[] = [];
+  for (let row = 0; row <= down; row += 1) {
+    const v = row / down;
+    // Gathered at the pole, full width by a fifth of the way down.
+    const halfWidth = CLOTH.halfWidth * (0.86 + 0.14 * Math.min(1, v * 5));
+    for (let column = 0; column <= across; column += 1) {
+      const u = column / across;
+      const point = 1 - Math.abs(u * 2 - 1);
+      const index = (row * (across + 1) + column) * 3;
+      positions[index] = (u * 2 - 1) * halfWidth;
+      // `v ** 3` keeps the tail local to the hem instead of skewing every row above it.
+      positions[index + 1] = -(v * CLOTH.height + CLOTH.tail * point * v ** 3);
+      positions[index + 2] = clothDepth(u, v, phase);
+    }
+  }
+  for (let row = 0; row < down; row += 1) {
+    for (let column = 0; column < across; column += 1) {
+      const a = row * (across + 1) + column;
+      const b = a + 1;
+      const c = a + across + 1;
+      const d = c + 1;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/**
+ * A heraldic banner hanging from the west face of a pier.
  *
  * West face, not the nave face, and that is a lighting decision rather than a liturgical
  * one. The sun in this building travels +X and -Z, so it lights whatever faces -X or +Z;
@@ -661,15 +737,8 @@ function railing(
  * any part of it. Hung on the west face it faces the camera and the sun at once, which is
  * also how the reference's banners are seen — broadside, not edge-on.
  */
-function banner(
-  kit: IKit,
-  parent: Group,
-  geometry: BufferGeometry,
-  x: number,
-  z: number,
-  topY: number,
-): void {
-  const cloth = new Mesh(geometry, materials.banner);
+function banner(kit: IKit, parent: Group, x: number, z: number, topY: number, phase: number): void {
+  const cloth = new Mesh(clothGeometry(phase), materials.banner);
   cloth.position.set(x, topY, z);
   cloth.castShadow = true;
   parent.add(cloth);
@@ -683,15 +752,36 @@ function banner(
 
   // The device: a cross patty in gold. Five boxes rather than a texture, because there are
   // no textures in this file and a flat quad would show as a smear at this size.
+  //
+  // Each piece is set on the cloth's own surface via `clothDepth` rather than at a fixed
+  // offset from the pier. On a bowed cloth a flat offset sinks the arms of the cross into
+  // the fabric while the centre floats a hand's width clear of it.
+  const onCloth = (u: number, drop: number): number =>
+    z + clothDepth(u, drop / CLOTH.height, phase) + 0.045;
   const deviceY = topY - 2.1;
-  const face = z + 0.16;
-  place(kit.gold, [x, deviceY, face], [0.2, 1.5, 0.06]);
-  place(kit.gold, [x, deviceY + 0.28, face], [0.95, 0.2, 0.06]);
+  place(kit.gold, [x, deviceY, onCloth(0.5, 2.1)], [0.2, 1.5, 0.06]);
   for (const side of [-0.62, 0.62]) {
-    place(kit.gold, [x + side, deviceY - 0.75, face], [0.24, 0.24, 0.06]);
+    place(kit.gold, [x + side, deviceY - 0.75, onCloth(0.5 + side / 2, 2.85)], [0.24, 0.24, 0.06]);
   }
-  // A hem band across the bottom, which is what stops the swallowtail reading as a tear.
-  place(kit.gold, [x, topY - 4.55, face], [1.9, 0.11, 0.05]);
+  // The cross arm and the hem band are the two pieces that run *across* the cloth, and a
+  // single straight box cannot: the cloth stands 0.2 m proud in the middle, so a bar set
+  // at the centre depth floats clear of the fabric at both ends and one set at the edge
+  // depth buries itself in the middle. Both are short runs of segments, each on the
+  // surface under it. They go out whole when the heraldic map lands.
+  const band = (width: number, height: number, y: number, drop: number, segments: number): void => {
+    for (let index = 0; index < segments; index += 1) {
+      const t = (index + 0.5) / segments;
+      const u = 0.5 + (t - 0.5) * (width / (CLOTH.halfWidth * 2));
+      place(kit.gold, [x + (t - 0.5) * width, y, onCloth(u, drop)], [
+        width / segments + 0.01,
+        height,
+        0.05,
+      ]);
+    }
+  };
+  band(0.95, 0.2, deviceY + 0.28, 1.82, 4);
+  // The hem band is what stops the pointed bottom reading as a tear.
+  band(1.9, 0.11, topY - 4.55, 4.55, 7);
 }
 
 /** A robed figure on a plinth, standing in an aisle bay. */
@@ -966,24 +1056,20 @@ export function createFurnishings(): Group {
   // ---- banners -----------------------------------------------------------------------
   // Hung from alternating piers so the two colonnades do not mirror each other exactly —
   // a perfectly symmetric pair of banners reads as wallpaper.
-  const bannerShape = new Shape();
-  bannerShape.moveTo(-1.0, 0);
-  bannerShape.lineTo(1.0, 0);
-  bannerShape.lineTo(1.0, -4.85);
-  bannerShape.lineTo(0, -5.4);
-  bannerShape.lineTo(-1.0, -4.85);
-  bannerShape.closePath();
-  // Extruded rather than flat. A zero-thickness cloth has one normal; the extrusion gives
-  // it edges facing -X and +Y that catch the sun and draw a lit rim down each side, which
-  // is what stops it reading as a decal stuck on the pier.
-  const bannerGeometry = new ExtrudeGeometry(bannerShape, { depth: 0.09, bevelEnabled: false });
-  for (const [x, z] of [
-    [-PIER_X, -3.5],
-    [-PIER_X, 10.5],
-    [PIER_X, 3.5],
-    [PIER_X, -10.5],
-  ] as ReadonlyArray<readonly [number, number]>) {
-    banner(kit, furnishings, bannerGeometry, x, z + NAVE.pierRadius + 0.25, 13.0);
+
+  // One geometry each rather than one shared: the fold phase is baked into the vertices, so
+  // sharing would hang four identically creased cloths on four piers. Four banners is four
+  // draws either way.
+  for (const [x, z, phase] of [
+    [-PIER_X, -3.5, 0.7],
+    [-PIER_X, 10.5, 2.3],
+    [PIER_X, 3.5, 4.1],
+    [PIER_X, -10.5, 5.6],
+  ] as ReadonlyArray<readonly [number, number, number]>) {
+    // 11.6, not the 13.0 these hung at. The near pier is ten metres from a lens whose
+    // frustum tops out around y 10 there, so at 13.0 the only banner properly broadside to
+    // the camera showed its bottom metre and nothing else — no device, no hem, no shape.
+    banner(kit, furnishings, x, z + NAVE.pierRadius + 0.25, 11.6, phase);
   }
 
   // ---- aisle statuary and memorials --------------------------------------------------
@@ -998,6 +1084,10 @@ export function createFurnishings(): Group {
       // invisible in three consecutive captures. Standing them against the arcade puts
       // them where the reference's are read from — in front of an opening, not behind one.
       const z = -HALF_DEPTH + bay * NAVE.bayPitch + NAVE.bayPitch / 2;
+      // Bay 7 on the +X side is left empty on purpose: `Play` stands an authored glTF
+      // figure there instead, so an authored statue and these procedural ones can be
+      // compared standing in the same light in the same aisle.
+      if (side > 0 && bay === 7) continue;
       statue(kit, side * 6.95, z, side > 0 ? -Math.PI / 2 : Math.PI / 2);
     }
     for (const bay of [2, 4, 6]) {

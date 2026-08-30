@@ -13,9 +13,13 @@ import {
   Mesh,
   MeshBasicMaterial,
   NearestFilter,
+  Box3,
+  BoxGeometry,
+  MeshStandardMaterial,
   Object3D,
   type PerspectiveCamera,
   type Texture,
+  Vector3,
 } from "three";
 import { Crate } from "../entities/Crate.js";
 import { Goal } from "../entities/Goal.js";
@@ -47,6 +51,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   #assetProof: Group | undefined;
   #floorTexture: Texture | undefined;
   #walker: IFirstPerson | undefined;
+  #engel: Group | undefined;
 
   static override readonly initialState: GameState = {
     characterName: "",
@@ -70,10 +75,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   };
 
   override async load(ctx: GameCtx): Promise<void> {
-    const [texture, model, marble] = await Promise.all([
+    const [texture, model, marble, engel] = await Promise.all([
       ctx.assets.texture("native-proof.png"),
       ctx.assets.model<{ scene: Group }>("native-proof.glb"),
       ctx.assets.texture("cathedral-floor.png"),
+      ctx.assets.model<{ scene: Group }>("engel.glb"),
       // Resolved for its side effect: `loadSurfaces` caches the set, and `applySurfaces`
       // reads that cache in `enter`. Awaited here rather than in `enter` because the
       // screen-space passes gather from what is already on screen — a texture that lands
@@ -81,6 +87,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       loadSurfaces(ctx.assets),
     ]);
     this.#floorTexture = marble;
+    this.#engel = engel.scene;
     // A 16-pixel check filtered smoothly is a grey smear at flag size; nearest keeps the
     // squares square, which is the whole reason the finish flag is legible from the ledge.
     texture.magFilter = NearestFilter;
@@ -205,6 +212,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // step with geometry this file does not own.
     buildStaticColliders(ctx, cathedral);
     const furnishings = createFurnishings();
+    // The authored glTF figure stands in the slot `furnishings.ts` leaves empty for it:
+    // bay 7 on the +X side, x = 6.95, z = 21. Its procedural neighbours in bays 3 and 5 are
+    // untouched, so the two kinds stand in the same aisle under the same light.
+    if (this.#engel !== undefined) ctx.add(placeAuthoredStatue(this.#engel, 6.95, 21));
     ctx.add(furnishings);
     // Flames, halos and the two point lights breathe on seeded phases; the furnishing
     // group owns the animation, the scene owns the clock.
@@ -369,4 +380,69 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       if (respawned) frameCtx.state.flush();
     };
   }
+}
+
+/**
+ * Stands an authored glTF figure on a plinth beside the procedural statuary.
+ *
+ * Scale and footing are computed from the model's own bounds rather than hand-tuned, because
+ * a glTF arrives in whatever units its author used — metres, centimetres or none — and a
+ * hard-coded factor silently breaks the moment the model is replaced. Normalising to a target
+ * height and seating the measured base on the plinth is the only version of this that
+ * survives someone dropping in a different file.
+ */
+function placeAuthoredStatue(source: Group, x: number, z: number): Group {
+  /** Plinth top, matching the procedural statue's 1.5 m box plus its 0.12 m cap. */
+  const PLINTH_TOP = 1.62;
+  /** Slightly over life size, as carved figures on plinths tend to be. */
+  const TARGET_HEIGHT = 2.1;
+
+  const figure = source.clone(true);
+  const bounds = new Box3().setFromObject(figure);
+  const size = bounds.getSize(new Vector3());
+  const scale = size.y > 0 ? TARGET_HEIGHT / size.y : 1;
+  figure.scale.setScalar(scale);
+
+  // Re-measure after scaling: the base offset has to be in final units, and the model's
+  // origin is very unlikely to sit at its own feet.
+  const scaled = new Box3().setFromObject(figure);
+  figure.position.set(x - scaled.min.x - (scaled.max.x - scaled.min.x) / 2, PLINTH_TOP - scaled.min.y, z);
+  figure.position.x = x;
+  figure.position.z = z;
+  // Face the nave, matching the procedural statues on this side.
+  figure.rotation.y = -Math.PI / 2;
+  figure.traverse((object) => {
+    if (object instanceof Mesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }
+  });
+
+  const plinth = new Mesh(
+    new BoxGeometry(0.9, 1.5, 0.9),
+    new MeshStandardMaterial({ color: 0x6d6558, roughness: 0.9, metalness: 0 }),
+  );
+  plinth.position.set(x, 0.75, z);
+  plinth.castShadow = true;
+  plinth.receiveShadow = true;
+
+  const group = new Group();
+  group.name = "authored-statue";
+  group.add(plinth, figure);
+  group.updateMatrixWorld(true);
+  const placed = new Box3().setFromObject(figure);
+  let triangles = 0;
+  figure.traverse((o) => {
+    if (o instanceof Mesh) triangles += (o.geometry.index?.count ?? o.geometry.getAttribute("position").count) / 3;
+  });
+  console.info(
+    `TN_AUTHORED_STATUE:${JSON.stringify({
+      scale: +scale.toFixed(4),
+      sourceHeight: +size.y.toFixed(3),
+      min: [+placed.min.x.toFixed(2), +placed.min.y.toFixed(2), +placed.min.z.toFixed(2)],
+      max: [+placed.max.x.toFixed(2), +placed.max.y.toFixed(2), +placed.max.z.toFixed(2)],
+      triangles: Math.round(triangles),
+    })}`,
+  );
+  return group;
 }
