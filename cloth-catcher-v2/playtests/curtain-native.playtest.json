@@ -1,0 +1,32 @@
+{
+  "name": "blast-curtain-native",
+  "schemaVersion": 1,
+  "subject": "a blast curtain must deform and stop at its physics barrier",
+  "target": "desktop",
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 30,
+  "artifacts": { "screenshots": "before-after" },
+  "steps": [
+    { "kind": "wait", "label": "ready", "waitTicks": 30, "release": true },
+    { "kind": "input", "label": "blast", "press": "Space", "holdTicks": 2, "release": true },
+    { "kind": "wait", "label": "billow", "waitTicks": 30, "release": true },
+    { "kind": "wait", "label": "request-sample", "waitTicks": 1, "release": true },
+    { "kind": "wait", "label": "settle-sample", "waitTicks": 1, "release": true },
+    { "kind": "wait", "label": "adjudicate", "waitTicks": 1, "release": true }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": false,
+      "noRuntimeDiagnostics": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      { "id": "state", "path": "blasts", "equals": 1, "changed": true },
+      { "id": "state", "path": "barrierHeld", "equals": 1, "changed": true },
+      { "id": "state", "path": "deformation", "gte": 0.35, "changed": true },
+      { "id": "state", "path": "outcome", "equals": "won", "changed": true },
+      { "id": "state", "path": "solverSteps", "changed": true }
+    ]
+  }
+}
