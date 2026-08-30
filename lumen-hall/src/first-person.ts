@@ -2,10 +2,10 @@
 //
 // A first-person walker for the nave. WASD or the arrows move, the mouse looks.
 //
-// Deliberately not a physics character: the cathedral floor is one flat plane at y = 0 and
-// the only things to collide with are piers, so a capsule controller would spend a Rapier
-// body and a step-height problem to solve nothing. Movement is clamped to the building's
-// interior instead, which is the whole collision model this scene needs.
+// Driven by a kinematic `CharacterBody3D` when one is supplied, so the player is stopped by
+// piers and walls and steps up the chancel stairs instead of walking through them. The
+// clamped free-camera path is kept as the fallback for a scene with no physics context.
+import type { CharacterBody3D } from "@threenative/physics";
 import type { PerspectiveCamera } from "three";
 import { Euler, Vector3 } from "three";
 
@@ -14,6 +14,18 @@ export interface IWalkerBounds {
   readonly halfWidth: number;
   /** Half-depth, measured from the origin along Z. */
   readonly halfDepth: number;
+}
+
+export interface IFirstPersonOptions {
+  /**
+   * The kinematic body that does the colliding.
+   *
+   * When present the walker stops being a clamped free camera and becomes a character: it
+   * slides along piers, is stopped by walls and steps up the chancel stairs. `bounds` stays
+   * as a backstop, because a character that escapes its collision through a seam should end
+   * up inside the building rather than in the void.
+   */
+  readonly character?: CharacterBody3D;
 }
 
 export interface IFirstPerson {
@@ -41,6 +53,14 @@ const LOOK_SENSITIVITY = 0.0022;
 const MAX_PITCH = Math.PI / 2 - 0.02;
 /** Seconds for the camera to reach most of its target velocity. Kills the on/off snap. */
 const ACCELERATION = 0.09;
+/**
+ * The collision capsule. Total height is `2 * (halfHeight + radius)` = 1.72 m, and because
+ * every shape here is centred on the body origin, that origin sits at the waist.
+ */
+export const BODY_HALF_HEIGHT = 0.58;
+export const BODY_RADIUS = 0.28;
+/** Waist to eye, so the camera rides at `EYE_HEIGHT` when the capsule is standing on the floor. */
+const EYE_OVER_BODY = EYE_HEIGHT - (BODY_HALF_HEIGHT + BODY_RADIUS);
 
 /**
  * Attaches mouse-look and keyboard movement to a camera.
@@ -53,7 +73,9 @@ export function createFirstPerson(
   camera: PerspectiveCamera,
   canvas: HTMLElement,
   bounds: IWalkerBounds,
+  options: IFirstPersonOptions = {},
 ): IFirstPerson {
+  const character = options.character;
   camera.position.y = EYE_HEIGHT;
   camera.rotation.order = "YXZ";
 
@@ -102,6 +124,21 @@ export function createFirstPerson(
       const blend = 1 - Math.exp(-dt / ACCELERATION);
       velocity.lerp(desired, blend);
 
+      if (character !== undefined) {
+        // Horizontal intent only. `moveAndSlide` owns the vertical axis — it applies gravity,
+        // resolves the ground contact and runs the autostep that carries the player up the
+        // chancel stairs. Writing `velocity.y` here would fight it every frame.
+        character.velocity.x = velocity.x;
+        character.velocity.z = velocity.z;
+        character.moveAndSlide(dt);
+        // The solver writes the transform after the bulk step, so this reads last frame's
+        // result. That is the correct thing to render: it is where the character actually
+        // was, rather than where it asked to go before anything stopped it.
+        camera.position.copy(character.object.position);
+        camera.position.y = character.object.position.y + EYE_OVER_BODY;
+        return;
+      }
+
       camera.position.addScaledVector(velocity, dt);
       camera.position.y = EYE_HEIGHT;
       camera.position.x = Math.max(-bounds.halfWidth, Math.min(bounds.halfWidth, camera.position.x));
@@ -112,6 +149,10 @@ export function createFirstPerson(
       camera.position.set(x, EYE_HEIGHT, z);
       orientation.set(pitch, yaw, 0, "YXZ");
       velocity.set(0, 0, 0);
+      // The capsule is centred on the body origin, so its origin sits at the waist rather
+      // than at the feet — place it that far above the floor or the character spawns half
+      // sunk into it and the solver spends the first frames pushing it out.
+      character?.teleport({ x, y: BODY_HALF_HEIGHT + BODY_RADIUS, z });
     },
 
     dispose() {

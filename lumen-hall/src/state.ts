@@ -14,6 +14,8 @@ export type GameState = {
   uiReady: boolean;
   peakRise: number;
   playerX: number;
+  /** Where the first-person walker actually ended up, after collision resolved. */
+  walkerZ: number;
   respawns: number;
   score: number;
   /** The run: "playing" until the flag is reached ("won") or the last life is gone ("lost"). */

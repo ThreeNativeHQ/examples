@@ -1,5 +1,11 @@
 import { AudioBus, type ICtx, Scene, type SceneFrame } from "@threenative/core";
-import { Area3D, CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
+import {
+  Area3D,
+  CharacterBody3D,
+  CollisionShape3D,
+  type IPhysicsContext,
+  RigidBody3D,
+} from "@threenative/physics";
 import {
   BufferAttribute,
   DoubleSide,
@@ -7,6 +13,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   NearestFilter,
+  Object3D,
   type PerspectiveCamera,
   type Texture,
 } from "three";
@@ -19,7 +26,13 @@ import { createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { createCathedral } from "../render/cathedral.js";
 import { createFurnishings } from "../render/furnishings.js";
-import { createFirstPerson, type IFirstPerson } from "../first-person.js";
+import {
+  BODY_HALF_HEIGHT,
+  BODY_RADIUS,
+  createFirstPerson,
+  type IFirstPerson,
+} from "../first-person.js";
+import { buildStaticColliders } from "../collision.js";
 import { applySurfaces, loadSurfaces } from "../render/surfaces.js";
 import { ball, block, makeRandom, roundedBox, spike, tube } from "../render/shapes.js";
 import { setupSky } from "../render/sky.js";
@@ -46,6 +59,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     paused: false,
     peakRise: 0,
     playerX: -2,
+    walkerZ: 22,
     respawns: 0,
     score: 0,
     screen: "playing",
@@ -146,10 +160,28 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     view.updateProjectionMatrix();
     // Walk the cathedral. Bounds are the interior, not a physics body: the floor is one
     // flat plane and clamping to the building is the entire collision model this needs.
-    const walker = createFirstPerson(view, ctx.renderer.domElement, {
-      halfWidth: NAVE.width / 2 + NAVE.aisleWidth - 1.2,
-      halfDepth: (NAVE.depth * 0.5) - 3,
+    // A kinematic capsule, so the player is stopped by piers and walls and can climb the
+    // chancel stairs. `autostep` is what makes a step a step rather than a wall; without it a
+    // 0.45 m riser stops a character dead and reads as a broken collider.
+    const body = new Object3D();
+    body.position.set(2.6, BODY_HALF_HEIGHT + BODY_RADIUS, 22);
+    const character = new CharacterBody3D({
+      autostep: { maxHeight: 0.6, minWidth: 0.2 },
+      maxSlopeClimbAngle: Math.PI / 4,
+      object: body,
+      physics: ctx.physics,
+      shape: CollisionShape3D.capsule(BODY_HALF_HEIGHT, BODY_RADIUS),
+      snapToGround: 0.3,
     });
+    const walker = createFirstPerson(
+      view,
+      ctx.renderer.domElement,
+      {
+        halfWidth: NAVE.width / 2 + NAVE.aisleWidth - 1.2,
+        halfDepth: NAVE.depth * 0.5 - 3,
+      },
+      { character },
+    );
     this.#walker = walker;
 
     // Camera vantages for `tools/look.mjs --vantage <name>=/`: named spots the screenshot
@@ -165,7 +197,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     };
 
     const materials = createMaterials();
-    ctx.add(applySurfaces(createCathedral(this.#floorTexture)));
+    const cathedral = applySurfaces(createCathedral(this.#floorTexture));
+    ctx.add(cathedral);
+    // Collision is read off the building rather than hand-listed, so it cannot drift out of
+    // step with geometry this file does not own.
+    buildStaticColliders(ctx, cathedral);
     const furnishings = createFurnishings();
     ctx.add(furnishings);
     // Flames, halos and the two point lights breathe on seeded phases; the furnishing
@@ -279,6 +315,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         return;
       }
       walker.update(frameCtx.input.vector("move"), dt, frameCtx.input.pressed?.("jump") === true);
+      // Publish where the walker actually ended up. This is the observable a collision test
+      // needs: a screenshot cannot tell "stopped by the chancel screen" from "walked through
+      // it and is looking back at a lit building from outside".
+      frameState.walkerZ = view.position.z;
       elapsed += dt;
       animateFires?.(elapsed);
 
@@ -301,6 +341,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         frameCtx.state.set({ status: "won" });
         frameCtx.state.flush();
       }
+      frameState.walkerZ = view.position.z;
       frameState.coyoteJumps = player.coyoteJumps;
       frameState.jumps = player.jumps;
       frameState.lives = lives;
@@ -316,6 +357,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         frameState.odometer !== current.odometer ||
         frameState.peakRise !== current.peakRise ||
         frameState.playerX !== current.playerX ||
+        frameState.walkerZ !== current.walkerZ ||
         frameState.respawns !== current.respawns;
       if (changed) frameCtx.state.set(frameState);
       if (respawned) frameCtx.state.flush();

@@ -1,0 +1,55 @@
+{
+  "name": "lumen-hall-walls-stop-the-player",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 45,
+  "artifacts": {
+    "screenshots": false
+  },
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "settle",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-east",
+      "press": "KeyW",
+      "holdTicks": 400,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "keep-pushing",
+      "press": "KeyW",
+      "holdTicks": 400,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-against-the-screen",
+      "waitTicks": 40,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "walkerZ",
+        "changed": true,
+        "lte": -12,
+        "gte": -19
+      }
+    ]
+  }
+}
