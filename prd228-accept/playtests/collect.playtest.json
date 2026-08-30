@@ -1,0 +1,56 @@
+{
+  "name": "platformer-collect",
+  "schemaVersion": 1,
+  "target": "web",
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 10,
+  "subject": "player",
+  "steps": [
+    {
+      "kind": "input",
+      "label": "first-coin",
+      "press": "ArrowRight",
+      "holdTicks": 16,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "score-holds",
+      "waitTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "clear-blocker",
+      "press": ["ArrowRight", "Space"],
+      "holdTicks": 30,
+      "release": true
+    },
+    { "kind": "wait", "waitTicks": 16, "release": true },
+    {
+      "kind": "input",
+      "label": "last-coin",
+      "press": "ArrowLeft",
+      "holdTicks": 20,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "runtimeReady": true },
+    "resources": [
+      {
+        "id": "state",
+        "path": "coins",
+        "gte": 3,
+        "changed": true,
+        "atSteps": [
+          { "label": "first-coin", "equals": 1 },
+          { "label": "score-holds", "equals": 1 },
+          { "label": "last-coin", "equals": 3 }
+        ]
+      }
+    ],
+    "signals": [{ "name": "collected", "entity": "player", "minCount": 3 }],
+    "tags": [{ "tag": "coin", "count": 4 }]
+  }
+}
