@@ -52,7 +52,7 @@ import {
   Vector2,
   Vector3,
 } from "three";
-import { softCircleDataTexture } from "@threenative/core";
+import { InstancedBatch, softCircleDataTexture } from "@threenative/core";
 import { ClothSheet } from "./cloth.js";
 import { NAVE } from "./lighting.js";
 
@@ -276,47 +276,29 @@ const materials = {
 // instancing
 // ---------------------------------------------------------------------------------------
 
-/** Accumulates transforms for one geometry+material pair, then becomes one draw call. */
-interface IBatch {
-  readonly add: (matrix: Matrix4) => void;
-}
+/**
+ * Instancing is the framework's job now.
+ *
+ * This file used to carry its own accumulator: a `Matrix4[]` per geometry+material pair, a
+ * shared `Object3D` to compose transforms through, the axis-to-axis quaternion for a rod
+ * spanning two points, and a build step that turned the lot into one `InstancedMesh`. All
+ * of that is `InstancedBatch` in `@threenative/core`, and it exists because
+ * `new InstancedMesh(geometry, material, count)` demands the count *before* the first
+ * placement exists — so every procedural builder either counts its layout twice or collects
+ * matrices first, and `cathedral.ts` next door does the counting version eight times.
+ *
+ * It owns none of the look: the geometry and the material are this file's, passed by
+ * reference, and every transform below is still computed here.
+ *
+ * `place` and `rod` survive as the two adapters that keep 65 call sites unchanged. `rod` is
+ * `span` under a different name because the call sites read better as rods, and renaming
+ * them all would be churn for nothing.
+ */
+type IBatch = InstancedBatch;
 
-interface IBuiltBatch extends IBatch {
-  readonly build: (parent: Group, name: string, castShadow: boolean) => InstancedMesh | undefined;
+function batch(geometry: BufferGeometry, material: Material): InstancedBatch {
+  return new InstancedBatch({ geometry, material });
 }
-
-function batch(geometry: BufferGeometry, material: Material): IBuiltBatch {
-  const matrices: Matrix4[] = [];
-  return {
-    add: (matrix: Matrix4): void => {
-      matrices.push(matrix.clone());
-    },
-    build: (parent: Group, name: string, castShadow: boolean): InstancedMesh | undefined => {
-      if (matrices.length === 0) return undefined;
-      const mesh = new InstancedMesh(geometry, material, matrices.length);
-      mesh.name = name;
-      for (let index = 0; index < matrices.length; index += 1) {
-        mesh.setMatrixAt(index, matrices[index] as Matrix4);
-      }
-      mesh.instanceMatrix.needsUpdate = true;
-      // Candles and chain links are sub-texel in a 4096 map spanning 92 metres; asking the
-      // shadow pass to rasterise them buys nothing and costs a second full instanced draw.
-      mesh.castShadow = castShadow;
-      mesh.receiveShadow = castShadow;
-      mesh.computeBoundingSphere();
-      parent.add(mesh);
-      return mesh;
-    },
-  };
-}
-
-const dummy = new Object3D();
-/** The camera orientation every halo quad copies. Read once a frame, not once a flame. */
-const haloFacing = new Quaternion();
-const UP = new Vector3(0, 1, 0);
-const rodDirection = new Vector3();
-const rodMidpoint = new Vector3();
-const rodRotation = new Quaternion();
 
 /** Place one instance by position, scale and Euler rotation. */
 function place(
@@ -325,39 +307,23 @@ function place(
   scale: [number, number, number],
   rotation: [number, number, number] = [0, 0, 0],
 ): void {
-  dummy.position.set(position[0], position[1], position[2]);
-  dummy.rotation.set(rotation[0], rotation[1], rotation[2]);
-  dummy.scale.set(scale[0], scale[1], scale[2]);
-  dummy.updateMatrix();
-  target.add(dummy.matrix);
+  target.place({ position, scale, rotation });
 }
 
-/**
- * Place a unit cylinder as a rod spanning two points.
- *
- * Chains, tie rods and railing bars are all "from A to B" rather than "at P with rotation
- * R"; deriving the quaternion here keeps every caller from hand-computing an Euler angle
- * that is wrong the moment a position moves by a metre.
- */
+/** Place a unit cylinder as a rod spanning two points. */
 function rod(
   target: IBatch,
   from: [number, number, number],
   to: [number, number, number],
   radius: number,
 ): void {
-  rodDirection.set(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
-  const length = rodDirection.length();
-  if (length < 1e-5) return;
-  rodDirection.divideScalar(length);
-  rodRotation.setFromUnitVectors(UP, rodDirection);
-  rodMidpoint.set((from[0] + to[0]) / 2, (from[1] + to[1]) / 2, (from[2] + to[2]) / 2);
-  dummy.position.copy(rodMidpoint);
-  dummy.quaternion.copy(rodRotation);
-  dummy.scale.set(radius, length, radius);
-  dummy.updateMatrix();
-  dummy.rotation.set(0, 0, 0);
-  target.add(dummy.matrix);
+  target.span(from, to, radius);
 }
+
+/** Reused by the fire animator below, which composes matrices of its own. */
+const dummy = new Object3D();
+/** The camera orientation every halo quad copies. Read once a frame, not once a flame. */
+const haloFacing = new Quaternion();
 
 // ---------------------------------------------------------------------------------------
 // layout, derived from the bay so nothing drifts when the nave is resized
@@ -1244,22 +1210,22 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
   // but a batch named for its *material* rather than for what it is would fall straight
   // through that filter the moment it is, and every taper below the 4.5 m reach ceiling
   // would become something the player can stand on. Hence "candle-wax", not "wax".
-  batches.bronzeRod.build(furnishings, "furnishings-bronze-rods", true);
-  batches.bronzeTaper.build(furnishings, "furnishings-bronze-tapers", true);
-  batches.chainLink.build(furnishings, "furnishings-chain", false);
-  const flameMesh = batches.flame.build(furnishings, "furnishings-flames", false);
-  batches.gold.build(furnishings, "furnishings-gold", false);
-  const haloMesh = batches.halo.build(furnishings, "furnishings-candle-halos", false);
-  batches.ironBox.build(furnishings, "furnishings-iron-rails", true);
-  batches.ironRod.build(furnishings, "furnishings-iron-rods", true);
-  batches.ironSpike.build(furnishings, "furnishings-finials", true);
-  batches.knop.build(furnishings, "furnishings-knops", false);
-  batches.ring.build(furnishings, "furnishings-rings", true);
-  batches.robe.build(furnishings, "furnishings-statues", true);
-  batches.stoneBox.build(furnishings, "furnishings-stone", true);
-  batches.stoneHead.build(furnishings, "furnishings-heads", false);
-  batches.stoneSpike.build(furnishings, "furnishings-gables", true);
-  batches.wax.build(furnishings, "furnishings-candle-wax", false);
+  batches.bronzeRod.build({ parent: furnishings, name: "furnishings-bronze-rods", castShadow: true, receiveShadow: true });
+  batches.bronzeTaper.build({ parent: furnishings, name: "furnishings-bronze-tapers", castShadow: true, receiveShadow: true });
+  batches.chainLink.build({ parent: furnishings, name: "furnishings-chain", castShadow: false, receiveShadow: false });
+  const flameMesh = batches.flame.build({ parent: furnishings, name: "furnishings-flames", castShadow: false, receiveShadow: false });
+  batches.gold.build({ parent: furnishings, name: "furnishings-gold", castShadow: false, receiveShadow: false });
+  const haloMesh = batches.halo.build({ parent: furnishings, name: "furnishings-candle-halos", castShadow: false, receiveShadow: false });
+  batches.ironBox.build({ parent: furnishings, name: "furnishings-iron-rails", castShadow: true, receiveShadow: true });
+  batches.ironRod.build({ parent: furnishings, name: "furnishings-iron-rods", castShadow: true, receiveShadow: true });
+  batches.ironSpike.build({ parent: furnishings, name: "furnishings-finials", castShadow: true, receiveShadow: true });
+  batches.knop.build({ parent: furnishings, name: "furnishings-knops", castShadow: false, receiveShadow: false });
+  batches.ring.build({ parent: furnishings, name: "furnishings-rings", castShadow: true, receiveShadow: true });
+  batches.robe.build({ parent: furnishings, name: "furnishings-statues", castShadow: true, receiveShadow: true });
+  batches.stoneBox.build({ parent: furnishings, name: "furnishings-stone", castShadow: true, receiveShadow: true });
+  batches.stoneHead.build({ parent: furnishings, name: "furnishings-heads", castShadow: false, receiveShadow: false });
+  batches.stoneSpike.build({ parent: furnishings, name: "furnishings-gables", castShadow: true, receiveShadow: true });
+  batches.wax.build({ parent: furnishings, name: "furnishings-candle-wax", castShadow: false, receiveShadow: false });
 
   // ---- fire animation -----------------------------------------------------------------
   // Every flame and both real lights breathe on a seeded phase: deterministic in the
