@@ -128,6 +128,9 @@ async function run(): Promise<IProof> {
   // Walk due north at the game's own walk speed and let the odometer decide the cadence.
   let z = 0;
   const before = soundscape.debug().steps;
+  // Measure concurrently. Measuring after the loop only catches the tail of unusually long
+  // clips and reports a false failure for an ordinary short footfall that has already ended.
+  const walkingMeasure = measure("ambience+candles+walking", 2.6);
   const walking = performance.now() + 2600;
   while (performance.now() < walking) {
     for (let tick = 0; tick < 6; tick += 1) {
@@ -136,7 +139,7 @@ async function run(): Promise<IProof> {
     }
     await wait(100);
   }
-  phases.push(await measure("ambience+candles+walking", 1.2));
+  phases.push(await walkingMeasure);
   const steps = soundscape.debug().steps - before;
 
   const silence = phases[0] as IPhase;
