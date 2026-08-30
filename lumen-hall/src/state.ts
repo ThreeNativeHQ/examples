@@ -20,6 +20,15 @@ export type GameState = {
   walkerY: number;
   /** Walker position across the nave. Passing +-8 means it got through an arcade opening. */
   walkerX: number;
+  /**
+   * How far the furthest banner hem has travelled from where it was authored, in metres.
+   *
+   * A screenshot cannot tell a simulated cloth in still air from a static one, so this is
+   * the observable that proves the sim runs. Zero forever means `stepCloth` is not being
+   * called; a number that grows without bound means the integrator has gone unstable and
+   * the banner has left the building.
+   */
+  bannerSway: number;
   respawns: number;
   score: number;
   /** The run: "playing" until the flag is reached ("won") or the last life is gone ("lost"). */

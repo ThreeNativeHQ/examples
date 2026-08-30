@@ -53,6 +53,7 @@ import {
   Vector3,
 } from "three";
 import { softCircleDataTexture } from "@threenative/core";
+import { ClothSheet } from "./cloth.js";
 import { NAVE } from "./lighting.js";
 
 // ---------------------------------------------------------------------------------------
@@ -481,6 +482,9 @@ interface IFire {
 /** Reset by `createFurnishings`; a scene rebuild must not inherit the last build's flames. */
 let fires: IFire[] = [];
 
+/** The simulated banners. Reset alongside `fires` for the same reason. */
+let cloths: ClothSheet[] = [];
+
 interface IKit {
   readonly bronzeRod: IBatch;
   readonly bronzeTaper: IBatch;
@@ -802,9 +806,13 @@ function clothDepth(u: number, v: number, phase: number): number {
   return bow + folds;
 }
 
+/** The banner grid. Shared with `ClothSheet`, which throws if the two ever disagree. */
+const CLOTH_ACROSS = 16;
+const CLOTH_DOWN = 22;
+
 function clothGeometry(phase: number): BufferGeometry {
-  const across = 16;
-  const down = 22;
+  const across = CLOTH_ACROSS;
+  const down = CLOTH_DOWN;
   const positions = new Float32Array((across + 1) * (down + 1) * 3);
   const indices: number[] = [];
   for (let row = 0; row <= down; row += 1) {
@@ -847,10 +855,16 @@ function clothGeometry(phase: number): BufferGeometry {
  * also how the reference's banners are seen — broadside, not edge-on.
  */
 function banner(kit: IKit, parent: Group, x: number, z: number, topY: number, phase: number): void {
-  const cloth = new Mesh(clothGeometry(phase), materials.banner);
+  const geometry = clothGeometry(phase);
+  const cloth = new Mesh(geometry, materials.banner);
   cloth.position.set(x, topY, z);
   cloth.castShadow = true;
   parent.add(cloth);
+  // The authored surface above is the sim's rest state, not a starting guess it will
+  // wander away from: `ClothSheet` measures every rest length off these vertices, so the
+  // bow, the gather and the swallowtail are encoded in the constraint set. With the draft
+  // at zero the banner is pixel-identical to the static one this replaced.
+  cloths.push(new ClothSheet(geometry, { across: CLOTH_ACROSS, down: CLOTH_DOWN, phase }));
 
   // The pole and its two suspension rings. Cloth that starts at a bare edge looks pasted
   // to the pier; the pole gives it something to hang from.
@@ -890,6 +904,7 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
   const furnishings = new Group();
   furnishings.name = "furnishings";
   fires = [];
+  cloths = [];
 
   // Unit geometries. Every one of these is instanced, so the segment counts below are paid
   // exactly once no matter how many hundreds of copies end up in the frame.
@@ -1296,6 +1311,28 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
         18 * (1 + Math.sin(time * 7.9 + 1.3) * 0.05 + Math.sin(time * 13.1) * 0.03);
     };
   }
+
+  // ---- cloth ---------------------------------------------------------------------------
+  // Its own hook rather than a line inside `animateFires`, because the two want different
+  // clocks: the flames are a closed form in elapsed time and the cloth is an integrator
+  // that needs the step. Reported, not silent — a sim that throws on a grid mismatch is
+  // loud, but a sim nobody calls is not, and four dead banners look exactly like four
+  // simulated banners in still air.
+  furnishings.userData.stepCloth = (dt: number): number => {
+    let excursion = 0;
+    for (const cloth of cloths) {
+      cloth.step(dt);
+      excursion = Math.max(excursion, cloth.excursion);
+    }
+    return excursion;
+  };
+  console.info(
+    `TN_BANNER_CLOTH:${JSON.stringify({
+      sheets: cloths.length,
+      particles: cloths.reduce((total, cloth) => total + cloth.particles, 0),
+      constraints: cloths.reduce((total, cloth) => total + cloth.constraintCount, 0),
+    })}`,
+  );
 
   return furnishings;
 }

@@ -77,6 +77,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     walkerZ: 22,
     walkerY: 1.7,
     walkerX: 2.6,
+    bannerSway: 0,
     respawns: 0,
     score: 0,
     screen: "playing",
@@ -279,6 +280,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const animateFires = furnishings.userData.animateFires as
       | ((time: number, camera?: Object3D) => void)
       | undefined;
+    // The banners are simulated, so unlike the flames they need the step rather than the
+    // clock. Both hooks come off the same group; the scene owns when they run.
+    const stepCloth = furnishings.userData.stepCloth as ((dt: number) => number) | undefined;
     let elapsed = 0;
     // Keep the initial -99 sentinel until seed.playtest samples it. If this draw is replaced with
     // Math.random, the unchanged seeded state reports an out-of-range value and seed.playtest
@@ -393,6 +397,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // The camera goes with the clock: the halo quads are billboards and the animator is
       // the only place their matrices are written.
       animateFires?.(elapsed, view);
+      // The banners are simulated; publish how far the hem has moved so a scenario can
+      // prove it rather than trusting a still frame.
+      frameState.bannerSway = stepCloth?.(dt) ?? 0;
 
       const previous = frameCtx.state.getState();
       // A finished run stops simulating the character and keeps drawing the world behind

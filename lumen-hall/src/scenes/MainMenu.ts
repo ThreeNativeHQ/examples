@@ -28,6 +28,7 @@ export class MainMenu extends Scene<GameState, IPhysicsContext> {
     walkerZ: 22,
     walkerY: 1.7,
     walkerX: 2.6,
+    bannerSway: 0,
     respawns: 0,
     screen: "menu",
     score: 0,

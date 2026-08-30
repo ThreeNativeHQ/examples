@@ -1,0 +1,25 @@
+{
+  "name": "lumen-hall-banners-are-simulated-cloth",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 30,
+  "artifacts": { "screenshots": false },
+  "steps": [
+    { "kind": "wait", "label": "let-the-draft-build", "waitTicks": 90, "release": true },
+    { "kind": "wait", "label": "and-keep-breathing", "waitTicks": 90, "release": true },
+    { "kind": "wait", "label": "settle", "waitTicks": 60, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "runtimeReady": true },
+    "resources": [
+      { "id": "state", "path": "bannerSway", "changed": true },
+      {
+        "id": "state",
+        "path": "bannerSway",
+        "lte": 0.35,
+        "allowTrivial": "A held invariant, not a transition: this row proves the Verlet integrator stays bounded. A cloth that leaves the building fails here, and it is supposed to be satisfied from the first tick to the last."
+      }
+    ]
+  }
+}
