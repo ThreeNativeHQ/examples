@@ -385,6 +385,23 @@ export interface IAuthoredStand {
   readonly flame: number;
 }
 
+export interface IAuthoredStatue {
+  readonly model: "engel" | "lady";
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
+}
+
+/** Every aisle statue slot is filled by one of the two authored glTF figures. */
+export const AUTHORED_STATUES: readonly IAuthoredStatue[] = [
+  { model: "lady", x: -6.95, z: -7, yaw: Math.PI / 2 },
+  { model: "engel", x: 6.95, z: -7, yaw: -Math.PI / 2 },
+  { model: "engel", x: -6.95, z: 7, yaw: Math.PI / 2 },
+  { model: "lady", x: 6.95, z: 7, yaw: -Math.PI / 2 },
+  { model: "lady", x: -6.95, z: 21, yaw: Math.PI / 2 },
+  { model: "engel", x: 6.95, z: 21, yaw: -Math.PI / 2 },
+];
+
 /**
  * Where the imported stands go, and why each one is where it is.
  *
@@ -464,9 +481,7 @@ interface IKit {
   readonly knop: IBatch;
   readonly ring: IBatch;
   readonly stoneBox: IBatch;
-  readonly stoneHead: IBatch;
   readonly stoneSpike: IBatch;
-  readonly robe: IBatch;
   readonly wax: IBatch;
 }
 
@@ -847,14 +862,6 @@ function banner(kit: IKit, parent: Group, x: number, z: number, topY: number, ph
   // would be the only device there is.
 }
 
-/** A robed figure on a plinth, standing in an aisle bay. */
-function statue(kit: IKit, x: number, z: number, facing: number): void {
-  place(kit.stoneBox, [x, 0.75, z], [0.9, 1.5, 0.9]);
-  place(kit.stoneBox, [x, 1.56, z], [1.05, 0.12, 1.05]);
-  place(kit.robe, [x, 1.62, z], [1, 1, 1], [0, facing, 0]);
-  place(kit.stoneHead, [x, 3.62, z], [0.15, 0.19, 0.15]);
-}
-
 /** A wall memorial: gabled stone panel with a gold inscription plate. */
 function memorial(kit: IKit, x: number, z: number, facing: number): void {
   place(kit.stoneBox, [x, 3.4, z], [0.22, 1.9, 1.25], [0, facing, 0]);
@@ -910,26 +917,7 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
     knop: batch(new SphereGeometry(1, 8, 6), materials.bronze),
     ring: batch(new TorusGeometry(1, 0.05, 6, 28), materials.bronze),
     stoneBox: batch(new BoxGeometry(1, 1, 1), materials.carvedStone),
-    stoneHead: batch(new SphereGeometry(1, 8, 6), materials.carvedStone),
     stoneSpike: batch(new ConeGeometry(1, 1, 4), materials.carvedStone),
-    // A lathed robe: one profile, many figures. Modelling a body would cost geometry the
-    // frame never resolves — at 20 m in an unlit aisle a statue is a tapering silhouette.
-    robe: batch(
-      new LatheGeometry(
-        [
-          new Vector2(0.42, 0),
-          new Vector2(0.4, 0.25),
-          new Vector2(0.34, 0.8),
-          new Vector2(0.29, 1.25),
-          new Vector2(0.27, 1.6),
-          new Vector2(0.22, 1.82),
-          new Vector2(0.13, 1.95),
-          new Vector2(0.06, 2.0),
-        ],
-        10,
-      ),
-      materials.carvedStone,
-    ),
     wax: batch(unitRod, materials.wax),
   };
   const kit: IKit = batches;
@@ -1149,24 +1137,10 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
     banner(kit, furnishings, x, z + NAVE.pierRadius + 0.25, 11.6, phase);
   }
 
-  // ---- aisle statuary and memorials --------------------------------------------------
-  // Everything here lives in light the sun never reaches. If the GI stage is off these are
-  // black cut-outs; if it is on they are modelled by bounce off the arcade — which makes
-  // them the cheapest read on whether the stage did anything.
+  // ---- aisle memorials ---------------------------------------------------------------
+  // Statuary is authored glTF placed from `AUTHORED_STATUES` by Play. Only the repeated
+  // wall memorials remain procedural here.
   for (const side of [-1, 1]) {
-    for (const bay of [3, 5, 7]) {
-      // Bay centres, on the nave side of the arcade rather than out in the aisle. The
-      // colonnade in this building is dense enough that a sightline from the nave floor
-      // into an aisle bay is almost never clear: statues placed properly in the aisle were
-      // invisible in three consecutive captures. Standing them against the arcade puts
-      // them where the reference's are read from — in front of an opening, not behind one.
-      const z = -HALF_DEPTH + bay * NAVE.bayPitch + NAVE.bayPitch / 2;
-      // Bays 5 and 7 on the +X side are left empty on purpose: `Play` stands authored glTF
-      // figures there instead, so authored statues and these procedural ones can be
-      // compared standing in the same light in the same aisle.
-      if (side > 0 && (bay === 5 || bay === 7)) continue;
-      statue(kit, side * 6.95, z, side > 0 ? -Math.PI / 2 : Math.PI / 2);
-    }
     for (const bay of [2, 4, 6]) {
       const z = -HALF_DEPTH + bay * NAVE.bayPitch + NAVE.bayPitch / 2;
       memorial(kit, side * (AISLE_WALL_X - 0.35), z, 0);
@@ -1221,9 +1195,7 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
   batches.ironSpike.build({ parent: furnishings, name: "furnishings-finials", castShadow: true, receiveShadow: true });
   batches.knop.build({ parent: furnishings, name: "furnishings-knops", castShadow: false, receiveShadow: false });
   batches.ring.build({ parent: furnishings, name: "furnishings-rings", castShadow: true, receiveShadow: true });
-  batches.robe.build({ parent: furnishings, name: "furnishings-statues", castShadow: true, receiveShadow: true });
   batches.stoneBox.build({ parent: furnishings, name: "furnishings-stone", castShadow: true, receiveShadow: true });
-  batches.stoneHead.build({ parent: furnishings, name: "furnishings-heads", castShadow: false, receiveShadow: false });
   batches.stoneSpike.build({ parent: furnishings, name: "furnishings-gables", castShadow: true, receiveShadow: true });
   batches.wax.build({ parent: furnishings, name: "furnishings-candle-wax", castShadow: false, receiveShadow: false });
 

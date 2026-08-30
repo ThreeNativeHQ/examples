@@ -583,11 +583,10 @@ function dressGlass(mesh: Mesh, maps: ISurfaceTextures): void {
   // mirror — fine for tracery, fatal for a saint holding a book. Flipping u on back faces
   // makes both sides read the same way round, and does it without needing to know which way
   // any particular window was built to face.
-  // V is flipped for every one of these maps because they arrive as KTX2, and a compressed
-  // texture cannot be flipped at upload — the loader reports `flipY: false`, so the image
-  // samples bottom-up against the top-down UVs `projectPanelUV` writes. Symmetric artwork
-  // hides it; three standing saints do not, and they came out inverted.
-  const panel = vec2(uv().x, uv().y.oneMinus());
+  // Keep V exactly as authored. Both the raw PNG desktop-native path and Three's KTX2
+  // loader expose the panel upright to shader UVs; applying another V inversion turns the
+  // standing saints upside down. Only U changes on a back face, to undo the mirror.
+  const panel = uv();
   const facing = frontFacing.select(panel, vec2(panel.x.oneMinus(), panel.y));
   const sample = textureNode(map, facing);
 

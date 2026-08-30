@@ -30,7 +30,9 @@ import { createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { createCathedral } from "../render/cathedral.js";
 import {
+  AUTHORED_STATUES,
   AUTHORED_STANDS,
+  type IAuthoredStatue,
   type IAuthoredStand,
   type IFlamePlacement,
   createFurnishings,
@@ -266,12 +268,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const wicks: IFlamePlacement[] = [];
     const standObjects: Group[] = [];
 
-    // The authored glTF figure stands in the slot `furnishings.ts` leaves empty for it:
-    // bay 7 on the +X side, x = 6.95, z = 21. Its procedural neighbours in bays 3 and 5 are
-    // untouched, so the two kinds stand in the same aisle under the same light.
-    if (this.#engel !== undefined) ctx.add(placeAuthoredStatue(this.#engel, 6.95, 21));
-    // Bay 5, z = 7, the other slot furnishings.ts leaves empty.
-    if (this.#lady !== undefined) ctx.add(placeAuthoredStatue(this.#lady, 6.95, 7));
+    for (const statue of AUTHORED_STATUES) {
+      const source = statue.model === "engel" ? this.#engel : this.#lady;
+      if (source !== undefined) ctx.add(placeAuthoredStatue(source, statue));
+    }
     // The sanctuary stands on the chancel platform, where furnishings.ts leaves its
     // procedural altar set switched off. CHANCEL_Y 1.08, ALTAR_Z = CHANCEL_Z - 6.5.
     if (this.#sanctuary !== undefined) {
@@ -496,7 +496,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
  * rather than hard-coded — a glTF arrives in whatever units its author used, so a fixed
  * factor breaks silently the moment the file is replaced.
  */
-function placeAuthoredStatue(source: Group, x: number, z: number): Group {
+function placeAuthoredStatue(source: Group, statue: IAuthoredStatue): Group {
   /** Statue and its own base together, which is what the model actually is. */
   const TARGET_HEIGHT = 3.6;
 
@@ -505,7 +505,7 @@ function placeAuthoredStatue(source: Group, x: number, z: number): Group {
   const size = bounds.getSize(new Vector3());
   const scale = size.y > 0 ? TARGET_HEIGHT / size.y : 1;
   figure.scale.setScalar(scale);
-  figure.rotation.y = -Math.PI / 2;
+  figure.rotation.y = statue.yaw;
 
   // Re-measure after scaling and rotating. The offsets have to be in final world units, and
   // a model's origin is very unlikely to sit at the centre of its own footprint or at its
@@ -513,7 +513,7 @@ function placeAuthoredStatue(source: Group, x: number, z: number): Group {
   figure.updateMatrixWorld(true);
   const placed = new Box3().setFromObject(figure);
   const centre = placed.getCenter(new Vector3());
-  figure.position.set(x - centre.x, -placed.min.y, z - centre.z);
+  figure.position.set(statue.x - centre.x, -placed.min.y, statue.z - centre.z);
 
   figure.traverse((object) => {
     if (object instanceof Mesh) {
@@ -529,6 +529,8 @@ function placeAuthoredStatue(source: Group, x: number, z: number): Group {
   const final = new Box3().setFromObject(figure);
   console.info(
     `TN_AUTHORED_STATUE:${JSON.stringify({
+      model: statue.model,
+      at: [statue.x, statue.z],
       scale: +scale.toFixed(4),
       sourceHeight: +size.y.toFixed(3),
       min: [+final.min.x.toFixed(2), +final.min.y.toFixed(2), +final.min.z.toFixed(2)],
