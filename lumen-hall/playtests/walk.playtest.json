@@ -1,0 +1,23 @@
+{
+  "name": "lumen-hall-walks-forward",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 45,
+  "artifacts": { "screenshots": "before-after" },
+  "steps": [
+    { "kind": "wait", "label": "settle", "waitTicks": 30, "release": true },
+    {
+      "kind": "input",
+      "label": "walk-forward",
+      "press": "KeyW",
+      "holdTicks": 150,
+      "release": true
+    },
+    { "kind": "wait", "label": "coast-to-stop", "waitTicks": 30, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "runtimeReady": true },
+    "visual": [{ "frameDiff": { "minChangedPixelRatio": 0.15 } }]
+  }
+}
