@@ -1,0 +1,17 @@
+{
+  "name": "lumen-hall-steady-state-perf",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1600, "height": 900 },
+  "warmupFrames": 60,
+  "artifacts": { "screenshots": false },
+  "steps": [
+    { "kind": "wait", "label": "window-1-is-startup", "waitTicks": 150, "release": true },
+    { "kind": "wait", "label": "still-window-1", "waitTicks": 150, "release": true },
+    { "kind": "wait", "label": "window-2a", "waitTicks": 150, "release": true },
+    { "kind": "wait", "label": "window-2b", "waitTicks": 150, "release": true },
+    { "kind": "wait", "label": "window-3a", "waitTicks": 150, "release": true },
+    { "kind": "wait", "label": "window-3b", "waitTicks": 150, "release": true }
+  ],
+  "assert": { "diagnostics": { "runtimeReady": true } }
+}

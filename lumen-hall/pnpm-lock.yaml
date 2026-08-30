@@ -964,7 +964,7 @@ packages:
     version: 0.3.0
 
   '@threenative/core@file:../.packages/threenative-core-0.3.0-517721d719b8.tgz':
-    resolution: {integrity: sha512-HZXua2CeGjNmtDDwKxvCSeJCeGrDGbps4dq8Ln0gTbIYDUjMAfY8RNcqLXcbVQJJo7z85yan71wLH9IXf25yxw==, tarball: file:../.packages/threenative-core-0.3.0-517721d719b8.tgz}
+    resolution: {integrity: sha512-WQu8rsivNO8WuuRZypxLjQy4+Zhno3Fu68jPNoAkvZSiXbWP5hURoPx9c/ZIggdsM3jbS7ns2lWqpA17uFnhCw==, tarball: file:../.packages/threenative-core-0.3.0-517721d719b8.tgz}
     version: 0.3.0
     peerDependencies:
       '@threenative/playtest': '>=0.3.0 <0.4.0'

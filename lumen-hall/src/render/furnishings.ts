@@ -141,7 +141,7 @@ interface IBatch {
 }
 
 interface IBuiltBatch extends IBatch {
-  readonly build: (parent: Group, name: string, castShadow: boolean) => void;
+  readonly build: (parent: Group, name: string, castShadow: boolean) => InstancedMesh | undefined;
 }
 
 function batch(geometry: BufferGeometry, material: Material): IBuiltBatch {
@@ -150,8 +150,8 @@ function batch(geometry: BufferGeometry, material: Material): IBuiltBatch {
     add: (matrix: Matrix4): void => {
       matrices.push(matrix.clone());
     },
-    build: (parent: Group, name: string, castShadow: boolean): void => {
-      if (matrices.length === 0) return;
+    build: (parent: Group, name: string, castShadow: boolean): InstancedMesh | undefined => {
+      if (matrices.length === 0) return undefined;
       const mesh = new InstancedMesh(geometry, material, matrices.length);
       mesh.name = name;
       for (let index = 0; index < matrices.length; index += 1) {
@@ -164,6 +164,7 @@ function batch(geometry: BufferGeometry, material: Material): IBuiltBatch {
       mesh.receiveShadow = castShadow;
       mesh.computeBoundingSphere();
       parent.add(mesh);
+      return mesh;
     },
   };
 }
@@ -247,6 +248,24 @@ const CHANCEL_HALF_WIDTH = 5.8;
 // the pieces
 // ---------------------------------------------------------------------------------------
 
+/** One flame's animation state, recorded by `candle` and replayed by `animateFires`. */
+interface IFire {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly sx: number;
+  readonly sy: number;
+  readonly sz: number;
+  readonly hx: number;
+  readonly hy: number;
+  readonly hz: number;
+  readonly phase: number;
+  readonly speed: number;
+}
+
+/** Reset by `createFurnishings`; a scene rebuild must not inherit the last build's flames. */
+let fires: IFire[] = [];
+
 interface IKit {
   readonly bronzeRod: IBatch;
   readonly chainLink: IBatch;
@@ -282,6 +301,23 @@ function candle(kit: IKit, x: number, baseY: number, z: number, height: number, 
   // them closer together than their own radius merge into one lozenge with no candles
   // inside it — which is what a 0.2 m halo did to every seven-branch stand in the frame.
   place(kit.halo, [x, tip, z], [0.115, 0.14, 0.115]);
+  // Deterministic per-flame fire state for the animator below. The golden-angle phase
+  // spread keeps neighbours out of step, and the speeds cluster around 1.3-2 Hz — candle
+  // flicker, not strobe. Seeded from the placement index so two captures of the same
+  // build at the same frame time differ by the stage under test and nothing else.
+  fires.push({
+    x,
+    y: tip,
+    z,
+    sx: 0.05,
+    sy: 0.11,
+    sz: 0.05,
+    hx: 0.115,
+    hy: 0.14,
+    hz: 0.115,
+    phase: (fires.length * 2.399963) % (Math.PI * 2),
+    speed: 8 + ((fires.length * 7) % 5) * 1.1,
+  });
 }
 
 /**
@@ -549,6 +585,7 @@ function memorial(kit: IKit, x: number, z: number, facing: number): void {
 export function createFurnishings(): Group {
   const furnishings = new Group();
   furnishings.name = "furnishings";
+  fires = [];
 
   // Unit geometries. Every one of these is instanced, so the segment counts below are paid
   // exactly once no matter how many hundreds of copies end up in the frame.
@@ -556,7 +593,24 @@ export function createFurnishings(): Group {
   const batches = {
     bronzeRod: batch(unitRod, materials.bronze),
     chainLink: batch(new TorusGeometry(1, 0.26, 4, 8), materials.bronze),
-    flame: batch(new SphereGeometry(1, 6, 5), materials.flame),
+    flame: batch(
+      // A teardrop, not a sphere: the pointed top and the narrow waist are the read that
+      // says flame. Unit height, as the sphere it replaces was, so every scale below is
+      // unchanged; the lathe profile is slimmer than the sphere's equator, which is the
+      // point — spherical flames read as glowing beads.
+      new LatheGeometry(
+        [
+          new Vector2(0.001, -1),
+          new Vector2(0.42, -0.66),
+          new Vector2(0.68, -0.1),
+          new Vector2(0.56, 0.4),
+          new Vector2(0.24, 0.78),
+          new Vector2(0.001, 1),
+        ],
+        8,
+      ),
+      materials.flame,
+    ),
     gold: batch(new BoxGeometry(1, 1, 1), materials.gold),
     halo: batch(new SphereGeometry(1, 8, 6), materials.halo),
     ironBox: batch(new BoxGeometry(1, 1, 1), materials.iron),
@@ -842,9 +896,9 @@ export function createFurnishings(): Group {
   // ---- resolve every batch into its single draw ---------------------------------------
   batches.bronzeRod.build(furnishings, "furnishings-bronze-rods", true);
   batches.chainLink.build(furnishings, "furnishings-chain", false);
-  batches.flame.build(furnishings, "furnishings-flames", false);
+  const flameMesh = batches.flame.build(furnishings, "furnishings-flames", false);
   batches.gold.build(furnishings, "furnishings-gold", false);
-  batches.halo.build(furnishings, "furnishings-halos", false);
+  const haloMesh = batches.halo.build(furnishings, "furnishings-halos", false);
   batches.ironBox.build(furnishings, "furnishings-iron-rails", true);
   batches.ironRod.build(furnishings, "furnishings-iron-rods", true);
   batches.ironSpike.build(furnishings, "furnishings-finials", true);
@@ -855,6 +909,48 @@ export function createFurnishings(): Group {
   batches.stoneHead.build(furnishings, "furnishings-heads", false);
   batches.stoneSpike.build(furnishings, "furnishings-gables", true);
   batches.wax.build(furnishings, "furnishings-wax", false);
+
+  // ---- fire animation -----------------------------------------------------------------
+  // Every flame and both real lights breathe on a seeded phase: deterministic in the
+  // build, so two captures of the same frame time still differ by the stage under test
+  // and nothing else, while no two neighbouring flames move together. The halo rides its
+  // own wobbled matrix rather than the flame's, because the two draw from different base
+  // scales. Cost is two instance-matrix uploads of a few hundred entries per frame —
+  // orders of magnitude under the post chain.
+  if (flameMesh !== undefined && haloMesh !== undefined) {
+    furnishings.userData.animateFires = (time: number): void => {
+      for (let index = 0; index < fires.length; index += 1) {
+        const fire = fires[index] as IFire;
+        // Two offset sines: one slow breath, one quicker gutter. Flatlined they would
+        // read as a scale tween; the pair is what reads as combustion.
+        const wobble =
+          Math.sin(time * fire.speed + fire.phase) * 0.6 +
+          Math.sin(time * fire.speed * 1.73 + fire.phase * 2.1) * 0.4;
+        dummy.position.set(fire.x + wobble * 0.004, fire.y + wobble * 0.006, fire.z);
+        dummy.rotation.set(0, 0, wobble * 0.06);
+        dummy.scale.set(
+          fire.sx * (1 - Math.abs(wobble) * 0.07),
+          fire.sy * (1 + wobble * 0.16),
+          fire.sz * (1 - Math.abs(wobble) * 0.07),
+        );
+        dummy.updateMatrix();
+        flameMesh.setMatrixAt(index, dummy.matrix);
+        dummy.scale.set(
+          fire.hx * (1 - Math.abs(wobble) * 0.05),
+          fire.hy * (1 + wobble * 0.1),
+          fire.hz * (1 - Math.abs(wobble) * 0.05),
+        );
+        dummy.updateMatrix();
+        haloMesh.setMatrixAt(index, dummy.matrix);
+      }
+      flameMesh.instanceMatrix.needsUpdate = true;
+      haloMesh.instanceMatrix.needsUpdate = true;
+      standLight.intensity =
+        6.5 * (1 + Math.sin(time * 9.3) * 0.05 + Math.sin(time * 15.7) * 0.03);
+      altarLight.intensity =
+        18 * (1 + Math.sin(time * 7.9 + 1.3) * 0.05 + Math.sin(time * 13.1) * 0.03);
+    };
+  }
 
   return furnishings;
 }
