@@ -61,7 +61,11 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
   sun.position.set(-62, 40, -4);
   sun.target.position.set(12, 1, -12);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(4096, 4096);
+  // 2048, not 4096. The godray pass samples this map once per raymarch step per pixel, so
+  // its size is a cost multiplier on the whole volumetric pass rather than a one-off. At a
+  // 92-unit ortho extent 2048 still gives 22 texels per metre, which holds a hard pier edge
+  // at this scale — and the pier edge is the only thing the shafts need it for.
+  sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 220;
   // The shadow camera has to contain the whole building, not just what is on screen —

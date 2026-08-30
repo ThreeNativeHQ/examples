@@ -83,6 +83,7 @@ export function setupPost(
     godraysDensity: 1.1,
     godraysFloor: 0.16,
     godraysIntensity: 1.6,
+    godraysSteps: 24,
     // Low, because this number is what was washing the building out. The pass adds haze
     // to every pixel rather than only to the beams, so at 0.55 the darkest tenth of the
     // frame never went below 22% luminance and nothing in the nave read as shadow.

@@ -101,6 +101,15 @@ export interface IWorldEnvironmentOptions {
   /** Multiplier applied after the floor, so beams can be bright without the haze returning. */
   readonly godraysIntensity?: number;
   /**
+   * Raymarch steps per pixel. `GodraysNode` defaults to 60.
+   *
+   * Every step is a shadow-map sample, so this multiplies directly into the cost of the
+   * whole pass. The pass jitters its sample positions with interleaved noise, so a lower
+   * count trades a hard shaft edge for a slightly noisier one rather than for banding —
+   * which the denoise and temporal stages then largely absorb.
+   */
+  readonly godraysSteps?: number;
+  /**
    * Ceiling on shaft brightness.
    *
    * This is also the single strongest control over how bright the *whole* scene looks. The
@@ -178,6 +187,7 @@ export class WorldEnvironment {
       godraysDensity: options.godraysDensity ?? 0.7,
       godraysFloor: options.godraysFloor ?? 0,
       godraysIntensity: options.godraysIntensity ?? 1,
+      godraysSteps: options.godraysSteps ?? 60,
       godraysMaxDensity: options.godraysMaxDensity ?? 0.5,
       bloomEnabled: options.bloomEnabled ?? true,
       bloomStrength: options.bloomStrength ?? 0.7,
@@ -293,6 +303,7 @@ export class WorldEnvironment {
         const shafts = godrays(depth, view, godraysLight);
         shafts.density.value = options.godraysDensity;
         shafts.maxDensity.value = options.godraysMaxDensity;
+        shafts.raymarchSteps.value = options.godraysSteps;
         // Floor, then scale, then tint. The floor is what turns this from a whole-frame
         // brightener into a shaft renderer; the tint by the light's own colour is what
         // stops a warm sun throwing a white beam.

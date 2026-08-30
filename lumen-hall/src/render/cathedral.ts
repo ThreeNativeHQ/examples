@@ -1262,7 +1262,7 @@ export function createCathedral(floorTexture?: Texture): Group {
   // never be occluded.
   const canopy = new Mesh(
     part(
-      piercedPanel(11, 14.6, 0.45, [{ halfWidth: 4.4, springY: 6 }]),
+      piercedPanel(11, 13.9, 0.45, [{ halfWidth: 4.4, springY: 6 }]),
       TONE.stone,
     ),
     materials.carved,
@@ -1271,6 +1271,28 @@ export function createCathedral(floorTexture?: Texture): Group {
   canopy.castShadow = true;
   canopy.receiveShadow = true;
   nave.add(canopy);
+
+  // A gable on the canopy, for the same reason the rose has one: a pierced panel ends in a
+  // straight horizontal edge, and against a lit apse wall that edge reads as the top of a
+  // rectangle stuck on the wall rather than as the head of a window.
+  const canopyParts: BufferGeometry[] = [];
+  const canopyFoot = new Vector2(5.4, 13.6);
+  const canopyApex = 16.4;
+  const canopyRun = Math.hypot(canopyFoot.x, canopyApex - canopyFoot.y);
+  for (const slope of [-1, 1]) {
+    canopyParts.push(
+      part(
+        new BoxGeometry(canopyRun + 0.35, 0.5, 0.5)
+          .rotateZ(slope * -Math.atan2(canopyApex - canopyFoot.y, canopyFoot.x))
+          .translate((slope * canopyFoot.x) / 2, (canopyFoot.y + canopyApex) / 2, 0),
+        TONE.bright,
+      ),
+    );
+  }
+  const canopyGable = new Mesh(weld(canopyParts, "canopy gable"), materials.carved);
+  canopyGable.position.set(0, 0, -halfDepth + 0.62);
+  canopyGable.castShadow = true;
+  nave.add(canopyGable);
 
   // ---- chancel floor, altar, screen ---------------------------------------------------------
   // Three steps, not one box. The step nosings are the horizontal that breaks the floor's

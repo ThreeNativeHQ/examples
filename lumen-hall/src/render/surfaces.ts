@@ -61,6 +61,7 @@ import { palette } from "./palette.js";
 
 /** Every texture this file needs, by the name the asset pipeline knows it as. */
 export const SURFACE_SOURCES = {
+  floorRough: "cathedral-floor-rough.png",
   glassCool: "cathedral-glass-clerestory-cool.png",
   glassLancet: "cathedral-glass-lancet.png",
   glassRose: "cathedral-glass-rose.png",
@@ -91,11 +92,21 @@ const ALBEDO_MEAN = 0.25;
 
 /** Measured mean linear luminance of each glass map, over its opaque pixels. */
 const GLASS_LUMINANCE: Record<"glassCool" | "glassLancet" | "glassRose" | "glassWarm", number> = {
-  glassCool: 0.4797,
-  glassLancet: 0.2502,
-  glassRose: 0.3496,
-  glassWarm: 0.6065,
+  glassCool: 0.4796,
+  glassLancet: 0.1855,
+  glassRose: 0.2779,
+  glassWarm: 0.6066,
 };
+
+/**
+ * A material this rough is the floor: `cathedral.ts` keeps it the only low-roughness
+ * surface in the building, because otherwise screen-space reflection has nothing to
+ * return. Whatever number it uses stays the *polished* roughness — the mask only says
+ * where the polish is not.
+ */
+const FLOOR_MAX_ROUGHNESS = 0.3;
+/** Unpolished joints between inlay pieces. High enough that the reflection stops there. */
+const FLOOR_GROUT_ROUGHNESS = 0.55;
 
 /**
  * One stone, as this file needs it: two maps, the size the source was photographed at,
@@ -180,11 +191,16 @@ export function applySurfaces(cathedral: Group, textures?: ISurfaceTextures): Gr
 
   const pale = new Set<MeshStandardMaterial>();
   const dark = new Set<MeshStandardMaterial>();
+  const floor = new Set<MeshStandardMaterial>();
   const glass: Mesh[] = [];
   cathedral.traverse((object) => {
     if (!(object instanceof Mesh)) return;
     const material = object.material;
     if (material instanceof MeshStandardMaterial) {
+      if (material.roughness <= FLOOR_MAX_ROUGHNESS && material.map !== null) {
+        floor.add(material);
+        return;
+      }
       if (material.metalness !== 0) return;
       if (luminance(material.color) < SHADOW_STONE_MAX_LUMINANCE) dark.add(material);
       else pale.add(material);
@@ -208,6 +224,7 @@ export function applySurfaces(cathedral: Group, textures?: ISurfaceTextures): Gr
   };
   for (const material of pale) dressStone(material, limestone);
   for (const material of dark) dressStone(material, vaultstone);
+  for (const material of floor) dressFloor(material, maps.floorRough);
   for (const mesh of glass) dressGlass(mesh, maps);
   return cathedral;
 }
@@ -249,6 +266,40 @@ function dressStone(material: MeshStandardMaterial, stone: IStone): void {
   // screen-space derivative of the relief, so it works off the triplanar sample without a
   // tangent frame — which the merged shell does not have a usable one of anyway.
   nodes.normalNode = bumpMap(reliefNode, float(stone.bump));
+}
+
+/**
+ * Breaks the floor's mirror where a real floor is not a mirror.
+ *
+ * One uniform roughness across the whole nave floor reads as water. The mask says where
+ * the polish is missing — the joints between inlay pieces, the duller dark stone, and
+ * broad patches of wear — and the roughness runs from whatever `cathedral.ts` set as the
+ * polished value up to `FLOOR_GROUT_ROUGHNESS` across it.
+ */
+function dressFloor(material: MeshStandardMaterial, mask: Texture): void {
+  const albedo = material.map;
+  if (albedo === null) return;
+  // The mask is drawn on the albedo's own image, so it has to be sampled with the albedo's
+  // own transform. Copying it is what keeps a joint in the roughness over the joint in the
+  // pattern instead of a tile and a half away from it.
+  mask.wrapS = albedo.wrapS;
+  mask.wrapT = albedo.wrapT;
+  mask.repeat.copy(albedo.repeat);
+  mask.offset.copy(albedo.offset);
+  mask.center.copy(albedo.center);
+  mask.rotation = albedo.rotation;
+  mask.anisotropy = albedo.anisotropy;
+  // Linear. Read through an sRGB transfer the joints come back at roughly a third of the
+  // weight they were drawn at, and the floor goes back to being a mirror.
+  mask.colorSpace = NoColorSpace;
+  mask.needsUpdate = true;
+
+  const nodes = material as unknown as INodeMaterial;
+  nodes.roughnessNode = mix(
+    float(material.roughness),
+    float(FLOOR_GROUT_ROUGHNESS),
+    textureNode(mask).r,
+  );
 }
 
 function prepare(map: Texture, colorSpace: string, anisotropy: number): void {
