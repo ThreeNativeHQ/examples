@@ -10,13 +10,267 @@
 // is 4x4, so **every source texture's width and height must be divisible by four**. A
 // 1254x1254 source compiles without complaint and then fails at draw time with
 // `GPUValidationError: size is not a multiple of the block width`.
-import type { Texture } from "three";
+//
+// Two things this file will not do, and why:
+//
+//   It does not change how bright any surface is. Every albedo map is authored with a
+//   known linear mean (`ALBEDO_MEAN`) and the palette colour is divided by that mean
+//   before it multiplies the map, so a lit pier averages exactly the value it averaged
+//   when it was flat colour. The lighting lane's exposure, SSGI intensity and godray
+//   density were tuned against those values; a texture pass that quietly doubles the
+//   albedo of the whole building invalidates all of it.
+//
+//   It does not touch UVs on the stone. `createCathedral` builds the shell out of
+//   cylinders (UVs 0..1 around), extruded panels (UVs in metres), planes, boxes, tori and
+//   rings, and one `repeat` cannot be right for all of them — a texture scaled for a pier
+//   is smeared across the vault. The stone is mapped triplanar from world position
+//   instead, so one metre of stone is one metre of texture on every surface in the
+//   building and the courses line up across the joins between them.
+import {
+  type BufferGeometry,
+  ClampToEdgeWrapping,
+  Float32BufferAttribute,
+  type Group,
+  LinearSRGBColorSpace,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  NoColorSpace,
+  type PlaneGeometry,
+  RepeatWrapping,
+  SRGBColorSpace,
+  type Texture,
+} from "three";
+import {
+  float,
+  mix,
+  normalWorld,
+  positionWorld,
+  smoothstep,
+  texture as textureNode,
+  triplanarTexture,
+  vec3,
+} from "three/tsl";
+import { palette } from "./palette.js";
 
-export interface ISurfaceTextures {
-  readonly floor?: Texture;
+/** Every texture this file needs, by the name the asset pipeline knows it as. */
+export const SURFACE_SOURCES = {
+  glassCool: "cathedral-glass-clerestory-cool.png",
+  glassLancet: "cathedral-glass-lancet.png",
+  glassRose: "cathedral-glass-rose.png",
+  glassWarm: "cathedral-glass-clerestory-warm.png",
+  limestone: "cathedral-limestone.png",
+  limestoneRough: "cathedral-limestone-rough.png",
+  vaultstone: "cathedral-vaultstone.png",
+  vaultstoneRough: "cathedral-vaultstone-rough.png",
+} as const;
+
+export type ISurfaceTextures = Record<keyof typeof SURFACE_SOURCES, Texture>;
+
+/** The subset of `ctx.assets` this file uses. */
+export interface IAssetSource {
+  texture(name: string): Promise<Texture>;
 }
 
-/** Applies loaded textures to the shared cathedral materials. */
-export function applySurfaces(_textures: ISurfaceTextures): void {
-  // Filled in by the textures lane.
+/**
+ * The linear mean each albedo map was authored to, per channel.
+ *
+ * The maps are colour-neutral on average by construction, so dividing the palette colour
+ * by this number and multiplying it back through the map leaves the average surface
+ * exactly as bright as it was before the map existed. Change it here only if the
+ * generator that wrote the PNGs changed its target.
+ */
+const ALBEDO_MEAN = 0.25;
+
+/** Metres of wall covered by one tile. Both sources are photographed flat-on at this size. */
+const LIMESTONE_TILE = 3;
+const VAULTSTONE_TILE = 2;
+
+/** How dark the base of a wall gets, and how far up the staining reaches. */
+const GRIME_FLOOR = 0.55;
+const GRIME_TOP = 4.5;
+
+/**
+ * `colorNode` and `roughnessNode` exist on every node material the WebGPU renderer builds,
+ * but the shell is made of plain `three` materials whose types know nothing about nodes.
+ * The renderer copies own properties across when it converts them, so setting the nodes
+ * before the first frame works; the compiler just cannot see it.
+ */
+type INodeMaterial = {
+  colorNode?: unknown;
+  roughnessNode?: unknown;
+};
+
+let loaded: ISurfaceTextures | undefined;
+
+/**
+ * Resolves every surface texture. Call from `Scene.load`, not from `enter`.
+ *
+ * The stone has to be on the materials before the first frame is drawn: the screen-space
+ * passes gather from what is on screen, so a texture that arrives three frames late is a
+ * texture the first three frames of GI were computed without.
+ */
+export async function loadSurfaces(assets: IAssetSource): Promise<ISurfaceTextures> {
+  const names = Object.keys(SURFACE_SOURCES) as (keyof typeof SURFACE_SOURCES)[];
+  const textures = await Promise.all(names.map((name) => assets.texture(SURFACE_SOURCES[name])));
+  const resolved = {} as ISurfaceTextures;
+  names.forEach((name, index) => {
+    const texture = textures[index];
+    if (texture === undefined) throw new Error(`TN_SURFACES_MISSING: ${SURFACE_SOURCES[name]}`);
+    resolved[name] = texture;
+  });
+  loaded = resolved;
+  return resolved;
+}
+
+/**
+ * Dresses the cathedral shell in stone and glass, and returns it so the call site stays
+ * one expression.
+ *
+ * Materials are found by the palette colour they were built with rather than by being
+ * handed in, because `createCathedral` owns them and this lane does not edit that file.
+ */
+export function applySurfaces(cathedral: Group, textures?: ISurfaceTextures): Group {
+  const maps = textures ?? loaded;
+  if (maps === undefined) {
+    throw new Error("TN_SURFACES_NOT_LOADED: call loadSurfaces() from Scene.load() first.");
+  }
+
+  const stone = new Set<MeshStandardMaterial>();
+  const shadowStone = new Set<MeshStandardMaterial>();
+  const glass: Mesh[] = [];
+  cathedral.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const material = object.material;
+    if (material instanceof MeshStandardMaterial) {
+      // `toneMapped` is false only on the glass, so a standard material here is structure.
+      if (material.color.getHex() === palette.stone) stone.add(material);
+      else if (material.color.getHex() === palette.stoneDark) shadowStone.add(material);
+      return;
+    }
+    if (material instanceof MeshBasicMaterial && !material.toneMapped) glass.push(object);
+  });
+
+  for (const material of stone) {
+    dressStone(material, maps.limestone, maps.limestoneRough, LIMESTONE_TILE);
+  }
+  for (const material of shadowStone) {
+    dressStone(material, maps.vaultstone, maps.vaultstoneRough, VAULTSTONE_TILE);
+  }
+  for (const mesh of glass) dressGlass(mesh, maps);
+  return cathedral;
+}
+
+/** Triplanar albedo and roughness, plus the dirt that collects where a wall meets a floor. */
+function dressStone(
+  material: MeshStandardMaterial,
+  albedo: Texture,
+  rough: Texture,
+  tileMetres: number,
+): void {
+  prepare(albedo, SRGBColorSpace, 8);
+  // Roughness is data, not colour. Read through an sRGB transfer it comes back far too
+  // low and every pier in the building turns into polished granite.
+  prepare(rough, NoColorSpace, 4);
+
+  const scale = float(1 / tileMetres);
+  const project = (map: Texture) =>
+    triplanarTexture(textureNode(map), null, null, scale, positionWorld, normalWorld);
+
+  const albedoNode = project(albedo);
+  // The palette colour still decides how light this stone is; the map only says how it
+  // varies. Dividing by the map's own mean is what keeps those two jobs separate.
+  const tint = material.color.clone().multiplyScalar(1 / ALBEDO_MEAN);
+  // Weathering, not a gradient: the darkening at the foot of a wall is modulated by the
+  // stone's own pattern, so it follows the courses instead of drawing a clean horizon.
+  const staining = mix(
+    float(GRIME_FLOOR).add(albedoNode.r.mul(0.3)),
+    float(1),
+    smoothstep(float(0.2), float(GRIME_TOP), positionWorld.y),
+  );
+
+  const nodes = material as unknown as INodeMaterial;
+  nodes.colorNode = albedoNode.rgb.mul(vec3(tint.r, tint.g, tint.b)).mul(staining);
+  nodes.roughnessNode = project(rough).r;
+}
+
+function prepare(map: Texture, colorSpace: string, anisotropy: number): void {
+  map.wrapS = RepeatWrapping;
+  map.wrapT = RepeatWrapping;
+  map.colorSpace = colorSpace;
+  map.anisotropy = anisotropy;
+}
+
+/**
+ * Leaded glass on one window.
+ *
+ * Which window it is comes from the flat colour it is replacing: the arcade already
+ * alternates warm and cool lights down the nave, and reading that back keeps the rhythm
+ * the building was designed with instead of inventing a second one.
+ */
+function dressGlass(mesh: Mesh, maps: ISurfaceTextures): void {
+  const material = mesh.material;
+  if (!(material instanceof MeshBasicMaterial)) return;
+  const geometry = mesh.geometry;
+  // The rose eye is a tiny disc at the centre of the wheel and the rose map already draws
+  // one; texturing it a second time only fights the tracery in front of it.
+  if (geometry.type === "RingGeometry") return;
+
+  const rose = isRose(geometry);
+  const map = rose
+    ? maps.glassRose
+    : geometry.type === "ExtrudeGeometry"
+      ? maps.glassLancet
+      : material.color.getHex() === palette.glassCool
+        ? maps.glassCool
+        : maps.glassWarm;
+
+  // One panel per window, whatever the geometry thought its UVs were. The extruded
+  // lancets carry UVs in metres and the planes carry 0..1; projecting both from local XY
+  // puts exactly one copy of the panel across the opening either way.
+  projectPanelUV(geometry);
+
+  map.colorSpace = SRGBColorSpace;
+  map.anisotropy = 4;
+  map.wrapS = ClampToEdgeWrapping;
+  map.wrapT = ClampToEdgeWrapping;
+  material.map = map;
+  // The map carries the colour now. Leaving the tint on multiplies it in twice and the
+  // window turns into one hue with a pattern scratched into it.
+  material.color.setRGB(1, 1, 1, LinearSRGBColorSpace);
+  if (rose) {
+    // The rose is drawn on a square plane. Its corners are transparent so the wheel is a
+    // wheel and not a lit panel with a circle painted on it.
+    material.alphaTest = 0.5;
+  }
+  material.needsUpdate = true;
+}
+
+/** The rose is the only glass plane wider than a bay's clerestory light. */
+function isRose(geometry: BufferGeometry): boolean {
+  if (geometry.type !== "PlaneGeometry") return false;
+  return (geometry as PlaneGeometry).parameters.width > 6;
+}
+
+/** Rewrites `uv` so one copy of the panel covers the geometry's local XY extent. */
+function projectPanelUV(geometry: BufferGeometry): void {
+  const position = geometry.getAttribute("position");
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < position.count; index += 1) {
+    minX = Math.min(minX, position.getX(index));
+    maxX = Math.max(maxX, position.getX(index));
+    minY = Math.min(minY, position.getY(index));
+    maxY = Math.max(maxY, position.getY(index));
+  }
+  const spanX = Math.max(maxX - minX, Number.EPSILON);
+  const spanY = Math.max(maxY - minY, Number.EPSILON);
+  const uv = new Float32Array(position.count * 2);
+  for (let index = 0; index < position.count; index += 1) {
+    uv[index * 2] = (position.getX(index) - minX) / spanX;
+    uv[index * 2 + 1] = (position.getY(index) - minY) / spanY;
+  }
+  geometry.setAttribute("uv", new Float32BufferAttribute(uv, 2));
 }

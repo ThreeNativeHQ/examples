@@ -5,23 +5,42 @@
 // cannot drift out of scale when a number is edited.
 //
 // The single silhouette cue that separates gothic from romanesque is the **two-centre
-// pointed arch**, and it appears at three scales — arcade, triforium, clerestory. A wall
-// with rectangular holes in it reads as a car park at any lighting quality, so the
+// pointed arch**, and it appears at four scales — arcade, triforium, clerestory, chancel.
+// A wall with rectangular holes in it reads as a car park at any lighting quality, so the
 // openings are real extruded shapes with real arch heads rather than boxes with gaps.
 //
+// Two structural decisions drive everything below:
+//
+//   *Merge, then instance.* A bay is one welded `BufferGeometry` — arch orders, string
+//   courses, triforium arcade, clerestory splay and mullions together — drawn once as an
+//   `InstancedMesh` across all eighteen wall positions. Piers, vault webs, ribs and bosses
+//   are the same trick. The whole shell is roughly thirty draw calls; built as loose meshes
+//   the same geometry was over three hundred, and the post chain has no budget for that.
+//
+//   *Tone lives in vertex colours, not in materials.* Merging kills per-part materials, so
+//   every part is tinted into a `color` attribute and drawn by one `vertexColors` material.
+//   That is what lets a capital read as a bright band across a dark pier without costing a
+//   second draw call for every capital in the building.
+//
 // What each part is here to do for the lighting chain:
-//   godrays   the clerestory mullions cut one window into several separate shafts
+//   godrays   the clerestory mullions cut one window into three separate shafts
 //   ssgi      the aisles behind the colonnade receive no direct light whatsoever
-//   gtao      pier bases, capital undersides, and the arch orders
+//   gtao      pier bases, capital undersides, the arch orders, and the vault severies
 //   ssr       the floor is the only low-roughness surface in the building
 //   bloom     the glass is authored past the tonemap ceiling on purpose
 import {
   BoxGeometry,
   BufferGeometry,
+  CatmullRomCurve3,
+  Color,
   CylinderGeometry,
   DoubleSide,
   ExtrudeGeometry,
+  Float32BufferAttribute,
   Group,
+  InstancedMesh,
+  LatheGeometry,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -30,18 +49,65 @@ import {
   RepeatWrapping,
   RingGeometry,
   Shape,
+  SphereGeometry,
   SRGBColorSpace,
   type Texture,
   TorusGeometry,
+  TubeGeometry,
+  Vector2,
+  Vector3,
 } from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { NAVE } from "./lighting.js";
 import { palette } from "./palette.js";
 
+/** Tones the carved stone is tinted with. One material, four values, no extra draw calls. */
+const TONE = {
+  /** The bulk of the building. */
+  stone: palette.stone,
+  /** Capitals, string courses, ribs, tracery — anything meant to catch a rim of light. */
+  bright: 0x968b7b,
+  /** Bases, plinths, wall backing. Reads as the shadow the arcade sits in. */
+  base: 0x4a463d,
+  /** Triforium backing and aisle roof: the darkness the openings are read against. */
+  void: palette.stoneDark,
+} as const;
+
 const materials = {
-  /** The building. Rough, near-white, no metalness — it carries every bounce in the scene. */
-  limestone: new MeshStandardMaterial({ color: palette.stone, roughness: 0.93, metalness: 0 }),
-  /** The vault and the aisle walls, a shade down so the arcade reads in front of them. */
-  shadowStone: new MeshStandardMaterial({ color: palette.stoneDark, roughness: 0.95, metalness: 0 }),
+  /**
+   * Everything carved. `vertexColors` multiplies the merged tints above, so one material
+   * covers plinth to boss; the white base colour is deliberate, since anything else would
+   * tint the stone twice.
+   */
+  carved: new MeshStandardMaterial({
+    color: 0xffffff,
+    metalness: 0,
+    roughness: 0.92,
+    vertexColors: true,
+  }),
+  /**
+   * The aisle walls: seen from one side only, so `DoubleSide` costs nothing.
+   *
+   * A shade above `stoneDark`, because the arcade openings are seen at sixty degrees off
+   * their own plane from anywhere on the axis — at the darker value the aisle behind them
+   * was pure black and the colonnade read as a wall with decorations on it.
+   */
+  shadowStone: new MeshStandardMaterial({
+    color: 0x494437,
+    metalness: 0,
+    roughness: 0.95,
+    side: DoubleSide,
+  }),
+  /**
+   * The apse. Pale, where the aisles are dark: the east end is what the whole nave points
+   * at, and an apse cut from the same value as the aisle walls closes the axis on nothing.
+   */
+  apseStone: new MeshStandardMaterial({
+    color: palette.stone,
+    metalness: 0,
+    roughness: 0.9,
+    side: DoubleSide,
+  }),
   /** The one low-roughness surface. Without it screen-space reflections have nothing to return. */
   marble: new MeshStandardMaterial({ color: palette.floor, roughness: 0.16, metalness: 0.1 }),
   marbleBand: new MeshStandardMaterial({ color: palette.floorBand, roughness: 0.2, metalness: 0.1 }),
@@ -55,31 +121,95 @@ function glass(colour: number): MeshBasicMaterial {
   return new MeshBasicMaterial({ color: colour, toneMapped: false, side: DoubleSide });
 }
 
+// ---- geometry plumbing ---------------------------------------------------------------
+
+const SQRT3 = Math.sqrt(3);
+const scratch = new Matrix4();
+
 /**
- * A two-centre (equilateral) pointed arch opening, as a hole in a wall panel.
+ * Springing height of the arcade, and therefore the top of every pier capital in the nave.
  *
- * Springing at `springY`, half-width `a`, apex at `springY + a·√3`. Both arcs have radius
- * `2a` and are centred on the *opposite* springing point — that is what a two-centre arch
- * is, and swapping in a semicircle here is the difference between this building and a
- * roman aqueduct.
+ * One constant for both, because an arch that springs from anywhere other than the abacus
+ * it stands on is the single loudest wrongness available in a building like this — the
+ * previous pass had the capital floating two metres above the arch it was carrying.
  */
-function pointedArchHole(a: number, springY: number): Path {
+const ARCADE_SPRING = 8;
+
+/**
+ * Tint every vertex, and drop the index while doing it.
+ *
+ * `mergeGeometries` refuses a mix of indexed and non-indexed inputs, and `ExtrudeGeometry`
+ * is the only non-indexed primitive in this file — so rather than remember which is which,
+ * everything is flattened on the way in. The cost is vertex count in a scene that is draw
+ * -call bound, not vertex bound.
+ */
+function part(geometry: BufferGeometry, tone: number): BufferGeometry {
+  const flat = geometry.index === null ? geometry : geometry.toNonIndexed();
+  if (flat !== geometry) geometry.dispose();
+  const colour = new Color(tone);
+  const count = flat.getAttribute("position").count;
+  const data = new Float32Array(count * 3);
+  for (let vertex = 0; vertex < count; vertex += 1) {
+    data[vertex * 3] = colour.r;
+    data[vertex * 3 + 1] = colour.g;
+    data[vertex * 3 + 2] = colour.b;
+  }
+  flat.setAttribute("color", new Float32BufferAttribute(data, 3));
+  return flat;
+}
+
+/** `mergeGeometries` returns `null` on mismatched attributes; this file cannot recover from that. */
+function weld(parts: BufferGeometry[], label: string): BufferGeometry {
+  const merged = mergeGeometries(parts, false);
+  if (merged === null) throw new Error(`cathedral: attribute mismatch welding ${label}`);
+  for (const piece of parts) piece.dispose();
+  return merged;
+}
+
+/**
+ * Height of a two-centre pointed arch at horizontal position `t`, normalised so that
+ * `p(0) = 1` at the apex and `p(±1) = 0` at the springing.
+ *
+ * Both arcs have radius `2a` centred on the *opposite* springing point, which puts the
+ * apex at `a·√3`. Dividing by √3 is what makes this reusable at any rise: the vault, the
+ * ribs and the arch profiles all share one curve, so they cannot drift apart.
+ */
+function pointedRise(t: number): number {
+  const along = Math.min(1, Math.abs(t));
+  return Math.sqrt(Math.max(0, 4 - (1 + along) ** 2)) / SQRT3;
+}
+
+/** A two-centre pointed opening of half-width `a`, centred on `cx`, springing at `springY`. */
+function pointedArchHole(a: number, springY: number, cx = 0): Path {
   const hole = new Path();
-  hole.moveTo(-a, 0);
-  hole.lineTo(-a, springY);
-  hole.absarc(a, springY, 2 * a, Math.PI, (Math.PI * 2) / 3, true);
-  hole.absarc(-a, springY, 2 * a, Math.PI / 3, 0, true);
-  hole.lineTo(a, 0);
+  hole.moveTo(cx - a, 0);
+  hole.lineTo(cx - a, springY);
+  hole.absarc(cx + a, springY, 2 * a, Math.PI, (Math.PI * 2) / 3, true);
+  hole.absarc(cx - a, springY, 2 * a, Math.PI / 3, 0, true);
+  hole.lineTo(cx + a, 0);
   hole.closePath();
   return hole;
 }
 
-/** A wall panel of `width × height`, pierced by one pointed opening, extruded `thickness` deep. */
+interface IOpening {
+  readonly halfWidth: number;
+  readonly springY: number;
+  readonly centre?: number;
+}
+
+/**
+ * A wall panel pierced by one or more pointed openings.
+ *
+ * The panel is built in its own local frame with `z` running from the nave face *away*
+ * from the nave, which is what lets receding arch orders be stacked by depth: order zero
+ * sits at the face with the widest opening, and each order behind it is narrower, so the
+ * arch head reads as three concentric mouldings instead of one cut in a card.
+ */
 function piercedPanel(
   width: number,
   height: number,
   thickness: number,
-  opening: { halfWidth: number; springY: number },
+  openings: readonly IOpening[],
 ): BufferGeometry {
   const panel = new Shape();
   panel.moveTo(-width / 2, 0);
@@ -87,68 +217,415 @@ function piercedPanel(
   panel.lineTo(width / 2, height);
   panel.lineTo(-width / 2, height);
   panel.closePath();
-  panel.holes.push(pointedArchHole(opening.halfWidth, opening.springY));
-  const geometry = new ExtrudeGeometry(panel, { depth: thickness, bevelEnabled: false });
-  // Extrude builds along +Z from the shape plane; centre it so the panel's own position is
-  // its middle and the two rows of the arcade stay symmetric about the nave axis.
-  geometry.translate(0, 0, -thickness / 2);
-  return geometry;
+  for (const opening of openings) {
+    panel.holes.push(pointedArchHole(opening.halfWidth, opening.springY, opening.centre ?? 0));
+  }
+  return new ExtrudeGeometry(panel, { bevelEnabled: false, depth: thickness });
+}
+
+/** A rib, as a tube swept along the curve the vault surface actually creases on. */
+function ribTube(points: readonly Vector3[], radius: number): BufferGeometry {
+  return new TubeGeometry(new CatmullRomCurve3([...points]), points.length * 2, radius, 6, false);
+}
+
+// ---- the compound pier ----------------------------------------------------------------
+
+/**
+ * One compound pier, welded into a single geometry with the nave lying toward local +X.
+ *
+ * A stack of a cylinder and two boxes reads as scaffolding. What makes a pier read as
+ * stone is that its section is *lobed*: eight engaged shafts around an octagonal core give
+ * eight bright lines and eight dark ones when a shaft of light crosses it, and that
+ * vertical rhythm survives at any distance, which a single broad highlight does not.
+ *
+ * The three tall shafts on the nave face are the other half of it. They run unbroken from
+ * the floor past the arcade capital to the vault springing, and they are the reason the
+ * eye reads floor and vault as one structure rather than as a room with a lid.
+ */
+function compoundPier(radius: number, capitalY: number, vaultShaftTop: number): BufferGeometry {
+  const parts: BufferGeometry[] = [];
+  const socleTop = 1.5;
+  const bellHeight = 1.25;
+  const coreTop = capitalY - bellHeight;
+
+  // Stepped plinth. Three receding steps, not one box: the step edges are where ambient
+  // occlusion reads strongest, and they are what gives the pier a foot rather than a cut.
+  parts.push(part(new BoxGeometry(radius * 2.9, 0.5, radius * 2.9).translate(0, 0.25, 0), TONE.base));
+  parts.push(part(new BoxGeometry(radius * 2.5, 0.45, radius * 2.5).translate(0, 0.72, 0), TONE.base));
+  // The socle flares outward going *down*, so the octagon meets the square below it on a
+  // slope. A straight drum here leaves a hard ring that reads as a join, not a moulding.
+  parts.push(
+    part(new CylinderGeometry(radius * 1.34, radius * 1.5, 0.55, 8).translate(0, 1.22, 0), TONE.base),
+  );
+
+  parts.push(
+    part(
+      new CylinderGeometry(radius, radius, coreTop - socleTop, 8).translate(
+        0,
+        (coreTop + socleTop) / 2,
+        0,
+      ),
+      TONE.stone,
+    ),
+  );
+
+  const shafts = 12;
+  const shaftRadius = radius * 0.26;
+  const shaftOrbit = radius + shaftRadius * 0.8;
+  for (let index = 0; index < shafts; index += 1) {
+    // Twelve thin ones, all the way round, rather than five fat ones over the front 240°.
+    // Fewer and fatter reads as a bundle of pipes; the count is what makes a compound pier
+    // look carved out of one block, and the back half matters because it is seen from the aisle.
+    const angle = (index / shafts) * Math.PI * 2;
+    const shaftX = Math.cos(angle) * shaftOrbit;
+    const shaftZ = Math.sin(angle) * shaftOrbit;
+    parts.push(
+      part(
+        new CylinderGeometry(shaftRadius, shaftRadius, coreTop - 1.35, 10).translate(
+          shaftX,
+          (coreTop + 1.35) / 2,
+          shaftZ,
+        ),
+        TONE.stone,
+      ),
+    );
+    // Necking ring under the capital and a torus base above the socle: two thin bright
+    // horizontals that stop each shaft reading as an extruded pipe.
+    parts.push(
+      part(
+        new TorusGeometry(shaftRadius * 1.16, shaftRadius * 0.34, 6, 10)
+          .rotateX(Math.PI / 2)
+          .translate(shaftX, coreTop - 0.24, shaftZ),
+        TONE.bright,
+      ),
+    );
+    parts.push(
+      part(
+        new TorusGeometry(shaftRadius * 1.3, shaftRadius * 0.4, 6, 10)
+          .rotateX(Math.PI / 2)
+          .translate(shaftX, socleTop + 0.1, shaftZ),
+        TONE.base,
+      ),
+    );
+  }
+
+  // The capital, as a lathed profile rather than a cube. The silhouette that matters is the
+  // *flare*: a bell that widens as it rises, capped by a flat abacus. That outline is what
+  // the eye reads as a foliage band from twenty metres, long before any leaf is resolvable.
+  // Kept deliberately tight. The first pass flared to 1.5x the core radius and read as a
+  // mushroom cap from the nave floor; a real capital projects barely past the shafts it
+  // gathers, and the *band* is the read, not the overhang.
+  const bell = [
+    new Vector2(radius * 1.16, 0),
+    new Vector2(radius * 1.26, 0.09),
+    new Vector2(radius * 1.14, 0.2),
+    new Vector2(radius * 1.18, 0.3),
+    new Vector2(radius * 1.26, 0.6),
+    new Vector2(radius * 1.32, 0.86),
+    new Vector2(radius * 1.36, 0.96),
+    new Vector2(0, 0.96),
+  ];
+  parts.push(part(new LatheGeometry(bell, 16).translate(0, coreTop, 0), TONE.bright));
+  // A *square* abacus over the round bell. This is the detail that stops a lathed capital
+  // reading as a lampshade: the corners of the slab break the circle from every angle, and
+  // gothic capitals are square-abacus almost without exception for exactly that reason.
+  parts.push(
+    part(
+      new BoxGeometry(radius * 2.86, 0.24, radius * 2.86).translate(0, coreTop + 1.08, 0),
+      TONE.bright,
+    ),
+  );
+  parts.push(
+    part(
+      new BoxGeometry(radius * 2.6, 0.16, radius * 2.6).translate(0, coreTop + 0.92, 0),
+      TONE.bright,
+    ),
+  );
+
+  // Crockets around the bell. Eight squashed blobs is not carving, but it breaks the
+  // lathe's perfect circle, and a broken outline is the whole read of a foliage capital.
+  for (let leaf = 0; leaf < 12; leaf += 1) {
+    const angle = (leaf / 12) * Math.PI * 2 + Math.PI / 12;
+    parts.push(
+      part(
+        new SphereGeometry(radius * 0.13, 6, 4)
+          .scale(1.5, 0.7, 1.5)
+          .translate(
+            Math.cos(angle) * radius * 1.14,
+            coreTop + 0.62,
+            Math.sin(angle) * radius * 1.14,
+          ),
+        TONE.bright,
+      ),
+    );
+  }
+
+  // The vault shafts: a triple cluster standing proud of the pier on the nave side, running
+  // floor to vault. They pass *outside* the abacus rather than through it, which is why the
+  // abacus radius above and this offset are locked to each other.
+  const shaftFace = radius * 1.43 + 0.5;
+  // Five, not three, and the outer pair tinted bright. Above the arcade capital these are
+  // the only thing in twenty metres of wall with a vertical edge, so they carry the whole
+  // read of the nave's height; three thin ones simply vanished into the dark.
+  for (const [offsetZ, tallRadius, tone] of [
+    [0, 0.5, TONE.stone],
+    [-1.0, 0.34, TONE.bright],
+    [1.0, 0.34, TONE.bright],
+    [-1.75, 0.24, TONE.stone],
+    [1.75, 0.24, TONE.stone],
+  ] as const) {
+    parts.push(
+      part(
+        new CylinderGeometry(tallRadius, tallRadius, vaultShaftTop, 10).translate(
+          shaftFace - (tallRadius < 0.3 ? 0.28 : 0),
+          vaultShaftTop / 2,
+          offsetZ,
+        ),
+        tone,
+      ),
+    );
+  }
+  // A corbel at the top of the cluster, so the ribs land on something instead of on air.
+  parts.push(
+    part(
+      new BoxGeometry(1.6, 0.6, 4.4).translate(shaftFace - 0.14, vaultShaftTop - 0.3, 0),
+      TONE.bright,
+    ),
+  );
+
+  return weld(parts, "pier");
+}
+
+// ---- one bay of arcade wall ------------------------------------------------------------
+
+/**
+ * A full-height slice of one arcade wall: arcade with three orders, string course,
+ * triforium arcade, string course, splayed clerestory.
+ *
+ * Local frame: `x` along the bay and centred on it, `y` from the floor, and `z` running
+ * from the nave face (0) *into* the wall. That last convention is the whole point — it is
+ * what lets the arch orders be ordered by depth, and it makes the two colonnades mirror
+ * each other with a single `rotation.y = side · π/2`.
+ */
+function bayWall(): BufferGeometry {
+  const { arcadeHeight, bayPitch, clerestoryTop, triforiumTop } = NAVE;
+  const parts: BufferGeometry[] = [];
+
+  // -- arcade, in three receding orders --------------------------------------------------
+  // Each order behind the last is narrower and lower, because a two-centre head of
+  // half-width `a` apexes at `a·√3`; that is what produces concentric mouldings for free.
+  // Four bands, the first of them standing *proud* of the wall. A hood mould is the only
+  // one of these that casts onto the wall behind it rather than into the opening, and that
+  // cast line is what gives the arcade its contact shadow at grazing sun.
+  const orders = [
+    { depth: 0.22, halfWidth: bayPitch * 0.4, tone: TONE.bright, z: -0.22 },
+    { depth: 0.46, halfWidth: bayPitch * 0.38, tone: TONE.stone, z: 0 },
+    { depth: 0.34, halfWidth: bayPitch * 0.345, tone: TONE.bright, z: 0.46 },
+    { depth: 0.42, halfWidth: bayPitch * 0.315, tone: TONE.stone, z: 0.8 },
+  ] as const;
+  for (const order of orders) {
+    parts.push(
+      part(
+        piercedPanel(bayPitch, arcadeHeight, order.depth, [
+          { halfWidth: order.halfWidth, springY: ARCADE_SPRING },
+        ]).translate(0, 0, order.z),
+        order.tone,
+      ),
+    );
+  }
+
+  // -- string courses --------------------------------------------------------------------
+  // A cathedral's storeys are legible because two horizontals cut across every pier in the
+  // building at the same height. Without them the three storeys blend into one tall wall.
+  for (const [courseY, courseTone] of [
+    [arcadeHeight, TONE.bright],
+    [triforiumTop, TONE.bright],
+  ] as const) {
+    parts.push(
+      part(
+        new BoxGeometry(bayPitch, 0.42, 0.8).translate(0, courseY + 0.21, 0.05),
+        courseTone,
+      ),
+    );
+    parts.push(
+      part(
+        new BoxGeometry(bayPitch, 0.22, 0.5).translate(0, courseY + 0.53, 0.1),
+        TONE.stone,
+      ),
+    );
+  }
+
+  // -- triforium: an arcade, not a slot ---------------------------------------------------
+  // Four small pointed lights per bay. One opening per bay read as a letterbox; four read
+  // as a storey, and the difference is entirely in the count of vertical mullions between
+  // them catching light along their edges.
+  const triforiumHeight = triforiumTop - arcadeHeight;
+  const lights = 4;
+  const lightSpan = bayPitch * 0.86;
+  const lightPitch = lightSpan / lights;
+  const triforiumOpenings: IOpening[] = [];
+  for (let light = 0; light < lights; light += 1) {
+    triforiumOpenings.push({
+      centre: -lightSpan / 2 + lightPitch * (light + 0.5),
+      halfWidth: lightPitch * 0.38,
+      springY: triforiumHeight * 0.42,
+    });
+  }
+  parts.push(
+    part(
+      piercedPanel(bayPitch, triforiumHeight, 0.55, triforiumOpenings).translate(
+        0,
+        arcadeHeight + 0.63,
+        0,
+      ),
+      TONE.stone,
+    ),
+  );
+  // Detached colonnettes in front of each mullion, and a solid backing behind the whole
+  // storey. The triforium in a real nave is a *dark* arcade; the backing is what makes the
+  // openings read as depth instead of as holes onto the aisle roof.
+  for (let mullion = 0; mullion <= lights; mullion += 1) {
+    parts.push(
+      part(
+        new CylinderGeometry(0.2, 0.2, triforiumHeight * 0.5, 8).translate(
+          -lightSpan / 2 + lightPitch * mullion,
+          arcadeHeight + 0.63 + triforiumHeight * 0.25,
+          -0.3,
+        ),
+        TONE.bright,
+      ),
+    );
+  }
+  parts.push(
+    part(
+      new BoxGeometry(bayPitch, triforiumHeight, 0.3).translate(
+        0,
+        arcadeHeight + triforiumHeight / 2,
+        1.25,
+      ),
+      TONE.void,
+    ),
+  );
+  // The gallery sill: a shelf the colonnettes stand on, projecting further than the string
+  // course below it. Without it the triforium is a row of holes floating on a flat wall.
+  parts.push(
+    part(
+      new BoxGeometry(bayPitch, 0.3, 1.3).translate(0, arcadeHeight + 0.78, -0.45),
+      TONE.bright,
+    ),
+  );
+
+  // -- clerestory, splayed ----------------------------------------------------------------
+  // Two panels, the outer one with a narrower opening. That step *is* the window splay: it
+  // is what makes each shaft of light start narrow at the glass and widen into the nave,
+  // and it costs one extra extrusion rather than a bevel the shadow map cannot resolve.
+  const clerestoryHeight = clerestoryTop - triforiumTop;
+  const innerHalf = bayPitch * 0.3;
+  const outerHalf = bayPitch * 0.222;
+  const clerestorySpring = clerestoryHeight * 0.45;
+  const clerestoryBase = triforiumTop + 0.63;
+  parts.push(
+    part(
+      piercedPanel(bayPitch, clerestoryHeight, 0.75, [
+        { halfWidth: innerHalf, springY: clerestorySpring },
+      ]).translate(0, clerestoryBase, 0),
+      TONE.stone,
+    ),
+  );
+  parts.push(
+    part(
+      piercedPanel(bayPitch, clerestoryHeight, 0.7, [
+        { halfWidth: outerHalf, springY: clerestorySpring },
+      ]).translate(0, clerestoryBase, 0.75),
+      TONE.bright,
+    ),
+  );
+  // Two mullions, so one window throws three shafts. Three shafts read as light; one reads
+  // as haze, and the godray pass raymarches whatever the shadow map hands it.
+  const lightHeight = clerestorySpring + outerHalf * SQRT3;
+  for (const mullionX of [-outerHalf / 3, outerHalf / 3]) {
+    parts.push(
+      part(
+        new BoxGeometry(0.26, lightHeight * 0.96, 0.62).translate(
+          mullionX,
+          clerestoryBase + lightHeight * 0.48,
+          1.12,
+        ),
+        TONE.bright,
+      ),
+    );
+  }
+
+  return weld(parts, "bay wall");
+}
+
+// ---- the vault --------------------------------------------------------------------------
+
+/**
+ * One quadripartite severy: the real curved surface, not a ceiling plane with arcs hung
+ * under it.
+ *
+ * A groin vault is the union of two barrels, so its height is `max` of the two pointed
+ * profiles — `max`, not `min`, because the vault comes down to the springing only at the
+ * four *corners* and stands at crown height along the middle of every edge. Taking the
+ * larger of the two profiles puts the creases exactly on `|u| = |v|`, which is where the
+ * diagonal ribs go; the ribs are then on the surface by construction rather than by eye.
+ */
+function vaultWeb(halfWidth: number, halfPitch: number, spring: number, rise: number): BufferGeometry {
+  const columns = 24;
+  const rows = 16;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let row = 0; row <= rows; row += 1) {
+    const v = (row / rows) * 2 - 1;
+    for (let column = 0; column <= columns; column += 1) {
+      const u = (column / columns) * 2 - 1;
+      positions.push(
+        u * halfWidth,
+        spring + rise * Math.max(pointedRise(u), pointedRise(v)),
+        v * halfPitch,
+      );
+      uvs.push(column / columns, row / rows);
+    }
+  }
+  const stride = columns + 1;
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const a = row * stride + column;
+      const b = a + 1;
+      const c = a + stride;
+      // Wound so the face normal comes out downward. The vault is only ever seen from
+      // below, so a single-sided surface facing the wrong way is an invisible ceiling.
+      indices.push(a, b, c, b, c + 1, c);
+    }
+  }
+  const web = new BufferGeometry();
+  web.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  web.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+  web.setIndex(indices);
+  web.computeVertexNormals();
+  return web;
 }
 
 /**
- * One clustered pier: an octagonal core with engaged shafts around it.
+ * Where a rib meets the springing, pulled off the ideal surface and onto the vault-shaft
+ * corbel it visually lands on.
  *
- * A plain cylinder catches one broad highlight and reads as a pipe. The cluster is what
- * gives a pier its vertical rhythm of bright and dark lines when a shaft of light crosses
- * it, which is most of why the reference reads as stone.
+ * The web springs from the wall face; the shafts stand two metres proud of it. Left alone
+ * the ribs would die into a blank wall a shaft-width away from the corbel that is plainly
+ * carrying them. The pull only acts over the last quarter of the curve, so the rib is still
+ * exactly on the web everywhere the crease is visible.
  */
-function clusteredPier(radius: number, height: number): Group {
-  const pier = new Group();
-
-  const core = new Mesh(new CylinderGeometry(radius, radius, height, 8), materials.limestone);
-  core.position.y = height / 2;
-  core.castShadow = true;
-  core.receiveShadow = true;
-  pier.add(core);
-
-  const shaftRadius = radius * 0.3;
-  for (let index = 0; index < 5; index += 1) {
-    // Five, spread over the front 240° only: the back of a pier faces the dark aisle and
-    // a shaft there costs geometry and shows nothing.
-    const angle = -Math.PI * 0.66 + (index / 4) * Math.PI * 1.32;
-    const shaft = new Mesh(
-      new CylinderGeometry(shaftRadius, shaftRadius, height, 10),
-      materials.limestone,
-    );
-    shaft.position.set(
-      Math.sin(angle) * (radius + shaftRadius * 0.55),
-      height / 2,
-      Math.cos(angle) * (radius + shaftRadius * 0.55),
-    );
-    shaft.castShadow = true;
-    shaft.receiveShadow = true;
-    pier.add(shaft);
-  }
-
-  const plinth = new Mesh(
-    new BoxGeometry(radius * 3, 0.9, radius * 3),
-    materials.shadowStone,
-  );
-  plinth.position.y = 0.45;
-  plinth.castShadow = true;
-  plinth.receiveShadow = true;
-  pier.add(plinth);
-
-  // The capital: a bright horizontal line across a dark pier, and the thing the arch and
-  // the vault ribs both spring from.
-  const capital = new Mesh(new BoxGeometry(radius * 3.1, 1.1, radius * 3.1), materials.limestone);
-  capital.position.y = height - 0.55;
-  capital.castShadow = true;
-  capital.receiveShadow = true;
-  pier.add(capital);
-
-  return pier;
+function ribFoot(point: Vector3, along: number, inset: number, drop: number): Vector3 {
+  const pull = Math.max(0, (Math.abs(along) - 0.72) / 0.28);
+  if (pull === 0) return point;
+  point.x -= Math.sign(point.x) * inset * pull;
+  point.y -= drop * pull;
+  return point;
 }
+
+// ---- the building ------------------------------------------------------------------------
 
 /**
  * The nave. Floor at y = 0, running east toward -Z where the rose window closes the axis.
@@ -161,15 +638,27 @@ function clusteredPier(radius: number, height: number): Group {
 export function createCathedral(floorTexture?: Texture): Group {
   const { width, height, depth, bayPitch, arcadeHeight, pierRadius } = NAVE;
   const { triforiumTop, clerestoryTop, aisleWidth } = NAVE;
+  /**
+   * How far the aisle runs behind each colonnade, for the wall and its windows.
+   *
+   * Shorter than `NAVE.aisleWidth`, which still sets the paved extent. An arcade opening
+   * is a 1.2 m-deep slot, and from a camera on the axis every sightline through it is
+   * within thirty degrees of the wall plane: at six metres the far wall subtended less
+   * than a metre of that slot and the aisle rendered as solid black. Bringing the wall in
+   * is what makes lit tracery visible behind the colonnade at all.
+   */
+  const aisleDepth = 4.6;
   const nave = new Group();
   nave.name = "cathedral";
   const bays = Math.floor(depth / bayPitch);
   const halfDepth = (bays * bayPitch) / 2;
+  const halfWidth = width / 2;
+  /** Two bays of apse behind the chancel arch. The east end recedes; it is not one wall. */
+  const chancelZ = -halfDepth + bayPitch * 2;
 
   // ---- floor -------------------------------------------------------------------------
-  // Polished, and banded across the axis. The bands are not decoration: a mirror floor
-  // with no pattern gives the reflection nothing to be a reflection *of*, and the eye
-  // reads it as fog.
+  // Polished, and patterned. A mirror floor with no pattern gives the reflection nothing to
+  // be a reflection *of*, and the eye reads it as fog.
   const floorWidth = width + aisleWidth * 2;
   const floorDepth = bays * bayPitch;
   if (floorTexture !== undefined) {
@@ -191,263 +680,483 @@ export function createCathedral(floorTexture?: Texture): Group {
   floor.receiveShadow = true;
   nave.add(floor);
 
-  // The chancel steps break the reflection line near the east end; the bands that used to
-  // run down the whole nave are gone, because the marble map now carries that rhythm.
-
   // ---- the two arcade walls ----------------------------------------------------------
-  // Built as pierced panels rather than piers-with-gaps, so each opening has a real arch
-  // head and the shadow map sees one clean silhouette per bay.
-  const arcadeOpening = { halfWidth: bayPitch * 0.36, springY: arcadeHeight * 0.52 };
-  const arcadePanel = piercedPanel(bayPitch, arcadeHeight, 1.0, arcadeOpening);
-
-  const triforiumHeight = triforiumTop - arcadeHeight;
-  const triforiumPanel = piercedPanel(bayPitch, triforiumHeight, 0.8, {
-    halfWidth: bayPitch * 0.17,
-    springY: triforiumHeight * 0.45,
-  });
-
-  const clerestoryHeight = clerestoryTop - triforiumTop;
-  const clerestoryOpening = { halfWidth: bayPitch * 0.26, springY: clerestoryHeight * 0.42 };
-  const clerestoryPanel = piercedPanel(bayPitch, clerestoryHeight, 0.7, clerestoryOpening);
-
+  // One geometry, eighteen instances. `rotation.y = side · π/2` maps the panel's local +Z
+  // (into the wall) onto the outward direction on either side, which is what makes one
+  // asymmetric bay serve both colonnades.
+  const wall = new InstancedMesh(bayWall(), materials.carved, bays * 2);
+  wall.castShadow = true;
+  wall.receiveShadow = true;
+  let wallInstance = 0;
   for (const side of [-1, 1]) {
-    const x = (side * width) / 2;
     for (let bay = 0; bay < bays; bay += 1) {
       const z = -halfDepth + bay * bayPitch + bayPitch / 2;
-
-      const arcade = new Mesh(arcadePanel, materials.limestone);
-      arcade.rotation.y = Math.PI / 2;
-      arcade.position.set(x, 0, z);
-      arcade.castShadow = true;
-      arcade.receiveShadow = true;
-      nave.add(arcade);
-
-      const triforium = new Mesh(triforiumPanel, materials.shadowStone);
-      triforium.rotation.y = Math.PI / 2;
-      triforium.position.set(x, arcadeHeight, z);
-      triforium.castShadow = true;
-      triforium.receiveShadow = true;
-      nave.add(triforium);
-
-      const clerestory = new Mesh(clerestoryPanel, materials.limestone);
-      clerestory.rotation.y = Math.PI / 2;
-      clerestory.position.set(x, triforiumTop, z);
-      clerestory.castShadow = true;
-      clerestory.receiveShadow = true;
-      nave.add(clerestory);
-
-      // The mullion. One vertical bar in the middle of each clerestory light is what
-      // turns one shaft into two, and two shafts read as light where one reads as haze.
-      const mullion = new Mesh(
-        new BoxGeometry(0.9, clerestoryOpening.springY + clerestoryOpening.halfWidth * 1.7, 0.28),
-        materials.limestone,
-      );
-      mullion.rotation.y = Math.PI / 2;
-      mullion.position.set(
-        x,
-        triforiumTop + (clerestoryOpening.springY + clerestoryOpening.halfWidth * 1.7) / 2,
-        z,
-      );
-      mullion.castShadow = true;
-      nave.add(mullion);
-
-      const pane = new Mesh(
-        new PlaneGeometry(
-          clerestoryOpening.halfWidth * 2,
-          clerestoryOpening.springY + clerestoryOpening.halfWidth * 1.7,
-        ),
-        glass(bay % 2 === 0 ? palette.glassWarm : palette.glassCool),
-      );
-      pane.rotation.y = Math.PI / 2;
-      pane.position.set(
-        x + side * 0.02,
-        triforiumTop + (clerestoryOpening.springY + clerestoryOpening.halfWidth * 1.7) / 2,
-        z,
-      );
-      nave.add(pane);
+      scratch.makeRotationY((side * Math.PI) / 2).setPosition(side * halfWidth, 0, z);
+      wall.setMatrixAt(wallInstance, scratch);
+      wallInstance += 1;
     }
+  }
+  wall.instanceMatrix.needsUpdate = true;
+  nave.add(wall);
 
-    // The outer aisle wall, behind the colonnade. It is the surface that stays dark, and
-    // the reason the arcade openings read as openings.
+  // ---- glass ---------------------------------------------------------------------------
+  // Two clerestory materials rather than one with instance colours: `toneMapped: false` is
+  // the whole trick here and a per-instance tint is one more thing that can quietly stop
+  // being honoured under a node material.
+  const clerestoryHeight = clerestoryTop - triforiumTop;
+  const clerestorySpring = clerestoryHeight * 0.45;
+  const outerHalf = bayPitch * 0.222;
+  const paneHeight = clerestorySpring + outerHalf * SQRT3;
+  const paneGeometry = new PlaneGeometry(outerHalf * 2, paneHeight);
+  const paneY = triforiumTop + 0.63 + paneHeight * 0.5;
+  for (const [tint, parity] of [
+    [palette.glassWarm, 0],
+    [palette.glassCool, 1],
+  ] as const) {
+    const count = Math.ceil(bays / 2) * 2;
+    const panes = new InstancedMesh(paneGeometry, glass(tint), count);
+    let paneInstance = 0;
+    for (const side of [-1, 1]) {
+      for (let bay = 0; bay < bays; bay += 1) {
+        if (bay % 2 !== parity) continue;
+        const z = -halfDepth + bay * bayPitch + bayPitch / 2;
+        scratch.makeRotationY((side * Math.PI) / 2).setPosition(side * (halfWidth + 1.44), paneY, z);
+        panes.setMatrixAt(paneInstance, scratch);
+        paneInstance += 1;
+      }
+    }
+    panes.count = paneInstance;
+    panes.instanceMatrix.needsUpdate = true;
+    nave.add(panes);
+  }
+
+  // Aisle windows. Dimmer than the clerestory on purpose: the aisles must stay the dark
+  // half of the picture, but a colonnade with nothing behind it reads as a wall, and the
+  // reference plainly shows lit tracery through the arcade openings.
+  const aisleGlass = new InstancedMesh(
+    new PlaneGeometry(4.0, 9.6),
+    glass(0xe0a0ae),
+    bays * 2,
+  );
+  let aisleInstance = 0;
+  for (const side of [-1, 1]) {
+    for (let bay = 0; bay < bays; bay += 1) {
+      const z = -halfDepth + bay * bayPitch + bayPitch / 2;
+      scratch
+        .makeRotationY((side * Math.PI) / 2)
+        .setPosition(side * (halfWidth + aisleDepth - 0.12), 6.9, z);
+      aisleGlass.setMatrixAt(aisleInstance, scratch);
+      aisleInstance += 1;
+    }
+  }
+  aisleGlass.instanceMatrix.needsUpdate = true;
+  nave.add(aisleGlass);
+
+  // ---- piers ---------------------------------------------------------------------------
+  // On the bay joints, sitting on the wall line so the back of the pier is engaged in the
+  // wall and only the shaft cluster stands in the nave — which is what a compound pier is.
+  const pierR = pierRadius * 1.05;
+  const vaultShaftTop = clerestoryTop - 0.7;
+  const pierGeometry = compoundPier(pierR, ARCADE_SPRING, vaultShaftTop);
+  const piers = new InstancedMesh(pierGeometry, materials.carved, (bays + 1) * 2);
+  piers.castShadow = true;
+  piers.receiveShadow = true;
+  let pierInstance = 0;
+  for (const side of [-1, 1]) {
+    for (let bay = 0; bay <= bays; bay += 1) {
+      // Local +X faces the nave, so the far colonnade is the same geometry turned round —
+      // never a negative scale, which would invert every normal in the merged pier.
+      scratch
+        .makeRotationY(side > 0 ? Math.PI : 0)
+        .setPosition(side * (halfWidth + 0.3), 0, -halfDepth + bay * bayPitch);
+      piers.setMatrixAt(pierInstance, scratch);
+      pierInstance += 1;
+    }
+  }
+  piers.instanceMatrix.needsUpdate = true;
+  nave.add(piers);
+
+  // ---- aisles ----------------------------------------------------------------------------
+  for (const side of [-1, 1]) {
     const aisleWall = new Mesh(
-      new PlaneGeometry(bays * bayPitch, arcadeHeight + 2),
+      new PlaneGeometry(bays * bayPitch, arcadeHeight),
       materials.shadowStone,
     );
-    aisleWall.rotation.y = side * -Math.PI / 2;
-    aisleWall.position.set(x + side * aisleWidth, (arcadeHeight + 2) / 2, 0);
+    aisleWall.rotation.y = (side * -Math.PI) / 2;
+    aisleWall.position.set(side * (halfWidth + aisleDepth), arcadeHeight / 2, 0);
     aisleWall.receiveShadow = true;
     nave.add(aisleWall);
 
     const aisleVault = new Mesh(
-      new PlaneGeometry(bays * bayPitch, aisleWidth),
+      new PlaneGeometry(bays * bayPitch, aisleDepth),
       materials.shadowStone,
     );
     aisleVault.rotation.set(Math.PI / 2, 0, Math.PI / 2);
-    aisleVault.position.set(x + (side * aisleWidth) / 2, arcadeHeight + 2, 0);
+    aisleVault.position.set(side * (halfWidth + aisleDepth / 2), arcadeHeight - 0.4, 0);
     nave.add(aisleVault);
   }
 
-  // ---- piers -------------------------------------------------------------------------
-  // On the bay joints, standing proud of the arcade wall into the nave.
-  for (const side of [-1, 1]) {
-    for (let bay = 0; bay <= bays; bay += 1) {
-      const pier = clusteredPier(pierRadius, arcadeHeight + 1.2);
-      pier.position.set((side * width) / 2 - side * pierRadius * 0.7, 0, -halfDepth + bay * bayPitch);
-      nave.add(pier);
-
-      // The vault shaft: a thin colonnette running from the capital to the springing of
-      // the vault, which is what visually ties the floor to the ceiling in a gothic nave.
-      const colonnette = new Mesh(
-        new CylinderGeometry(pierRadius * 0.26, pierRadius * 0.26, clerestoryTop - arcadeHeight, 10),
-        materials.limestone,
-      );
-      colonnette.position.set(
-        (side * width) / 2 - side * pierRadius * 0.5,
-        (clerestoryTop + arcadeHeight) / 2,
-        -halfDepth + bay * bayPitch,
-      );
-      colonnette.castShadow = true;
-      nave.add(colonnette);
-    }
-  }
-
   // ---- vault -------------------------------------------------------------------------
-  const vault = new Mesh(new PlaneGeometry(width, bays * bayPitch), materials.shadowStone);
-  vault.rotation.x = Math.PI / 2;
-  vault.position.y = height;
-  nave.add(vault);
+  const rise = height - clerestoryTop;
+  const halfPitch = bayPitch / 2;
+  const webs = new InstancedMesh(
+    // A shade below the walls. The web takes bounce off the whole nave and nothing direct,
+    // so at the wall's own tint it blew out to paper-white and flattened the ribs off it.
+    part(vaultWeb(halfWidth, halfPitch, clerestoryTop, rise), 0x5c5449),
+    materials.carved,
+    bays,
+  );
+  // The vault casts nothing: the sun enters below its springing through the clerestory, so
+  // every shadow-map texel it would occupy is spent on nothing the camera can see.
+  webs.castShadow = false;
+  webs.receiveShadow = true;
+
+  // ribs, per bay: two diagonals across the severy and two wall arcs against the clerestory
+  const shaftInset = halfWidth - (pierR * 1.52 + 0.44 + 0.3);
+  const ribParts: BufferGeometry[] = [];
+  const samples = 13;
+  for (const lean of [1, -1]) {
+    const points: Vector3[] = [];
+    for (let sample = 0; sample < samples; sample += 1) {
+      const along = (sample / (samples - 1)) * 2 - 1;
+      points.push(
+        ribFoot(
+          new Vector3(
+            along * halfWidth,
+            clerestoryTop + rise * pointedRise(along),
+            along * lean * halfPitch,
+          ),
+          along,
+          shaftInset,
+          0.7,
+        ),
+      );
+    }
+    ribParts.push(part(ribTube(points, 0.36), TONE.bright));
+  }
+  for (const side of [-1, 1]) {
+    // The formeret: the arch of the vault against the clerestory wall. It is what turns the
+    // top of each window into a lunette instead of a rectangle cut off by a ceiling.
+    const points: Vector3[] = [];
+    for (let sample = 0; sample < samples; sample += 1) {
+      const along = (sample / (samples - 1)) * 2 - 1;
+      points.push(
+        new Vector3(
+          side * (halfWidth - 0.32),
+          clerestoryTop + rise * pointedRise(along),
+          along * halfPitch,
+        ),
+      );
+    }
+    ribParts.push(part(ribTube(points, 0.24), TONE.bright));
+  }
+  const bayRibs = new InstancedMesh(weld(ribParts, "bay ribs"), materials.carved, bays);
+  bayRibs.castShadow = false;
+
+  // The transverse rib sits on the bay *joint*, shared by the two severies either side, so
+  // it is instanced once per joint rather than once per bay.
+  const transversePoints: Vector3[] = [];
+  for (let sample = 0; sample < samples; sample += 1) {
+    const along = (sample / (samples - 1)) * 2 - 1;
+    transversePoints.push(
+      ribFoot(
+        new Vector3(along * halfWidth, clerestoryTop + rise * pointedRise(along), 0),
+        along,
+        shaftInset,
+        0.7,
+      ),
+    );
+  }
+  const transverse = new InstancedMesh(
+    part(ribTube(transversePoints, 0.38), TONE.bright),
+    materials.carved,
+    bays + 1,
+  );
+  transverse.castShadow = false;
+
+  const bosses = new InstancedMesh(
+    part(
+      new SphereGeometry(0.62, 10, 8).scale(1, 0.7, 1).translate(0, height - 0.3, 0),
+      TONE.bright,
+    ),
+    materials.carved,
+    bays,
+  );
+  bosses.castShadow = false;
 
   for (let bay = 0; bay < bays; bay += 1) {
     const z = -halfDepth + bay * bayPitch + bayPitch / 2;
-    // Diagonal ribs: the X across each bay. They receive no direct light at all — every
-    // pixel of them is indirect, which makes them the clearest read of whether the GI
-    // stage is doing anything.
-    for (const lean of [-1, 1]) {
-      const rib = new Mesh(
-        new TorusGeometry(width * 0.62, 0.28, 8, 24, Math.PI),
-        materials.limestone,
-      );
-      rib.position.set(0, clerestoryTop, z);
-      rib.rotation.set(0, (lean * Math.PI) / 4, 0);
-      rib.scale.y = (height - clerestoryTop) / (width * 0.62);
-      nave.add(rib);
-    }
+    scratch.makeRotationY(0).setPosition(0, 0, z);
+    webs.setMatrixAt(bay, scratch);
+    bayRibs.setMatrixAt(bay, scratch);
+    bosses.setMatrixAt(bay, scratch);
+  }
+  for (let joint = 0; joint <= bays; joint += 1) {
+    scratch.makeRotationY(0).setPosition(0, 0, -halfDepth + joint * bayPitch);
+    transverse.setMatrixAt(joint, scratch);
+  }
+  webs.instanceMatrix.needsUpdate = true;
+  bayRibs.instanceMatrix.needsUpdate = true;
+  transverse.instanceMatrix.needsUpdate = true;
+  bosses.instanceMatrix.needsUpdate = true;
+  nave.add(webs, bayRibs, transverse, bosses);
 
-    const transverse = new Mesh(
-      new TorusGeometry(width / 2, 0.32, 8, 24, Math.PI),
-      materials.limestone,
+  // ---- east end ------------------------------------------------------------------------
+  // The chancel arch. One enormous pointed opening two bays short of the east wall, so the
+  // apse is seen *through* something. A single flat wall closing the axis is the difference
+  // between a nave and a corridor, however good the tracery on it is.
+  const chancelParts: BufferGeometry[] = [];
+  // Ordered by depth from the *east*: this panel is extruded away from the camera, so the
+  // widest opening belongs on the highest local z, which is the face the nave sees.
+  const chancelOrders = [
+    { depth: 0.7, halfWidth: 5.6, tone: TONE.stone, z: 0 },
+    { depth: 0.55, halfWidth: 6.1, tone: TONE.bright, z: 0.7 },
+    { depth: 0.75, halfWidth: 6.6, tone: TONE.bright, z: 1.25 },
+  ] as const;
+  for (const order of chancelOrders) {
+    chancelParts.push(
+      part(
+        piercedPanel(width, 26, order.depth, [{ halfWidth: order.halfWidth, springY: 12 }]).translate(
+          0,
+          0,
+          order.z,
+        ),
+        order.tone,
+      ),
     );
-    transverse.position.set(0, clerestoryTop, -halfDepth + bay * bayPitch);
-    transverse.rotation.y = Math.PI / 2;
-    transverse.scale.y = (height - clerestoryTop) / (width / 2);
-    nave.add(transverse);
+  }
+  const chancelArch = new Mesh(weld(chancelParts, "chancel arch"), materials.carved);
+  // Extruded along +Z from the shape plane; pushed back so the nave face lands on the joint.
+  chancelArch.position.set(0, 0, chancelZ - 2);
+  chancelArch.castShadow = true;
+  chancelArch.receiveShadow = true;
+  nave.add(chancelArch);
 
-    const boss = new Mesh(new CylinderGeometry(0.55, 0.55, 0.5, 10), materials.limestone);
-    boss.position.set(0, height - 0.3, z);
-    nave.add(boss);
+  // The apse itself: a back wall and two canted returns, so the east end has a plan and not
+  // just an elevation. The canted walls are what stop the rose reading as a poster.
+  const apseBack = new Mesh(new PlaneGeometry(13.6, height), materials.apseStone);
+  apseBack.position.set(0, height / 2, -halfDepth);
+  apseBack.receiveShadow = true;
+  nave.add(apseBack);
+  for (const side of [-1, 1]) {
+    const from = new Vector3(side * halfWidth, 0, chancelZ);
+    const to = new Vector3(side * 6.8, 0, -halfDepth);
+    const span = from.distanceTo(to);
+    const cant = new Mesh(new PlaneGeometry(span, height), materials.apseStone);
+    cant.position.set((from.x + to.x) / 2, height / 2, (from.z + to.z) / 2);
+    cant.rotation.y = Math.atan2(to.x - from.x, to.z - from.z) + Math.PI / 2;
+    cant.receiveShadow = true;
+    nave.add(cant);
   }
 
-  // ---- east end ----------------------------------------------------------------------
-  const eastWall = new Mesh(new PlaneGeometry(width, height), materials.limestone);
-  eastWall.position.set(0, height / 2, -halfDepth);
-  eastWall.receiveShadow = true;
-  nave.add(eastWall);
-
-  // The rose. Brightest object in the frame and the thing that closes the axis, so it sits
-  // dead centre and everything else in the east end defers to it.
-  const roseRadius = width * 0.28;
-  const roseY = triforiumTop + roseRadius * 0.9;
-  const rose = new Mesh(new PlaneGeometry(roseRadius * 2, roseRadius * 2), glass(palette.glassRose));
-  rose.position.set(0, roseY, -halfDepth + 0.12);
+  // ---- the rose ------------------------------------------------------------------------
+  // Brightest object in the frame and the thing that closes the axis. Sized and sited so a
+  // camera on the nave floor sees the whole wheel through the chancel arch; a rose whose
+  // top is clipped by the arch in front of it is a rose nobody can read.
+  const roseRadius = 5;
+  const roseY = 17.5;
+  const roseZ = -halfDepth + 0.12;
+  // A disc. The square pane behind the tracery showed its corners as four bright pink
+  // quadrants outside the wheel — the loudest single wrongness in the previous capture.
+  const rose = new Mesh(new RingGeometry(0, roseRadius, 48), glass(palette.glassRose));
+  rose.position.set(0, roseY, roseZ);
   nave.add(rose);
 
-  // Radial tracery. Without spokes the rose is a glowing disc; with them it is a window.
-  for (let spoke = 0; spoke < 8; spoke += 1) {
-    const bar = new Mesh(
-      new BoxGeometry(0.34, roseRadius * 2, 0.3),
-      materials.limestone,
+  const traceryParts: BufferGeometry[] = [];
+  // Sixteen spokes and three rings. The count is what separates a rose from a wheel: at
+  // eight the eye counts the spokes, at sixteen it reads a pattern and stops counting.
+  for (let spoke = 0; spoke < 16; spoke += 1) {
+    traceryParts.push(
+      part(
+        new BoxGeometry(0.2, roseRadius * 2, 0.26).rotateZ((spoke / 16) * Math.PI),
+        TONE.bright,
+      ),
     );
-    bar.position.set(0, roseY, -halfDepth + 0.3);
-    bar.rotation.z = (spoke / 8) * Math.PI;
-    nave.add(bar);
   }
-  for (const ratio of [0.34, 0.72]) {
-    const ring = new Mesh(
-      new RingGeometry(roseRadius * ratio - 0.16, roseRadius * ratio + 0.16, 40),
-      materials.limestone,
+  for (const ratio of [0.3, 0.56, 0.82]) {
+    traceryParts.push(
+      part(new RingGeometry(roseRadius * ratio - 0.11, roseRadius * ratio + 0.11, 40), TONE.bright),
     );
-    ring.position.set(0, roseY, -halfDepth + 0.34);
-    nave.add(ring);
   }
+  // Cusped lights around the rim: sixteen small circles are the detail that reads as petals
+  // when the wheel is only a hundred pixels across, which is all it ever is from the nave.
+  for (let petal = 0; petal < 16; petal += 1) {
+    const angle = (petal / 16) * Math.PI * 2;
+    traceryParts.push(
+      part(
+        new TorusGeometry(roseRadius * 0.16, 0.09, 6, 14).translate(
+          Math.cos(angle) * roseRadius * 0.69,
+          Math.sin(angle) * roseRadius * 0.69,
+          0,
+        ),
+        TONE.bright,
+      ),
+    );
+  }
+  traceryParts.push(
+    part(new RingGeometry(roseRadius, roseRadius + 1.1, 48), TONE.bright),
+  );
+  const tracery = new Mesh(weld(traceryParts, "rose tracery"), materials.carved);
+  tracery.position.set(0, roseY, roseZ + 0.22);
+  nave.add(tracery);
+
   // The eye at the centre, warm against the cool field. Every real rose has one and it is
   // what gives the wheel a centre to be a wheel around.
-  const roseEye = new Mesh(
-    new RingGeometry(0, roseRadius * 0.16, 20),
-    glass(palette.glassWarm),
-  );
-  roseEye.position.set(0, roseY, -halfDepth + 0.4);
+  const roseEye = new Mesh(new RingGeometry(0, roseRadius * 0.15, 20), glass(palette.glassWarm));
+  roseEye.position.set(0, roseY, roseZ + 0.3);
   nave.add(roseEye);
 
-  const roseFrame = new Mesh(
-    new RingGeometry(roseRadius, roseRadius + 0.9, 48),
-    materials.limestone,
-  );
-  roseFrame.position.set(0, roseY, -halfDepth + 0.34);
-  nave.add(roseFrame);
-
-  // The triple lancet below the rose, and the altar in front of it.
-  // Three lancets under the rose, each with a real arch head. A rectangle here reads as a
-  // poster taped to the wall, which is exactly what the first blockout looked like.
-  for (let light = -1; light <= 1; light += 1) {
-    const lancetHalf = 0.95;
-    const lancetShape = new Shape();
-    lancetShape.moveTo(-lancetHalf, 0);
-    lancetShape.lineTo(-lancetHalf, 6);
-    lancetShape.absarc(lancetHalf, 6, 2 * lancetHalf, Math.PI, (Math.PI * 2) / 3, true);
-    lancetShape.absarc(-lancetHalf, 6, 2 * lancetHalf, Math.PI / 3, 0, true);
-    lancetShape.lineTo(lancetHalf, 0);
-    lancetShape.closePath();
-    const lancet = new Mesh(
-      new ExtrudeGeometry(lancetShape, { depth: 0.1, bevelEnabled: false }),
-      glass(light === 0 ? palette.glassWarm : palette.glassRose),
+  // The rose's own architecture: a gable over it and a shaft either side. A wheel pasted on
+  // a blank plane reads as a decal; the gable is what tells the eye that the east wall has
+  // a front, and its two slopes are the only diagonals in an otherwise all-vertical wall.
+  const surroundParts: BufferGeometry[] = [];
+  const gableFoot = new Vector2(6.5, 21.3);
+  const gableApex = 27;
+  const gableRun = Math.hypot(gableFoot.x, gableApex - gableFoot.y);
+  for (const slope of [-1, 1]) {
+    surroundParts.push(
+      part(
+        new BoxGeometry(gableRun + 0.4, 0.55, 0.45)
+          .rotateZ(slope * -Math.atan2(gableApex - gableFoot.y, gableFoot.x))
+          .translate((slope * gableFoot.x) / 2, (gableFoot.y + gableApex) / 2, 0),
+        TONE.bright,
+      ),
     );
-    // The centre light is taller, which is what stops three equal windows reading as a
-    // fence and makes the group point at the rose above it.
-    lancet.scale.y = light === 0 ? 1.18 : 1;
-    lancet.position.set(light * 2.5, arcadeHeight * 0.42, -halfDepth + 0.12);
-    nave.add(lancet);
-
-    const mullionBar = new Mesh(new BoxGeometry(0.22, 7.4, 0.22), materials.limestone);
-    mullionBar.position.set(light * 2.5, arcadeHeight * 0.42 + 3.4, -halfDepth + 0.3);
-    nave.add(mullionBar);
   }
+  for (const flank of [-1, 1]) {
+    surroundParts.push(
+      part(
+        new CylinderGeometry(0.42, 0.42, 21.6, 10).translate(flank * 6.5, 10.8, 0),
+        TONE.stone,
+      ),
+    );
+  }
+  const roseSurround = new Mesh(weld(surroundParts, "rose surround"), materials.carved);
+  roseSurround.position.set(0, 0, -halfDepth + 0.55);
+  roseSurround.castShadow = true;
+  nave.add(roseSurround);
 
-  const steps = new Mesh(new BoxGeometry(width * 0.7, 0.45, 4), materials.marbleBand);
-  steps.position.set(0, 0.22, -halfDepth + 7);
-  steps.castShadow = true;
-  steps.receiveShadow = true;
-  nave.add(steps);
+  // ---- the east lancets ------------------------------------------------------------------
+  // Three pointed lights under the rose, the centre one taller — which is what stops three
+  // equal windows reading as a fence and makes the group point at the wheel above it.
+  const lancetParts: BufferGeometry[] = [];
+  const lancetGlass: BufferGeometry[] = [];
+  for (const light of [-1, 0, 1]) {
+    const lancetHalf = 0.7;
+    const lancetHeight = light === 0 ? 6.1 : 4.4;
+    const shape = new Shape();
+    shape.moveTo(-lancetHalf, 0);
+    shape.lineTo(-lancetHalf, lancetHeight);
+    shape.absarc(lancetHalf, lancetHeight, 2 * lancetHalf, Math.PI, (Math.PI * 2) / 3, true);
+    shape.absarc(-lancetHalf, lancetHeight, 2 * lancetHalf, Math.PI / 3, 0, true);
+    shape.lineTo(lancetHalf, 0);
+    shape.closePath();
+    lancetGlass.push(
+      new ExtrudeGeometry(shape, { bevelEnabled: false, depth: 0.1 }).translate(light * 2.0, 5.0, 0),
+    );
+    // A mullion up the middle of each light, and a jamb either side. Glass with no bar
+    // across it blooms into one soft lozenge and loses the pointed head entirely.
+    lancetParts.push(
+      part(
+        new BoxGeometry(0.16, lancetHeight + lancetHalf * SQRT3, 0.3).translate(
+          light * 2.0,
+          5.0 + (lancetHeight + lancetHalf * SQRT3) / 2,
+          0.24,
+        ),
+        TONE.bright,
+      ),
+    );
+    for (const jamb of [-1, 1]) {
+      lancetParts.push(
+        part(
+          new BoxGeometry(0.24, lancetHeight + 0.6, 0.5).translate(
+            light * 2.0 + jamb * (lancetHalf + 0.16),
+            5.0 + (lancetHeight + 0.6) / 2,
+            0.2,
+          ),
+          // Jambs in plain stone, not the bright tint. Six bright bars beside three bright
+          // panes fused into one striped slab and the lancets stopped reading as windows.
+          TONE.stone,
+        ),
+      );
+    }
+  }
+  // Half value. At full `glassCool` the three lights fused into one blue slab under the
+  // rose and took the wheel's job; the rose has to stay the brightest thing on the axis.
+  const lancets = new Mesh(weld(lancetGlass, "east lancets"), glass(0x5f7ec4));
+  lancets.position.set(0, 0, -halfDepth + 0.1);
+  nave.add(lancets);
+  const lancetFrames = new Mesh(weld(lancetParts, "lancet frames"), materials.carved);
+  lancetFrames.position.set(0, 0, -halfDepth + 0.1);
+  nave.add(lancetFrames);
 
-  const altar = new Mesh(new BoxGeometry(4, 1.3, 1.8), materials.limestone);
-  altar.position.set(0, 1.1, -halfDepth + 5);
+  // The canopy: one containing arch over all three lights, so the group sits in a recess
+  // rather than being pasted flat on the apse wall. The two-centre head narrows fast near
+  // its apex, which is why the side lights are shorter than the centre one — they have to
+  // fit under the curve, and that stepping is also what makes the group point at the rose.
+  //
+  // It stops just above its own apex on purpose. Carried up to the vault it becomes a slab
+  // standing in front of the rose, and the rose is the one object on this axis that may
+  // never be occluded.
+  const canopy = new Mesh(
+    part(
+      piercedPanel(11, 14.6, 0.45, [{ halfWidth: 4.4, springY: 6 }]),
+      TONE.stone,
+    ),
+    materials.carved,
+  );
+  canopy.position.set(0, 0, -halfDepth + 0.2);
+  canopy.castShadow = true;
+  canopy.receiveShadow = true;
+  nave.add(canopy);
+
+  // ---- chancel floor, altar, screen ---------------------------------------------------------
+  // Three steps, not one box. The step nosings are the horizontal that breaks the floor's
+  // reflection near the east end, and one 45 cm slab gives exactly one such line.
+  const stepParts: BufferGeometry[] = [];
+  for (let step = 0; step < 3; step += 1) {
+    stepParts.push(
+      new BoxGeometry(width * 0.82 - step * 0.7, 0.36, 1.0).translate(
+        0,
+        0.18 + step * 0.36,
+        chancelZ + 2.6 - step * 1.0,
+      ),
+    );
+  }
+  stepParts.push(
+    new BoxGeometry(11.6, 1.08, bayPitch * 2 + 1).translate(0, 0.54, chancelZ - bayPitch + 0.5),
+  );
+  const chancelFloor = new Mesh(weld(stepParts, "steps"), materials.marbleBand);
+  chancelFloor.castShadow = true;
+  chancelFloor.receiveShadow = true;
+  nave.add(chancelFloor);
+
+  const altar = new Mesh(part(new BoxGeometry(4.2, 1.35, 1.9), TONE.bright), materials.carved);
+  altar.position.set(0, 1.08 + 0.68, chancelZ - 6.5);
   altar.castShadow = true;
   altar.receiveShadow = true;
   nave.add(altar);
 
   // The chancel screen: near-black vertical bars, read as silhouette against the lit apse.
-  for (let bar = -8; bar <= 8; bar += 1) {
-    const rail = new Mesh(new BoxGeometry(0.14, 3.2, 0.14), materials.iron);
-    rail.position.set(bar * 0.62, 1.6, -halfDepth + 9);
-    rail.castShadow = true;
-    nave.add(rail);
+  const screen = new InstancedMesh(new BoxGeometry(0.13, 3.4, 0.13), materials.iron, 27);
+  for (let bar = 0; bar < 27; bar += 1) {
+    // On the raised chancel platform, inside the arch — a screen standing on the nave floor
+    // reads as railings in a corridor rather than as the boundary of the sanctuary.
+    scratch.makeRotationY(0).setPosition((bar - 13) * 0.5, 1.08 + 1.7, chancelZ - 0.8);
+    screen.setMatrixAt(bar, scratch);
   }
+  screen.instanceMatrix.needsUpdate = true;
+  screen.castShadow = true;
+  nave.add(screen);
 
   // The west wall, behind the camera. Off screen, and it still matters: it is the surface
   // bouncing light back down the nave that screen-space GI can never sample — the gap
   // PRD-268's probe volume exists to close.
-  const westWall = new Mesh(new PlaneGeometry(width + aisleWidth * 2, height), materials.shadowStone);
+  const westWall = new Mesh(
+    new PlaneGeometry(width + aisleWidth * 2, height),
+    materials.shadowStone,
+  );
   westWall.position.set(0, height / 2, halfDepth);
-  westWall.material.side = DoubleSide;
   nave.add(westWall);
 
   return nave;

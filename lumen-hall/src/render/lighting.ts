@@ -49,8 +49,14 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
   // Steep enough that the shafts land on the floor between the columns rather than on the
   // far wall. At 22 m up over 44 m across they hit the opposite wall at head height and
   // the floor stays black; this angle puts them down where the camera is looking.
-  sun.position.set(-58, 46, 26);
-  sun.target.position.set(6, 2, -14);
+  // Almost perpendicular to the nave axis, and only slightly toward the east end.
+  //
+  // The previous direction carried a large -Z component, which meant the light approached
+  // down the length of the building and the solid west wall behind the camera blocked it
+  // before it ever reached a window. The result was a hard-edged black wedge over half the
+  // frame that looked like a shadow bug and was actually a sun pointed at a wall.
+  sun.position.set(-62, 40, -4);
+  sun.target.position.set(12, 1, -12);
   sun.castShadow = true;
   sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.camera.near = 1;

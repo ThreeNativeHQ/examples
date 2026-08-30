@@ -53,7 +53,10 @@ export function setupPost(
     // A beam is only a beam against dark air. Indirect light raises everything the beam
     // is meant to stand out from, so past about 0.4 the shafts stop reading as volumes and
     // the whole nave becomes one evenly lit interior.
-    ssgiIntensity: 0.34,
+    // Raised with the exposure. The aisles are lit by bounce alone and the darker albedo
+    // gives that bounce less to work with, so the same number that held detail on flat
+    // grey stone crushes the textured stone to black.
+    ssgiIntensity: 0.55,
     // The nave is 16 wide and 46 long. A radius shorter than the bay spacing gathers
     // nothing from the far column, which is the bounce that fills the aisle.
     // Short. A long gather radius pulls light across the whole nave and the result is a
@@ -72,8 +75,13 @@ export function setupPost(
     // Measured by eye across four captures: below ~0.4 the shafts vanish, above ~0.8 the
     // haze stops being confined to them and the whole nave fogs. 0.55 is the band where a
     // shaft is a volume and the air beside it is still air.
-    godraysDensity: 0.55,
-    godraysMaxDensity: 0.5,
+    // Density and maxDensity interact: the pass clamps accumulated illumination at
+    // maxDensity, so a density high enough to push most view rays past that clamp makes
+    // every pixel land on the same value and the result is flat fog rather than beams.
+    // Measured on this scene: 1.6 saturates everything, 0.4 is invisible, 0.7 keeps a
+    // gradient between the lit air and the dark air.
+    godraysDensity: 0.7,
+    godraysMaxDensity: 0.55,
     // The floor is polished stone, so the columns and the glass stand in it.
     ssrEnabled: !stageOff("ssr"),
     // The nave is 63 m long and the near piers stand about 8 m from the camera. The node's
@@ -93,7 +101,10 @@ export function setupPost(
     // The single biggest lever on "too bright". A cathedral interior at a low sun is a
     // high-dynamic-range subject: the shafts are meant to clip and everything the shafts
     // miss is meant to fall away.
-    exposure: 0.85,
+    // Re-balanced once the stone carried real albedo maps. A photographed limestone
+    // texture is far darker than the flat colour it replaced, so every exposure value
+    // tuned against untextured stone reads two stops under once the maps land.
+    exposure: 1.45,
   });
   environment.apply(renderer, scene, camera, sun);
 }

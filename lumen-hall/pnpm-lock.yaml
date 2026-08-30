@@ -6,8 +6,8 @@ settings:
 
 overrides:
   '@threenative/core': file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.0-517721d719b8.tgz
-  '@threenative/assets': file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-1a79059529f3.tgz
-  '@threenative/physics': file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.3.0-dc056a946625.tgz
+  '@threenative/assets': file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-ce4c190c32eb.tgz
+  '@threenative/physics': file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.3.0-e9365234e651.tgz
   '@threenative/playtest': file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz
   '@threenative/runtime-native': file:/home/joao/projects/threenative/sandbox/.packages/threenative-runtime-native-0.3.0-22fcb03a1501.tgz
   '@threenative/ui': file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.3.0-91ad807c7fda.tgz
@@ -22,8 +22,8 @@ importers:
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.0-517721d719b8.tgz
         version: file:../.packages/threenative-core-0.3.0-517721d719b8.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz(playwright@1.62.1)(three@0.185.1))(@types/react@19.2.0)(react-reconciler@0.33.0(react@19.2.0))(react@19.2.0)
       '@threenative/physics':
-        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.3.0-dc056a946625.tgz
-        version: file:../.packages/threenative-physics-0.3.0-dc056a946625.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-517721d719b8.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz(playwright@1.62.1)(three@0.185.1))(@types/react@19.2.0)(react-reconciler@0.33.0(react@19.2.0))(react@19.2.0))
+        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.3.0-e9365234e651.tgz
+        version: file:../.packages/threenative-physics-0.3.0-e9365234e651.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-517721d719b8.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz(playwright@1.62.1)(three@0.185.1))(@types/react@19.2.0)(react-reconciler@0.33.0(react@19.2.0))(react@19.2.0))
       '@threenative/ui':
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.3.0-91ad807c7fda.tgz
         version: file:../.packages/threenative-ui-0.3.0-91ad807c7fda.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-517721d719b8.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz(playwright@1.62.1)(three@0.185.1))(@types/react@19.2.0)(react-reconciler@0.33.0(react@19.2.0))(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -47,8 +47,8 @@ importers:
         specifier: 4.3.3
         version: 4.3.3(vite@8.2.0(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0))
       '@threenative/assets':
-        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-1a79059529f3.tgz
-        version: file:../.packages/threenative-assets-0.3.0-1a79059529f3.tgz(@types/node@26.4.0)
+        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-ce4c190c32eb.tgz
+        version: file:../.packages/threenative-assets-0.3.0-ce4c190c32eb.tgz(@types/node@26.4.0)
       '@threenative/playtest':
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz
         version: file:../.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz(playwright@1.62.1)(three@0.185.1)
@@ -959,8 +959,8 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-1a79059529f3.tgz':
-    resolution: {integrity: sha512-CU27XYMNLdWGlfmFMZjkV1J9Ro5MgvP4ofNPRafVUIYa1/f/utPoN+GZaDBm0cY4+IXt1Uxf7sk4NaBaQqUSdA==, tarball: file:../.packages/threenative-assets-0.3.0-1a79059529f3.tgz}
+  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-ce4c190c32eb.tgz':
+    resolution: {integrity: sha512-QXzIj0nCRPACij4khFCubuy8HoEUnqyeV/0myf2VIbpN8cJAlxwV8VefF5KHhds3BVbIgAG1MwvtA3I3PRbbsw==, tarball: file:../.packages/threenative-assets-0.3.0-ce4c190c32eb.tgz}
     version: 0.3.0
 
   '@threenative/core@file:../.packages/threenative-core-0.3.0-517721d719b8.tgz':
@@ -978,8 +978,8 @@ packages:
       react-reconciler:
         optional: true
 
-  '@threenative/physics@file:../.packages/threenative-physics-0.3.0-dc056a946625.tgz':
-    resolution: {integrity: sha512-tHJYMRKJltPUJ8Ywk6fZ7y9rzUaCQivI8PrF0L8r0Nq+xt2VRXsMEDe2NcvXLfdj6AkhmKHtfqS8EWszigRVpw==, tarball: file:../.packages/threenative-physics-0.3.0-dc056a946625.tgz}
+  '@threenative/physics@file:../.packages/threenative-physics-0.3.0-e9365234e651.tgz':
+    resolution: {integrity: sha512-mprA4LQ1Yrc7wrLEgXjBVQehCxycwthqU+TY6wdUZDXFp7WWhHlEIZVignr7uX4fKGOW8NrqJIdQfFw3fX3SSQ==, tarball: file:../.packages/threenative-physics-0.3.0-e9365234e651.tgz}
     version: 0.3.0
     peerDependencies:
       '@threenative/core': '>=0.3.0 <0.4.0'
@@ -1225,6 +1225,9 @@ packages:
   combined-stream@1.0.8:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
     engines: {node: '>= 0.8'}
+
+  comlink@4.4.2:
+    resolution: {integrity: sha512-OxGdvBmJuNKSCMO4NTl1L47VRp6xn2wG4F/2hYzB6tiCb709otOxtEYCSvK80PtjODfXXZu8ds+Nw5kVCjqd2g==}
 
   content-disposition@1.1.0:
     resolution: {integrity: sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==}
@@ -2307,6 +2310,9 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  xatlasjs@0.2.0:
+    resolution: {integrity: sha512-3YxdpuDY4X2Kjn/Zm2c5648x/hYAP/X5YIx7nc1ify65kroSX+CFyzkhbBkIq9RDpjhA2prPRyhJZzYPUE1WgQ==}
+
   zod-to-json-schema@3.25.2:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}
     peerDependencies:
@@ -3002,7 +3008,7 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.2.0(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)
 
-  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-1a79059529f3.tgz(@types/node@26.4.0)':
+  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-ce4c190c32eb.tgz(@types/node@26.4.0)':
     dependencies:
       '@gltf-transform/core': 4.4.2
       '@gltf-transform/extensions': 4.4.2
@@ -3013,6 +3019,9 @@ snapshots:
       ktx2-encoder: 0.6.0
       meshoptimizer: 1.1.1
       pngjs: 7.0.0
+      three: 0.185.1
+      three-mesh-bvh: 0.9.14(three@0.185.1)
+      xatlasjs: 0.2.0
     transitivePeerDependencies:
       - '@types/node'
 
@@ -3030,7 +3039,7 @@ snapshots:
       - immer
       - use-sync-external-store
 
-  '@threenative/physics@file:../.packages/threenative-physics-0.3.0-dc056a946625.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-517721d719b8.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz(playwright@1.62.1)(three@0.185.1))(@types/react@19.2.0)(react-reconciler@0.33.0(react@19.2.0))(react@19.2.0))':
+  '@threenative/physics@file:../.packages/threenative-physics-0.3.0-e9365234e651.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-517721d719b8.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz(playwright@1.62.1)(three@0.185.1))(@types/react@19.2.0)(react-reconciler@0.33.0(react@19.2.0))(react@19.2.0))':
     dependencies:
       '@dimforge/rapier3d-compat': 0.19.3
       '@threenative/core': file:../.packages/threenative-core-0.3.0-517721d719b8.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-489b4bfe2baa.tgz(playwright@1.62.1)(three@0.185.1))(@types/react@19.2.0)(react-reconciler@0.33.0(react@19.2.0))(react@19.2.0)
@@ -3266,6 +3275,9 @@ snapshots:
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
+
+  comlink@4.4.2:
+    optional: true
 
   content-disposition@1.1.0: {}
 
@@ -4380,6 +4392,10 @@ snapshots:
       strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
+
+  xatlasjs@0.2.0:
+    optionalDependencies:
+      comlink: 4.4.2
 
   zod-to-json-schema@3.25.2(zod@4.3.6):
     dependencies:

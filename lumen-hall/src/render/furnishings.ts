@@ -22,6 +22,7 @@
 // roughly twenty draws no matter how many candles are lit. The batches are declared once
 // at the bottom of `createFurnishings` and every builder below writes into them.
 import {
+  AdditiveBlending,
   BoxGeometry,
   type BufferGeometry,
   Color,
@@ -40,7 +41,7 @@ import {
   PointLight,
   Quaternion,
   Shape,
-  ShapeGeometry,
+  ExtrudeGeometry,
   SphereGeometry,
   TorusGeometry,
   Vector2,
@@ -67,10 +68,10 @@ const materials = {
    * The faint emissive is what stops the wheel disappearing into an unlit vault.
    */
   bronze: new MeshStandardMaterial({
-    color: 0x3b2c18,
+    color: 0x6b5228,
     roughness: 0.42,
-    metalness: 0.35,
-    emissive: 0x1b1206,
+    metalness: 0.3,
+    emissive: 0x2b1d09,
   }),
   /** Heraldic gold on the banners and the altar. Same reasoning as bronze, one stop up. */
   gold: new MeshStandardMaterial({
@@ -85,11 +86,20 @@ const materials = {
   carvedStone: new MeshStandardMaterial({ color: 0x6d6558, roughness: 0.9, metalness: 0 }),
   /** The altar linen: the only near-white cloth in the building, and it reads as the focus. */
   linen: new MeshStandardMaterial({ color: 0xbdb49c, roughness: 0.85, metalness: 0 }),
-  /** Banner cloth. Deep and unsaturated — the glass owns the colour in this room. */
+  /**
+   * Banner cloth. Deep and unsaturated — the glass owns the colour in this room.
+   *
+   * The `emissive` is not a glow, it is a floor. The sun travels +X/-Z, so a cloth hung
+   * flat against a pier receives no direct light at any angle, and the gathered indirect
+   * on a navy albedo rounds to black: the first capture showed the gold device floating
+   * with nothing behind it. The emissive term is what keeps the cloth a dark blue shape
+   * instead of a hole.
+   */
   banner: new MeshStandardMaterial({
-    color: 0x1d2748,
+    color: 0x232d54,
     roughness: 0.88,
     metalness: 0,
+    emissive: 0x0a0f22,
     side: DoubleSide,
   }),
   /** The sanctuary runner. Muted, so it warms the steps without competing with the rose. */
@@ -97,11 +107,28 @@ const materials = {
   /**
    * A flame.
    *
-   * `toneMapped: false` and a colour authored *past* 1.0. The bloom stage thresholds at
-   * 0.2, so a value of 2.6 blooms hard and the GI pass gathers a warm bounce off it. A
-   * flame authored at 1.0 tonemaps to a beige dot and lights nothing.
+   * `toneMapped: false` and a colour authored far *past* 1.0. The bloom stage thresholds
+   * at 0.2 but its strength is only 0.18, so the halo a flame throws is proportional to how
+   * far over the threshold it sits, not to how big the mesh is. The first capture used 2.6
+   * and the candles rendered as white sticks with no light on them at all.
    */
-  flame: new MeshBasicMaterial({ color: new Color().setRGB(2.6, 1.35, 0.5), toneMapped: false }),
+  flame: new MeshBasicMaterial({ color: new Color().setRGB(5.5, 2.7, 0.95), toneMapped: false }),
+  /**
+   * The halo around a flame.
+   *
+   * Additive, depth-writing off, and much larger than the flame itself. Bloom alone cannot
+   * do this job here: `bloomStrength` is 0.18 because the stained glass is already past the
+   * tonemap ceiling and a stronger bloom lifts the whole frame. The halo is a local,
+   * per-candle version of the same effect that costs one draw call for every candle in the
+   * building and nothing in the post chain.
+   */
+  halo: new MeshBasicMaterial({
+    color: new Color().setRGB(0.32, 0.14, 0.045),
+    blending: AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+    transparent: true,
+  }),
 };
 
 // ---------------------------------------------------------------------------------------
@@ -195,13 +222,26 @@ const BAYS = Math.floor(NAVE.depth / NAVE.bayPitch);
 const HALF_DEPTH = (BAYS * NAVE.bayPitch) / 2;
 /** Centre of the pier standing proud of the arcade, matching `createCathedral`. */
 const PIER_X = NAVE.width / 2 - NAVE.pierRadius * 0.7;
-/** The nave-facing surface of that pier — what a banner hangs against. */
-const PIER_FACE_X = PIER_X - NAVE.pierRadius;
 /** Face of the outer aisle wall. */
 const AISLE_WALL_X = NAVE.width / 2 + NAVE.aisleWidth;
 /** The chancel screen line `createCathedral` already builds bars on. */
-const SCREEN_Z = -HALF_DEPTH + 9;
-const ALTAR_Z = -HALF_DEPTH + 5;
+/**
+ * The east end, mirrored from `createCathedral`.
+ *
+ * These five numbers are the shell's, not this file's: the chancel arch springs two bays
+ * short of the east wall, the sanctuary floor is a raised platform, and the screen stands
+ * on it. They are duplicated here rather than imported because `cathedral.ts` exports one
+ * function and nothing else — which makes them the one thing in this file that can go
+ * silently stale. When the altar moves over there, these move here, and the symptom is an
+ * altar set floating a metre below a platform it should be standing on.
+ */
+const CHANCEL_Z = -HALF_DEPTH + NAVE.bayPitch * 2;
+/** Top of the raised sanctuary platform: everything in the chancel stands on this. */
+const CHANCEL_Y = 1.08;
+const SCREEN_Z = CHANCEL_Z - 0.8;
+const ALTAR_Z = CHANCEL_Z - 6.5;
+/** Half-width of the platform. Outside this the chancel fittings stand on the nave floor. */
+const CHANCEL_HALF_WIDTH = 5.8;
 
 // ---------------------------------------------------------------------------------------
 // the pieces
@@ -212,6 +252,7 @@ interface IKit {
   readonly chainLink: IBatch;
   readonly flame: IBatch;
   readonly gold: IBatch;
+  readonly halo: IBatch;
   readonly ironBox: IBatch;
   readonly ironRod: IBatch;
   readonly ironSpike: IBatch;
@@ -232,9 +273,15 @@ interface IKit {
  */
 function candle(kit: IKit, x: number, baseY: number, z: number, height: number, radius: number) {
   place(kit.wax, [x, baseY + height / 2, z], [radius, height, radius]);
-  // Taller than wide, and small: the flame's read in the frame is its bloom halo, not its
-  // silhouette, so growing the mesh only makes the halo a blob.
-  place(kit.flame, [x, baseY + height + 0.055, z], [radius * 0.62, radius * 1.15, radius * 0.62]);
+  // Deliberately larger than a real flame. A 15 mm flame 20 m down the nave is a third of a
+  // pixel; at that size the tonemap averages it away with its neighbours and the candle
+  // reads as an unlit white stick, which is exactly what the first capture showed.
+  const tip = baseY + height + 0.09;
+  place(kit.flame, [x, tip, z], [0.05, 0.11, 0.05]);
+  // Kept barely wider than the flame. The halo is a sphere, not a soft sprite, so two of
+  // them closer together than their own radius merge into one lozenge with no candles
+  // inside it — which is what a 0.2 m halo did to every seven-branch stand in the frame.
+  place(kit.halo, [x, tip, z], [0.115, 0.14, 0.115]);
 }
 
 /**
@@ -311,12 +358,14 @@ function candelabrum(
   height: number,
   count: number,
   yaw: number,
+  baseY = 0,
 ): void {
-  place(kit.ironRod, [x, 0.06, z], [0.46, 0.12, 0.46]);
-  place(kit.knop, [x, 0.2, z], [0.3, 0.16, 0.3]);
-  rod(kit.ironRod, [x, 0.12, z], [x, height, z], 0.048);
-  place(kit.knop, [x, height * 0.42, z], [0.12, 0.14, 0.12]);
-  place(kit.knop, [x, height * 0.74, z], [0.1, 0.12, 0.1]);
+  const top = baseY + height;
+  place(kit.ironRod, [x, baseY + 0.06, z], [0.46, 0.12, 0.46]);
+  place(kit.knop, [x, baseY + 0.2, z], [0.3, 0.16, 0.3]);
+  rod(kit.ironRod, [x, baseY + 0.12, z], [x, top, z], 0.048);
+  place(kit.knop, [x, baseY + height * 0.42, z], [0.12, 0.14, 0.12]);
+  place(kit.knop, [x, baseY + height * 0.74, z], [0.1, 0.12, 0.1]);
 
   const spacing = 0.27;
   const span = (count - 1) * spacing;
@@ -324,19 +373,19 @@ function candelabrum(
   const dz = Math.sin(yaw);
   rod(
     kit.ironRod,
-    [x - (dx * span) / 2, height, z - (dz * span) / 2],
-    [x + (dx * span) / 2, height, z + (dz * span) / 2],
+    [x - (dx * span) / 2, top, z - (dz * span) / 2],
+    [x + (dx * span) / 2, top, z + (dz * span) / 2],
     0.035,
   );
   for (let index = 0; index < count; index += 1) {
     const offset = -span / 2 + index * spacing;
     const cx = x + dx * offset;
     const cz = z + dz * offset;
-    place(kit.bronzeRod, [cx, height + 0.05, cz], [0.075, 0.09, 0.075]);
+    place(kit.bronzeRod, [cx, top + 0.05, cz], [0.075, 0.09, 0.075]);
     // The middle taper is the tallest and they fall away to the ends. A flat row of equal
     // candles reads as a barcode; the arc is what makes the group read as a candelabrum.
     const fall = Math.abs(index - (count - 1) / 2) / Math.max(1, (count - 1) / 2);
-    candle(kit, cx, height + 0.1, cz, 0.72 - fall * 0.24, 0.043);
+    candle(kit, cx, top + 0.1, cz, 0.72 - fall * 0.24, 0.043);
   }
 }
 
@@ -391,9 +440,10 @@ function railing(
   from: [number, number],
   to: [number, number],
   height: number,
-  options: { readonly pitch?: number; readonly finials?: boolean } = {},
+  options: { readonly pitch?: number; readonly finials?: boolean; readonly baseY?: number } = {},
 ): void {
   const pitch = options.pitch ?? 0.42;
+  const baseY = options.baseY ?? 0;
   const dx = to[0] - from[0];
   const dz = to[1] - from[1];
   const length = Math.hypot(dx, dz);
@@ -405,12 +455,12 @@ function railing(
     const t = index / count;
     const bx = from[0] + dx * t;
     const bz = from[1] + dz * t;
-    rod(kit.ironRod, [bx, 0, bz], [bx, height, bz], 0.038);
+    rod(kit.ironRod, [bx, baseY, bz], [bx, baseY + height, bz], 0.038);
     if (options.finials === true && index % 3 === 0) {
-      place(kit.ironSpike, [bx, height + 0.24, bz], [0.075, 0.34, 0.075]);
+      place(kit.ironSpike, [bx, baseY + height + 0.24, bz], [0.075, 0.34, 0.075]);
     }
   }
-  for (const railY of [0.14, height * 0.62, height - 0.06]) {
+  for (const railY of [baseY + 0.14, baseY + height * 0.62, baseY + height - 0.06]) {
     place(kit.ironBox, [from[0] + dx / 2, railY, from[1] + dz / 2], [0.06, 0.09, length], [
       0,
       yaw,
@@ -420,10 +470,16 @@ function railing(
 }
 
 /**
- * A heraldic banner hanging from a pier.
+ * A heraldic banner hanging from the west face of a pier.
  *
  * The bottom is a swallowtail rather than a straight hem: the notch is what separates a
  * banner from a rectangle of cloth, and at this distance the notch is most of the read.
+ *
+ * West face, not the nave face, and that is a lighting decision rather than a liturgical
+ * one. The sun in this building travels +X and -Z, so it lights whatever faces -X or +Z;
+ * a banner hung flat against the *side* of a pier faces +X and receives no direct light on
+ * any part of it. Hung on the west face it faces the camera and the sun at once, which is
+ * also how the reference's banners are seen — broadside, not edge-on.
  */
 function banner(
   kit: IKit,
@@ -432,33 +488,30 @@ function banner(
   x: number,
   z: number,
   topY: number,
-  facing: number,
 ): void {
   const cloth = new Mesh(geometry, materials.banner);
   cloth.position.set(x, topY, z);
-  cloth.rotation.y = facing;
   cloth.castShadow = true;
   parent.add(cloth);
 
   // The pole and its two suspension rings. Cloth that starts at a bare edge looks pasted
   // to the pier; the pole gives it something to hang from.
-  const normal = Math.sign(facing) * 0.09;
-  rod(kit.bronzeRod, [x + normal, topY + 0.12, z - 1.15], [x + normal, topY + 0.12, z + 1.15], 0.05);
-  for (const side of [-0.8, 0.8]) {
-    place(kit.chainLink, [x + normal, topY + 0.24, z + side], [0.13, 0.13, 0.13], [0, facing, 0]);
+  rod(kit.bronzeRod, [x - 1.25, topY + 0.12, z + 0.1], [x + 1.25, topY + 0.12, z + 0.1], 0.05);
+  for (const side of [-0.85, 0.85]) {
+    place(kit.chainLink, [x + side, topY + 0.26, z + 0.1], [0.14, 0.14, 0.14]);
   }
 
   // The device: a cross patty in gold. Five boxes rather than a texture, because there are
   // no textures in this file and a flat quad would show as a smear at this size.
   const deviceY = topY - 2.1;
-  const face = x + Math.sign(facing) * 0.05;
-  place(kit.gold, [face, deviceY, z], [0.05, 1.5, 0.2], [0, facing, 0]);
-  place(kit.gold, [face, deviceY + 0.28, z], [0.05, 0.2, 0.95], [0, facing, 0]);
+  const face = z + 0.16;
+  place(kit.gold, [x, deviceY, face], [0.2, 1.5, 0.06]);
+  place(kit.gold, [x, deviceY + 0.28, face], [0.95, 0.2, 0.06]);
   for (const side of [-0.62, 0.62]) {
-    place(kit.gold, [face, deviceY - 0.75, z + side], [0.05, 0.24, 0.24], [0, facing, 0]);
+    place(kit.gold, [x + side, deviceY - 0.75, face], [0.24, 0.24, 0.06]);
   }
   // A hem band across the bottom, which is what stops the swallowtail reading as a tear.
-  place(kit.gold, [face, topY - 4.55, z], [0.04, 0.11, 1.9], [0, facing, 0]);
+  place(kit.gold, [x, topY - 4.55, face], [1.9, 0.11, 0.05]);
 }
 
 /** A robed figure on a plinth, standing in an aisle bay. */
@@ -492,6 +545,7 @@ export function createFurnishings(): Group {
     chainLink: batch(new TorusGeometry(1, 0.26, 4, 8), materials.bronze),
     flame: batch(new SphereGeometry(1, 6, 5), materials.flame),
     gold: batch(new BoxGeometry(1, 1, 1), materials.gold),
+    halo: batch(new SphereGeometry(1, 8, 6), materials.halo),
     ironBox: batch(new BoxGeometry(1, 1, 1), materials.iron),
     ironRod: batch(unitRod, materials.iron),
     ironSpike: batch(new ConeGeometry(1, 1, 6), materials.iron),
@@ -527,96 +581,150 @@ export function createFurnishings(): Group {
   // and hangs directly over the rose window, which is the one thing in the frame that must
   // stay unobstructed; flanking them opens the axis and puts a lit wheel in each half of
   // the picture, which is how the reference is composed.
-  chandelier(kit, 5.2, 13.5, 9.4, 1.45, 12);
-  chandelier(kit, -4.9, 2.5, 10.4, 1.7, 14);
+  chandelier(kit, 6.2, 11.0, 9.9, 1.55, 12);
+  chandelier(kit, -4.9, 2.5, 10.4, 1.75, 14);
   chandelier(kit, 5.0, -8.0, 10.8, 1.6, 12);
-  chandelier(kit, -4.7, -17.5, 11.0, 1.5, 12);
+  // Stops short of the chancel arch at z -19.5; a wheel hung inside the arch loses its
+  // chain against the arch order and reads as a ring stuck to the masonry.
+  chandelier(kit, -4.7, -13.5, 11.0, 1.5, 12);
 
   // ---- candle stands -----------------------------------------------------------------
   // Against the piers, where the reference puts them: a lit object in the near field is
   // what gives the nave its scale, because the eye reads a candle as a known size.
+  // The near one is the tallest and sits at the left edge of the frame, where the
+  // reference puts its foreground stand: a lit cluster two metres from the lens is what
+  // establishes that the piers behind it are fifteen metres tall.
+  candelabrum(kit, -5.0, 17.6, 2.95, 7, 0.5);
   candelabrum(kit, -6.3, 14.6, 2.35, 7, 0.35);
-  candelabrum(kit, 6.5, 11.2, 2.2, 7, -0.4);
   candelabrum(kit, -6.2, 0.8, 2.3, 7, 0.3);
-  candelabrum(kit, 6.2, -6.4, 2.25, 7, -0.3);
-  candelabrum(kit, -3.4, SCREEN_Z + 1.4, 2.0, 5, 0);
-  candelabrum(kit, 3.4, SCREEN_Z + 1.4, 2.0, 5, 0);
+  // The right of the nave, held in toward the axis. The nearest pier on that side fills the
+  // right quarter of the frame from top to bottom, and anything placed behind it at
+  // x > 6 disappears whole — including, in the third capture, an entire seven-branch stand.
+  candelabrum(kit, 5.4, 6.0, 2.5, 7, -0.45);
+  candelabrum(kit, 5.9, -6.4, 2.25, 7, -0.3);
+  // Flanking the chancel steps, on the nave floor rather than the raised platform.
+  candelabrum(kit, -4.1, CHANCEL_Z + 4.4, 2.4, 5, 0.15);
+  candelabrum(kit, 4.1, CHANCEL_Z + 4.4, 2.4, 5, -0.15);
 
   // ---- aisle votives -----------------------------------------------------------------
   // Placed so the sight line from the camera through an arcade opening actually lands on
   // them; a rack behind a pier is a rack nobody ever sees.
-  votiveRack(kit, -(AISLE_WALL_X - 2.5), 13.0, Math.PI / 2);
-  votiveRack(kit, AISLE_WALL_X - 2.5, 10.0, -Math.PI / 2);
+  votiveRack(kit, -9.8, 13.0, Math.PI / 2);
+  votiveRack(kit, -9.8, -1.0, Math.PI / 2);
+  votiveRack(kit, 9.8, 10.0, -Math.PI / 2);
 
   // ---- the chancel enclosure ---------------------------------------------------------
-  // `createCathedral` already builds the central bars of the screen across x ±5. This
-  // continues that line out to the aisles and adds the crest the reference silhouettes
-  // against the apse, then turns the screen east to enclose the choir — the two returns
-  // are what give the chancel depth instead of reading as a flat gate.
+  // `createCathedral` builds twenty-seven bars across x ±6.5, standing on the raised
+  // platform and topping out at 4.78. This continues that line out past the edge of the
+  // platform — where the floor drops back to 0 and the bars have to be a whole metre
+  // taller to reach the same crest — and adds the finialled top the reference silhouettes
+  // against the lit apse.
+  const screenTop = CHANCEL_Y + 3.4;
   for (const side of [-1, 1]) {
-    railing(kit, [side * 5.2, SCREEN_Z], [side * (AISLE_WALL_X - 1.2), SCREEN_Z], 3.4, {
+    railing(kit, [side * 6.7, SCREEN_Z], [side * (AISLE_WALL_X - 1.2), SCREEN_Z], screenTop, {
       finials: true,
+      pitch: 0.34,
     });
-    railing(kit, [side * 5.6, SCREEN_Z - 0.4], [side * 5.6, SCREEN_Z - 6.5], 3.0, { pitch: 0.5 });
-    // Gate posts, taller than the screen, marking the opening on the nave axis.
-    rod(kit.ironRod, [side * 2.0, 0, SCREEN_Z], [side * 2.0, 4.3, SCREEN_Z], 0.11);
-    place(kit.ironSpike, [side * 2.0, 4.6, SCREEN_Z], [0.16, 0.6, 0.16]);
+    // Gate posts on the platform, taller than the screen, marking the opening on the axis.
+    rod(kit.ironRod, [side * 2.0, CHANCEL_Y, SCREEN_Z], [side * 2.0, screenTop + 0.5, SCREEN_Z], 0.1);
+    place(kit.ironSpike, [side * 2.0, screenTop + 0.85, SCREEN_Z], [0.16, 0.6, 0.16]);
   }
-  // The crest over the central bars, which stop at 3.2 in `cathedral.ts`.
-  place(kit.ironBox, [0, 3.32, SCREEN_Z], [10.6, 0.1, 0.1]);
-  // A low communion rail in front of the steps, west of the screen.
-  railing(kit, [-3.2, SCREEN_Z + 3.2], [3.2, SCREEN_Z + 3.2], 0.95, { pitch: 0.36 });
+  // The crest, spanning the shell's bars and this file's, so the whole screen reads as one
+  // horizontal rather than as three pieces of fence that happen to line up.
+  place(kit.ironBox, [0, screenTop + 0.06, SCREEN_Z], [2 * (AISLE_WALL_X - 1.2), 0.11, 0.11]);
+  // The choir enclosure, running east from the screen along the edge of the platform. It
+  // is the only thing in the frame that draws a receding line at eye level, and a lattice
+  // in perspective is worth more to the read of depth than the same lattice seen flat on.
+  for (const side of [-1, 1]) {
+    railing(
+      kit,
+      [side * (CHANCEL_HALF_WIDTH - 0.35), SCREEN_Z - 0.6],
+      [side * (CHANCEL_HALF_WIDTH - 0.35), SCREEN_Z - 6.0],
+      2.6,
+      { pitch: 0.38, baseY: CHANCEL_Y },
+    );
+  }
+  // A low communion rail on the nave floor, west of the chancel steps.
+  railing(kit, [-3.4, CHANCEL_Z + 3.6], [3.4, CHANCEL_Z + 3.6], 0.95, { pitch: 0.36 });
 
   // ---- the altar group ---------------------------------------------------------------
-  // `createCathedral` puts a single 0.45 m block under the altar. Two treads in front of
-  // it turn one riser into a flight, which is the difference between an altar standing on
-  // a kerb and an altar raised above the nave.
-  const stepFront = -HALF_DEPTH + 9 - 0.5;
-  place(kit.stoneBox, [0, 0.075, stepFront - 1.0], [13.0, 0.15, 1.1]);
-  place(kit.stoneBox, [0, 0.15, stepFront - 2.1], [12.0, 0.3, 1.1]);
+  // Everything here stands on the sanctuary platform, so every y is measured from
+  // `CHANCEL_Y`. The shell's altar block is 1.35 tall centred at 1.76, which puts its top
+  // at 2.435 — the height every fitting below sits on.
+  const mensaY = 2.435;
 
-  const runner = new Mesh(new BoxGeometry(4.6, 0.03, 6.4), materials.carpet);
-  runner.position.set(0, 0.465, ALTAR_Z + 1.6);
+  const runner = new Mesh(new BoxGeometry(4.6, 0.03, 7.5), materials.carpet);
+  runner.position.set(0, CHANCEL_Y + 0.015, ALTAR_Z + 3.4);
   runner.receiveShadow = true;
   furnishings.add(runner);
 
   // The mensa and its frontal. The linen is the brightest non-emissive surface in the
   // building and it sits dead on the axis, which is what pulls the eye to the east end.
-  place(kit.stoneBox, [0, 1.81, ALTAR_Z], [4.5, 0.14, 2.05]);
-  const frontal = new Mesh(new BoxGeometry(4.05, 1.15, 0.04), materials.linen);
-  frontal.position.set(0, 1.15, ALTAR_Z + 0.92);
+  place(kit.stoneBox, [0, mensaY + 0.07, ALTAR_Z], [4.7, 0.14, 2.15]);
+  const frontal = new Mesh(new BoxGeometry(4.2, 1.3, 0.04), materials.linen);
+  frontal.position.set(0, 1.76, ALTAR_Z + 0.97);
   furnishings.add(frontal);
-  place(kit.gold, [0, 1.72, ALTAR_Z + 0.93], [4.05, 0.08, 0.03]);
-  place(kit.gold, [0, 1.2, ALTAR_Z + 0.94], [0.1, 0.7, 0.03]);
-  place(kit.gold, [0, 1.36, ALTAR_Z + 0.94], [0.44, 0.1, 0.03]);
+  place(kit.gold, [0, 2.36, ALTAR_Z + 0.98], [4.2, 0.08, 0.03]);
+  place(kit.gold, [0, 1.8, ALTAR_Z + 0.99], [0.1, 0.7, 0.03]);
+  place(kit.gold, [0, 1.96, ALTAR_Z + 0.99], [0.44, 0.1, 0.03]);
 
   // Six candlesticks and a cross: the standard altar set, and six small flames at the far
   // end of a 55 m axis is exactly the cue that says something is happening down there.
+  const setZ = ALTAR_Z - 0.4;
   for (let index = 0; index < 6; index += 1) {
     const cx = -1.65 + index * 0.66;
-    rod(kit.bronzeRod, [cx, 1.88, ALTAR_Z - 0.35], [cx, 2.45, ALTAR_Z - 0.35], 0.035);
-    place(kit.knop, [cx, 2.15, ALTAR_Z - 0.35], [0.075, 0.06, 0.075]);
-    place(kit.bronzeRod, [cx, 2.48, ALTAR_Z - 0.35], [0.07, 0.07, 0.07]);
-    candle(kit, cx, 2.52, ALTAR_Z - 0.35, 0.42, 0.04);
+    rod(kit.bronzeRod, [cx, mensaY + 0.14, setZ], [cx, mensaY + 0.72, setZ], 0.035);
+    place(kit.knop, [cx, mensaY + 0.42, setZ], [0.075, 0.06, 0.075]);
+    place(kit.bronzeRod, [cx, mensaY + 0.75, setZ], [0.07, 0.07, 0.07]);
+    candle(kit, cx, mensaY + 0.79, setZ, 0.42, 0.04);
   }
-  place(kit.gold, [0, 3.1, ALTAR_Z - 0.55], [0.08, 1.25, 0.08]);
-  place(kit.gold, [0, 3.42, ALTAR_Z - 0.55], [0.62, 0.08, 0.08]);
+  place(kit.gold, [0, mensaY + 1.35, setZ - 0.25], [0.08, 1.25, 0.08]);
+  place(kit.gold, [0, mensaY + 1.67, setZ - 0.25], [0.62, 0.08, 0.08]);
 
-  // The reredos behind the altar: five gabled panels, the centre one tallest. It tops out
-  // below the sill of the east lancets on purpose — its whole job is to be a dark carved
-  // silhouette *against* that glass, and a panel tall enough to cover the glass has
-  // nothing to be a silhouette against.
+  // The reredos behind the altar: five gabled panels, the centre one tallest.
   for (let index = -2; index <= 2; index += 1) {
     const panelHeight = 3.4 - Math.abs(index) * 0.45;
-    place(kit.stoneBox, [index * 1.22, panelHeight / 2, ALTAR_Z - 1.55], [1.14, panelHeight, 0.3]);
-    place(kit.stoneSpike, [index * 1.22, panelHeight + 0.42, ALTAR_Z - 1.55], [
-      0.86,
-      0.85,
-      0.42,
-    ], [0, Math.PI / 4, 0]);
+    const panelZ = ALTAR_Z - 1.7;
+    place(kit.stoneBox, [index * 1.22, CHANCEL_Y + panelHeight / 2, panelZ], [1.14, panelHeight, 0.3]);
+    place(
+      kit.stoneSpike,
+      [index * 1.22, CHANCEL_Y + panelHeight + 0.42, panelZ],
+      [0.86, 0.85, 0.42],
+      [0, Math.PI / 4, 0],
+    );
     if (index !== 0) continue;
-    place(kit.gold, [index * 1.22, panelHeight * 0.62, ALTAR_Z - 1.38], [0.6, 0.9, 0.04]);
+    place(kit.gold, [index * 1.22, CHANCEL_Y + panelHeight * 0.62, panelZ + 0.17], [0.6, 0.9, 0.04]);
   }
+
+  // The tabernacle canopy: a slender spire over the altar, rising past the top of the
+  // screen. Everything else in the sanctuary sits below the screen's crest and is read
+  // through a lattice of iron bars; the spire is the one part of the group that clears
+  // them, and it is the reason the east end reads as a *place* rather than as a bright
+  // window with some candles in front of it.
+  const canopyFoot = CHANCEL_Y + 0.1;
+  const canopyTop = CHANCEL_Y + 5.6;
+  for (const cx of [-0.62, 0.62]) {
+    for (const cz of [-0.62, 0.62]) {
+      rod(kit.stoneBox, [cx, canopyFoot, ALTAR_Z + cz], [cx, canopyTop, ALTAR_Z + cz], 0.09);
+    }
+  }
+  place(kit.stoneBox, [0, canopyTop, ALTAR_Z], [1.7, 0.22, 1.7]);
+  for (const [gx, gz, yaw] of [
+    [0, 0.85, 0],
+    [0, -0.85, 0],
+    [0.85, 0, Math.PI / 2],
+    [-0.85, 0, Math.PI / 2],
+  ] as ReadonlyArray<readonly [number, number, number]>) {
+    place(kit.stoneSpike, [gx, canopyTop + 0.5, ALTAR_Z + gz], [0.75, 0.9, 0.2], [0, yaw, 0]);
+  }
+  place(kit.stoneSpike, [0, canopyTop + 1.55, ALTAR_Z], [0.62, 2.4, 0.62], [0, Math.PI / 4, 0]);
+  // Crockets. Four knops up the spire are what stop a cone reading as a traffic bollard.
+  for (let step = 0; step < 4; step += 1) {
+    const t = 0.18 + step * 0.2;
+    place(kit.knop, [0, canopyTop + 0.35 + t * 2.4, ALTAR_Z], [0.1, 0.1, 0.1]);
+  }
+  place(kit.gold, [0, canopyTop + 2.95, ALTAR_Z], [0.09, 0.62, 0.09]);
+  place(kit.gold, [0, canopyTop + 3.05, ALTAR_Z], [0.34, 0.09, 0.09]);
 
   // ---- banners -----------------------------------------------------------------------
   // Hung from alternating piers so the two colonnades do not mirror each other exactly —
@@ -628,14 +736,17 @@ export function createFurnishings(): Group {
   bannerShape.lineTo(0, -5.4);
   bannerShape.lineTo(-1.0, -4.85);
   bannerShape.closePath();
-  const bannerGeometry = new ShapeGeometry(bannerShape);
+  // Extruded rather than flat. A zero-thickness cloth has one normal; the extrusion gives
+  // it edges facing -X and +Y that catch the sun and draw a lit rim down each side, which
+  // is what stops it reading as a decal stuck on the pier.
+  const bannerGeometry = new ExtrudeGeometry(bannerShape, { depth: 0.09, bevelEnabled: false });
   for (const [x, z] of [
-    [-PIER_FACE_X + 0.15, -3.5],
-    [-PIER_FACE_X + 0.15, 10.5],
-    [PIER_FACE_X - 0.15, 3.5],
-    [PIER_FACE_X - 0.15, -10.5],
+    [-PIER_X, -3.5],
+    [-PIER_X, 10.5],
+    [PIER_X, 3.5],
+    [PIER_X, -10.5],
   ] as ReadonlyArray<readonly [number, number]>) {
-    banner(kit, furnishings, bannerGeometry, x, z, 13.0, x < 0 ? Math.PI / 2 : -Math.PI / 2);
+    banner(kit, furnishings, bannerGeometry, x, z + NAVE.pierRadius + 0.25, 13.0);
   }
 
   // ---- aisle statuary and memorials --------------------------------------------------
@@ -644,8 +755,13 @@ export function createFurnishings(): Group {
   // them the cheapest read on whether the stage did anything.
   for (const side of [-1, 1]) {
     for (const bay of [3, 5, 7]) {
-      const z = -HALF_DEPTH + bay * NAVE.bayPitch;
-      statue(kit, side * (AISLE_WALL_X - 2.9), z, side > 0 ? -Math.PI / 2 : Math.PI / 2);
+      // Bay centres, on the nave side of the arcade rather than out in the aisle. The
+      // colonnade in this building is dense enough that a sightline from the nave floor
+      // into an aisle bay is almost never clear: statues placed properly in the aisle were
+      // invisible in three consecutive captures. Standing them against the arcade puts
+      // them where the reference's are read from — in front of an opening, not behind one.
+      const z = -HALF_DEPTH + bay * NAVE.bayPitch + NAVE.bayPitch / 2;
+      statue(kit, side * 6.95, z, side > 0 ? -Math.PI / 2 : Math.PI / 2);
     }
     for (const bay of [2, 4, 6]) {
       const z = -HALF_DEPTH + bay * NAVE.bayPitch + NAVE.bayPitch / 2;
@@ -670,8 +786,8 @@ export function createFurnishings(): Group {
   // 2. The sanctuary. The altar is 55 m down the axis and stands *in front of* the lit
   //    lancets, so every surface of it that the camera can see faces away from the only
   //    light in the building. Without this it is a black block against bright glass.
-  const altarLight = new PointLight(0xffc184, 9, 14, 2);
-  altarLight.position.set(0, 3.1, ALTAR_Z + 2.4);
+  const altarLight = new PointLight(0xffc184, 18, 16, 2);
+  altarLight.position.set(0, CHANCEL_Y + 2.6, ALTAR_Z + 2.6);
   furnishings.add(altarLight);
 
   // ---- resolve every batch into its single draw ---------------------------------------
@@ -679,6 +795,7 @@ export function createFurnishings(): Group {
   batches.chainLink.build(furnishings, "furnishings-chain", false);
   batches.flame.build(furnishings, "furnishings-flames", false);
   batches.gold.build(furnishings, "furnishings-gold", false);
+  batches.halo.build(furnishings, "furnishings-halos", false);
   batches.ironBox.build(furnishings, "furnishings-iron-rails", true);
   batches.ironRod.build(furnishings, "furnishings-iron-rods", true);
   batches.ironSpike.build(furnishings, "furnishings-finials", true);

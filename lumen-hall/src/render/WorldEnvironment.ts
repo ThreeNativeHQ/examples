@@ -176,6 +176,12 @@ export class WorldEnvironment {
     const options = this.#options;
     const raw = renderer.raw as { toneMapping?: number; toneMappingExposure?: number };
     raw.toneMapping = TONEMAP[options.tonemapMode];
+    // `toneMappingExposure` is set for the non-WebGPU path below, and it is *not* what
+    // exposes the node chain: once `setOutputNode` installs a `RenderPipeline`, the
+    // renderer's exposure scalar no longer reaches the frame. Measured — moving it from
+    // 0.85 to 1.45 changed nothing at all on screen. Exposure is applied as a multiply on
+    // the scene pass instead, which is also the physically right place for it: it is the
+    // shutter, so it belongs before the tone curve rather than after.
     raw.toneMappingExposure = options.exposure;
 
     const stages: IStageReport[] = [];
@@ -209,10 +215,14 @@ export class WorldEnvironment {
     // and a projection matrix inverse. The scene's camera is the one the pass rendered with.
     const view = camera as PerspectiveCamera;
 
-    let lit: ChainNode = chain(colour);
+    // Scene-referred exposure. Everything downstream — GI gather, reflections, bloom
+    // threshold — sees the exposed image, which is what makes the bloom threshold mean the
+    // same thing at any exposure.
+    const exposed = chain(colour.mul(options.exposure));
+    let lit: ChainNode = exposed;
 
     if (options.ssgiEnabled) {
-      const gi = ssgi(chain(colour), depth, normal, view);
+      const gi = ssgi(exposed, depth, normal, view);
       const tier = SSGI_QUALITY[options.ssgiQuality];
       gi.sliceCount.value = tier.sliceCount;
       gi.stepCount.value = tier.stepCount;
@@ -239,7 +249,7 @@ export class WorldEnvironment {
       // Occlusion darkens the direct term; the gathered indirect adds on top of it, tinted
       // by the surface it lands on. `ssgiIntensity` is the game's dial on that second term —
       // gathered light is unbounded, and a Cornell box at 1.0 blows out.
-      lit = chain(colour.mul(ao.r).add(colour.mul(indirect.rgb).mul(options.ssgiIntensity)));
+      lit = chain(exposed.mul(ao.r).add(exposed.mul(indirect.rgb).mul(options.ssgiIntensity)));
       stages.push({ stage: "ssgi", applied: true });
     } else {
       off("ssgi", "ssgiEnabled is false");

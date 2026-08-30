@@ -19,6 +19,7 @@ import { createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { createCathedral } from "../render/cathedral.js";
 import { createFurnishings } from "../render/furnishings.js";
+import { applySurfaces, loadSurfaces } from "../render/surfaces.js";
 import { ball, block, makeRandom, roundedBox, spike, tube } from "../render/shapes.js";
 import { setupSky } from "../render/sky.js";
 import type { GameState } from "../state.js";
@@ -55,6 +56,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       ctx.assets.texture("native-proof.png"),
       ctx.assets.model<{ scene: Group }>("native-proof.glb"),
       ctx.assets.texture("cathedral-floor.png"),
+      // Resolved for its side effect: `loadSurfaces` caches the set, and `applySurfaces`
+      // reads that cache in `enter`. Awaited here rather than in `enter` because the
+      // screen-space passes gather from what is already on screen — a texture that lands
+      // three frames late is three frames of GI computed against untextured stone.
+      loadSurfaces(ctx.assets),
     ]);
     this.#floorTexture = marble;
     // A 16-pixel check filtered smoothly is a grey smear at flag size; nearest keeps the
@@ -133,7 +139,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     view.updateProjectionMatrix();
 
     const materials = createMaterials();
-    ctx.add(createCathedral(this.#floorTexture));
+    ctx.add(applySurfaces(createCathedral(this.#floorTexture)));
     ctx.add(createFurnishings());
     // Keep the initial -99 sentinel until seed.playtest samples it. If this draw is replaced with
     // Math.random, the unchanged seeded state reports an out-of-range value and seed.playtest
