@@ -304,14 +304,24 @@ export class WorldEnvironment {
         shafts.density.value = options.godraysDensity;
         shafts.maxDensity.value = options.godraysMaxDensity;
         shafts.raymarchSteps.value = options.godraysSteps;
+        // The pass jitters its samples with interleaved noise, and at 24 steps the noise
+        // renders as a regular honeycomb lattice over every hazy pixel — visible even on
+        // the dark stone the scatter barely touches. The bilateral denoiser built for the
+        // GI gather smooths exactly that: high-frequency, depth-coherent, and the shaft
+        // edges survive because they sit on geometry silhouettes the depth term owns.
+        // Denoise before the floor: the floor's subtraction amplifies relative noise on
+        // near-floor values, so cleaning the raw accumulation is worth more per pass.
+        let shaft: ChainNode = chain(shafts);
+        if (options.denoiseEnabled) {
+          shaft = chain(denoise(shaft, depth, normal, view));
+        }
         // Floor, then scale, then tint. The floor is what turns this from a whole-frame
         // brightener into a shaft renderer; the tint by the light's own colour is what
         // stops a warm sun throwing a white beam.
-        const shaft = chain(shafts)
-          .rgb.sub(options.godraysFloor)
-          .max(0)
-          .mul(options.godraysIntensity);
-        lit = chain(lit.add(shaft.mul(color(godraysLight.color))));
+        const cleaned = chain(
+          shaft.rgb.sub(options.godraysFloor).max(0).mul(options.godraysIntensity),
+        );
+        lit = chain(lit.add(cleaned.mul(color(godraysLight.color))));
         stages.push({ stage: "godrays", applied: true });
       }
     } else {

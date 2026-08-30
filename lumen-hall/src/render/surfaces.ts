@@ -212,13 +212,16 @@ export function applySurfaces(cathedral: Group, textures?: ISurfaceTextures): Gr
 
   const limestone: IStone = {
     albedo: maps.limestone,
-    bump: 0.45,
+    // 0.25: at 0.45 the bump's screen-space derivative rendered the relief's regular
+    // course pattern as a honeycomb weave on every mid-distance wall — texture noise
+    // reading as knitted fabric. The relief still catches raking light at this value.
+    bump: 0.25,
     relief: maps.limestoneRelief,
     tileMetres: 3,
   };
   const vaultstone: IStone = {
     albedo: maps.vaultstone,
-    bump: 0.32,
+    bump: 0.18,
     relief: maps.vaultstoneRelief,
     tileMetres: 2,
   };
