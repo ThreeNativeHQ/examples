@@ -1,0 +1,18 @@
+{
+  "name": "lumen-hall-arcade-openings-are-open",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 45,
+  "artifacts": { "screenshots": false },
+  "steps": [
+    { "kind": "wait", "label": "settle", "waitTicks": 30, "release": true },
+    { "kind": "input", "label": "strafe-into-the-aisle", "press": "KeyD", "holdTicks": 300, "release": true },
+    { "kind": "input", "label": "keep-going", "press": "KeyD", "holdTicks": 300, "release": true },
+    { "kind": "wait", "label": "settle-in-the-aisle", "waitTicks": 40, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "runtimeReady": true },
+    "resources": [{ "id": "state", "path": "walkerX", "changed": true, "gte": 9.2, "lte": 14 }]
+  }
+}

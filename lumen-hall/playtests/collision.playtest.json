@@ -1,5 +1,5 @@
 {
-  "name": "lumen-hall-walls-stop-the-player",
+  "name": "lumen-hall-walls-stop-you-and-stairs-carry-you",
   "target": "web",
   "schemaVersion": 1,
   "viewport": {
@@ -45,10 +45,16 @@
     "resources": [
       {
         "id": "state",
+        "path": "walkerY",
+        "changed": true,
+        "gte": 2.4
+      },
+      {
+        "id": "state",
         "path": "walkerZ",
         "changed": true,
         "lte": -12,
-        "gte": -19
+        "gte": -22
       }
     ]
   }

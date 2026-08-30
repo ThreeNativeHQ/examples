@@ -27,11 +27,16 @@ import {
   type BufferGeometry,
   Color,
   ConeGeometry,
+  CubeTexture,
   CylinderGeometry,
+  DataTexture,
   DoubleSide,
+  ExtrudeGeometry,
   Group,
   InstancedMesh,
   LatheGeometry,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   type Material,
   Matrix4,
   Mesh,
@@ -41,8 +46,8 @@ import {
   PointLight,
   Quaternion,
   Shape,
-  ExtrudeGeometry,
   SphereGeometry,
+  SRGBColorSpace,
   TorusGeometry,
   Vector2,
   Vector3,
@@ -50,38 +55,152 @@ import {
 import { NAVE } from "./lighting.js";
 
 // ---------------------------------------------------------------------------------------
+// the room the metal reflects
+// ---------------------------------------------------------------------------------------
+//
+// Metal in a PBR renderer has no diffuse term at all: a `metalness: 1` surface is nothing
+// but a mirror tinted by its albedo, so with nothing to reflect it renders black, and the
+// usual escape — dialling metalness down to a middling 0.3 and adding emissive — is the
+// definition of plastic. That is what the first eight captures had on the chandeliers: a
+// flat mid-brown ring with no bright edge anywhere on it.
+//
+// `scene.environment` would be the right home for this, but this function is handed no
+// scene — it returns a `Group`. `NodeMaterial.setupEnvironment` reads `material.envMap`
+// per material on the WebGPU path, which reaches the same shading with the same cube and
+// touches nothing outside this file.
+//
+// The cube is generated rather than loaded: no DOM, no canvas, no asset, so it works on
+// the native target too. It is not a picture of this building — it is the three things a
+// chandelier in this building actually reflects, and nothing else:
+//
+//   a bright warm band at clerestory height on the -X side   the sun-side windows
+//   a dimmer band opposite                                   the shaded windows
+//   a warm floor below and a near-black vault above          the room
+//
+// The bands are what make the rim read. A smooth gradient models the form but gives no
+// glint; a *band* is a light source with an edge, and an edge is what a low-roughness
+// surface turns into a highlight that slides along the ring as it curves.
+function metalEnvironment(): CubeTexture {
+  const size = 64;
+  const faces: DataTexture[] = [];
+  for (let face = 0; face < 6; face += 1) {
+    const data = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const u = (2 * (x + 0.5)) / size - 1;
+        const v = (2 * (y + 0.5)) / size - 1;
+        // Standard cube face orientation: +X, -X, +Y, -Y, +Z, -Z.
+        const axis: [number, number, number] =
+          face === 0
+            ? [1, -v, -u]
+            : face === 1
+              ? [-1, -v, u]
+              : face === 2
+                ? [u, 1, v]
+                : face === 3
+                  ? [u, -1, -v]
+                  : face === 4
+                    ? [u, -v, 1]
+                    : [-u, -v, -1];
+        const length = Math.hypot(axis[0], axis[1], axis[2]);
+        const dx = axis[0] / length;
+        const up = axis[1] / length;
+
+        // Vault above, lit pavement below, meeting at the horizon.
+        const t = Math.abs(up) ** 0.6;
+        const near: [number, number, number] = up > 0 ? [0.05, 0.047, 0.045] : [0.2, 0.15, 0.105];
+        let r = 0.105 * (1 - t) + near[0] * t;
+        let g = 0.09 * (1 - t) + near[1] * t;
+        let b = 0.075 * (1 - t) + near[2] * t;
+
+        // The two window bands. `height` is a narrow lobe around clerestory level and
+        // `side` picks the sunlit colonnade; their product is a patch, not a stripe
+        // wrapped all the way round, which is what a real window is.
+        const height = Math.exp(-(((up - 0.4) / 0.2) ** 2));
+        const sunSide = Math.max(0, -dx) ** 1.5;
+        const shadeSide = Math.max(0, dx) ** 2;
+        const glare = height * (sunSide * 1.5 + shadeSide * 0.28);
+        r = Math.min(1, r + glare);
+        g = Math.min(1, g + glare * 0.72);
+        b = Math.min(1, b + glare * 0.44);
+
+        const index = (y * size + x) * 4;
+        data[index] = Math.round(r * 255);
+        data[index + 1] = Math.round(g * 255);
+        data[index + 2] = Math.round(b * 255);
+        data[index + 3] = 255;
+      }
+    }
+    const facing = new DataTexture(data, size, size);
+    facing.needsUpdate = true;
+    faces.push(facing);
+  }
+  const cube = new CubeTexture(faces);
+  cube.colorSpace = SRGBColorSpace;
+  // Without mips a rough metal samples the sharpest level of the cube and the dull iron
+  // gets the same crisp window edge as the polished bronze, which flattens the difference
+  // between the two materials back out again.
+  cube.generateMipmaps = true;
+  cube.minFilter = LinearMipmapLinearFilter;
+  cube.magFilter = LinearFilter;
+  cube.needsUpdate = true;
+  return cube;
+}
+
+const metalEnv = metalEnvironment();
+
+// ---------------------------------------------------------------------------------------
 // materials
 // ---------------------------------------------------------------------------------------
 //
-// There is no environment map in this scene — one sun and the GI pass, nothing else. A
-// `metalness` near 1 with no environment to reflect renders as black, which is why the
-// cathedral's chancel screen is deliberately 0.7 and reads as pure silhouette. Anything
-// here that must stay *visible* against the dark vault therefore stays low-metalness and
-// leans on a small `emissive` term to keep it off the floor of the histogram.
+// Metalness is binary. Every metal below is 1 with a dark albedo — a metal's albedo *is*
+// its reflection tint, so a light brown at metalness 1 gives a washed-out non-colour — and
+// every non-metal is 0. Nothing metal carries an emissive term: emissive on a mirror is
+// a constant added on top of the reflection and it is exactly what kills the highlight.
 const materials = {
-  /** The screens, the chandelier wheels, the candle stands. Silhouette first. */
-  iron: new MeshStandardMaterial({ color: 0x16130f, roughness: 0.5, metalness: 0.6 }),
+  /** The screens and the candle stands. Old wrought iron: near-black, and dull. */
+  iron: new MeshStandardMaterial({
+    color: 0x1a1712,
+    // 0.62, not 0.55. With MSAA off, the 6 mm top edge of a candelabrum crossbar at three
+    // metres turned its specular into a dotted line — one lit texel every few pixels. The
+    // extra roughness spreads that highlight over enough of the edge to stay continuous,
+    // and duller iron next to polished bronze is the right reading anyway.
+    roughness: 0.62,
+    metalness: 1,
+    envMap: metalEnv,
+    envMapIntensity: 0.95,
+  }),
   /**
-   * The chandelier corona and the candle cups. Dark bronze rather than bright brass: the
-   * reference's chandeliers read as warm because of the flames sitting on them, not
-   * because the metal is bright, and a bright ring at that size becomes a hoop of bloom.
-   * The faint emissive is what stops the wheel disappearing into an unlit vault.
+   * The chandelier corona and the candle cups. Polished bronze — low roughness, so the rim
+   * of a wheel carries a moving highlight where it turns toward the windows and goes dark
+   * where it turns away. That highlight is most of what makes it read as metal at all;
+   * the warmth comes from the flames standing on it, not from the albedo.
+   *
+   * Not lower than 0.3: the scene runs without MSAA and a mirror-smooth 2 cm rod at this
+   * distance is a specular aliasing generator.
    */
   bronze: new MeshStandardMaterial({
-    color: 0x6b5228,
-    roughness: 0.42,
-    metalness: 0.3,
-    emissive: 0x2b1d09,
+    color: 0x6b4a24,
+    roughness: 0.32,
+    metalness: 1,
+    envMap: metalEnv,
+    envMapIntensity: 1.15,
   }),
-  /** Heraldic gold on the banners and the altar. Same reasoning as bronze, one stop up. */
+  /** Heraldic gold on the banners and the altar. The one bright metal in the building. */
   gold: new MeshStandardMaterial({
-    color: 0x8a6a2c,
-    roughness: 0.38,
-    metalness: 0.35,
-    emissive: 0x241a08,
+    color: 0x9a7326,
+    roughness: 0.3,
+    metalness: 1,
+    envMap: metalEnv,
+    envMapIntensity: 1.2,
   }),
   /** Candle wax. Warm-lit from its own flame, so it carries a little emissive of its own. */
-  wax: new MeshStandardMaterial({ color: 0xd9cdb2, roughness: 0.75, emissive: 0x3a2610 }),
+  wax: new MeshStandardMaterial({
+    color: 0xd9cdb2,
+    roughness: 0.75,
+    metalness: 0,
+    emissive: 0x3a2610,
+  }),
   /** Statues, plinths, memorial panels, the reredos. One shade off the building's stone. */
   carvedStone: new MeshStandardMaterial({ color: 0x6d6558, roughness: 0.9, metalness: 0 }),
   /** The altar linen: the only near-white cloth in the building, and it reads as the focus. */
@@ -123,7 +242,7 @@ const materials = {
    * building and nothing in the post chain.
    */
   halo: new MeshBasicMaterial({
-    color: new Color().setRGB(0.32, 0.14, 0.045),
+    color: new Color().setRGB(0.26, 0.115, 0.036),
     blending: AdditiveBlending,
     depthWrite: false,
     toneMapped: false,
@@ -268,6 +387,7 @@ let fires: IFire[] = [];
 
 interface IKit {
   readonly bronzeRod: IBatch;
+  readonly bronzeTaper: IBatch;
   readonly chainLink: IBatch;
   readonly flame: IBatch;
   readonly gold: IBatch;
@@ -295,12 +415,15 @@ function candle(kit: IKit, x: number, baseY: number, z: number, height: number, 
   // Deliberately larger than a real flame. A 15 mm flame 20 m down the nave is a third of a
   // pixel; at that size the tonemap averages it away with its neighbours and the candle
   // reads as an unlit white stick, which is exactly what the first capture showed.
-  const tip = baseY + height + 0.09;
+  // On the wick, not above it. At 0.09 the flame floated a visible gap clear of the wax.
+  const tip = baseY + height + 0.05;
   place(kit.flame, [x, tip, z], [0.05, 0.11, 0.05]);
-  // Kept barely wider than the flame. The halo is a sphere, not a soft sprite, so two of
-  // them closer together than their own radius merge into one lozenge with no candles
-  // inside it — which is what a 0.2 m halo did to every seven-branch stand in the frame.
-  place(kit.halo, [x, tip, z], [0.115, 0.14, 0.115]);
+  // Kept barely wider than the flame. The halo is a sphere with a hard edge, not a soft
+  // sprite, so it has two failure modes and both have been in a capture: too large and two
+  // of them merge into one lozenge with no candles inside it, and too large *near the
+  // lens* and the edge itself becomes visible as a disc. It stays just big enough to soften
+  // the flame and no bigger; the rest of the glow is bloom's job.
+  place(kit.halo, [x, tip, z], [0.088, 0.108, 0.088]);
   // Deterministic per-flame fire state for the animator below. The golden-angle phase
   // spread keeps neighbours out of step, and the speeds cluster around 1.3-2 Hz — candle
   // flicker, not strobe. Seeded from the placement index so two captures of the same
@@ -365,18 +488,22 @@ function chandelier(
       ringY,
       z + Math.sin(angle) * radius,
     ];
-    rod(kit.bronzeRod, [x, ringY, z], rim, 0.028);
+    rod(kit.bronzeTaper, [x, ringY, z], rim, 0.036);
     // Tie rods from the hub down to the rim: the diagonal is what gives a corona its
     // cone-shaped silhouette instead of a flat disc seen edge-on from below.
-    rod(kit.bronzeRod, [x, hubTop, z], rim, 0.022);
+    rod(kit.bronzeTaper, [x, hubTop, z], rim, 0.03);
   }
 
   for (let index = 0; index < arms; index += 1) {
     const angle = (index / arms) * Math.PI * 2 + 0.2;
     const cx = x + Math.cos(angle) * radius;
     const cz = z + Math.sin(angle) * radius;
-    place(kit.bronzeRod, [cx, ringY + 0.06, cz], [0.085, 0.1, 0.085]);
-    candle(kit, cx, ringY + 0.11, cz, 0.3 + ((index * 7) % 5) * 0.02, 0.05);
+    // Pan, then cup. A candle standing straight on the rim reads as a peg pushed into a
+    // hoop; the pan is the disc that catches the wax and it is the part that says the ring
+    // was made to hold candles.
+    place(kit.bronzeRod, [cx, ringY + 0.03, cz], [0.155, 0.022, 0.155]);
+    place(kit.bronzeRod, [cx, ringY + 0.09, cz], [0.085, 0.1, 0.085]);
+    candle(kit, cx, ringY + 0.14, cz, 0.3 + ((index * 7) % 5) * 0.02, 0.05);
   }
 }
 
@@ -402,9 +529,12 @@ function candelabrum(
   place(kit.ironRod, [x, baseY + 0.04, z], [0.44, 0.08, 0.44]);
   place(kit.ironRod, [x, baseY + 0.14, z], [0.3, 0.12, 0.3]);
   place(kit.ironRod, [x, baseY + 0.24, z], [0.17, 0.1, 0.17]);
-  rod(kit.ironRod, [x, baseY + 0.12, z], [x, top, z], 0.048);
-  place(kit.knop, [x, baseY + height * 0.42, z], [0.12, 0.14, 0.12]);
-  place(kit.knop, [x, baseY + height * 0.74, z], [0.1, 0.12, 0.1]);
+  rod(kit.ironRod, [x, baseY + 0.12, z], [x, top, z], 0.05);
+  // Small. These are the only polished bronze on an otherwise dull iron stand, so at
+  // 0.12 they stopped reading as knops on a shaft and started reading as brass balls
+  // threaded onto a pole.
+  place(kit.knop, [x, baseY + height * 0.42, z], [0.082, 0.1, 0.082]);
+  place(kit.knop, [x, baseY + height * 0.74, z], [0.07, 0.086, 0.07]);
 
   const spacing = 0.27;
   const span = (count - 1) * spacing;
@@ -420,7 +550,8 @@ function candelabrum(
     const offset = -span / 2 + index * spacing;
     const cx = x + dx * offset;
     const cz = z + dz * offset;
-    place(kit.bronzeRod, [cx, top + 0.05, cz], [0.075, 0.09, 0.075]);
+    place(kit.bronzeRod, [cx, top + 0.02, cz], [0.135, 0.02, 0.135]);
+    place(kit.bronzeRod, [cx, top + 0.07, cz], [0.075, 0.09, 0.075]);
     // The middle taper is the tallest and they fall away to the ends. A flat row of equal
     // candles reads as a barcode; the arc is what makes the group read as a candelabrum.
     const fall = Math.abs(index - (count - 1) / 2) / Math.max(1, (count - 1) / 2);
@@ -592,6 +723,9 @@ export function createFurnishings(): Group {
   const unitRod = new CylinderGeometry(1, 1, 1, 8);
   const batches = {
     bronzeRod: batch(unitRod, materials.bronze),
+    // A cone frustum, not a cylinder: `rod` puts the wide end at `from`, so a spoke drawn
+    // hub-outward thickens toward the hub. Uniform rods at this scale read as bent wire.
+    bronzeTaper: batch(new CylinderGeometry(0.42, 1, 1, 6), materials.bronze),
     chainLink: batch(new TorusGeometry(1, 0.26, 4, 8), materials.bronze),
     flame: batch(
       // A teardrop, not a sphere: the pointed top and the narrow waist are the read that
@@ -894,11 +1028,19 @@ export function createFurnishings(): Group {
   furnishings.add(altarLight);
 
   // ---- resolve every batch into its single draw ---------------------------------------
+  // The names are not only for debugging. `collision.ts` decides what gets a static trimesh
+  // collider by matching object names against
+  // /glass|flame|candle|chain|banner|pane|rose|lancet|chandelier/. Today `Play` hands that
+  // builder the cathedral group and not this one, so nothing here is collided either way —
+  // but a batch named for its *material* rather than for what it is would fall straight
+  // through that filter the moment it is, and every taper below the 4.5 m reach ceiling
+  // would become something the player can stand on. Hence "candle-wax", not "wax".
   batches.bronzeRod.build(furnishings, "furnishings-bronze-rods", true);
+  batches.bronzeTaper.build(furnishings, "furnishings-bronze-tapers", true);
   batches.chainLink.build(furnishings, "furnishings-chain", false);
   const flameMesh = batches.flame.build(furnishings, "furnishings-flames", false);
   batches.gold.build(furnishings, "furnishings-gold", false);
-  const haloMesh = batches.halo.build(furnishings, "furnishings-halos", false);
+  const haloMesh = batches.halo.build(furnishings, "furnishings-candle-halos", false);
   batches.ironBox.build(furnishings, "furnishings-iron-rails", true);
   batches.ironRod.build(furnishings, "furnishings-iron-rods", true);
   batches.ironSpike.build(furnishings, "furnishings-finials", true);
@@ -908,7 +1050,7 @@ export function createFurnishings(): Group {
   batches.stoneBox.build(furnishings, "furnishings-stone", true);
   batches.stoneHead.build(furnishings, "furnishings-heads", false);
   batches.stoneSpike.build(furnishings, "furnishings-gables", true);
-  batches.wax.build(furnishings, "furnishings-wax", false);
+  batches.wax.build(furnishings, "furnishings-candle-wax", false);
 
   // ---- fire animation -----------------------------------------------------------------
   // Every flame and both real lights breathe on a seeded phase: deterministic in the

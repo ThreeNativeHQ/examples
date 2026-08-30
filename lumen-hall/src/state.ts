@@ -16,6 +16,10 @@ export type GameState = {
   playerX: number;
   /** Where the first-person walker actually ended up, after collision resolved. */
   walkerZ: number;
+  /** Walker eye height. Rises when the character climbs the chancel steps. */
+  walkerY: number;
+  /** Walker position across the nave. Passing +-8 means it got through an arcade opening. */
+  walkerX: number;
   respawns: number;
   score: number;
   /** The run: "playing" until the flag is reached ("won") or the last life is gone ("lost"). */

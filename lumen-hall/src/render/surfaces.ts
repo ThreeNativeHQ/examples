@@ -48,13 +48,17 @@ import {
 import {
   bumpMap,
   float,
+  frontFacing,
   mix,
   normalWorld,
   positionWorld,
   smoothstep,
   texture as textureNode,
   triplanarTexture,
+  uv,
+  vec2,
   vec3,
+  vec4,
   vertexColor,
 } from "three/tsl";
 import { palette } from "./palette.js";
@@ -91,11 +95,27 @@ export interface IAssetSource {
 const ALBEDO_MEAN = 0.25;
 
 /** Measured mean linear luminance of each glass map, over its opaque pixels. */
-const GLASS_LUMINANCE: Record<"glassCool" | "glassLancet" | "glassRose" | "glassWarm", number> = {
-  glassCool: 0.4796,
-  glassLancet: 0.1855,
-  glassRose: 0.2779,
-  glassWarm: 0.6066,
+type GlassName = "glassCool" | "glassLancet" | "glassRose" | "glassWarm";
+
+const GLASS_LUMINANCE: Record<GlassName, number> = {
+  glassCool: 0.4291,
+  glassLancet: 0.2655,
+  glassRose: 0.1968,
+  glassWarm: 0.5209,
+};
+
+/**
+ * Width over height of each panel as authored.
+ *
+ * A lancet panel is drawn four times taller than it is wide because that is the shape of
+ * the opening it covers. Stretched to fit whatever rectangle it lands on, the saints go
+ * dumpy; `fitPanel` uses these to keep the panel square-on and tile it instead.
+ */
+const GLASS_ASPECT: Record<GlassName, number> = {
+  glassCool: 512 / 1024,
+  glassLancet: 512 / 2048,
+  glassRose: 1,
+  glassWarm: 512 / 1024,
 };
 
 /**
@@ -316,8 +336,8 @@ function prepare(map: Texture, colorSpace: string, anisotropy: number): void {
  * Leaded glass on one window.
  *
  * Which panel it gets comes from the flat colour it is replacing: the arcade already
- * alternates warm and cool lights down the nave, so reading that back keeps the rhythm
- * the building was designed with instead of inventing a second one.
+ * alternates warm and cool lights down the nave, so reading that back keeps the rhythm the
+ * building was designed with instead of inventing a second one.
  */
 function dressGlass(mesh: Mesh, maps: ISurfaceTextures): void {
   const material = mesh.material;
@@ -329,7 +349,7 @@ function dressGlass(mesh: Mesh, maps: ISurfaceTextures): void {
   if (ring !== undefined && ring < ROSE_MIN_RADIUS) return;
 
   const hex = material.color.getHex();
-  const key: keyof typeof GLASS_LUMINANCE =
+  const key: GlassName =
     ring !== undefined
       ? "glassRose"
       : hex === palette.glassWarm
@@ -337,29 +357,64 @@ function dressGlass(mesh: Mesh, maps: ISurfaceTextures): void {
         : hex === palette.glassCool
           ? "glassCool"
           : "glassLancet";
-  const map = maps[key];
 
-  // Planes and rings already carry the 0..1 UVs one panel wants. The east lancets are
-  // three extruded shapes welded into one mesh and carry UVs in metres, mixed with the
-  // side walls' own; those get one panel projected across the group, which at fifty
-  // metres down the nave is the difference between glass and a blue slab, and nothing
-  // finer than that is resolvable anyway.
+  // Planes and rings already carry the 0..1 UVs one panel wants. The east lancets are three
+  // extruded shapes welded into one mesh and carry UVs in metres, mixed with the side walls'
+  // own, so those get rewritten from the local XY extent.
   if (geometry.type !== "PlaneGeometry" && ring === undefined) projectPanelUV(geometry);
 
+  // One clone per window. The clone shares the image — so it is still a single upload — but
+  // carries its own repeat and offset, which is what lets one lancet panel serve a 5.4 m
+  // triple light and a 3.4 m aisle window without either of them being stretched.
+  const map = maps[key].clone();
   map.colorSpace = SRGBColorSpace;
-  map.anisotropy = 4;
-  map.wrapS = ClampToEdgeWrapping;
+  map.anisotropy = 8;
+  map.wrapS = RepeatWrapping;
   map.wrapT = ClampToEdgeWrapping;
-  material.map = map;
-  // Keep the window exactly as bright as the flat colour it replaces and let the map
-  // supply the hue. Leaving the tint on multiplies colour in twice — the aisle lights
-  // were deliberately set to half value, and a white base colour throws that away.
+  if (ring === undefined) fitPanel(map, geometry, GLASS_ASPECT[key]);
+  map.needsUpdate = true;
+
+  // Keep the window exactly as bright as the flat colour it replaces and let the map supply
+  // the hue. The aisle lights and the east lancets were deliberately set to half value, and
+  // a white base colour throws that away.
   const gain = luminance(material.color) / GLASS_LUMINANCE[key];
-  material.color.setRGB(gain, gain, gain, LinearSRGBColorSpace);
+
+  // Every pane is `DoubleSide`, and all of them are seen from whichever side the geometry
+  // happens to face. A back face shows the same UVs from behind, which is a left-to-right
+  // mirror — fine for tracery, fatal for a saint holding a book. Flipping u on back faces
+  // makes both sides read the same way round, and does it without needing to know which way
+  // any particular window was built to face.
+  const panel = uv();
+  const facing = frontFacing.select(panel, vec2(panel.x.oneMinus(), panel.y));
+  const sample = textureNode(map, facing);
+
+  const nodes = material as unknown as INodeMaterial;
+  nodes.colorNode = vec4(sample.rgb.mul(gain), sample.a);
   // The rose map is transparent outside its wheel, so the panel is a wheel even when the
   // geometry under it is not.
   material.alphaTest = key === "glassRose" ? 0.5 : 0;
   material.needsUpdate = true;
+}
+
+/**
+ * Sets `repeat` and `offset` so the panel keeps its authored proportions on this opening.
+ *
+ * A wide opening gets whole panels side by side — three lights of a triple lancet get three
+ * copies, and the seams land in the stone between them. A tall one shows as much of the
+ * panel as fits, anchored at the head, since that is the end with the canopy on it.
+ */
+function fitPanel(map: Texture, geometry: BufferGeometry, panelAspect: number): void {
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (box === null) return;
+  const width = box.max.x - box.min.x;
+  const height = box.max.y - box.min.y;
+  if (width <= 0 || height <= 0) return;
+  const columns = Math.max(1, Math.round(width / (height * panelAspect)));
+  const panelHeight = width / columns / panelAspect;
+  const rows = Math.min(1, height / panelHeight);
+  map.repeat.set(columns, rows);
+  map.offset.set(0, 1 - rows);
 }
 
 /** Anything smaller than this and a disc of glass is the rose's eye, not the rose. */

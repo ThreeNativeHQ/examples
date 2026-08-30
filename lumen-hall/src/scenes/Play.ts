@@ -60,6 +60,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     peakRise: 0,
     playerX: -2,
     walkerZ: 22,
+    walkerY: 1.7,
+    walkerX: 2.6,
     respawns: 0,
     score: 0,
     screen: "playing",
@@ -342,6 +344,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         frameCtx.state.flush();
       }
       frameState.walkerZ = view.position.z;
+      frameState.walkerY = view.position.y;
+      frameState.walkerX = view.position.x;
       frameState.coyoteJumps = player.coyoteJumps;
       frameState.jumps = player.jumps;
       frameState.lives = lives;
@@ -358,6 +362,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         frameState.peakRise !== current.peakRise ||
         frameState.playerX !== current.playerX ||
         frameState.walkerZ !== current.walkerZ ||
+        frameState.walkerY !== current.walkerY ||
+        frameState.walkerX !== current.walkerX ||
         frameState.respawns !== current.respawns;
       if (changed) frameCtx.state.set(frameState);
       if (respawned) frameCtx.state.flush();
