@@ -216,16 +216,19 @@ const materials = {
    * far half of the curve turns its back to the camera.
    */
   banner: new MeshStandardMaterial({
-    // Almost black, and it has to be. The banners hang facing +Z, which is the one
-    // orientation the sun in this building hits square on, and the sun is intensity 9 —
-    // the lit stone around them sits near white. At 0x232d54 and again at 0x0f1430 the
-    // cloth clipped: every part of it landed at the top of the tone curve, so the bow's
-    // normals swept through the light and produced *no gradient at all*. That is what made
-    // it read as a flat slab even after it stopped being one. The fix is not more curvature,
-    // it is an albedo low enough that the curvature has somewhere to go.
-    color: 0x060a1c,
+    // 0x232d54 is a contract, not a preference. `surfaces.ts` finds the banner cloth by
+    // matching this exact hex — it has no other handle on it — and then drives the heraldic
+    // map's gain from `luminance(color) / BANNER_CLOTH_LUMINANCE`. Re-tint the cloth here
+    // and the banners silently stop being dressed at all, which is what four captures of a
+    // flat undressed slab were. Change the tint by changing both files together.
+    color: 0x232d54,
     roughness: 0.88,
     metalness: 0,
+    // Restored deliberately after being removed. `surfaces.ts` documents depending on it:
+    // emissive is added after lighting and its `colorNode` does not reach it, so it is what
+    // keeps a navy cloth on an *unlit* pier from rounding to black. Two of the four banners
+    // hang on faces the sun never touches.
+    emissive: 0x0a0f22,
     side: DoubleSide,
   }),
   /** The sanctuary runner. Muted, so it warms the steps without competing with the rose. */
@@ -763,38 +766,12 @@ function banner(kit: IKit, parent: Group, x: number, z: number, topY: number, ph
     place(kit.chainLink, [x + side, topY + 0.26, z + 0.1], [0.14, 0.14, 0.14]);
   }
 
-  // The device: a cross patty in gold. Five boxes rather than a texture, because there are
-  // no textures in this file and a flat quad would show as a smear at this size.
-  //
-  // Each piece is set on the cloth's own surface via `clothDepth` rather than at a fixed
-  // offset from the pier. On a bowed cloth a flat offset sinks the arms of the cross into
-  // the fabric while the centre floats a hand's width clear of it.
-  const onCloth = (u: number, drop: number): number =>
-    z + clothDepth(u, drop / CLOTH.height, phase) + 0.045;
-  const deviceY = topY - 2.1;
-  place(kit.gold, [x, deviceY, onCloth(0.5, 2.1)], [0.2, 1.5, 0.06]);
-  for (const side of [-0.62, 0.62]) {
-    place(kit.gold, [x + side, deviceY - 0.75, onCloth(0.5 + side / 2, 2.85)], [0.24, 0.24, 0.06]);
-  }
-  // The cross arm and the hem band are the two pieces that run *across* the cloth, and a
-  // single straight box cannot: the cloth stands 0.2 m proud in the middle, so a bar set
-  // at the centre depth floats clear of the fabric at both ends and one set at the edge
-  // depth buries itself in the middle. Both are short runs of segments, each on the
-  // surface under it. They go out whole when the heraldic map lands.
-  const band = (width: number, height: number, y: number, drop: number, segments: number): void => {
-    for (let index = 0; index < segments; index += 1) {
-      const t = (index + 0.5) / segments;
-      const u = 0.5 + (t - 0.5) * (width / (CLOTH.halfWidth * 2));
-      place(kit.gold, [x + (t - 0.5) * width, y, onCloth(u, drop)], [
-        width / segments + 0.01,
-        height,
-        0.05,
-      ]);
-    }
-  };
-  band(0.95, 0.2, deviceY + 0.28, 1.82, 4);
-  // The hem band is what stops the pointed bottom reading as a tear.
-  band(1.9, 0.11, topY - 4.55, 4.55, 7);
+  // No gold device here any more. `surfaces.ts` now dresses this cloth with a heraldic map
+  // that carries the cross patty and the braid that follows the swallowtail hem; the five
+  // gold boxes and the segmented bands that used to stand in for it drew straight over the
+  // map's own device. `TN_SURFACES_BANNERS` in the console reports how many cloths were
+  // dressed — if that count is 0, the tint contract above has been broken and the boxes
+  // would be the only device there is.
 }
 
 /** A robed figure on a plinth, standing in an aisle bay. */

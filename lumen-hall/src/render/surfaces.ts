@@ -33,6 +33,7 @@ import {
   type BufferGeometry,
   ClampToEdgeWrapping,
   Color,
+  DoubleSide,
   Float32BufferAttribute,
   type Group,
   LinearSRGBColorSpace,
@@ -158,7 +159,6 @@ interface IStone {
  * does not reach it, which is what keeps a navy cloth on an unlit pier from rounding to
  * black whether or not it has a map.
  */
-const BANNER_COLOUR = 0x232d54;
 const BANNER_CLOTH_LUMINANCE = 0.02206;
 
 /** Roughness, read off the relief: the recessed mortar in a wall is also the rough part. */
@@ -461,11 +461,13 @@ export function applyFurnishings(furnishings: Group, textures?: ISurfaceTextures
   furnishings.traverse((object) => {
     if (!(object instanceof Mesh)) return;
     const material = object.material;
-    // Matched on the exact colour `furnishings.ts` builds the banner with. Recolour the
-    // cloth there and it silently goes back to flat navy, which is what the count below is
-    // in the log for.
+    // Matched on *structure*, not on a colour value. The banner cloth is the one furnishing
+    // that is two-sided, and `furnishings.ts` says why: it bows, so at grazing angles the
+    // far half of the curve turns its back to the camera. Matching the exact navy hex cost
+    // a capture the moment that lane re-tinted the cloth to stop it clipping — and a tint
+    // is exactly the kind of thing they should be free to move without breaking this file.
     if (!(material instanceof MeshStandardMaterial)) return;
-    if (material.color.getHex() !== BANNER_COLOUR) return;
+    if (material.side !== DoubleSide || material.metalness !== 0) return;
     cloths.add(material);
     panels.add(object.geometry);
   });

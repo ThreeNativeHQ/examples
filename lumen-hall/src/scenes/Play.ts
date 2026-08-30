@@ -387,34 +387,33 @@ export class Play extends Scene<GameState, IPhysicsContext> {
 }
 
 /**
- * Stands an authored glTF figure on a plinth beside the procedural statuary.
+ * Stands an authored glTF figure on the floor, as authored.
  *
- * Scale and footing are computed from the model's own bounds rather than hand-tuned, because
- * a glTF arrives in whatever units its author used — metres, centimetres or none — and a
- * hard-coded factor silently breaks the moment the model is replaced. Normalising to a target
- * height and seating the measured base on the plinth is the only version of this that
- * survives someone dropping in a different file.
+ * No procedural plinth and no procedural anything else: the model carries its own base, and
+ * a hand-built box under it read as a crate with a statue balanced on top. The only thing
+ * computed here is the uniform scale, and that is computed from the model's own bounds
+ * rather than hard-coded — a glTF arrives in whatever units its author used, so a fixed
+ * factor breaks silently the moment the file is replaced.
  */
 function placeAuthoredStatue(source: Group, x: number, z: number): Group {
-  /** Plinth top, matching the procedural statue's 1.5 m box plus its 0.12 m cap. */
-  const PLINTH_TOP = 1.62;
-  /** Slightly over life size, as carved figures on plinths tend to be. */
-  const TARGET_HEIGHT = 2.1;
+  /** Statue and its own base together, which is what the model actually is. */
+  const TARGET_HEIGHT = 3.6;
 
   const figure = source.clone(true);
   const bounds = new Box3().setFromObject(figure);
   const size = bounds.getSize(new Vector3());
   const scale = size.y > 0 ? TARGET_HEIGHT / size.y : 1;
   figure.scale.setScalar(scale);
-
-  // Re-measure after scaling: the base offset has to be in final units, and the model's
-  // origin is very unlikely to sit at its own feet.
-  const scaled = new Box3().setFromObject(figure);
-  figure.position.set(x - scaled.min.x - (scaled.max.x - scaled.min.x) / 2, PLINTH_TOP - scaled.min.y, z);
-  figure.position.x = x;
-  figure.position.z = z;
-  // Face the nave, matching the procedural statues on this side.
   figure.rotation.y = -Math.PI / 2;
+
+  // Re-measure after scaling and rotating. The offsets have to be in final world units, and
+  // a model's origin is very unlikely to sit at the centre of its own footprint or at its
+  // feet — this one's did neither.
+  figure.updateMatrixWorld(true);
+  const placed = new Box3().setFromObject(figure);
+  const centre = placed.getCenter(new Vector3());
+  figure.position.set(x - centre.x, -placed.min.y, z - centre.z);
+
   figure.traverse((object) => {
     if (object instanceof Mesh) {
       object.castShadow = true;
@@ -422,30 +421,17 @@ function placeAuthoredStatue(source: Group, x: number, z: number): Group {
     }
   });
 
-  const plinth = new Mesh(
-    new BoxGeometry(0.9, 1.5, 0.9),
-    new MeshStandardMaterial({ color: 0x6d6558, roughness: 0.9, metalness: 0 }),
-  );
-  plinth.position.set(x, 0.75, z);
-  plinth.castShadow = true;
-  plinth.receiveShadow = true;
-
   const group = new Group();
   group.name = "authored-statue";
-  group.add(plinth, figure);
+  group.add(figure);
   group.updateMatrixWorld(true);
-  const placed = new Box3().setFromObject(figure);
-  let triangles = 0;
-  figure.traverse((o) => {
-    if (o instanceof Mesh) triangles += (o.geometry.index?.count ?? o.geometry.getAttribute("position").count) / 3;
-  });
+  const final = new Box3().setFromObject(figure);
   console.info(
     `TN_AUTHORED_STATUE:${JSON.stringify({
       scale: +scale.toFixed(4),
       sourceHeight: +size.y.toFixed(3),
-      min: [+placed.min.x.toFixed(2), +placed.min.y.toFixed(2), +placed.min.z.toFixed(2)],
-      max: [+placed.max.x.toFixed(2), +placed.max.y.toFixed(2), +placed.max.z.toFixed(2)],
-      triangles: Math.round(triangles),
+      min: [+final.min.x.toFixed(2), +final.min.y.toFixed(2), +final.min.z.toFixed(2)],
+      max: [+final.max.x.toFixed(2), +final.max.y.toFixed(2), +final.max.z.toFixed(2)],
     })}`,
   );
   return group;
