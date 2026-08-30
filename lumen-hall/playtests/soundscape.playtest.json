@@ -2,21 +2,78 @@
   "name": "lumen-hall-the-building-is-audible",
   "target": "web",
   "schemaVersion": 1,
-  "viewport": { "width": 1280, "height": 720 },
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
   "warmupFrames": 30,
-  "artifacts": { "screenshots": false },
+  "artifacts": {
+    "screenshots": false
+  },
   "steps": [
-    { "kind": "wait", "label": "settle-in-silence", "waitTicks": 40, "release": true },
-    { "kind": "input", "label": "walk-the-nave", "press": "KeyW", "holdTicks": 120, "release": true },
-    { "kind": "wait", "label": "stop-and-listen", "waitTicks": 40, "release": true },
-    { "kind": "input", "label": "walk-some-more", "press": "KeyW", "holdTicks": 120, "release": true },
-    { "kind": "wait", "label": "settle", "waitTicks": 40, "release": true }
+    {
+      "kind": "wait",
+      "label": "settle-in-silence",
+      "waitTicks": 40,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-the-nave",
+      "press": "KeyW",
+      "holdTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "stop-and-listen",
+      "waitTicks": 40,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-some-more",
+      "press": "KeyW",
+      "holdTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle",
+      "waitTicks": 40,
+      "release": true
+    }
   ],
   "assert": {
-    "diagnostics": { "noConsoleErrors": true, "runtimeReady": true },
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "runtimeReady": true
+    },
     "resources": [
-      { "id": "state", "path": "footsteps", "changed": true, "gte": 4 },
-      { "id": "state", "path": "walkerZ", "changed": true, "lte": 16 }
+      {
+        "id": "state",
+        "path": "footsteps",
+        "changed": true,
+        "gte": 4
+      },
+      {
+        "id": "state",
+        "path": "candleVoices",
+        "equals": 4,
+        "allowTrivial": "A held invariant: one positional flame voice per authored candle stand, and there are four. Thirty voices would mean it was wired per wick instead of per stand; zero would mean startCandles never ran."
+      },
+      {
+        "id": "state",
+        "path": "ambient",
+        "equals": true,
+        "allowTrivial": "Also held: the room tone starts in enter and must never stop. A transition here would mean it died mid-scene, which is the failure this row exists to catch."
+      },
+      {
+        "id": "state",
+        "path": "walkerZ",
+        "changed": true,
+        "lte": 16
+      }
     ]
   }
 }

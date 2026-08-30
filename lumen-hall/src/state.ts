@@ -36,6 +36,10 @@ export type GameState = {
    * identical to a working one in every capture. This is what a scenario asserts instead.
    */
   footsteps: number;
+  /** Positional flame voices alive — one per authored candle stand, so four. */
+  candleVoices: number;
+  /** Whether the looping room tone is running. False mid-scene means it died. */
+  ambient: boolean;
   respawns: number;
   score: number;
   /** The run: "playing" until the flag is reached ("won") or the last life is gone ("lost"). */

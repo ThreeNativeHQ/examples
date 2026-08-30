@@ -30,6 +30,8 @@ export class MainMenu extends Scene<GameState, IPhysicsContext> {
     walkerX: 2.6,
     bannerSway: 0,
     footsteps: 0,
+    candleVoices: 0,
+    ambient: false,
     respawns: 0,
     screen: "menu",
     score: 0,

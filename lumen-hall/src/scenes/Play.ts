@@ -36,7 +36,7 @@ import {
   createFurnishings,
 } from "../render/furnishings.js";
 import { findWickTips } from "../render/wicks.js";
-import { type ISoundscape, loadSoundscape } from "../audio/soundscape.js";
+import { loadSoundscape } from "../audio/soundscape.js";
 import {
   BODY_HALF_HEIGHT,
   BODY_RADIUS,
@@ -63,7 +63,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   #sanctuary: Group | undefined;
   #candela: Group | undefined;
   #vigil: Group | undefined;
-  #soundscape: ISoundscape | undefined;
 
   static override readonly initialState: GameState = {
     characterName: "",
@@ -81,6 +80,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     walkerX: 2.6,
     bannerSway: 0,
     footsteps: 0,
+    candleVoices: 0,
+    ambient: false,
     respawns: 0,
     score: 0,
     screen: "playing",
@@ -152,9 +153,6 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   override exit(_ctx: GameCtx): void {
     this.#walker?.dispose();
     this.#walker = undefined;
-    // Voices outlive the scene otherwise: the ambience keeps looping over the menu.
-    this.#soundscape?.dispose();
-    this.#soundscape = undefined;
   }
 
   override enter(ctx: GameCtx): SceneFrame<GameState, IPhysicsContext> {
@@ -163,8 +161,14 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // One bus, not two. `AudioBus` parents an `AudioListener` to the camera and a camera
     // carrying two of them presents as doubled, phasing audio rather than as an error, so
     // the soundscape borrows the scene's rather than making its own.
-    const soundscape = loadSoundscape({ bus: audio, assets: ctx.assets });
-    this.#soundscape = soundscape;
+    // Registered rather than held in a field. The registry disposes every entry on clear,
+    // so this gets teardown for free — and, more usefully, `debug()` becomes readable by
+    // the dev overlay and assertable by a scenario as components rather than as one number
+    // this scene has to remember to publish.
+    const soundscape = ctx.entities.add(
+      "soundscape",
+      loadSoundscape({ bus: audio, assets: ctx.assets }),
+    );
     soundscape.startAmbience();
     void soundscape.ready.catch((cause: unknown) => {
       console.warn(`TN_SOUNDSCAPE_UNAVAILABLE:${String(cause)}`);
@@ -426,7 +430,15 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       soundscape.travel(dt, view.position);
       // The observable that proves the footsteps fire. A wired-up sound that never plays is
       // indistinguishable from a working one in every screenshot.
-      frameState.footsteps = soundscape.debug().steps;
+      // Read once: `debug()` is the registry's own snapshot shape, and it is published
+      // through state because `runtime.components` is not advertised by this build's
+      // bridge — an entity carrying a `debug()` method is snapshotted into
+      // `observations.componentSeries`, but a scenario asserting `components` is rejected
+      // for a missing capability before it ever samples. State is the route that works.
+      const heard = soundscape.debug();
+      frameState.footsteps = heard.steps;
+      frameState.candleVoices = heard.candles;
+      frameState.ambient = heard.ambience;
 
       const previous = frameCtx.state.getState();
       // A finished run stops simulating the character and keeps drawing the world behind
