@@ -247,6 +247,11 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // from a wick that missed its candle by 4 cm — at nave distance both look lit.
       stand: () => walker.teleport(1.4, 20.5, 0.02, -0.75),
       hearse: () => walker.teleport(0, -6, 0.02, 0),
+      // Close on an aisle statue: the shaft edge that crosses it, the albedo's baked
+      // weathering, and the fill on the shaded side all read only from here. The west
+      // slot stands in the sun shaft through the west lancet, the east one does not.
+      statue: () => walker.teleport(4.3, 21, 0.12, -Math.PI / 2),
+      statueWest: () => walker.teleport(-10.5, 7, 0.1, -Math.PI / 2),
     };
 
     const materials = createMaterials();
