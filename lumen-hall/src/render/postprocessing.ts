@@ -81,8 +81,8 @@ export function setupPost(
     // Measured on this scene: 1.6 saturates everything, 0.4 is invisible, 0.7 keeps a
     // gradient between the lit air and the dark air.
     godraysDensity: 1.1,
-    godraysFloor: 0.16,
-    godraysIntensity: 1.6,
+    godraysFloor: 0.09,
+    godraysIntensity: 2.4,
     godraysSteps: 24,
     // Low, because this number is what was washing the building out. The pass adds haze
     // to every pixel rather than only to the beams, so at 0.55 the darkest tenth of the
