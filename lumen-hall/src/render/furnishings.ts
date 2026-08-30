@@ -383,9 +383,72 @@ const CHANCEL_HALF_WIDTH = 5.8;
  */
 const BANNER_X = NAVE.width / 2 - 1.6;
 
+/**
+ * A stand this file deliberately does not build.
+ *
+ * The same idiom as the statue bays: `createFurnishings` leaves the slot empty and `Play`
+ * — which is where the loaded glTF actually lives — stands the imported model in it. The
+ * coordinates are here rather than there so that the stands that *are* procedural and the
+ * stands that are not stay laid out in one file; a spacing decision split across two files
+ * drifts on the first move.
+ */
+export interface IAuthoredStand {
+  /** Which model goes here. `Play` maps these names to the loaded glTF. */
+  readonly model: "candela" | "vigil";
+  readonly x: number;
+  readonly z: number;
+  /** Overall height of the finished piece in metres, candles included. */
+  readonly height: number;
+  /** Rotation about Y. A branched bar seen end-on collapses to a single candle. */
+  readonly yaw: number;
+  /** Flame size multiplier, passed through to `IFlamePlacement.size`. */
+  readonly flame: number;
+}
+
+/**
+ * Where the imported stands go, and why each one is where it is.
+ *
+ * These are placed against the *camera*, not against the architecture. The view sits at
+ * x 2.6 with a 63° lens, which leaves the near frustum about ten metres wide at the first
+ * pier row: a stand out at the pier line is entirely off the left edge. The two nave pieces
+ * stand in from the colonnade so their flames land in the near corners of the frame, three
+ * and eight metres from the lens — a candle is a known size, so a lit cluster this close is
+ * what tells the eye the piers behind it are fifteen metres tall.
+ */
+export const AUTHORED_STANDS: readonly IAuthoredStand[] = [
+  // The foreground stand, on the polished marble that fills the bottom third of the frame.
+  // `standLight` below sits at this x and z; move one and move the other.
+  { model: "vigil", x: -1.3, z: 17.6, height: 3.75, yaw: 0.55, flame: 0.62 },
+  // The right of the nave, held in toward the axis: the nearest pier on that side fills the
+  // right quarter of the frame and anything behind it at x > 6 disappears whole.
+  { model: "vigil", x: 6.4, z: 14.5, height: 3.3, yaw: -0.5, flame: 0.7 },
+  // Flanking the chancel steps, on the nave floor rather than the raised platform. The ring
+  // stand goes here and not in the nave: twelve candles on a hoop read as a *hearse* seen
+  // square on, and square on is the only way the axis ever sees the chancel.
+  { model: "candela", x: -4.1, z: CHANCEL_Z + 4.4, height: 2.95, yaw: 0.15, flame: 1 },
+  { model: "candela", x: 4.1, z: CHANCEL_Z + 4.4, height: 2.95, yaw: -0.15, flame: 1 },
+];
+
 // ---------------------------------------------------------------------------------------
 // the pieces
 // ---------------------------------------------------------------------------------------
+
+/**
+ * A wick the caller found for itself, in world coordinates.
+ *
+ * The authored glTF stands model their candles as carved wax with no fire on them. `Play`
+ * measures where each taper ends with `wicks.ts` and passes the points to
+ * `createFurnishings`, which lights them into the same two instanced draws as every
+ * procedural candle in the building. Nothing here knows which stand a wick came from, and
+ * that is the point: one flame system, one animator, one bloom budget.
+ */
+export interface IFlamePlacement {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** Multiplies the default flame and halo size. */
+  readonly size?: number;
+}
 
 /** One flame's animation state, recorded by `candle` and replayed by `animateFires`. */
 interface IFire {
@@ -432,18 +495,35 @@ interface IKit {
  */
 function candle(kit: IKit, x: number, baseY: number, z: number, height: number, radius: number) {
   place(kit.wax, [x, baseY + height / 2, z], [radius, height, radius]);
+  // On the wick, not above it. At 0.09 the flame floated a visible gap clear of the wax.
+  lightWick(kit, x, baseY + height + 0.05, z);
+}
+
+/**
+ * Put fire on a wick that already exists.
+ *
+ * Split out of `candle` because the authored glTF stands carry their own carved wax and
+ * need only this half: `wicks.ts` measures where their tapers end and `Play` hands the
+ * points here, so an authored candle and a procedural one are the same two instances in
+ * the same two draw calls, flickering off the same animator. A second flame system for
+ * the imported models would have been a second pair of draws and a second thing to keep
+ * in step with the bloom threshold.
+ *
+ * `size` scales the whole fire, and it is not cosmetic: the authored stands are placed
+ * against the *lens* rather than against the architecture, so the ones three metres from
+ * the camera need a smaller flame than the nave-scale default or they read as torches.
+ */
+function lightWick(kit: IKit, x: number, tip: number, z: number, size = 1): void {
   // Deliberately larger than a real flame. A 15 mm flame 20 m down the nave is a third of a
   // pixel; at that size the tonemap averages it away with its neighbours and the candle
   // reads as an unlit white stick, which is exactly what the first capture showed.
-  // On the wick, not above it. At 0.09 the flame floated a visible gap clear of the wax.
-  const tip = baseY + height + 0.05;
-  place(kit.flame, [x, tip, z], [0.05, 0.11, 0.05]);
+  place(kit.flame, [x, tip, z], [0.05 * size, 0.11 * size, 0.05 * size]);
   // Kept barely wider than the flame. The halo is a sphere with a hard edge, not a soft
   // sprite, so it has two failure modes and both have been in a capture: too large and two
   // of them merge into one lozenge with no candles inside it, and too large *near the
   // lens* and the edge itself becomes visible as a disc. It stays just big enough to soften
   // the flame and no bigger; the rest of the glow is bloom's job.
-  place(kit.halo, [x, tip, z], [0.088, 0.108, 0.088]);
+  place(kit.halo, [x, tip, z], [0.088 * size, 0.108 * size, 0.088 * size]);
   // Deterministic per-flame fire state for the animator below. The golden-angle phase
   // spread keeps neighbours out of step, and the speeds cluster around 1.3-2 Hz — candle
   // flicker, not strobe. Seeded from the placement index so two captures of the same
@@ -452,12 +532,12 @@ function candle(kit: IKit, x: number, baseY: number, z: number, height: number, 
     x,
     y: tip,
     z,
-    sx: 0.05,
-    sy: 0.11,
-    sz: 0.05,
-    hx: 0.115,
-    hy: 0.14,
-    hz: 0.115,
+    sx: 0.05 * size,
+    sy: 0.11 * size,
+    sz: 0.05 * size,
+    hx: 0.115 * size,
+    hy: 0.14 * size,
+    hz: 0.115 * size,
     phase: (fires.length * 2.399963) % (Math.PI * 2),
     speed: 8 + ((fires.length * 7) % 5) * 1.1,
   });
@@ -793,7 +873,7 @@ function memorial(kit: IKit, x: number, z: number, facing: number): void {
 // ---------------------------------------------------------------------------------------
 
 /** Everything that furnishes the nave. Origin and axes match `createCathedral`. */
-export function createFurnishings(): Group {
+export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []): Group {
   const furnishings = new Group();
   furnishings.name = "furnishings";
   fires = [];
@@ -881,19 +961,20 @@ export function createFurnishings(): Group {
   // from the lens. That is the whole job: a candle is a known size, so a lit cluster this
   // close is what tells the eye the piers behind it are fifteen metres tall, and the pool
   // it throws is the only warm thing on the near pavement.
-  candelabrum(kit, -1.3, 17.6, 3.1, 7, 0.55);
+  // The two stands nearest the lens are NOT built here. `AUTHORED_STANDS` above reserves
+  // them for the imported glTF pieces, because the near field is the one place in the frame
+  // where a lathe-and-cylinder stand is read as a lathe-and-cylinder stand: at three metres
+  // the eye resolves the crossbar, and a modelled one carries chasing and a cast foot that
+  // no amount of primitives buys. Everything further down the nave stays procedural — past
+  // eight metres the two are indistinguishable and the procedural one costs no draw call.
   candelabrum(kit, -4.4, 13.4, 2.6, 7, 0.4);
   candelabrum(kit, -6.3, 8.2, 2.35, 7, 0.3);
   candelabrum(kit, -6.2, -0.6, 2.3, 7, 0.3);
   // The right of the nave, held in toward the axis. The nearest pier on that side fills the
   // right quarter of the frame from top to bottom, and anything placed behind it at
   // x > 6 disappears whole — including, in the third capture, an entire seven-branch stand.
-  candelabrum(kit, 6.4, 14.5, 2.7, 7, -0.5);
   candelabrum(kit, 5.4, 6.0, 2.5, 7, -0.45);
   candelabrum(kit, 5.9, -6.4, 2.25, 7, -0.3);
-  // Flanking the chancel steps, on the nave floor rather than the raised platform.
-  candelabrum(kit, -4.1, CHANCEL_Z + 4.4, 2.4, 5, 0.15);
-  candelabrum(kit, 4.1, CHANCEL_Z + 4.4, 2.4, 5, -0.15);
 
   // ---- aisle votives -----------------------------------------------------------------
   // Placed so the sight line from the camera through an arcade opening actually lands on
@@ -1115,6 +1196,14 @@ export function createFurnishings(): Group {
   const altarLight = new PointLight(0xffc184, 18, 16, 2);
   altarLight.position.set(0, CHANCEL_Y + 2.6, ALTAR_Z + 2.6);
   furnishings.add(altarLight);
+
+  // ---- fire on the authored stands ----------------------------------------------------
+  // Last, so these flames sit at the end of the instance buffers and the procedural
+  // candles keep the indices — and therefore the seeded phases — they had before the
+  // imported models arrived. A capture of an unchanged stage stays byte-comparable.
+  for (const wick of authoredWicks) {
+    lightWick(kit, wick.x, wick.y, wick.z, wick.size ?? 1);
+  }
 
   // ---- resolve every batch into its single draw ---------------------------------------
   // The names are not only for debugging. `collision.ts` decides what gets a static trimesh

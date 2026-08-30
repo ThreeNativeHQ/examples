@@ -17,7 +17,6 @@ import {
   BoxGeometry,
   MeshStandardMaterial,
   Object3D,
-  SphereGeometry,
   type PerspectiveCamera,
   type Texture,
   Vector3,
@@ -30,7 +29,13 @@ import { NAVE, setupLighting } from "../render/lighting.js";
 import { createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { createCathedral } from "../render/cathedral.js";
-import { createFurnishings } from "../render/furnishings.js";
+import {
+  AUTHORED_STANDS,
+  type IAuthoredStand,
+  type IFlamePlacement,
+  createFurnishings,
+} from "../render/furnishings.js";
+import { findWickTips } from "../render/wicks.js";
 import {
   BODY_HALF_HEIGHT,
   BODY_RADIUS,
@@ -55,6 +60,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   #engel: Group | undefined;
   #lady: Group | undefined;
   #sanctuary: Group | undefined;
+  #candela: Group | undefined;
+  #vigil: Group | undefined;
 
   static override readonly initialState: GameState = {
     characterName: "",
@@ -78,13 +85,15 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   };
 
   override async load(ctx: GameCtx): Promise<void> {
-    const [texture, model, marble, engel, lady, sanctuary] = await Promise.all([
+    const [texture, model, marble, engel, lady, sanctuary, candela, vigil] = await Promise.all([
       ctx.assets.texture("native-proof.png"),
       ctx.assets.model<{ scene: Group }>("native-proof.glb"),
       ctx.assets.texture("cathedral-floor.png"),
       ctx.assets.model<{ scene: Group }>("engel.glb"),
       ctx.assets.model<{ scene: Group }>("lady.glb"),
       ctx.assets.model<{ scene: Group }>("sanctuary.glb"),
+      ctx.assets.model<{ scene: Group }>("candela.glb"),
+      ctx.assets.model<{ scene: Group }>("vigil.glb"),
       // Resolved for its side effect: `loadSurfaces` caches the set, and `applySurfaces`
       // reads that cache in `enter`. Awaited here rather than in `enter` because the
       // screen-space passes gather from what is already on screen — a texture that lands
@@ -95,6 +104,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     this.#engel = engel.scene;
     this.#lady = lady.scene;
     this.#sanctuary = sanctuary.scene;
+    this.#candela = candela.scene;
+    this.#vigil = vigil.scene;
     // A 16-pixel check filtered smoothly is a grey smear at flag size; nearest keeps the
     // squares square, which is the whole reason the finish flag is legible from the ledge.
     texture.magFilter = NearestFilter;
@@ -210,6 +221,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       axis: () => walker.teleport(0, 24, 0.06, 0),
       altar: () => walker.teleport(0, -12, 0.04, 0),
       aisle: () => walker.teleport(10.5, 14, 0.05, -Math.PI / 2),
+      // Close on the two imported stands, which is the only way to tell a measured wick
+      // from a wick that missed its candle by 4 cm — at nave distance both look lit.
+      stand: () => walker.teleport(1.4, 20.5, 0.02, -0.75),
+      hearse: () => walker.teleport(0, -6, 0.02, 0),
     };
 
     const materials = createMaterials();
@@ -222,7 +237,14 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // by metalness and colour luminance, and several furnishings materials — the carpet at
     // 0x51201d among them — are unmetallic and dark enough that they would be dressed as
     // vault stone.
-    const furnishings = applyFurnishings(createFurnishings());
+    // The authored pieces are placed BEFORE the furnishings are built, and the order is
+    // load-bearing: each one measures its own wicks and hands the points to
+    // `createFurnishings`, which lights them into the same two instanced draws as every
+    // procedural candle in the building. Build the furnishings first and the imported
+    // stands would need a second flame system, a second pair of draw calls, and a second
+    // thing to keep in step with the bloom threshold.
+    const wicks: IFlamePlacement[] = [];
+
     // The authored glTF figure stands in the slot `furnishings.ts` leaves empty for it:
     // bay 7 on the +X side, x = 6.95, z = 21. Its procedural neighbours in bays 3 and 5 are
     // untouched, so the two kinds stand in the same aisle under the same light.
@@ -232,8 +254,25 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // The sanctuary stands on the chancel platform, where furnishings.ts leaves its
     // procedural altar set switched off. CHANCEL_Y 1.08, ALTAR_Z = CHANCEL_Z - 6.5.
     if (this.#sanctuary !== undefined) {
-      ctx.add(placeSanctuary(this.#sanctuary, 0, -NAVE.depth / 2 + NAVE.bayPitch * 2 - 6.5, 1.08));
+      const sanctuary = placeSanctuary(
+        this.#sanctuary,
+        0,
+        -NAVE.depth / 2 + NAVE.bayPitch * 2 - 6.5,
+        1.08,
+      );
+      ctx.add(sanctuary.group);
+      wicks.push(...sanctuary.wicks);
     }
+    // The imported candle stands, in the four slots `furnishings.ts` reserves for them.
+    for (const stand of AUTHORED_STANDS) {
+      const source = stand.model === "candela" ? this.#candela : this.#vigil;
+      if (source === undefined) continue;
+      const placed = placeAuthoredStand(source, stand);
+      ctx.add(placed.group);
+      wicks.push(...placed.wicks);
+    }
+
+    const furnishings = applyFurnishings(createFurnishings(wicks));
     ctx.add(furnishings);
     // Flames, halos and the two point lights breathe on seeded phases; the furnishing
     // group owns the animation, the scene owns the clock.
@@ -453,20 +492,96 @@ function placeAuthoredStatue(source: Group, x: number, z: number): Group {
 
 
 /**
+ * Stands an imported candle stand in one of the slots `furnishings.ts` reserves, and finds
+ * its wicks.
+ *
+ * Nothing about where the candles are is written down here. The stand is scaled from its
+ * own bounds to the height the layout asks for, stood on the floor, and then *measured*:
+ * `findWickTips` cuts the top slice of the placed model and clusters what is left in plan,
+ * so each taper reports its own tip in world coordinates. Hand-listed candle offsets were
+ * the alternative and they are a trap — a Meshy export is regenerated on a whim, and the
+ * failure mode is twelve flames hanging in the air beside twelve candles, which looks like
+ * a lighting bug and is not one.
+ *
+ * The tips come back sorted heaviest-first, so a stand whose model gains a spike or a
+ * finial still lights its candles: the noise clusters sort to the end and `minWeight`
+ * drops them.
+ */
+function placeAuthoredStand(
+  source: Group,
+  stand: IAuthoredStand,
+): { readonly group: Group; readonly wicks: readonly IFlamePlacement[] } {
+  const piece = source.clone(true);
+  // Measured, never hard-coded. A glTF arrives in whatever units its author used, so a
+  // fixed factor breaks silently the moment the file is replaced.
+  const size = new Box3().setFromObject(piece).getSize(new Vector3());
+  const scale = size.y > 0 ? stand.height / size.y : 1;
+  piece.scale.setScalar(scale);
+  piece.rotation.y = stand.yaw;
+  piece.updateMatrixWorld(true);
+
+  // Re-measure after scaling and rotating: a model's origin is very unlikely to sit at the
+  // centre of its own footprint or at its feet, and neither of these two does.
+  const placed = new Box3().setFromObject(piece);
+  const centre = placed.getCenter(new Vector3());
+  piece.position.set(stand.x - centre.x, -placed.min.y, stand.z - centre.z);
+  piece.traverse((object) => {
+    if (object instanceof Mesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }
+  });
+
+  const group = new Group();
+  group.name = `authored-stand-${stand.model}`;
+  group.add(piece);
+  group.updateMatrixWorld(true);
+
+  const tips = findWickTips(group);
+  const wicks = tips.map((tip) => ({
+    x: tip.x,
+    y: tip.y + 0.02 * stand.flame,
+    z: tip.z,
+    size: stand.flame,
+  }));
+
+  console.info(
+    `TN_AUTHORED_STAND:${JSON.stringify({
+      model: stand.model,
+      scale: +scale.toFixed(4),
+      at: [stand.x, +stand.z.toFixed(2)],
+      wicks: wicks.length,
+      wickY: tips.map((tip) => +tip.y.toFixed(2)),
+    })}`,
+  );
+  return { group, wicks };
+}
+
+/**
  * Stands the authored sanctuary on the chancel platform and lights its candles.
  *
- * The model ships its candles unlit — they are carved wax with no flame — so the flames are
- * added here as emissive quads, the same way `furnishings.ts` lights every other candle in
- * the building. They are not point lights: the screen-space GI pass gathers from the beauty
+ * The model ships its candles unlit — they are carved wax with no flame — so this returns
+ * the wicks rather than lighting them, and `createFurnishings` puts fire on them alongside
+ * every procedural candle in the building. They were their own static emissive quads until
+ * now, which is why the altar candles were the only four in the frame that did not flicker.
+ * They are not point lights either: the screen-space GI pass gathers from the beauty
  * buffer, so a bright emissive quad genuinely lights the stone around it, and eight point
  * lights on one altar would cost more than the whole post chain.
  *
  * The flame positions are fractions of the placed model's own bounding box rather than
- * absolute coordinates, so they follow the model if its scale or footing changes. The
- * fractions were read off the reference render: four candles on the mensa, paired either
- * side of the tabernacle, with their tips at about 41% of the total height.
+ * absolute coordinates, so they follow the model if its scale or footing changes. Unlike
+ * the candle stands these are NOT measured off the geometry: an altar's highest points are
+ * the tabernacle gable and the cross, not its candles, so the top-slice search that works
+ * on a candelabrum finds the wrong four things here. The fractions were read off the
+ * reference render: four candles on the mensa, paired either side of the tabernacle, with
+ * their tips at about 41% of the total height.
  */
-function placeSanctuary(source: Group, x: number, z: number, groundY: number): Group {
+function placeSanctuary(
+  source: Group,
+  x: number,
+  z: number,
+  groundY: number,
+): { readonly group: Group; readonly wicks: readonly IFlamePlacement[] } {
   /** Mensa to the tip of the tabernacle cross, from the reference. */
   const TARGET_HEIGHT = 5.4;
   /** Candle x offsets as a fraction of the model's width, inner pair then outer pair. */
@@ -498,29 +613,22 @@ function placeSanctuary(source: Group, x: number, z: number, groundY: number): G
   const final = new Box3().setFromObject(piece);
   const width = final.max.x - final.min.x;
   const height = final.max.y - final.min.y;
-  // Authored far past 1.0 and unlit. The bloom stage thresholds at 0.2 with a strength of
-  // 0.18, so the halo a flame throws is proportional to how far over that threshold it sits
-  // rather than to how large the quad is.
-  const flameMaterial = new MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false });
-  flameMaterial.color.multiplyScalar(9);
-  for (const fraction of CANDLE_X) {
-    const flame = new Mesh(new SphereGeometry(0.045, 8, 6), flameMaterial);
-    flame.scale.set(1, 2.1, 1);
-    flame.position.set(
-      x + fraction * width,
-      final.min.y + CANDLE_Y * height,
-      z + (final.max.z - final.min.z) * 0.28,
-    );
-    group.add(flame);
-  }
+  const wicks: IFlamePlacement[] = CANDLE_X.map((fraction) => ({
+    x: x + fraction * width,
+    y: final.min.y + CANDLE_Y * height,
+    z: z + (final.max.z - final.min.z) * 0.28,
+    // Smaller than the nave default. These are 55 m down the axis behind a screen, and at
+    // full size four of them merge into one lozenge over the mensa.
+    size: 0.8,
+  }));
 
   console.info(
     `TN_AUTHORED_SANCTUARY:${JSON.stringify({
       scale: +scale.toFixed(4),
       min: [+final.min.x.toFixed(2), +final.min.y.toFixed(2), +final.min.z.toFixed(2)],
       max: [+final.max.x.toFixed(2), +final.max.y.toFixed(2), +final.max.z.toFixed(2)],
-      flames: CANDLE_X.length,
+      flames: wicks.length,
     })}`,
   );
-  return group;
+  return { group, wicks };
 }
