@@ -62,7 +62,7 @@ const CLIPS = [
     airLayer: {
       id: "cathedral-ambience-air",
       highpassHz: 1500,
-      gainDb: 0,
+      gainDb: -24,
       seconds: 20,
       influence: 0.6,
       loop: true,
@@ -318,9 +318,14 @@ async function fetchClip(clip, key) {
  * window long enough to loop, and a bed that swells once a pass is the exact drawing-attention
  * this one exists not to do.
  *
- * So only its air is used. High-passed and set to match the bed's peak, the part that undulates
- * is far enough down to be inaudible as a swell: measured over the loop window the mix keeps the
- * bed's 3.2 dB envelope spread exactly while lifting energy above 1.5 kHz from -55.8 to -47.0 dB.
+ * So only its air is used. High-passed and laid well under the bed, the part that undulates is
+ * far enough down to be inaudible as a swell: at every level tried the mix held the bed's own
+ * ~2.9 dB envelope spread, so `gainDb` is a purely tonal knob and not a steadiness risk.
+ *
+ * It is set conservatively. The bed alone carries -55.8 dB above 1.5 kHz — dead; -24 dB puts that
+ * at -38.2 dB, which is audible air over a low end that still dominates by nearly 40 dB, so the
+ * bed stays the "very distant and muffled" it is supposed to be. Turn this one number up for
+ * more: -18 gives -32.4 dB, -12 gives -26.5 dB, and 0 gives -14.7 dB, which is a hiss bed.
  */
 function mixAir(clip, ffmpeg, bed) {
   const airPath = join(RAW, `${clip.airLayer.id}.pcm`);
