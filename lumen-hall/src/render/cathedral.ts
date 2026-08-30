@@ -67,6 +67,12 @@ const TONE = {
   stone: palette.stone,
   /** Capitals, string courses, ribs, tracery — anything meant to catch a rim of light. */
   bright: 0x968b7b,
+  /**
+   * The upper storeys. Above the arcade the nave wall is backlit from every camera on the
+   * axis, so nothing up there is separated by *light*; the storeys have to be separated by
+   * their own albedo or twenty metres of wall reads as one undifferentiated slab.
+   */
+  upper: 0xa79b88,
   /** Bases, plinths, wall backing. Reads as the shadow the arcade sits in. */
   base: 0x4a463d,
   /** Triforium backing and aisle roof: the darkness the openings are read against. */
@@ -223,6 +229,54 @@ function piercedPanel(
   return new ExtrudeGeometry(panel, { bevelEnabled: false, depth: thickness });
 }
 
+/**
+ * One bay of the outer aisle wall: a pointed window opening with a respond either side.
+ *
+ * Same local frame as `bayWall` — `z` runs away from the nave — so both colonnades and both
+ * aisle walls come from one geometry placed by `rotation.y = side · π/2`.
+ *
+ * This is the second plane of depth in the picture. A flat wall behind the colonnade gives
+ * the arcade openings nothing to be openings *onto*, and the whole aisle then reads as a
+ * painted backdrop however dark it is.
+ */
+function aisleBay(bayPitch: number, wallHeight: number): BufferGeometry {
+  const parts: BufferGeometry[] = [
+    part(
+      piercedPanel(bayPitch, wallHeight, 0.5, [
+        { halfWidth: bayPitch * 0.32, springY: wallHeight * 0.38 },
+      ]),
+      // A mid value, not `void`. Against a black aisle the arcade openings had nothing to be
+      // darker or lighter *than*, and the whole colonnade flattened into one slab.
+      0x484133,
+    ),
+  ];
+  for (const edge of [-1, 1]) {
+    // A respond on each bay joint, standing proud toward the nave. Half of every pair is
+    // coincident with its neighbour's, which costs nothing and keeps one geometry per bay.
+    parts.push(
+      part(
+        new CylinderGeometry(0.38, 0.38, wallHeight, 8).translate(
+          (edge * bayPitch) / 2,
+          wallHeight / 2,
+          -0.34,
+        ),
+        TONE.base,
+      ),
+    );
+    parts.push(
+      part(
+        new BoxGeometry(1.1, 0.3, 1.1).translate(
+          (edge * bayPitch) / 2,
+          wallHeight * 0.38,
+          -0.34,
+        ),
+        TONE.base,
+      ),
+    );
+  }
+  return weld(parts, "aisle bay");
+}
+
 /** A rib, as a tube swept along the curve the vault surface actually creases on. */
 function ribTube(points: readonly Vector3[], radius: number): BufferGeometry {
   return new TubeGeometry(new CatmullRomCurve3([...points]), points.length * 2, radius, 6, false);
@@ -368,11 +422,11 @@ function compoundPier(radius: number, capitalY: number, vaultShaftTop: number): 
   // the only thing in twenty metres of wall with a vertical edge, so they carry the whole
   // read of the nave's height; three thin ones simply vanished into the dark.
   for (const [offsetZ, tallRadius, tone] of [
-    [0, 0.5, TONE.stone],
+    [0, 0.5, TONE.upper],
     [-1.0, 0.34, TONE.bright],
     [1.0, 0.34, TONE.bright],
-    [-1.75, 0.24, TONE.stone],
-    [1.75, 0.24, TONE.stone],
+    [-1.75, 0.24, TONE.upper],
+    [1.75, 0.24, TONE.upper],
   ] as const) {
     parts.push(
       part(
@@ -386,12 +440,21 @@ function compoundPier(radius: number, capitalY: number, vaultShaftTop: number): 
     );
   }
   // A corbel at the top of the cluster, so the ribs land on something instead of on air.
-  parts.push(
-    part(
-      new BoxGeometry(1.6, 0.6, 4.4).translate(shaftFace - 0.14, vaultShaftTop - 0.3, 0),
-      TONE.bright,
-    ),
-  );
+  for (const [corbelWidth, corbelDepth, corbelY] of [
+    [1.3, 3.8, vaultShaftTop - 0.72],
+    [1.7, 4.6, vaultShaftTop - 0.24],
+  ] as const) {
+    parts.push(
+      part(
+        new BoxGeometry(corbelWidth, 0.48, corbelDepth).translate(
+          shaftFace - 0.14,
+          corbelY,
+          0,
+        ),
+        TONE.bright,
+      ),
+    );
+  }
 
   return weld(parts, "pier");
 }
@@ -418,7 +481,7 @@ function bayWall(): BufferGeometry {
   // one of these that casts onto the wall behind it rather than into the opening, and that
   // cast line is what gives the arcade its contact shadow at grazing sun.
   const orders = [
-    { depth: 0.22, halfWidth: bayPitch * 0.4, tone: TONE.bright, z: -0.22 },
+    { depth: 0.34, halfWidth: bayPitch * 0.4, tone: TONE.bright, z: -0.34 },
     { depth: 0.46, halfWidth: bayPitch * 0.38, tone: TONE.stone, z: 0 },
     { depth: 0.34, halfWidth: bayPitch * 0.345, tone: TONE.bright, z: 0.46 },
     { depth: 0.42, halfWidth: bayPitch * 0.315, tone: TONE.stone, z: 0.8 },
@@ -438,8 +501,8 @@ function bayWall(): BufferGeometry {
   // A cathedral's storeys are legible because two horizontals cut across every pier in the
   // building at the same height. Without them the three storeys blend into one tall wall.
   for (const [courseY, courseTone] of [
-    [arcadeHeight, TONE.bright],
-    [triforiumTop, TONE.bright],
+    [arcadeHeight, TONE.upper],
+    [triforiumTop, TONE.upper],
   ] as const) {
     parts.push(
       part(
@@ -478,7 +541,7 @@ function bayWall(): BufferGeometry {
         arcadeHeight + 0.63,
         0,
       ),
-      TONE.stone,
+      TONE.upper,
     ),
   );
   // Detached colonnettes in front of each mullion, and a solid backing behind the whole
@@ -492,7 +555,7 @@ function bayWall(): BufferGeometry {
           arcadeHeight + 0.63 + triforiumHeight * 0.25,
           -0.3,
         ),
-        TONE.bright,
+        TONE.upper,
       ),
     );
   }
@@ -511,7 +574,7 @@ function bayWall(): BufferGeometry {
   parts.push(
     part(
       new BoxGeometry(bayPitch, 0.3, 1.3).translate(0, arcadeHeight + 0.78, -0.45),
-      TONE.bright,
+      TONE.upper,
     ),
   );
 
@@ -529,7 +592,7 @@ function bayWall(): BufferGeometry {
       piercedPanel(bayPitch, clerestoryHeight, 0.75, [
         { halfWidth: innerHalf, springY: clerestorySpring },
       ]).translate(0, clerestoryBase, 0),
-      TONE.stone,
+      TONE.upper,
     ),
   );
   parts.push(
@@ -537,7 +600,7 @@ function bayWall(): BufferGeometry {
       piercedPanel(bayPitch, clerestoryHeight, 0.7, [
         { halfWidth: outerHalf, springY: clerestorySpring },
       ]).translate(0, clerestoryBase, 0.75),
-      TONE.bright,
+      TONE.upper,
     ),
   );
   // Two mullions, so one window throws three shafts. Three shafts read as light; one reads
@@ -734,8 +797,8 @@ export function createCathedral(floorTexture?: Texture): Group {
   // half of the picture, but a colonnade with nothing behind it reads as a wall, and the
   // reference plainly shows lit tracery through the arcade openings.
   const aisleGlass = new InstancedMesh(
-    new PlaneGeometry(4.0, 9.6),
-    glass(0xe0a0ae),
+    new PlaneGeometry(bayPitch * 0.64, 9.2),
+    glass(0xd8a2ae),
     bays * 2,
   );
   let aisleInstance = 0;
@@ -744,7 +807,9 @@ export function createCathedral(floorTexture?: Texture): Group {
       const z = -halfDepth + bay * bayPitch + bayPitch / 2;
       scratch
         .makeRotationY((side * Math.PI) / 2)
-        .setPosition(side * (halfWidth + aisleDepth - 0.12), 6.9, z);
+        // Behind the aisle wall's own opening, not in front of it: the pointed head of that
+        // opening is what makes the light beyond the colonnade read as a window.
+        .setPosition(side * (halfWidth + aisleDepth + 0.54), 5.0, z);
       aisleGlass.setMatrixAt(aisleInstance, scratch);
       aisleInstance += 1;
     }
@@ -777,16 +842,27 @@ export function createCathedral(floorTexture?: Texture): Group {
   nave.add(piers);
 
   // ---- aisles ----------------------------------------------------------------------------
+  const aisleWalls = new InstancedMesh(
+    aisleBay(bayPitch, arcadeHeight),
+    materials.carved,
+    bays * 2,
+  );
+  aisleWalls.receiveShadow = true;
+  let aisleWallInstance = 0;
   for (const side of [-1, 1]) {
-    const aisleWall = new Mesh(
-      new PlaneGeometry(bays * bayPitch, arcadeHeight),
-      materials.shadowStone,
-    );
-    aisleWall.rotation.y = (side * -Math.PI) / 2;
-    aisleWall.position.set(side * (halfWidth + aisleDepth), arcadeHeight / 2, 0);
-    aisleWall.receiveShadow = true;
-    nave.add(aisleWall);
+    for (let bay = 0; bay < bays; bay += 1) {
+      const z = -halfDepth + bay * bayPitch + bayPitch / 2;
+      scratch
+        .makeRotationY((side * Math.PI) / 2)
+        .setPosition(side * (halfWidth + aisleDepth), 0, z);
+      aisleWalls.setMatrixAt(aisleWallInstance, scratch);
+      aisleWallInstance += 1;
+    }
+  }
+  aisleWalls.instanceMatrix.needsUpdate = true;
+  nave.add(aisleWalls);
 
+  for (const side of [-1, 1]) {
     const aisleVault = new Mesh(
       new PlaneGeometry(bays * bayPitch, aisleDepth),
       materials.shadowStone,
@@ -973,7 +1049,7 @@ export function createCathedral(floorTexture?: Texture): Group {
       ),
     );
   }
-  for (const ratio of [0.3, 0.56, 0.82]) {
+  for (const ratio of [0.24, 0.44, 0.62, 0.84]) {
     traceryParts.push(
       part(new RingGeometry(roseRadius * ratio - 0.11, roseRadius * ratio + 0.11, 40), TONE.bright),
     );

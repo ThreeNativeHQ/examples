@@ -85,7 +85,30 @@ export interface IWorldEnvironmentOptions {
   readonly godraysEnabled?: boolean;
   /** How dense the participating medium is. Higher is foggier. */
   readonly godraysDensity?: number;
-  /** Ceiling on shaft brightness, so a shaft never turns into a white wall. */
+  /**
+   * Haze below this value is discarded instead of added to the frame.
+   *
+   * Without it the pass is a uniform brightener rather than a shaft renderer. It returns a
+   * non-zero value for nearly every pixel, because in a building lit through a clerestory
+   * most of the upper volume genuinely is lit — so every view ray accumulates something.
+   * That "something" is tiny in linear space and enormous after the tone curve, which
+   * lifts shadows hardest: measured on the cathedral, the darkest 5% of the frame sat at
+   * luminance 71 of 255 with godrays on and 4 with them off, against 7 in the reference.
+   *
+   * Subtracting a floor keeps the air inside a real beam and discards the ambient lift.
+   */
+  readonly godraysFloor?: number;
+  /** Multiplier applied after the floor, so beams can be bright without the haze returning. */
+  readonly godraysIntensity?: number;
+  /**
+   * Ceiling on shaft brightness.
+   *
+   * This is also the single strongest control over how bright the *whole* scene looks. The
+   * pass adds its accumulated illumination to every pixel, not only to the pixels inside a
+   * visible beam, so raising it raises the shadow floor of the entire frame. Measured on
+   * the cathedral: with godrays on, the darkest tenth of the frame sat at luminance 55.8
+   * of 255; with them off it sat at 1.4, and the frame mean halved from 97 to 46.
+   */
   readonly godraysMaxDensity?: number;
   /** Godot's `glow_enabled`. */
   readonly bloomEnabled?: boolean;
@@ -153,6 +176,8 @@ export class WorldEnvironment {
       denoiseEnabled: options.denoiseEnabled ?? true,
       godraysEnabled: options.godraysEnabled ?? false,
       godraysDensity: options.godraysDensity ?? 0.7,
+      godraysFloor: options.godraysFloor ?? 0,
+      godraysIntensity: options.godraysIntensity ?? 1,
       godraysMaxDensity: options.godraysMaxDensity ?? 0.5,
       bloomEnabled: options.bloomEnabled ?? true,
       bloomStrength: options.bloomStrength ?? 0.7,
@@ -268,9 +293,14 @@ export class WorldEnvironment {
         const shafts = godrays(depth, view, godraysLight);
         shafts.density.value = options.godraysDensity;
         shafts.maxDensity.value = options.godraysMaxDensity;
-        // The pass returns a grey shaft mask. Tinting it by the light's own colour is
-        // what stops a warm sun throwing a white shaft.
-        lit = chain(lit.add(chain(shafts).rgb.mul(color(godraysLight.color))));
+        // Floor, then scale, then tint. The floor is what turns this from a whole-frame
+        // brightener into a shaft renderer; the tint by the light's own colour is what
+        // stops a warm sun throwing a white beam.
+        const shaft = chain(shafts)
+          .rgb.sub(options.godraysFloor)
+          .max(0)
+          .mul(options.godraysIntensity);
+        lit = chain(lit.add(shaft.mul(color(godraysLight.color))));
         stages.push({ stage: "godrays", applied: true });
       }
     } else {
@@ -294,7 +324,18 @@ export class WorldEnvironment {
       // real texture nodes. `lit` at this point is a composed `.mul().add()` expression —
       // `convertToTexture` resolves it into a render target the pass can sample. `ssgi()`
       // does this conversion for you in its factory; `ssr()` does not.
-      const reflections = ssr(convertToTexture(lit), depth, normal as unknown as Parameters<typeof ssr>[2], {
+      // Materialise the chain ONCE and reuse that texture on both sides of the add.
+      //
+      // Passing `convertToTexture(lit)` to the pass while adding the reflections back onto
+      // the unconverted `lit` builds two parallel copies of the same graph — one rendered
+      // into a target, one not. With bloom on, bloom's own conversion re-materialised the
+      // second copy and it happened to work. With bloom off the second copy never got
+      // scheduled and the frame came out as the bare background colour. Measured: bloom
+      // off alone rendered blank, bloom off plus SSR off rendered, bloom off plus godrays
+      // off rendered — the blank needed all three conditions, which is what a dangling
+      // graph branch looks like from the outside.
+      const base = convertToTexture(lit);
+      const reflections = ssr(base, depth, normal as unknown as Parameters<typeof ssr>[2], {
         camera: view,
         metalnessNode: metal.r,
         roughnessNode: rough.g,
@@ -302,7 +343,7 @@ export class WorldEnvironment {
       });
       reflections.maxDistance.value = options.ssrMaxDistance;
       reflections.resolutionScale = options.ssrResolutionScale;
-      lit = chain(lit.add(reflections));
+      lit = chain(chain(base).add(reflections));
       stages.push({ stage: "ssr", applied: true });
     } else {
       off("ssr", "ssrEnabled is false");

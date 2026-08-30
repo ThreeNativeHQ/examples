@@ -80,8 +80,13 @@ export function setupPost(
     // every pixel land on the same value and the result is flat fog rather than beams.
     // Measured on this scene: 1.6 saturates everything, 0.4 is invisible, 0.7 keeps a
     // gradient between the lit air and the dark air.
-    godraysDensity: 0.7,
-    godraysMaxDensity: 0.55,
+    godraysDensity: 1.1,
+    godraysFloor: 0.16,
+    godraysIntensity: 1.6,
+    // Low, because this number is what was washing the building out. The pass adds haze
+    // to every pixel rather than only to the beams, so at 0.55 the darkest tenth of the
+    // frame never went below 22% luminance and nothing in the nave read as shadow.
+    godraysMaxDensity: 0.6,
     // The floor is polished stone, so the columns and the glass stand in it.
     ssrEnabled: !stageOff("ssr"),
     // The nave is 63 m long and the near piers stand about 8 m from the camera. The node's

@@ -361,8 +361,11 @@ function candelabrum(
   baseY = 0,
 ): void {
   const top = baseY + height;
-  place(kit.ironRod, [x, baseY + 0.06, z], [0.46, 0.12, 0.46]);
-  place(kit.knop, [x, baseY + 0.2, z], [0.3, 0.16, 0.3]);
+  // A stepped foot, not a ball. A squashed sphere on the floor reads as a boulder at the
+  // base of the stand, which is what the fourth capture put under every one of them.
+  place(kit.ironRod, [x, baseY + 0.04, z], [0.44, 0.08, 0.44]);
+  place(kit.ironRod, [x, baseY + 0.14, z], [0.3, 0.12, 0.3]);
+  place(kit.ironRod, [x, baseY + 0.24, z], [0.17, 0.1, 0.17]);
   rod(kit.ironRod, [x, baseY + 0.12, z], [x, top, z], 0.048);
   place(kit.knop, [x, baseY + height * 0.42, z], [0.12, 0.14, 0.12]);
   place(kit.knop, [x, baseY + height * 0.74, z], [0.1, 0.12, 0.1]);
@@ -385,7 +388,11 @@ function candelabrum(
     // The middle taper is the tallest and they fall away to the ends. A flat row of equal
     // candles reads as a barcode; the arc is what makes the group read as a candelabrum.
     const fall = Math.abs(index - (count - 1) / 2) / Math.max(1, (count - 1) / 2);
-    candle(kit, cx, top + 0.1, cz, 0.72 - fall * 0.24, 0.043);
+    // Plus a deterministic burn-down per position. Thin, because at three metres from the
+    // lens a 43 mm taper is a white post: the near stand is the one place in the frame
+    // where a candle is read as an object rather than as a point of light.
+    const burn = ((index * 5) % 4) * 0.05;
+    candle(kit, cx, top + 0.1, cz, 0.78 - fall * 0.24 - burn, 0.033);
   }
 }
 
@@ -456,6 +463,12 @@ function railing(
     const bx = from[0] + dx * t;
     const bz = from[1] + dz * t;
     rod(kit.ironRod, [bx, baseY, bz], [bx, baseY + height, bz], 0.038);
+    // A boss on every other bar, on the middle rail. Screen ironwork in the reference is
+    // never a plain grid; one repeated ornament at the mid-rail is the cheapest thing that
+    // reads as wrought rather than welded, and it costs no extra draw call.
+    if (index % 2 === 0) {
+      place(kit.knop, [bx, baseY + height * 0.62, bz], [0.09, 0.09, 0.09]);
+    }
     if (options.finials === true && index % 3 === 0) {
       place(kit.ironSpike, [bx, baseY + height + 0.24, bz], [0.075, 0.34, 0.075]);
     }
@@ -591,15 +604,23 @@ export function createFurnishings(): Group {
   // ---- candle stands -----------------------------------------------------------------
   // Against the piers, where the reference puts them: a lit object in the near field is
   // what gives the nave its scale, because the eye reads a candle as a known size.
-  // The near one is the tallest and sits at the left edge of the frame, where the
-  // reference puts its foreground stand: a lit cluster two metres from the lens is what
-  // establishes that the piers behind it are fifteen metres tall.
-  candelabrum(kit, -5.0, 17.6, 2.95, 7, 0.5);
-  candelabrum(kit, -6.3, 14.6, 2.35, 7, 0.35);
-  candelabrum(kit, -6.2, 0.8, 2.3, 7, 0.3);
+  // The foreground pair, and they are placed against the *camera*, not against the
+  // architecture. The view sits at x 2.6 — a metre and a half off the axis — with a 63°
+  // lens, which leaves the near frustum only about ten metres wide at the first pier row:
+  // a stand out at the pier line four metres away is entirely off the left edge, which is
+  // where the previous near stand went when the framing moved. These two stand in from the
+  // colonnade so their flames land in the lower-left of the frame, three and eight metres
+  // from the lens. That is the whole job: a candle is a known size, so a lit cluster this
+  // close is what tells the eye the piers behind it are fifteen metres tall, and the pool
+  // it throws is the only warm thing on the near pavement.
+  candelabrum(kit, -1.3, 17.6, 3.1, 7, 0.55);
+  candelabrum(kit, -4.4, 13.4, 2.6, 7, 0.4);
+  candelabrum(kit, -6.3, 8.2, 2.35, 7, 0.3);
+  candelabrum(kit, -6.2, -0.6, 2.3, 7, 0.3);
   // The right of the nave, held in toward the axis. The nearest pier on that side fills the
   // right quarter of the frame from top to bottom, and anything placed behind it at
   // x > 6 disappears whole — including, in the third capture, an entire seven-branch stand.
+  candelabrum(kit, 6.4, 14.5, 2.7, 7, -0.5);
   candelabrum(kit, 5.4, 6.0, 2.5, 7, -0.45);
   candelabrum(kit, 5.9, -6.4, 2.25, 7, -0.3);
   // Flanking the chancel steps, on the nave floor rather than the raised platform.
@@ -609,7 +630,11 @@ export function createFurnishings(): Group {
   // ---- aisle votives -----------------------------------------------------------------
   // Placed so the sight line from the camera through an arcade opening actually lands on
   // them; a rack behind a pier is a rack nobody ever sees.
-  votiveRack(kit, -9.8, 13.0, Math.PI / 2);
+  // One of these is on the nave side of the arcade rather than in the aisle behind it.
+  // A rack correctly placed in an aisle bay is invisible from the nave floor here — the
+  // colonnade is deep enough that almost no sightline clears it — and the warm pool it
+  // throws on the pavement is the whole reason it exists.
+  votiveRack(kit, -5.4, 10.5, Math.PI / 2);
   votiveRack(kit, -9.8, -1.0, Math.PI / 2);
   votiveRack(kit, 9.8, 10.0, -Math.PI / 2);
 
@@ -717,14 +742,38 @@ export function createFurnishings(): Group {
   ] as ReadonlyArray<readonly [number, number, number]>) {
     place(kit.stoneSpike, [gx, canopyTop + 0.5, ALTAR_Z + gz], [0.75, 0.9, 0.2], [0, yaw, 0]);
   }
-  place(kit.stoneSpike, [0, canopyTop + 1.55, ALTAR_Z], [0.62, 2.4, 0.62], [0, Math.PI / 4, 0]);
+  place(kit.stoneSpike, [0, canopyTop + 1.3, ALTAR_Z], [0.82, 1.9, 0.82], [0, Math.PI / 4, 0]);
   // Crockets. Four knops up the spire are what stop a cone reading as a traffic bollard.
   for (let step = 0; step < 4; step += 1) {
     const t = 0.18 + step * 0.2;
-    place(kit.knop, [0, canopyTop + 0.35 + t * 2.4, ALTAR_Z], [0.1, 0.1, 0.1]);
+    place(kit.knop, [0, canopyTop + 0.35 + t * 1.9, ALTAR_Z], [0.1, 0.1, 0.1]);
   }
-  place(kit.gold, [0, canopyTop + 2.95, ALTAR_Z], [0.09, 0.62, 0.09]);
-  place(kit.gold, [0, canopyTop + 3.05, ALTAR_Z], [0.34, 0.09, 0.09]);
+  place(kit.gold, [0, canopyTop + 2.5, ALTAR_Z], [0.09, 0.62, 0.09]);
+  place(kit.gold, [0, canopyTop + 2.6, ALTAR_Z], [0.34, 0.09, 0.09]);
+
+  // Two sanctuary lamps on long chains, one either side of the altar. They hang where a
+  // chandelier cannot — inside the chancel arch, below the apse vault — and they are the
+  // only warm light *behind* the screen, which is what stops the sanctuary reading as a
+  // flat lit backdrop with a silhouette in front of it.
+  for (const side of [-1, 1]) {
+    const lampX = side * 2.7;
+    const lampZ = ALTAR_Z + 1.9;
+    const bowlY = CHANCEL_Y + 3.3;
+    for (let y = bowlY + 0.5; y < 15; y += 0.34) {
+      const upright = Math.round((y - bowlY) / 0.34) % 2 === 0;
+      place(kit.chainLink, [lampX, y, lampZ], [0.1, 0.1, 0.1], [0, upright ? 0 : Math.PI / 2, 0]);
+    }
+    for (const hang of [-0.22, 0.22]) {
+      rod(
+        kit.bronzeRod,
+        [lampX + hang, bowlY + 0.52, lampZ],
+        [lampX, bowlY + 0.14, lampZ],
+        0.016,
+      );
+    }
+    place(kit.knop, [lampX, bowlY, lampZ], [0.24, 0.15, 0.24]);
+    candle(kit, lampX, bowlY + 0.06, lampZ, 0.1, 0.05);
+  }
 
   // ---- banners -----------------------------------------------------------------------
   // Hung from alternating piers so the two colonnades do not mirror each other exactly —
@@ -780,8 +829,8 @@ export function createFurnishings(): Group {
   // 1. The foreground candle stand. It sits on the polished marble that fills the bottom
   //    third of the frame, and that floor is the largest surface in the picture with no
   //    other warm source anywhere near it.
-  const standLight = new PointLight(0xffb066, 5.5, 11, 2);
-  standLight.position.set(-6.3, 2.7, 14.6);
+  const standLight = new PointLight(0xffb066, 6.5, 12, 2);
+  standLight.position.set(-1.3, 3.3, 17.6);
   furnishings.add(standLight);
   // 2. The sanctuary. The altar is 55 m down the axis and stands *in front of* the lit
   //    lancets, so every surface of it that the camera can see faces away from the only
