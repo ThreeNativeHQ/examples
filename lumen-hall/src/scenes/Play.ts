@@ -277,7 +277,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // Flames, halos and the two point lights breathe on seeded phases; the furnishing
     // group owns the animation, the scene owns the clock.
     const animateFires = furnishings.userData.animateFires as
-      | ((time: number) => void)
+      | ((time: number, camera?: Object3D) => void)
       | undefined;
     let elapsed = 0;
     // Keep the initial -99 sentinel until seed.playtest samples it. If this draw is replaced with
@@ -390,7 +390,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       // it and is looking back at a lit building from outside".
       frameState.walkerZ = view.position.z;
       elapsed += dt;
-      animateFires?.(elapsed);
+      // The camera goes with the clock: the halo quads are billboards and the animator is
+      // the only place their matrices are written.
+      animateFires?.(elapsed, view);
 
       const previous = frameCtx.state.getState();
       // A finished run stops simulating the character and keeps drawing the world behind

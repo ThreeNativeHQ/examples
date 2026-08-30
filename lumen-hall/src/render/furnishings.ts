@@ -43,6 +43,7 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  PlaneGeometry,
   PointLight,
   Quaternion,
   SphereGeometry,
@@ -51,6 +52,7 @@ import {
   Vector2,
   Vector3,
 } from "three";
+import { softCircleDataTexture } from "@threenative/core";
 import { NAVE } from "./lighting.js";
 
 // ---------------------------------------------------------------------------------------
@@ -250,9 +252,18 @@ const materials = {
    * tonemap ceiling and a stronger bloom lifts the whole frame. The halo is a local,
    * per-candle version of the same effect that costs one draw call for every candle in the
    * building and nothing in the post chain.
+   *
+   * It was an eight-segment sphere until a close capture of the chancel ring showed what
+   * the comment above it had been predicting all along: an additive solid with a constant
+   * colour has a hard silhouette, so twelve of them read as twelve octagonal discs with
+   * candles inside. A glow has no edge. `softCircleDataTexture` is the framework's answer
+   * to exactly this — a radial alpha falloff written as pixel data rather than painted on a
+   * canvas, because a canvas-drawn image samples black under `WebGPURenderer`. Paired with
+   * the camera-facing quad the animator writes, the disc becomes a glow.
    */
   halo: new MeshBasicMaterial({
-    color: new Color().setRGB(0.26, 0.115, 0.036),
+    color: new Color().setRGB(0.42, 0.185, 0.058),
+    map: softCircleDataTexture(64, 0.32),
     blending: AdditiveBlending,
     depthWrite: false,
     toneMapped: false,
@@ -299,6 +310,8 @@ function batch(geometry: BufferGeometry, material: Material): IBuiltBatch {
 }
 
 const dummy = new Object3D();
+/** The camera orientation every halo quad copies. Read once a frame, not once a flame. */
+const haloFacing = new Quaternion();
 const UP = new Vector3(0, 1, 0);
 const rodDirection = new Vector3();
 const rodMidpoint = new Vector3();
@@ -523,7 +536,7 @@ function lightWick(kit: IKit, x: number, tip: number, z: number, size = 1): void
   // of them merge into one lozenge with no candles inside it, and too large *near the
   // lens* and the edge itself becomes visible as a disc. It stays just big enough to soften
   // the flame and no bigger; the rest of the glow is bloom's job.
-  place(kit.halo, [x, tip, z], [0.088 * size, 0.108 * size, 0.088 * size]);
+  place(kit.halo, [x, tip, z], [0.24 * size, 0.28 * size, 0.24 * size]);
   // Deterministic per-flame fire state for the animator below. The golden-angle phase
   // spread keeps neighbours out of step, and the speeds cluster around 1.3-2 Hz — candle
   // flicker, not strobe. Seeded from the placement index so two captures of the same
@@ -535,9 +548,9 @@ function lightWick(kit: IKit, x: number, tip: number, z: number, size = 1): void
     sx: 0.05 * size,
     sy: 0.11 * size,
     sz: 0.05 * size,
-    hx: 0.115 * size,
-    hy: 0.14 * size,
-    hz: 0.115 * size,
+    hx: 0.3 * size,
+    hy: 0.34 * size,
+    hz: 0.3 * size,
     phase: (fires.length * 2.399963) % (Math.PI * 2),
     speed: 8 + ((fires.length * 7) % 5) * 1.1,
   });
@@ -901,12 +914,15 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
           new Vector2(0.24, 0.78),
           new Vector2(0.001, 1),
         ],
-        8,
+        12,
       ),
       materials.flame,
     ),
     gold: batch(new BoxGeometry(1, 1, 1), materials.gold),
-    halo: batch(new SphereGeometry(1, 8, 6), materials.halo),
+    // A quad, not a sphere: `animateFires` turns every one of these to face the camera
+    // each frame, which is the half of the soft-halo change that lives outside the
+    // material. It costs nothing extra — the animator was already rewriting this matrix.
+    halo: batch(new PlaneGeometry(1, 1), materials.halo),
     ironBox: batch(new BoxGeometry(1, 1, 1), materials.iron),
     ironRod: batch(unitRod, materials.iron),
     ironSpike: batch(new ConeGeometry(1, 1, 6), materials.iron),
@@ -1238,7 +1254,10 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
   // scales. Cost is two instance-matrix uploads of a few hundred entries per frame —
   // orders of magnitude under the post chain.
   if (flameMesh !== undefined && haloMesh !== undefined) {
-    furnishings.userData.animateFires = (time: number): void => {
+    furnishings.userData.animateFires = (time: number, camera?: Object3D): void => {
+      // The halo quad faces the lens. Read once per frame, not once per flame: every halo
+      // in the building shares one orientation, and there are several hundred of them.
+      if (camera !== undefined) camera.getWorldQuaternion(haloFacing);
       for (let index = 0; index < fires.length; index += 1) {
         const fire = fires[index] as IFire;
         // Two offset sines: one slow breath, one quicker gutter. Flatlined they would
@@ -1255,6 +1274,10 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
         );
         dummy.updateMatrix();
         flameMesh.setMatrixAt(index, dummy.matrix);
+        // The halo rides its own wobbled matrix rather than the flame's, because the two
+        // draw from different base scales — and now from different orientations too: the
+        // flame is a lathe standing on the wick, the halo is a quad turned to the camera.
+        dummy.quaternion.copy(haloFacing);
         dummy.scale.set(
           fire.hx * (1 - Math.abs(wobble) * 0.05),
           fire.hy * (1 + wobble * 0.1),
@@ -1262,6 +1285,8 @@ export function createFurnishings(authoredWicks: readonly IFlamePlacement[] = []
         );
         dummy.updateMatrix();
         haloMesh.setMatrixAt(index, dummy.matrix);
+        // Put the shared dummy back the way the flame branch expects to find it next pass.
+        dummy.quaternion.identity();
       }
       flameMesh.instanceMatrix.needsUpdate = true;
       haloMesh.instanceMatrix.needsUpdate = true;
