@@ -148,18 +148,25 @@ interface IStone {
 }
 
 /**
- * The banner cloth, and the mean linear luminance the map's *cloth* was authored to.
+ * Mean linear luminance of the banner map, over the whole panel.
  *
- * Measured over the cloth only — not the device, not the braid, not the texels outside the
- * swallowtail. The gold device replaces five boxes that were separate meshes with their own
- * gold material, so averaging it into the reference would darken the cloth to pay for gold
- * it never used to carry.
+ * Measured over *every* texel, not over the cloth alone. Cloth-only is the intuitive
+ * reference — the gold device replaces boxes that were separate meshes, so it feels like it
+ * should not count — and it is wrong, because it is a mean the material never samples. A
+ * banner four metres up covers about sixty pixels of a 1600-wide frame, so it reads three or
+ * four mip levels down, where every texel is already an average of an 8x8 block and the
+ * braid and the device have bled into the cloth. Calibrating on cloth-only measured 0.02206
+ * and the banner came back 27% hot against the flat colour it was standing in for.
+ *
+ * The remaining trade is that at arm's length the cloth is a little darker than the flat
+ * navy, since up close the gold is resolved rather than averaged in. That is the right way
+ * round: every complaint about this banner has been that it is too bright.
  *
  * The material's `emissive` floor is untouched: it is added after lighting and `colorNode`
  * does not reach it, which is what keeps a navy cloth on an unlit pier from rounding to
  * black whether or not it has a map.
  */
-const BANNER_CLOTH_LUMINANCE = 0.02206;
+const BANNER_LUMINANCE = 0.03677;
 
 /** Roughness, read off the relief: the recessed mortar in a wall is also the rough part. */
 const ROUGH_PROUD = 0.74;
@@ -505,7 +512,7 @@ function dressBanner(material: MeshStandardMaterial, map: Texture): void {
   // The material's own colour is still what decides how dark the cloth is; the map only
   // says how it varies and where the gold goes. Read at apply time, so re-tinting the
   // banner in `furnishings.ts` still moves it.
-  const gain = luminance(material.color) / BANNER_CLOTH_LUMINANCE;
+  const gain = luminance(material.color) / BANNER_LUMINANCE;
   // Same two corrections the glass needs, and for the same reasons: V because these arrive
   // as KTX2 and a compressed texture cannot be flipped at upload, U on back faces because
   // the cloth is `DoubleSide` and a heraldic device is not left-right symmetric.
