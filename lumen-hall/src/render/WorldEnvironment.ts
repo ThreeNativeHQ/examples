@@ -23,16 +23,21 @@ import { denoise } from "three/addons/tsl/display/DenoiseNode.js";
 import { ssgi } from "three/addons/tsl/display/SSGINode.js";
 import { bilateralBlur } from "three/addons/tsl/display/BilateralBlurNode.js";
 import { godrays } from "three/addons/tsl/display/GodraysNode.js";
+import { ao } from "three/addons/tsl/display/GTAONode.js";
+import { sharpen } from "three/addons/tsl/display/SharpenNode.js";
 import { ssr } from "three/addons/tsl/display/SSRNode.js";
 import {
   color,
   convertToTexture,
+  float,
   metalness,
   mrt,
   normalView,
   output,
   pass,
   roughness,
+  screenUV,
+  smoothstep,
   vec2,
 } from "three/tsl";
 
@@ -143,6 +148,40 @@ export interface IWorldEnvironmentOptions {
    * of 255; with them off it sat at 1.4, and the frame mean halved from 97 to 46.
    */
   readonly godraysMaxDensity?: number;
+  /**
+   * Ground-truth ambient occlusion, at contact scale. Godot's `ssao_enabled`.
+   *
+   * Deliberately a *second* occlusion term next to the one SSGI already produces, not a
+   * replacement for it. SSGI's AO is gathered over `ssgiRadius` — metres, in this scene —
+   * which is the right scale for "this aisle is enclosed" and the wrong one for "this
+   * candelabra foot is standing on this floor". A gather that wide returns almost the same
+   * value for the pixel under the foot and the pixel beside it, so the contact never
+   * darkens and the prop reads as pasted onto the floor rather than resting on it. This
+   * pass runs at a radius of centimetres and multiplies on top.
+   */
+  readonly gtaoEnabled?: boolean;
+  /** Occlusion gather radius in world units. Contact scale, not room scale. */
+  readonly gtaoRadius?: number;
+  /** Exponent on the occlusion term: higher is a darker, tighter contact. */
+  readonly gtaoScale?: number;
+  /** Directions sampled per pixel. Cost is linear in this. */
+  readonly gtaoSamples?: number;
+  /** Fraction of display resolution the occlusion is traced at. */
+  readonly gtaoResolutionScale?: number;
+  /**
+   * Contrast-adaptive sharpening (RCAS) over the finished frame.
+   *
+   * Everything upstream of it blurs: the GI gather is denoised, the reflection is traced at
+   * half resolution and roughness-blurred, and the godray mask is bilateral-blurred. Each
+   * of those is worth its softness on its own and the sum of them is a frame with no
+   * micro-detail left in the stone. RCAS is contrast-adaptive, so it puts the edges back
+   * without ringing the shafts.
+   */
+  readonly sharpenEnabled?: boolean;
+  /** RCAS sharpness. **0 is maximum sharpening and 2 is none** — it is a radius, not a gain. */
+  readonly sharpenStrength?: number;
+  /** Corner darkening, as a fraction removed at the extreme corner. Zero disables it. */
+  readonly vignetteAmount?: number;
   /** Godot's `glow_enabled`. */
   readonly bloomEnabled?: boolean;
   readonly bloomStrength?: number;
@@ -214,6 +253,14 @@ export class WorldEnvironment {
       godraysSteps: options.godraysSteps ?? 60,
       godraysBlur: options.godraysBlur ?? 0,
       godraysMaxDensity: options.godraysMaxDensity ?? 0.5,
+      gtaoEnabled: options.gtaoEnabled ?? false,
+      gtaoRadius: options.gtaoRadius ?? 0.25,
+      gtaoScale: options.gtaoScale ?? 1,
+      gtaoSamples: options.gtaoSamples ?? 16,
+      gtaoResolutionScale: options.gtaoResolutionScale ?? 1,
+      sharpenEnabled: options.sharpenEnabled ?? false,
+      sharpenStrength: options.sharpenStrength ?? 0.2,
+      vignetteAmount: options.vignetteAmount ?? 0,
       bloomEnabled: options.bloomEnabled ?? true,
       bloomStrength: options.bloomStrength ?? 0.7,
       tonemapMode,
@@ -253,7 +300,8 @@ export class WorldEnvironment {
       // Everything below is a TSL node graph, and `setOutputNode` throws on any other
       // renderer. Say so once, per stage, instead of returning in silence.
       const reason = `renderer kind is '${renderer.kind}', not 'webgpu'`;
-      for (const stage of ["ssgi", "denoise", "godrays", "ssr", "bloom"]) off(stage, reason);
+      const all = ["ssgi", "denoise", "gtao", "godrays", "ssr", "bloom", "sharpen", "vignette"];
+      for (const stage of all) off(stage, reason);
       this.#report = { rendererKind: renderer.kind, stages };
       return this.#report;
     }
@@ -314,6 +362,25 @@ export class WorldEnvironment {
     } else {
       off("ssgi", "ssgiEnabled is false");
       off("denoise", "nothing to denoise with ssgi off");
+    }
+
+    // Contact occlusion, before the air. Order matters and this is the only place it can
+    // go: the godray pass adds *scattered light in the air between the camera and the
+    // surface*, and no amount of geometry at the surface occludes that. Multiplying the
+    // contact term over a frame that already has haze in it darkens the haze instead of the
+    // contact, which reads as a dirty lens rather than as a foot on a floor.
+    if (options.gtaoEnabled) {
+      const contact = ao(depth, normal, view);
+      contact.radius.value = options.gtaoRadius;
+      contact.scale.value = options.gtaoScale;
+      contact.samples.value = options.gtaoSamples;
+      contact.resolutionScale = options.gtaoResolutionScale;
+      // `RedFormat`, like SSGI's AO target: `.r` is the whole occlusion term, and
+      // multiplying by the vec4 would zero green and blue and render the nave in red.
+      lit = chain(lit.mul(chain(contact).r));
+      stages.push({ stage: "gtao", applied: true });
+    } else {
+      off("gtao", "gtaoEnabled is false");
     }
 
     if (options.godraysEnabled) {
@@ -400,6 +467,31 @@ export class WorldEnvironment {
       stages.push({ stage: "bloom", applied: true });
     } else {
       off("bloom", "bloomEnabled is false");
+    }
+
+    // Last of the image stages, because RCAS is defined on the finished picture: it looks
+    // at the contrast around a pixel and sharpens in proportion to it, so running it before
+    // bloom would sharpen edges that bloom then spreads back out.
+    if (options.sharpenEnabled) {
+      lit = chain(sharpen(convertToTexture(lit), options.sharpenStrength));
+      stages.push({ stage: "sharpen", applied: true });
+    } else {
+      off("sharpen", "sharpenEnabled is false");
+    }
+
+    // Folded into the last expression rather than given a pass of its own: it is one
+    // multiply by a function of the screen coordinate, and a full-screen pass to do a
+    // multiply would cost a render target's bandwidth to save nothing.
+    if (options.vignetteAmount > 0) {
+      // Radius measured from the centre in screen-diagonal units, so the corner is 1 and
+      // the falloff does not change shape when the window does. It starts at 0.55 — well
+      // outside the subject in a 16:9 frame — so the vignette is a corner, not a spotlight.
+      const radius = screenUV.sub(vec2(0.5, 0.5)).mul(vec2(1.78, 1)).length().mul(1.04);
+      const fall = smoothstep(float(0.55), float(1.02), radius).mul(options.vignetteAmount);
+      lit = chain(lit.mul(fall.oneMinus()));
+      stages.push({ stage: "vignette", applied: true });
+    } else {
+      off("vignette", "vignetteAmount is 0");
     }
 
     renderer.setOutputNode(lit);

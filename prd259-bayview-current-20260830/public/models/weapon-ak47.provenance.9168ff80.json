@@ -1,0 +1,44 @@
+{
+  "asset": "weapon-ak47.glb",
+  "title": "Ak47",
+  "author": "styloo",
+  "license": "CC0-1.0",
+  "source": "https://www.fab.com/listings/a718063e-8d02-4761-9b52-531d26212455",
+  "licenseEvidence": "https://styloo.itch.io/guns-asset-pack",
+  "processing": [
+    "Imported through tn asset import from the user-supplied Fab download.",
+    "Removed Root_Bone1|Unreal Take|Base Layer as an import artifact with scripts/prepare-fps-ak47.mjs.",
+    "Retained and declared the Fire and Reload clips."
+  ],
+  "inspection": {
+    "byteSize": 11751004,
+    "triangles": 15527,
+    "bounds": {
+      "min": [-5.0992875, -12.5155849, -30.9100962],
+      "max": [3.0141592, 17.2324104, 81.4221792],
+      "center": [-1.042564, 2.358413, 25.256042],
+      "size": [8.113447, 29.747995, 112.332275]
+    },
+    "namedNodes": [
+      "Armature",
+      "AK-47",
+      "neutral_bone",
+      "Root_Bone",
+      "Grip_Bone",
+      "Clip_Bone",
+      "Slide_Bone",
+      "Trigger_Bone"
+    ],
+    "animationClips": [
+      { "name": "Fire", "channels": 15 },
+      { "name": "Reload", "channels": 15 }
+    ]
+  },
+  "calibration": {
+    "realLengthMeters": 0.88,
+    "longAxis": "+Z",
+    "localLongAxisUnits": 112.332275,
+    "baseScaleMetersPerLocalUnit": 0.007834,
+    "formula": "0.88m / 112.332275 local units = 0.007834m per local unit; attachment scale divides this by the target bone's composed world scale."
+  }
+}

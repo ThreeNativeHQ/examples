@@ -1,0 +1,1161 @@
+{
+  "rows": [
+    {
+      "subject": "enemy",
+      "label": "enemy soldier (bone-accurate)",
+      "axis": "height",
+      "actual": 1.775,
+      "expected": "1.67–1.89 m",
+      "ratio": 1,
+      "status": "PASS",
+      "note": "bone-accurate head-top, not a bind-pose box"
+    },
+    {
+      "subject": "enemy-weapon",
+      "label": "enemy AK (rendered)",
+      "axis": "longest",
+      "actual": 0.88,
+      "expected": "0.77–0.99 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "player-viewmodel",
+      "label": "player viewmodel rifle",
+      "axis": "longest",
+      "actual": 0.883,
+      "expected": "0.75–1.01 m",
+      "ratio": 1,
+      "status": "PASS",
+      "note": "a viewmodel may be read slightly large, but not a different weapon"
+    },
+    {
+      "subject": "player",
+      "label": "player collider",
+      "axis": "height",
+      "actual": 1.78,
+      "expected": "1.67–1.89 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "enemy-hitbox",
+      "label": "enemy hitbox proxy",
+      "axis": "height",
+      "actual": 1.78,
+      "expected": "1.67–1.88 m (= enemy)",
+      "ratio": 1,
+      "status": "PASS",
+      "note": "must equal the rendered enemy height"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 1.8,
+      "expected": "≤ 1.8 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 1.62,
+      "expected": "≤ 1.8 m",
+      "ratio": 0.9,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 1.152,
+      "expected": "≤ 1.8 m",
+      "ratio": 0.64,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 1.584,
+      "expected": "≤ 1.8 m",
+      "ratio": 0.88,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 1.008,
+      "expected": "≤ 1.8 m",
+      "ratio": 0.56,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 1.44,
+      "expected": "≤ 1.8 m",
+      "ratio": 0.8,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 1.44,
+      "expected": "≤ 1.8 m",
+      "ratio": 0.8,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 1.44,
+      "expected": "≤ 1.8 m",
+      "ratio": 0.8,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 0.81,
+      "expected": "≤ 1.8 m",
+      "ratio": 0.45,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "height",
+      "actual": 1.548,
+      "expected": "≤ 1.8 m",
+      "ratio": 0.86,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.625,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.83,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.5,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.67,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.45,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.6,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.5,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.67,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.5,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.67,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.5,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.67,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.5,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.67,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.55,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.73,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.55,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.73,
+      "status": "PASS"
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "axis": "width",
+      "actual": 0.5,
+      "expected": "≤ 0.75 m",
+      "ratio": 0.67,
+      "status": "PASS"
+    },
+    {
+      "subject": "locker",
+      "label": "locker",
+      "axis": "height",
+      "actual": 1.85,
+      "expected": "1.57–2.13 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "locker",
+      "label": "locker",
+      "axis": "height",
+      "actual": 1.85,
+      "expected": "1.57–2.13 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "barricade",
+      "label": "barricade",
+      "axis": "depth",
+      "actual": 0.6,
+      "expected": "≤ 0.6 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "barricade",
+      "label": "barricade",
+      "axis": "depth",
+      "actual": 0.6,
+      "expected": "≤ 0.6 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "wall",
+      "label": "wall",
+      "axis": "height",
+      "actual": 5.5,
+      "expected": "4.95–6.05 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "wall",
+      "label": "wall",
+      "axis": "height",
+      "actual": 5.5,
+      "expected": "4.95–6.05 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "wall",
+      "label": "wall",
+      "axis": "height",
+      "actual": 5.5,
+      "expected": "4.95–6.05 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "wall",
+      "label": "wall",
+      "axis": "height",
+      "actual": 5.5,
+      "expected": "4.95–6.05 m",
+      "ratio": 1,
+      "status": "PASS"
+    },
+    {
+      "subject": "muzzle-flash",
+      "label": "muzzle flash quad",
+      "axis": "longest",
+      "actual": 0.3,
+      "expected": "≤ 0.3 m",
+      "ratio": 1,
+      "status": "PASS"
+    }
+  ],
+  "subjects": [
+    {
+      "subject": "enemy",
+      "label": "enemy soldier (bone-accurate)",
+      "height": 1.775,
+      "longest": 1.775,
+      "width": null,
+      "depth": null,
+      "groundClearance": null
+    },
+    {
+      "subject": "enemy-hitbox",
+      "label": "enemy hitbox proxy",
+      "width": 0.747,
+      "height": 1.78,
+      "depth": 0.634,
+      "longest": 1.78,
+      "minY": -0.025
+    },
+    {
+      "subject": "enemy-weapon",
+      "label": "enemy AK (rendered)",
+      "width": 0.686,
+      "height": 0.623,
+      "depth": 0.88,
+      "longest": 0.88,
+      "minY": 0.804
+    },
+    {
+      "subject": "player",
+      "label": "player collider",
+      "width": 0.5,
+      "height": 1.78,
+      "depth": 0.5,
+      "longest": 1.78,
+      "minY": 0.01
+    },
+    {
+      "subject": "player-viewmodel",
+      "label": "player viewmodel rifle",
+      "width": 0.373,
+      "height": 0.249,
+      "depth": 0.883,
+      "longest": 0.883,
+      "minY": 1.223
+    },
+    {
+      "subject": "deck",
+      "label": "deck",
+      "width": 34,
+      "height": 0,
+      "depth": 34,
+      "longest": 34,
+      "minY": 0
+    },
+    {
+      "subject": "lane-paint",
+      "label": "lane-paint",
+      "width": 0.22,
+      "height": 0,
+      "depth": 32.4,
+      "longest": 32.4,
+      "minY": 0.012
+    },
+    {
+      "subject": "lane-paint",
+      "label": "lane-paint",
+      "width": 0.22,
+      "height": 0,
+      "depth": 32.4,
+      "longest": 32.4,
+      "minY": 0.012
+    },
+    {
+      "subject": "lane-paint",
+      "label": "lane-paint",
+      "width": 0.22,
+      "height": 0,
+      "depth": 32.4,
+      "longest": 32.4,
+      "minY": 0.012
+    },
+    {
+      "subject": "lane-paint",
+      "label": "lane-paint",
+      "width": 0.22,
+      "height": 0,
+      "depth": 32.4,
+      "longest": 32.4,
+      "minY": 0.012
+    },
+    {
+      "subject": "firing-line",
+      "label": "firing-line",
+      "width": 32.4,
+      "height": 0,
+      "depth": 0.13,
+      "longest": 32.4,
+      "minY": 0.014
+    },
+    {
+      "subject": "wall",
+      "label": "wall",
+      "width": 35.2,
+      "height": 5.5,
+      "depth": 0.6,
+      "longest": 35.2,
+      "minY": 0
+    },
+    {
+      "subject": "wall",
+      "label": "wall",
+      "width": 35.2,
+      "height": 5.5,
+      "depth": 0.6,
+      "longest": 35.2,
+      "minY": 0
+    },
+    {
+      "subject": "wall",
+      "label": "wall",
+      "width": 0.6,
+      "height": 5.5,
+      "depth": 35.2,
+      "longest": 35.2,
+      "minY": 0
+    },
+    {
+      "subject": "wall",
+      "label": "wall",
+      "width": 0.6,
+      "height": 5.5,
+      "depth": 35.2,
+      "longest": 35.2,
+      "minY": 0
+    },
+    {
+      "subject": "drum",
+      "label": "drum",
+      "width": 7.396,
+      "height": 1.55,
+      "depth": 6.997,
+      "longest": 7.396,
+      "minY": 0.01
+    },
+    {
+      "subject": "barricade",
+      "label": "barricade",
+      "width": 4.15,
+      "height": 1.495,
+      "depth": 0.6,
+      "longest": 4.15,
+      "minY": 0
+    },
+    {
+      "subject": "barricade",
+      "label": "barricade",
+      "width": 4.4,
+      "height": 1.104,
+      "depth": 0.6,
+      "longest": 4.4,
+      "minY": 0
+    },
+    {
+      "subject": "locker",
+      "label": "locker",
+      "width": 0.9,
+      "height": 1.85,
+      "depth": 0.5,
+      "longest": 1.85,
+      "minY": 0
+    },
+    {
+      "subject": "locker",
+      "label": "locker",
+      "width": 0.9,
+      "height": 1.85,
+      "depth": 0.5,
+      "longest": 1.85,
+      "minY": 0
+    },
+    {
+      "subject": "walkway-deck",
+      "label": "walkway-deck",
+      "width": 9.4,
+      "height": 0.36,
+      "depth": 5.6,
+      "longest": 9.4,
+      "minY": 3.32
+    },
+    {
+      "subject": "walkway-column",
+      "label": "walkway-column",
+      "width": 1,
+      "height": 3.5,
+      "depth": 1,
+      "longest": 3.5,
+      "minY": 0
+    },
+    {
+      "subject": "walkway-column",
+      "label": "walkway-column",
+      "width": 1,
+      "height": 3.5,
+      "depth": 1,
+      "longest": 3.5,
+      "minY": 0
+    },
+    {
+      "subject": "walkway-column",
+      "label": "walkway-column",
+      "width": 1,
+      "height": 3.5,
+      "depth": 1,
+      "longest": 3.5,
+      "minY": 0
+    },
+    {
+      "subject": "walkway-column",
+      "label": "walkway-column",
+      "width": 1,
+      "height": 3.5,
+      "depth": 1,
+      "longest": 3.5,
+      "minY": 0
+    },
+    {
+      "subject": "walkway-rail",
+      "label": "walkway-rail",
+      "width": 9.6,
+      "height": 0.12,
+      "depth": 0.14,
+      "longest": 9.6,
+      "minY": 4.49
+    },
+    {
+      "subject": "ramp",
+      "label": "ramp",
+      "width": 2.6,
+      "height": 3.559,
+      "depth": 6.758,
+      "longest": 6.758,
+      "minY": -0.088
+    },
+    {
+      "subject": "block",
+      "label": "block",
+      "width": 4.2,
+      "height": 3.2,
+      "depth": 4.2,
+      "longest": 4.2,
+      "minY": 0
+    },
+    {
+      "subject": "block",
+      "label": "block",
+      "width": 2.4,
+      "height": 2.4,
+      "depth": 2.4,
+      "longest": 2.4,
+      "minY": 0
+    },
+    {
+      "subject": "block",
+      "label": "block",
+      "width": 2,
+      "height": 1.6,
+      "depth": 2,
+      "longest": 2,
+      "minY": 0
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.725,
+      "height": 1.9,
+      "depth": 0,
+      "longest": 1.9,
+      "minY": 1.73
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.625,
+      "height": 1.8,
+      "depth": 0,
+      "longest": 1.8,
+      "minY": 1.78
+    },
+    {
+      "subject": "target-support",
+      "label": "target-support",
+      "width": 0.07,
+      "height": 1.78,
+      "depth": 0.07,
+      "longest": 1.78,
+      "minY": 0
+    },
+    {
+      "subject": "target-support",
+      "label": "target-support",
+      "width": 0.07,
+      "height": 1.78,
+      "depth": 0.07,
+      "longest": 1.78,
+      "minY": 0
+    },
+    {
+      "subject": "target-mount-brace",
+      "label": "target-mount-brace",
+      "width": 0.705,
+      "height": 0.06,
+      "depth": 0.1,
+      "longest": 0.705,
+      "minY": 1.72
+    },
+    {
+      "subject": "target-mount-foot",
+      "label": "target-mount-foot",
+      "width": 0.985,
+      "height": 0.08,
+      "depth": 0.36,
+      "longest": 0.985,
+      "minY": 0
+    },
+    {
+      "subject": "target-mount",
+      "label": "target-mount",
+      "width": 0.745,
+      "height": 0.05,
+      "depth": 0.08,
+      "longest": 0.745,
+      "minY": 2.63
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.6,
+      "height": 1.72,
+      "depth": 0,
+      "longest": 1.72,
+      "minY": 1.09
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.5,
+      "height": 1.62,
+      "depth": 0,
+      "longest": 1.62,
+      "minY": 1.14
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 1.14,
+      "depth": 0.05,
+      "longest": 1.14,
+      "minY": 0
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 1.14,
+      "depth": 0.05,
+      "longest": 1.14,
+      "minY": 0
+    },
+    {
+      "subject": "target-brace",
+      "label": "target-brace",
+      "width": 0.56,
+      "height": 0.05,
+      "depth": 0.05,
+      "longest": 0.56,
+      "minY": 1.085
+    },
+    {
+      "subject": "target-foot",
+      "label": "target-foot",
+      "width": 0.8,
+      "height": 0.06,
+      "depth": 0.4,
+      "longest": 0.8,
+      "minY": 0
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.55,
+      "height": 1.252,
+      "depth": 0,
+      "longest": 1.252,
+      "minY": 3.024
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.45,
+      "height": 1.152,
+      "depth": 0,
+      "longest": 1.152,
+      "minY": 3.074
+    },
+    {
+      "subject": "target-support",
+      "label": "target-support",
+      "width": 0.07,
+      "height": 3.074,
+      "depth": 0.07,
+      "longest": 3.074,
+      "minY": 0
+    },
+    {
+      "subject": "target-support",
+      "label": "target-support",
+      "width": 0.07,
+      "height": 3.074,
+      "depth": 0.07,
+      "longest": 3.074,
+      "minY": 0
+    },
+    {
+      "subject": "target-mount-brace",
+      "label": "target-mount-brace",
+      "width": 0.53,
+      "height": 0.06,
+      "depth": 0.1,
+      "longest": 0.53,
+      "minY": 3.014
+    },
+    {
+      "subject": "target-mount-foot",
+      "label": "target-mount-foot",
+      "width": 0.81,
+      "height": 0.08,
+      "depth": 0.36,
+      "longest": 0.81,
+      "minY": 0
+    },
+    {
+      "subject": "target-mount",
+      "label": "target-mount",
+      "width": 0.57,
+      "height": 0.05,
+      "depth": 0.08,
+      "longest": 0.57,
+      "minY": 3.6
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.6,
+      "height": 1.684,
+      "depth": 0,
+      "longest": 1.684,
+      "minY": 3.758
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.5,
+      "height": 1.584,
+      "depth": 0,
+      "longest": 1.584,
+      "minY": 3.808
+    },
+    {
+      "subject": "target-support",
+      "label": "target-support",
+      "width": 0.07,
+      "height": 0.128,
+      "depth": 0.07,
+      "longest": 0.128,
+      "minY": 3.68
+    },
+    {
+      "subject": "target-support",
+      "label": "target-support",
+      "width": 0.07,
+      "height": 0.128,
+      "depth": 0.07,
+      "longest": 0.128,
+      "minY": 3.68
+    },
+    {
+      "subject": "target-mount-brace",
+      "label": "target-mount-brace",
+      "width": 0.58,
+      "height": 0.06,
+      "depth": 0.1,
+      "longest": 0.58,
+      "minY": 3.748
+    },
+    {
+      "subject": "target-rail-bracket",
+      "label": "target-rail-bracket",
+      "width": 0.64,
+      "height": 0.06,
+      "depth": 0.22,
+      "longest": 0.64,
+      "minY": 4.52
+    },
+    {
+      "subject": "target-mount",
+      "label": "target-mount",
+      "width": 0.62,
+      "height": 0.05,
+      "depth": 0.08,
+      "longest": 0.62,
+      "minY": 4.55
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.6,
+      "height": 1.108,
+      "depth": 0,
+      "longest": 1.108,
+      "minY": 0.296
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.5,
+      "height": 1.008,
+      "depth": 0,
+      "longest": 1.008,
+      "minY": 0.346
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.346,
+      "depth": 0.05,
+      "longest": 0.346,
+      "minY": 0
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.346,
+      "depth": 0.05,
+      "longest": 0.346,
+      "minY": 0
+    },
+    {
+      "subject": "target-brace",
+      "label": "target-brace",
+      "width": 0.56,
+      "height": 0.05,
+      "depth": 0.05,
+      "longest": 0.56,
+      "minY": 0.291
+    },
+    {
+      "subject": "target-foot",
+      "label": "target-foot",
+      "width": 0.8,
+      "height": 0.06,
+      "depth": 0.4,
+      "longest": 0.8,
+      "minY": 0
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.6,
+      "height": 1.54,
+      "depth": 0,
+      "longest": 1.54,
+      "minY": 0.43
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.5,
+      "height": 1.44,
+      "depth": 0,
+      "longest": 1.44,
+      "minY": 0.48
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.48,
+      "depth": 0.05,
+      "longest": 0.48,
+      "minY": 0
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.48,
+      "depth": 0.05,
+      "longest": 0.48,
+      "minY": 0
+    },
+    {
+      "subject": "target-brace",
+      "label": "target-brace",
+      "width": 0.56,
+      "height": 0.05,
+      "depth": 0.05,
+      "longest": 0.56,
+      "minY": 0.425
+    },
+    {
+      "subject": "target-foot",
+      "label": "target-foot",
+      "width": 0.8,
+      "height": 0.06,
+      "depth": 0.4,
+      "longest": 0.8,
+      "minY": 0
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.6,
+      "height": 1.54,
+      "depth": 0,
+      "longest": 1.54,
+      "minY": 0.43
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.5,
+      "height": 1.44,
+      "depth": 0,
+      "longest": 1.44,
+      "minY": 0.48
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.48,
+      "depth": 0.05,
+      "longest": 0.48,
+      "minY": 0
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.48,
+      "depth": 0.05,
+      "longest": 0.48,
+      "minY": 0
+    },
+    {
+      "subject": "target-brace",
+      "label": "target-brace",
+      "width": 0.56,
+      "height": 0.05,
+      "depth": 0.05,
+      "longest": 0.56,
+      "minY": 0.425
+    },
+    {
+      "subject": "target-foot",
+      "label": "target-foot",
+      "width": 0.8,
+      "height": 0.06,
+      "depth": 0.4,
+      "longest": 0.8,
+      "minY": 0
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.65,
+      "height": 1.54,
+      "depth": 0,
+      "longest": 1.54,
+      "minY": 0.43
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.55,
+      "height": 1.44,
+      "depth": 0,
+      "longest": 1.44,
+      "minY": 0.48
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.48,
+      "depth": 0.05,
+      "longest": 0.48,
+      "minY": 0
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.48,
+      "depth": 0.05,
+      "longest": 0.48,
+      "minY": 0
+    },
+    {
+      "subject": "target-brace",
+      "label": "target-brace",
+      "width": 0.61,
+      "height": 0.05,
+      "depth": 0.05,
+      "longest": 0.61,
+      "minY": 0.425
+    },
+    {
+      "subject": "target-foot",
+      "label": "target-foot",
+      "width": 0.85,
+      "height": 0.06,
+      "depth": 0.4,
+      "longest": 0.85,
+      "minY": 0
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.65,
+      "height": 0.91,
+      "depth": 0,
+      "longest": 0.91,
+      "minY": 0.245
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.55,
+      "height": 0.81,
+      "depth": 0,
+      "longest": 0.81,
+      "minY": 0.295
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.295,
+      "depth": 0.05,
+      "longest": 0.295,
+      "minY": 0
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.295,
+      "depth": 0.05,
+      "longest": 0.295,
+      "minY": 0
+    },
+    {
+      "subject": "target-brace",
+      "label": "target-brace",
+      "width": 0.61,
+      "height": 0.05,
+      "depth": 0.05,
+      "longest": 0.61,
+      "minY": 0.24
+    },
+    {
+      "subject": "target-foot",
+      "label": "target-foot",
+      "width": 0.85,
+      "height": 0.06,
+      "depth": 0.4,
+      "longest": 0.85,
+      "minY": 0
+    },
+    {
+      "subject": "target-frame",
+      "label": "target-frame",
+      "width": 0.6,
+      "height": 1.648,
+      "depth": 0,
+      "longest": 1.648,
+      "minY": 0.376
+    },
+    {
+      "subject": "target-plate",
+      "label": "target plate",
+      "width": 0.5,
+      "height": 1.548,
+      "depth": 0,
+      "longest": 1.548,
+      "minY": 0.426
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.426,
+      "depth": 0.05,
+      "longest": 0.426,
+      "minY": 0
+    },
+    {
+      "subject": "target-post",
+      "label": "target-post",
+      "width": 0.05,
+      "height": 0.426,
+      "depth": 0.05,
+      "longest": 0.426,
+      "minY": 0
+    },
+    {
+      "subject": "target-brace",
+      "label": "target-brace",
+      "width": 0.56,
+      "height": 0.05,
+      "depth": 0.05,
+      "longest": 0.56,
+      "minY": 0.371
+    },
+    {
+      "subject": "target-foot",
+      "label": "target-foot",
+      "width": 0.8,
+      "height": 0.06,
+      "depth": 0.4,
+      "longest": 0.8,
+      "minY": 0
+    },
+    {
+      "subject": "muzzle-flash",
+      "label": "muzzle flash quad",
+      "width": 0.3,
+      "height": 0.3,
+      "depth": 0,
+      "longest": 0.3
+    }
+  ],
+  "pageErrors": []
+}

@@ -13,7 +13,7 @@ type OutputRenderer = {
 };
 
 /**
- * `?off=ssgi,ssr,godrays,bloom` disables named stages on the same build.
+ * `?off=ssgi,ssr,godrays,bloom,gtao,sharpen,vignette` disables named stages on the same build.
  *
  * Two uses, and the second is the one that pays for it. An A/B of the look needs the two
  * captures to differ by one stage and nothing else. An attribution of the frame cost needs
@@ -74,6 +74,29 @@ export function setupPost(
     // Kept at 8 for the tighter contact darkening.
     ssgiRadius: 8,
     denoiseEnabled: !stageOff("denoise"),
+    // The contact term. `ssgiRadius` is 8 m and cannot do this job at the same time:
+    // measured on the sanctuary vantage, the pixel under a candelabra foot and the pixel
+    // 30 cm beside it come back from that gather within a percent of each other, so the
+    // foot never darkens the floor it stands on.
+    gtaoEnabled: !stageOff("gtao"),
+    // 0.35 m. A cathedral's contacts are a foot on a floor, a plinth against a pier and the
+    // seat of a moulding — all of them centimetres, none of them metres.
+    gtaoRadius: 0.35,
+    // 1.0 — no exponent. At 1.4 the term stopped being a contact shadow: measured against
+    // the same build with `?off=gtao`, the open marble in the middle of the nave, which no
+    // geometry occludes, came back 4.6% darker and the frame mean fell from 55.6 to 53.0.
+    // An exponent on a value that is 0.9 rather than 1.0 across the whole open floor is a
+    // whole-frame multiply wearing a contact shadow's name.
+    gtaoScale: 1,
+    // 8, not the node's 16. Halves the work in the pass, and the loss lands as noise on a
+    // term the frame's existing stochastic grain already hides. Not swept against 16 for
+    // quality — at half resolution over a 0.35 m radius the occlusion is low-frequency
+    // enough that the sample count is a cost dial rather than a look one.
+    gtaoSamples: 8,
+    // Half resolution. Contact occlusion is a low-frequency signal over a 0.35 m radius —
+    // at 1280x720 that radius is tens of pixels near the camera and under one in the far
+    // aisle, and neither end needs a full-resolution trace.
+    gtaoResolutionScale: 0.5,
     // The shafts. Density is the air in the building; too high and the nave is a fog box,
     // too low and the clerestory openings stop reading as separate windows.
     godraysEnabled: !stageOff("godrays"),
@@ -94,16 +117,49 @@ export function setupPost(
     // 1.1 shipped by mistake against this own note: past ~0.8 the haze stops being
     // confined to the shafts and the whole nave fogs — the "blurred frame" a reviewer
     // flagged. 0.7 is the measured band.
+    // 0.7, unchanged, after two attempts to raise it were measured and reverted.
+    //
+    // `maxDensity` was tried first, as the dial its own docblock calls the strongest control
+    // over beam brightness: raising the clamp from 0.6 to 1.0 moved the vault vantage by 0.00
+    // on every quantile, because at this density the accumulation never reaches 0.6 to be
+    // clamped by it. Density itself was tried next, at 1.1, and does raise the beams — the
+    // vault vantage's p90 went 46 to 88 — but it raises the air between them by the same
+    // proportion, so the nave vantage's median went 43 to 66 with it. Raising the floor to
+    // 0.13 to catch that put every quantile back within a point of where 0.7 and 0.08 leave
+    // them, on both vantages. Density and floor are one degree of freedom here, not two:
+    // subtracting a constant after a multiply cannot make a beam brighter *relative to* the
+    // room it is crossing.
     godraysDensity: 0.7,
     // 0.05: the fill lever the reference's ambience actually runs on. The floor discards
     // the pass's low-level scatter; at 0.09 the air between the beams was fully discarded
     // and the lower midtones sat 12 points under the reference (p25 11 vs 23) while SSGI
     // could not fill them at any intensity. The hemisphere light supplies the fill; the
     // floor stays at 0.05 so the long view rays down the nave keep their scatter.
-    godraysFloor: 0.05,
-    // 2.0: at 2.4 the beam-side band sat at p75 116 against the reference's 75 — the
-    // shafts read, but the lit air between them glowed hotter than the stone.
-    godraysIntensity: 2.0,
+    // 0.10, raised from 0.05, and only affordable because the fill under it changed.
+    //
+    // The note this replaces was right when it was written: at 0.09 the air between the
+    // beams was discarded and the lower midtones sat at p25 11 against the reference's 23,
+    // because the hemisphere light was the only thing filling shadow and it could not reach
+    // that far. It is no longer the only thing. With the room environment carrying the fill,
+    // the same frame with godrays entirely off measures p25 16.0 — above where the old floor
+    // left it *with* the haze — so the scatter is no longer load-bearing for the dark end.
+    //
+    // What it was still doing was lifting the middle. Measured on the same build by
+    // ablation: `?off=godrays` moved the frame's median from 53.6 to 31.3 of 255. A shaft
+    // renderer that moves the *median* of the picture by 22 points is not drawing shafts,
+    // it is fogging the room — the reference's median is 41.8, and its haze is visibly
+    // confined to the beams. Raising the floor discards the low-level scatter and keeps the
+    // in-beam values, which is exactly what this dial is for.
+    godraysFloor: 0.08,
+    // 3.0. The old note against this dial — "at 2.4 the beam-side band sat at p75 116
+    // against the reference's 75" — was measured with the floor at 0.05, where raising the
+    // intensity scaled the veil and the beams together and the air between the shafts went
+    // up with them. The floor is what separates the two: it subtracts before this multiplies,
+    // so with it at 0.08 the only thing left to scale is what is genuinely inside a beam.
+    // The pair is what the frame needed. At floor 0.08 and intensity 2.0 the shafts had
+    // gone: the frame's brightest hundredth measured 181 of 255 where the reference clips at
+    // 205-209, which is a cathedral with no light coming into it.
+    godraysIntensity: 3.0,
     // Back up from 24. That cut was made to buy frame time before MSAA was found to be
     // costing 55% of the GPU; with that recovered there is budget for a smooth march, and
     // 24 steps left visible slabs across the vault webs where each step boundary landed.
@@ -114,6 +170,11 @@ export function setupPost(
     // Low, because this number is what was washing the building out. The pass adds haze
     // to every pixel rather than only to the beams, so at 0.55 the darkest tenth of the
     // frame never went below 22% luminance and nothing in the nave read as shadow.
+    // 0.6, unchanged: raising it to 1.0 was measured a clean no-op on this scene, because
+    // at density 0.7 the accumulated illumination never reaches the old clamp. The warning
+    // in this dial's docblock — that it is the strongest control over whole-frame brightness
+    // — holds only while nothing subtracts the out-of-beam scatter, which `godraysFloor`
+    // now does.
     godraysMaxDensity: 0.6,
     // The floor is polished stone, so the columns and the glass stand in it.
     ssrEnabled: !stageOff("ssr"),
@@ -130,6 +191,15 @@ export function setupPost(
     // Bloom spreads the glass over everything near it. Enough to bloom the windows, not
     // enough to raise the floor of the whole frame.
     bloomStrength: 0.18,
+    // Micro-detail, put back. Four stages upstream of here blur on purpose — the GI
+    // denoise, the half-resolution reflection, the roughness blur on it and the bilateral
+    // blur on the shaft mask — and the stone came out of the sum with no grain in it.
+    sharpenEnabled: !stageOff("sharpen"),
+    // Remember the direction: 0 is maximum sharpening and 2 is none.
+    sharpenStrength: 0.85,
+    // A corner, not a mood. Enough to stop the eye leaving the frame at the top corners,
+    // where the nave is already dark and there is nothing to look at.
+    vignetteAmount: stageOff("vignette") ? 0 : 0.11,
     tonemapMode: "agx",
     // The single biggest lever on "too bright". A cathedral interior at a low sun is a
     // high-dynamic-range subject: the shafts are meant to clip and everything the shafts

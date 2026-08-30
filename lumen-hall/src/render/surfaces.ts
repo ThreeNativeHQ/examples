@@ -48,13 +48,17 @@ import {
 } from "three";
 import {
   bumpMap,
+  cameraViewMatrix,
+  clamp,
   float,
   frontFacing,
   mix,
+  mx_fractal_noise_float,
   normalWorld,
   positionWorld,
   smoothstep,
   texture as textureNode,
+  transformDirection,
   triplanarTexture,
   uv,
   vec2,
@@ -73,10 +77,21 @@ export const SURFACE_SOURCES = {
   glassRose: "cathedral-glass-rose.png",
   glassWarm: "cathedral-glass-clerestory-warm.png",
   limestone: "cathedral-limestone.png",
-  limestoneRelief: "cathedral-limestone-relief.png",
+  limestoneRelief: "cathedral-limestone-normal.png",
   vaultstone: "cathedral-vaultstone.png",
-  vaultstoneRelief: "cathedral-vaultstone-relief.png",
+  vaultstoneRelief: "cathedral-vaultstone-normal.png",
 } as const;
+
+// Each `*-normal.png` is four channels of one map: `rg` is a tangent-space normal with z
+// reconstructed rather than stored, `b` is cavity — 1 on an open face, dark in a mortar bed
+// — and `a` is the greyscale relief that has always driven roughness, carried across
+// unchanged. One map, three triplanar samples: exactly what the greyscale relief map on its
+// own used to cost, so a real normal and a cavity arrive for no extra fetch.
+//
+// The `-normal` suffix is load bearing rather than descriptive. The asset pipeline matches
+// it and switches that file from ETC1S to UASTC, which is the only codec in this project
+// that keeps four channels independent of each other; ETC1S is a luma-plus-palette codec
+// and would hand back a normal map that is an approximation of its own average colour.
 
 type SurfaceName = keyof typeof SURFACE_SOURCES;
 export type ISurfaceTextures = Record<SurfaceName, Texture>;
@@ -137,13 +152,35 @@ const FLOOR_MAX_ROUGHNESS = 0.3;
 const FLOOR_GROUT_ROUGHNESS = 0.55;
 
 /**
+ * Metalness at or below which a material is polished stone rather than metal.
+ *
+ * `cathedral.ts` gives its two marbles a token 0.1 for the sheen; its ironwork carries 0.7.
+ * Anything between is not a case this building has, so the threshold only has to separate
+ * those two and leave room for a marble that gains a little more sheen later.
+ */
+const POLISHED_MAX_METALNESS = 0.15;
+
+/**
  * One stone, as this file needs it: two maps, the size the source was photographed at,
- * and how hard to push its relief into the surface normal.
+ * how hard to push its relief into the surface normal, and the mean its cavity channel
+ * was measured at.
  */
 interface IStone {
   albedo: Texture;
-  bump: number;
-  relief: Texture;
+  /**
+   * Albedo-weighted mean of the packed map's cavity channel, straight off the generator.
+   *
+   * Cavity multiplies the colour, so without dividing by this the pass is a dimmer switch
+   * on the whole building — nine per cent of it, which is more than the difference between
+   * two of the exposure values this project has argued about. Weighted by the albedo and
+   * not a plain mean, because the shader multiplies the two together and it is the product
+   * whose average has to come out unchanged.
+   */
+  cavityMean: number;
+  /** Multiplier on the map's tangent-space x and y before z is rebuilt from them. */
+  normalScale: number;
+  /** `rg` normal, `b` cavity, `a` recess. See the note on `SURFACE_SOURCES`. */
+  packed: Texture;
   tileMetres: number;
 }
 
@@ -175,6 +212,27 @@ const ROUGH_RECESSED = 0.97;
 /** How dark the base of a wall gets, and how far up the staining reaches. */
 const GRIME_FLOOR = 0.55;
 const GRIME_TOP = 4.5;
+
+/**
+ * The wavelength and depth of the low-frequency variation laid over every stone surface.
+ *
+ * A 3 m tile repeated across a 92 m building repeats thirty times, and the eye finds that
+ * long before it finds any individual block. This is the standard answer: a second signal
+ * an order of magnitude larger than the tile, multiplied over the albedo, so no two bays
+ * average the same value even though they sample the same texels.
+ *
+ * It is procedural rather than a macro texture on purpose — a texture would be a fourth
+ * map and a fourth triplanar sample for a signal that is three octaves of noise. The
+ * noise is mean-zero, so `1 + amount * noise` averages exactly one and the calibration
+ * every other constant in this file was tuned against survives untouched.
+ *
+ * 22 m, not 13: at 13 m the variation landed inside a single bay and read as dirt on one
+ * pier rather than as one bay being a different quarry batch from the next.
+ */
+const MACRO_METRES = 22;
+const MACRO_AMOUNT = 0.22;
+/** How much of that same variation reaches roughness. Damp patches are duller patches. */
+const MACRO_ROUGHNESS = 0.05;
 
 /**
  * Linear luminance below which a stone material is the dark stone rather than the pale one.
@@ -265,6 +323,24 @@ export function applySurfaces(cathedral: Group, textures?: ISurfaceTextures): Gr
         floor.add(material);
         return;
       }
+      // Polished stone that never received a map: the chancel steps and platform, which
+      // `cathedral.ts` builds out of `marbleBand` at roughness 0.2 and metalness 0.1. The
+      // guard below reads that 0.1 as "this is ironwork, leave it alone" and skips it, so
+      // it stayed a smooth, unmapped slab. That was invisible while the sanctuary was dark
+      // and became the loudest thing in the altar vantage the moment `lighting.ts` put a
+      // room environment behind it: a surface at roughness 0.2 with an environment to
+      // reflect returns the clerestory band whatever its albedo says, so a near-black step
+      // rendered as a flat white plane.
+      //
+      // Dressed as stone rather than as floor, because it *is* stone — steps in a chancel,
+      // not a mirror — and `dressStone`'s roughness runs 0.74 to 0.97 off the relief, which
+      // is what stops the reflection.
+      if (material.metalness > 0 && material.metalness <= POLISHED_MAX_METALNESS) {
+        if (material.roughness <= FLOOR_MAX_ROUGHNESS && material.map === null) {
+          dark.add(material);
+          return;
+        }
+      }
       if (material.metalness !== 0) return;
       if (luminance(material.color) < SHADOW_STONE_MAX_LUMINANCE) dark.add(material);
       else pale.add(material);
@@ -274,19 +350,23 @@ export function applySurfaces(cathedral: Group, textures?: ISurfaceTextures): Gr
     if (material instanceof MeshBasicMaterial && !material.toneMapped) glass.push(object);
   });
 
+  // The two `cavityMean` numbers are the generator's own measurements of the maps in
+  // `assets/`, not estimates. Rebake a stone and this number moves with it.
   const limestone: IStone = {
     albedo: maps.limestone,
-    // 0.25: at 0.45 the bump's screen-space derivative rendered the relief's regular
-    // course pattern as a honeycomb weave on every mid-distance wall — texture noise
-    // reading as knitted fabric. The relief still catches raking light at this value.
-    bump: 0.25,
-    relief: maps.limestoneRelief,
+    cavityMean: 0.9085,
+    normalScale: 1,
+    packed: maps.limestoneRelief,
     tileMetres: 3,
   };
   const vaultstone: IStone = {
     albedo: maps.vaultstone,
-    bump: 0.18,
-    relief: maps.vaultstoneRelief,
+    cavityMean: 0.9161,
+    // 0.8 rather than 1: the vault stone's albedo is the contrastier of the two
+    // photographs, so the same bake gave it a mean slope of 13.1 degrees against the
+    // limestone's 11.7 for relief that is physically shallower, not deeper.
+    normalScale: 0.8,
+    packed: maps.vaultstoneRelief,
     tileMetres: 2,
   };
   for (const material of pale) dressStone(material, limestone);
@@ -299,19 +379,25 @@ export function applySurfaces(cathedral: Group, textures?: ISurfaceTextures): Gr
 /** Triplanar albedo and relief, plus the dirt that collects where a wall meets a floor. */
 function dressStone(material: MeshStandardMaterial, stone: IStone): void {
   prepare(stone.albedo, SRGBColorSpace, 8);
-  // Relief is data, not colour. Read through an sRGB transfer the joints come back far
-  // too shallow and every pier in the building turns into polished granite.
-  prepare(stone.relief, NoColorSpace, 4);
+  // The packed map is data, not colour. Read through an sRGB transfer the joints come back
+  // far too shallow and every pier in the building turns into polished granite; a normal
+  // read that way is worse still, because the transfer is applied to x and y and not to the
+  // z they are reconstructed against, so the vectors stop being unit length.
+  prepare(stone.packed, NoColorSpace, 4);
 
   const scale = float(1 / stone.tileMetres);
   const project = (map: Texture) =>
     triplanarTexture(textureNode(map), null, null, scale, positionWorld, normalWorld);
 
   const albedoNode = project(stone.albedo);
-  const reliefNode = project(stone.relief).r;
+  const packed = projectPacked(stone);
+  const reliefNode = packed.recess;
   // The material's own colour still decides how light this stone is; the map only says
   // how it varies. Dividing by the map's measured mean is what keeps those jobs apart.
   const tint = material.color.clone().multiplyScalar(1 / ALBEDO_MEAN);
+  // Three octaves from 22 m down to 5.5 m, mean zero. Sampled in world space like
+  // everything else here, so it crosses the joins between merged pieces without a seam.
+  const macro = mx_fractal_noise_float(positionWorld.mul(float(1 / MACRO_METRES)), 3, 2, 0.5);
   // Weathering, not a gradient: the darkening at the foot of a wall is modulated by the
   // stone's own pattern, so it follows the courses instead of drawing a clean horizon.
   const staining = mix(
@@ -320,7 +406,13 @@ function dressStone(material: MeshStandardMaterial, stone: IStone): void {
     smoothstep(float(0.2), float(GRIME_TOP), positionWorld.y),
   );
 
-  let colour = albedoNode.rgb.mul(vec3(tint.r, tint.g, tint.b)).mul(staining);
+  let colour = albedoNode.rgb
+    .mul(vec3(tint.r, tint.g, tint.b))
+    .mul(staining)
+    .mul(surfaceOff("macro") ? float(1) : float(1).add(macro.mul(float(MACRO_AMOUNT))))
+    // Cavity. Divided by the mean it was measured at, so the mortar beds go down and
+    // nothing else moves — the same bargain every other map in this file strikes.
+    .mul(surfaceOff("cavity") ? float(1) : packed.cavity.div(float(stone.cavityMean)));
   // The carved shell is one merged material tinted per vertex — plinth dark, capital
   // bright. Replacing `colorNode` drops that attribute unless it is multiplied back in,
   // and the building flattens into one value the moment it is forgotten.
@@ -328,11 +420,74 @@ function dressStone(material: MeshStandardMaterial, stone: IStone): void {
 
   const nodes = material as unknown as INodeMaterial;
   nodes.colorNode = colour;
-  nodes.roughnessNode = mix(float(ROUGH_RECESSED), float(ROUGH_PROUD), reliefNode);
-  // The joints have to catch the light, not just be a darker colour. `bumpMap` takes the
-  // screen-space derivative of the relief, so it works off the triplanar sample without a
-  // tangent frame — which the merged shell does not have a usable one of anyway.
-  nodes.normalNode = bumpMap(reliefNode, float(stone.bump));
+  const roughness = mix(float(ROUGH_RECESSED), float(ROUGH_PROUD), reliefNode);
+  nodes.roughnessNode = surfaceOff("macro")
+    ? roughness
+    : clamp(roughness.add(macro.mul(float(MACRO_ROUGHNESS))), float(0), float(1));
+  // A real normal, blended across the same three projections the albedo uses.
+  //
+  // What this replaces was `bumpMap(relief, 0.25)`, and the value was 0.25 rather than the
+  // 0.45 it wanted because `bumpMap` differences the height in *screen* space: the strength
+  // of the effect therefore depended on how far away the wall was, and at any usable value
+  // the regular course pattern turned into a honeycomb weave across every mid-distance
+  // wall — texture noise reading as knitted fabric. A sampled normal has no such
+  // dependence. It is mip-filtered like any other texture, so it flattens toward the
+  // geometric normal with distance instead of aliasing into a pattern, which is why the
+  // relief can now be authored at its real depth and still be quiet at the far end of the
+  // nave.
+  nodes.normalNode = surfaceOff("stonenormal")
+    ? bumpMap(reliefNode, float(0.25))
+    : transformDirection(packed.normal, cameraViewMatrix);
+}
+
+/**
+ * Samples one packed map on all three world planes and returns what each channel meant.
+ *
+ * Three samples, hand-written rather than three calls to `triplanarTexture`, because a
+ * normal cannot be blended the way a colour can: the three projections disagree about
+ * which way is up, and averaging their raw vectors flattens the relief toward nothing on
+ * every surface that is not axis-aligned. The plane assignments and the blend weights are
+ * copied from `triplanarTexture` itself so the normal lands on the same texels as the
+ * albedo — a groove sitting one plane away from its own dark line is worse than no groove.
+ */
+function projectPacked(stone: IStone) {
+  const position = positionWorld.mul(float(1 / stone.tileMetres));
+  const map = stone.packed;
+  const sx = textureNode(map, position.yz);
+  const sy = textureNode(map, position.zx);
+  const sz = textureNode(map, position.xy);
+
+  const axis = normalWorld.abs().normalize();
+  const weight = axis.div(axis.dot(vec3(1, 1, 1)));
+
+  const blend = (a: typeof sx.b, b: typeof sx.b, c: typeof sx.b) =>
+    a.mul(weight.x).add(b.mul(weight.y)).add(c.mul(weight.z));
+
+  // z is rebuilt rather than stored: two channels describe a unit vector completely, and
+  // the third is worth more as the cavity.
+  const decode = (sample: typeof sx) => {
+    const xy = sample.rg.mul(2).sub(1).mul(float(stone.normalScale));
+    return vec3(xy.x, xy.y, xy.dot(xy).oneMinus().max(float(0)).sqrt());
+  };
+
+  // The whiteout blend: each projection's tangent normal is added onto the geometric
+  // normal's other two components, and the component along the projection axis keeps the
+  // geometric normal's sign. That sign is the whole reason for the form — without it every
+  // surface facing -x reads its relief mirrored, and a wall and the wall opposite it are
+  // lit as if the sun were on different sides of the building.
+  const surface = normalWorld;
+  const tx = decode(sx);
+  const ty = decode(sy);
+  const tz = decode(sz);
+  const wx = vec3(tx.z.abs().mul(surface.x), tx.x.add(surface.y), tx.y.add(surface.z));
+  const wy = vec3(ty.y.add(surface.x), ty.z.abs().mul(surface.y), ty.x.add(surface.z));
+  const wz = vec3(tz.x.add(surface.x), tz.y.add(surface.y), tz.z.abs().mul(surface.z));
+
+  return {
+    cavity: blend(sx.b, sy.b, sz.b),
+    normal: wx.mul(weight.x).add(wy.mul(weight.y)).add(wz.mul(weight.z)).normalize(),
+    recess: blend(sx.a, sy.a, sz.a),
+  };
 }
 
 /**

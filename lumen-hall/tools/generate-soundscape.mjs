@@ -44,35 +44,21 @@ const CLIPS = [
     id: "cathedral-ambience",
     file: "cathedral-ambience.wav",
     rate: 22050,
-    outRate: 22050,
+    outRate: 8000,
     seconds: 20,
     loop: true,
     // Seconds 4-7 of the returned bed sit 20 dB below the rest, so the loop starts past them.
     loopBuild: { skip: 8.3, seconds: 10, fade: 1.5 },
     influence: 0.5,
     peakDb: -14,
-    // Just under Nyquist, not a tone choice. An earlier 3.2 kHz cutoff shipped at 8 kHz was
-    // telephone bandwidth; measuring this source first shows why that was nearly free and also
-    // why raising it buys little: every band above 500 Hz is 52-66 dB down. The muffled quality
-    // is in the take, not in the filter.
-    lowpassHz: 10000,
+    // The bed is all low rumble: measured on its own raw take, every band above 500 Hz is
+    // 52-66 dB down. Low-passing at 3.2 kHz keeps the "very distant and muffled" the brief asks
+    // for and discards nothing, and 8 kHz then covers that by Nyquist with room to spare. A
+    // 22 kHz re-render of this take was tried and reverted: it stored 280 KB of headroom over
+    // signal that does not exist. The rate is a consequence of the cutoff, not a shortcut.
+    lowpassHz: 3200,
     // `trim` is the one-shot decay cut; a loop's length is `loopBuild`'s business instead.
     trim: false,
-    // A second take, used for its top end only. See `mixAir`.
-    airLayer: {
-      id: "cathedral-ambience-air",
-      highpassHz: 1500,
-      gainDb: -24,
-      seconds: 20,
-      influence: 0.6,
-      loop: true,
-      text:
-        "The vast airy hush inside an enormous empty stone cathedral. A wide open high-ceilinged " +
-        "space: soft fine high-frequency air and a faint bright sibilant shimmer of room tone " +
-        "high above, over a deep low stone rumble far below. The sound of enormous emptiness and " +
-        "height. Completely steady and featureless, no events, no music, no voices, no bells, " +
-        "no footsteps, no wind gusts.",
-    },
     text:
       "Continuous deep room tone inside a vast empty stone cathedral. Very low distant air " +
       "rumble, faint muffled hush far away beyond thick stone, long slow reverberant decay. " +
@@ -89,9 +75,12 @@ const CLIPS = [
     loopBuild: { skip: 0.4, seconds: 6, fade: 1.2 },
     influence: 0.5,
     peakDb: -20,
-    // 5500 threw away the sound. A flame's crackle lives at the top: measured on the raw take,
-    // 8-11 kHz is the strongest band above 500 Hz at -26.7 dB, ahead of everything between. Cut
-    // there and what is left is the low flutter with none of the fire.
+    // The flame layer is the one clip whose point lives at the top. On the raw take 8-11 kHz is
+    // the strongest band above 500 Hz (-26.7 dB), ahead of everything between it and 500 — that
+    // band *is* the crackle, and an earlier 5500 cutoff at 12 kHz cut exactly the part that makes
+    // it read as fire. It is only 0.08% of total energy, so an energy-share test reports it as
+    // nothing; energy share is the wrong lens here, because the low rumble holding the other
+    // 99.5% is where the ear is least sensitive. Unlike the bed, this one earns its rate.
     lowpassHz: 10500,
     trim: false,
     text:
@@ -308,52 +297,6 @@ async function fetchClip(clip, key) {
   return pcm;
 }
 
-/**
- * Lay a high-passed second take under the bed to give it a top end.
- *
- * The shipped bed is a good bed and a dull one: measured on its own raw take, every band above
- * 500 Hz is 52-66 dB down, so it is all low rumble and none of the fine air a big stone room
- * has. Re-sampling cannot add what the take never had. A second generation asked for that air
- * does have it — about 13 dB more energy above 1.5 kHz — but it undulates by 10.6 dB across any
- * window long enough to loop, and a bed that swells once a pass is the exact drawing-attention
- * this one exists not to do.
- *
- * So only its air is used. High-passed and laid well under the bed, the part that undulates is
- * far enough down to be inaudible as a swell: at every level tried the mix held the bed's own
- * ~2.9 dB envelope spread, so `gainDb` is a purely tonal knob and not a steadiness risk.
- *
- * It is set conservatively. The bed alone carries -55.8 dB above 1.5 kHz — dead; -24 dB puts that
- * at -38.2 dB, which is audible air over a low end that still dominates by nearly 40 dB, so the
- * bed stays the "very distant and muffled" it is supposed to be. Turn this one number up for
- * more: -18 gives -32.4 dB, -12 gives -26.5 dB, and 0 gives -14.7 dB, which is a hiss bed.
- */
-function mixAir(clip, ffmpeg, bed) {
-  const airPath = join(RAW, `${clip.airLayer.id}.pcm`);
-  const airFiltered = join(RAW, `${clip.id}.air.pcm`);
-  ffmpeg(airPath, clip.rate, 2, `highpass=f=${clip.airLayer.highpassHz},lowpass=f=${clip.lowpassHz}`, airFiltered);
-  const bedSamples = new Int16Array(bed.buffer, bed.byteOffset, bed.length / 2);
-  const airBuffer = readFileSync(airFiltered);
-  const airSamples = new Int16Array(airBuffer.buffer, airBuffer.byteOffset, airBuffer.length / 2);
-  const peakOf = (samples) => {
-    let peak = 0;
-    for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
-    return Math.max(peak, 1);
-  };
-  // Matched peaks, measured after the high-pass rather than assumed from the raw take: the
-  // high-pass throws away the low end the raw peak was made of, so a gain derived before it
-  // would be wrong by however much of the source lived under the corner.
-  const scale = (peakOf(bedSamples) / peakOf(airSamples)) * 10 ** (clip.airLayer.gainDb / 20);
-  const count = Math.min(bedSamples.length, airSamples.length);
-  const out = new Int16Array(count);
-  for (let index = 0; index < count; index += 1) {
-    const sum = bedSamples[index] + airSamples[index] * scale;
-    // Clamp rather than wrap: an int16 overflow is a loud click, and this sums two signals whose
-    // peaks are matched by construction, so the headroom is thin by design.
-    out[index] = Math.max(-32768, Math.min(32767, Math.round(sum)));
-  }
-  return Buffer.from(out.buffer, out.byteOffset, out.byteLength);
-}
-
 /** Normalise, trim, low-pass, downmix and resample the raw stereo PCM into a mono WAV. */
 function render(clip, rawPath, stats) {
   const filters = [`volume=${(clip.peakDb - stats.peakDb).toFixed(2)}dB`];
@@ -414,8 +357,7 @@ function render(clip, rawPath, stats) {
   // intro that `skip` throws away.
   const filtered = join(RAW, `${clip.id}.filtered.pcm`);
   ffmpeg(rawPath, clip.rate, 2, filters.join(","), filtered);
-  let bed = readFileSync(filtered);
-  if (clip.airLayer !== undefined) bed = mixAir(clip, ffmpeg, bed);
+  const bed = readFileSync(filtered);
   const looped = join(RAW, `${clip.id}.loop.pcm`);
   writeFileSync(looped, buildLoop(bed, clip.outRate, clip.loopBuild));
   ffmpeg(looped, clip.outRate, 1, undefined, target);
@@ -460,14 +402,6 @@ for (const clip of CLIPS) {
         continue;
       }
       writeFileSync(rawPath, await fetchClip(clip, key));
-    }
-    // The air take is a second generation cached under its own id, fetched on the same terms.
-    if (clip.airLayer !== undefined) {
-      const airPath = join(RAW, `${clip.airLayer.id}.pcm`);
-      if (!existsSync(airPath)) {
-        if (args.reprocess) throw new Error(`no cached air-layer PCM at ${airPath}`);
-        writeFileSync(airPath, await fetchClip({ ...clip.airLayer, rate: clip.rate }, key));
-      }
     }
     const raw = readFileSync(rawPath);
     const stats = analyse(raw, clip.rate);
