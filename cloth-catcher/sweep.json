@@ -1,0 +1,10 @@
+{
+  "arm": "framework",
+  "genre": "physics-puzzle",
+  "briefHash": "a2a40e96964d318b9f0c956c370f34b185a1b86730abba96a7cdb6284fa034c1",
+  "proofHash": "e5be692b999fdad36baf5d795195de3423dd82d7bc577eb7fd36f3c241f13a95",
+  "template": "minimal",
+  "date": "2026-08-30T11:06:35.272Z",
+  "frameworkVersion": "0.1.0",
+  "sourceLines": 0
+}
