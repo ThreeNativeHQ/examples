@@ -99,7 +99,13 @@ type GlassName = "glassCool" | "glassLancet" | "glassRose" | "glassWarm";
 
 const GLASS_LUMINANCE: Record<GlassName, number> = {
   glassCool: 0.4291,
-  glassLancet: 0.2655,
+  // 0.1260, not the 0.2655 of the panel this replaced. The new lancet is a hand-authored
+  // three-saint light on a deep blue ground, and it is genuinely about half as bright. The
+  // gain divides by this number, so recording it is what keeps the window as bright on
+  // screen as the flat colour it stands in for — leaving the old value here would have
+  // halved every lancet in the building and quietly invalidated the exposure, SSGI and
+  // godray values that were tuned against it.
+  glassLancet: 0.126,
   glassRose: 0.1968,
   glassWarm: 0.5209,
 };
@@ -113,7 +119,7 @@ const GLASS_LUMINANCE: Record<GlassName, number> = {
  */
 const GLASS_ASPECT: Record<GlassName, number> = {
   glassCool: 512 / 1024,
-  glassLancet: 512 / 2048,
+  glassLancet: 432 / 2172,
   glassRose: 1,
   glassWarm: 512 / 1024,
 };
