@@ -461,31 +461,52 @@ function compoundPier(radius: number, capitalY: number, vaultShaftTop: number): 
   // floor to vault. They pass *outside* the abacus rather than through it, which is why the
   // abacus radius above and this offset are locked to each other.
   const shaftFace = radius * 1.43 + 0.5;
-  // Five, not three, and the outer pair tinted bright. Above the arcade capital these are
-  // the only thing in twenty metres of wall with a vertical edge, so they carry the whole
-  // read of the nave's height; three thin ones simply vanished into the dark.
-  for (const [offsetZ, tallRadius, tone] of [
-    [0, 0.5, TONE.upper],
-    [-1.0, 0.34, TONE.bright],
-    [1.0, 0.34, TONE.bright],
-    [-1.75, 0.24, TONE.upper],
-    [1.75, 0.24, TONE.upper],
+  // Five shafts at eye level, shedding members at each string course until one reaches the
+  // vault. That taper is not decoration — it is the only reason the clerestory is visible.
+  //
+  // Carried full height, the five spanned 4 m of z, 27 m tall, on a 7 m bay pitch, standing
+  // about two thirds of the way from a nave camera to the far clerestory. Projected onto the
+  // window plane that is a 5.9 m screen across a 7 m bay: a raycast of all 49 clerestory
+  // sample points inside the play camera's frustum found 36 of them stopped by *these
+  // cylinders*, and the upper elevation rendered as an unbroken black field. Dropping the
+  // outer pair at the arcade and the middle pair at the triforium leaves a 1 m screen above
+  // 19 m, and it is also what a real pier does — a vault shaft sheds members as it rises.
+  for (const [offsetZ, tallRadius, tone, top] of [
+    [0, 0.5, TONE.upper, vaultShaftTop],
+    [-1.0, 0.34, TONE.bright, NAVE.triforiumTop],
+    [1.0, 0.34, TONE.bright, NAVE.triforiumTop],
+    [-1.75, 0.24, TONE.upper, NAVE.arcadeHeight],
+    [1.75, 0.24, TONE.upper, NAVE.arcadeHeight],
   ] as const) {
+    const inset = tallRadius < 0.3 ? 0.28 : 0;
     parts.push(
       part(
-        new CylinderGeometry(tallRadius, tallRadius, vaultShaftTop, 10).translate(
-          shaftFace - (tallRadius < 0.3 ? 0.28 : 0),
-          vaultShaftTop / 2,
+        new CylinderGeometry(tallRadius, tallRadius, top, 10).translate(
+          shaftFace - inset,
+          top / 2,
           offsetZ,
         ),
         tone,
       ),
     );
+    // A stop where a shaft dies into the wall. Without one it ends in mid-air, which is the
+    // one way this taper can read as a modelling mistake rather than as architecture.
+    if (top === vaultShaftTop) continue;
+    parts.push(
+      part(
+        new BoxGeometry(tallRadius * 3.4, 0.34, tallRadius * 3.4).translate(
+          shaftFace - inset,
+          top - 0.17,
+          offsetZ,
+        ),
+        TONE.bright,
+      ),
+    );
   }
   // A corbel at the top of the cluster, so the ribs land on something instead of on air.
   for (const [corbelWidth, corbelDepth, corbelY] of [
-    [1.3, 3.8, vaultShaftTop - 0.72],
-    [1.7, 4.6, vaultShaftTop - 0.24],
+    [1.3, 1.5, vaultShaftTop - 0.72],
+    [1.7, 1.9, vaultShaftTop - 0.24],
   ] as const) {
     parts.push(
       part(
