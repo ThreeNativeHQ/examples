@@ -1,0 +1,24 @@
+{
+  "name": "lumen-hall-authored-stands-are-lit-and-cheap",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1600, "height": 900 },
+  "warmupFrames": 60,
+  "artifacts": { "screenshots": false },
+  "steps": [
+    { "kind": "wait", "label": "settle", "waitTicks": 60, "release": true },
+    { "kind": "input", "label": "walk-down-the-nave", "press": "KeyW", "holdTicks": 120, "release": true },
+    { "kind": "wait", "label": "settle-mid-nave", "waitTicks": 40, "release": true },
+    { "kind": "input", "label": "keep-going-to-the-chancel", "press": "KeyW", "holdTicks": 120, "release": true },
+    { "kind": "wait", "label": "settle-at-the-steps", "waitTicks": 60, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
+    "resources": [{ "id": "state", "path": "walkerZ", "changed": true, "lte": 14 }],
+    "performance": {
+      "maxDrawCalls": 200,
+      "maxTriangles": 2000000,
+      "minFps": 30
+    }
+  }
+}
