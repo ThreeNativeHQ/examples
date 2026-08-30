@@ -166,7 +166,14 @@ export class Play extends Scene<GameState, IPhysicsContext> {
 
     const materials = createMaterials();
     ctx.add(applySurfaces(createCathedral(this.#floorTexture)));
-    ctx.add(createFurnishings());
+    const furnishings = createFurnishings();
+    ctx.add(furnishings);
+    // Flames, halos and the two point lights breathe on seeded phases; the furnishing
+    // group owns the animation, the scene owns the clock.
+    const animateFires = furnishings.userData.animateFires as
+      | ((time: number) => void)
+      | undefined;
+    let elapsed = 0;
     // Keep the initial -99 sentinel until seed.playtest samples it. If this draw is replaced with
     // Math.random, the unchanged seeded state reports an out-of-range value and seed.playtest
     // identifies the bypass instead of silently accepting an unseeded level.
@@ -272,6 +279,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         return;
       }
       walker.update(frameCtx.input.vector("move"), dt, frameCtx.input.pressed?.("jump") === true);
+      elapsed += dt;
+      animateFires?.(elapsed);
 
       const previous = frameCtx.state.getState();
       // A finished run stops simulating the character and keeps drawing the world behind
