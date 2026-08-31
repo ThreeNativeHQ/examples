@@ -1,0 +1,81 @@
+{
+  "name": "virtual-geometry-installs",
+  "schemaVersion": 1,
+  "subject": "a 524,288-triangle body, installed from tarballs, submits only the cut the camera can resolve",
+  "target": "web",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 20,
+  "artifacts": {
+    "screenshots": true,
+    "console": true
+  },
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "near",
+      "waitTicks": 90,
+      "release": true,
+      "screenshot": "near"
+    },
+    {
+      "kind": "wait",
+      "label": "mid",
+      "waitTicks": 90,
+      "release": true,
+      "screenshot": "mid"
+    },
+    {
+      "kind": "wait",
+      "label": "far",
+      "waitTicks": 90,
+      "release": true,
+      "screenshot": "far"
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "noRuntimeDiagnostics": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "GameState",
+        "path": "loaded",
+        "equals": true,
+        "allowTrivial": "the body is loaded before the first step and stays loaded; the claim is that the loader returned at all, which has no later state to change into"
+      },
+      {
+        "id": "GameState",
+        "path": "clustered",
+        "equals": true,
+        "allowTrivial": "what the loader returns is decided once, at load. If this ever changed during the walk the mesh would have been swapped, which is not a thing this scene does"
+      },
+      {
+        "id": "GameState",
+        "path": "mark",
+        "equals": "far"
+      },
+      {
+        "id": "GameState",
+        "path": "triangles",
+        "lte": 60000
+      }
+    ],
+    "visual": [
+      {
+        "region": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "minNonblankPixelRatio": 0.02
+        }
+      }
+    ]
+  }
+}
