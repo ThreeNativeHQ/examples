@@ -32,7 +32,7 @@ interface ILoadedPiece {
 
 export class Cave extends Scene<GameState, IPhysicsContext> {
   #pieces: readonly ILoadedPiece[] = [];
-  readonly #position = new Vector3(0, EYE_HEIGHT, 5);
+  readonly #position = new Vector3(-1, EYE_HEIGHT, 1);
   #look = 0;
   #sun: DirectionalLight | undefined;
   #floorMasks: { maskMap: Awaited<ReturnType<CaveCtx["assets"]["texture"]>>; normalMap: null } | undefined;
@@ -54,7 +54,7 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
     paused: false,
     peakRise: 0,
     playerX: 0,
-    playerZ: 5,
+    playerZ: 1,
     respawns: 0,
     score: 0,
     status: "playing",
@@ -65,24 +65,31 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
    * The rock masks the importer refused to bind, loaded as plain textures. Unreal composed its
    * rock surface in a material graph rather than in a texture, so the scene composes it too.
    */
-  static readonly #MASKS = {
+  /**
+   * The rock masks the importer refused to bind, loaded as plain textures.
+   *
+   * Unreal composes these surfaces in a material graph rather than in a texture, so the scene
+   * composes them too. The mapping mirrors `import-report.json`'s `sidecarTextures` — that file
+   * is the authority for which material wanted which mask.
+   */
+  static readonly MASKS = {
     stalactite: "fab/soul-cave/textures/T_Cave_Rock_Stalactite_M.png",
-    path: "fab/soul-cave/textures/T_Cave_Rock_Path_M.png",
     pillar: "fab/soul-cave/textures/T_Cave_Rock_Pillar_M.png",
+    demon: "fab/soul-cave/textures/T_DemonStatue_M.png",
+    soul: "fab/soul-cave/textures/T_Soul_Statue_M.png",
   } as const;
 
-  static #maskFor(materialName: string): keyof typeof Cave.MASK_LOOKUP {
-    if (materialName.includes("Pillar")) return "pillar";
-    if (materialName.includes("Path_Moss")) return "path";
+  static #maskFor(materialName: string): keyof typeof Cave.MASKS {
+    if (materialName.includes("DemonStatue")) return "demon";
+    if (materialName.includes("Soul_Statue")) return "soul";
+    if (materialName.includes("Pillar_Moss")) return "pillar";
     return "stalactite";
   }
-
-  static readonly MASK_LOOKUP = Cave.#MASKS;
 
   override async load(ctx: CaveCtx): Promise<void> {
     const masks = Object.fromEntries(
       await Promise.all(
-        Object.entries(Cave.#MASKS).map(async ([key, path]) => {
+        Object.entries(Cave.MASKS).map(async ([key, path]) => {
           const map = await ctx.assets.texture(path);
           map.wrapS = 1000;
           map.wrapT = 1000;
@@ -90,9 +97,9 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
           return [key, map] as const;
         }),
       ),
-    ) as Record<keyof typeof Cave.MASK_LOOKUP, Awaited<ReturnType<CaveCtx["assets"]["texture"]>>>;
+    ) as Record<keyof typeof Cave.MASKS, Awaited<ReturnType<CaveCtx["assets"]["texture"]>>>;
 
-    this.#floorMasks = { maskMap: masks.path, normalMap: null };
+    this.#floorMasks = { maskMap: masks.stalactite, normalMap: null };
 
     this.#pieces = await Promise.all(
       CAVE_PIECES.map(async (piece) => {
@@ -165,14 +172,15 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
       ctx.add(
         createCaveShell({
           ...this.#floorMasks,
-          sizeMetres: 88,
+          sizeMetres: 96,
           heightMetres: 19,
           // Rotating the shape flat maps its local +Y to world +Z, so the room in front of the
           // camera is negative z here too. Two openings, as the reference has: the main shaft
           // ahead, and a smaller one over the left aisle that keeps that side out of pure black.
           holes: [
-            { x: 2, z: -24, width: 15, depth: 11 },
-            { x: -21, z: -13, width: 8, depth: 6 },
+            { x: -1, z: -14, width: 17, depth: 13 },
+            { x: -20, z: -18, width: 9, depth: 7 },
+            { x: 20, z: -40, width: 8, depth: 7 },
           ],
         }),
       );
@@ -195,7 +203,26 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
       ),
     });
 
+    // Authoring probes, both stripped before this scene ships:
+    //   ?solo=<key>   show one imported piece against the floor
+    //   ?debugcam=1   lift the camera out of the room to see the whole chamber
+    const probe = new URLSearchParams(location.search);
+    const solo = probe.get("solo");
+    if (solo) {
+      for (const piece of this.#pieces) piece.scene.visible = piece.key === solo;
+    }
+
     return (frame, dt) => {
+      if (probe.has("debugcam") || solo) {
+        const target = this.#pieces.find((piece) => piece.key === solo);
+        const box = target ? new Box3().setFromObject(target.scene) : undefined;
+        const centre = box ? box.getCenter(new Vector3()) : new Vector3(0, 8, -28);
+        const span = box ? box.getSize(new Vector3()).length() : 90;
+        camera.position.set(centre.x, centre.y + span * 0.25, centre.z + span * 0.9);
+        camera.lookAt(centre);
+        return;
+      }
+
       // The godrays stage raymarches against the sun's shadow map, and three.js does not allocate
       // that map until the renderer has run a shadow pass. Building the chain in `enter` reads a
       // null map and throws inside the TSL graph — with the chain still reporting the stage as

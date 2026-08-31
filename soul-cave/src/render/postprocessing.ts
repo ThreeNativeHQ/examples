@@ -15,22 +15,22 @@ import type { OutputRenderer } from "./worldEnvironment.js";
 const cavePreset = {
   // The shaft. Density and decay are what make it read as dusty air rather than a white cone.
   godraysEnabled: true,
-  godraysDensity: 0.62,
+  godraysDensity: 0.7,
   godraysIntensity: 1.7,
   godraysSteps: 32,
-  godraysMaxDensity: 0.3,
+  godraysMaxDensity: 0.34,
   godraysFloor: 0.02,
 
   // The warm bounce off lit rock. Interior scale is exactly what SSGI is for.
   ssgiEnabled: true,
-  ssgiQuality: "medium",
-  ssgiIntensity: 2.0,
+  ssgiQuality: "high",
+  ssgiIntensity: 1.5,
   ssgiRadius: 6,
   denoiseEnabled: true,
 
   // Wet floor. Kept at half resolution — it is a highlight, not a mirror.
   ssrEnabled: true,
-  ssrResolutionScale: 0.5,
+  ssrResolutionScale: 0.35,
   ssrMaxDistance: 18,
 
   // Seats the pillars where they meet the ground; without it they float.
@@ -50,7 +50,7 @@ const cavePreset = {
 
   tonemapMode: "aces",
   // Below 1: the reference's foreground is nearly black and its shaft is the only bright thing.
-  exposure: 1.08,
+  exposure: 0.95,
 } as const;
 
 /** Mobile has no budget for raymarched shafts plus GI; it keeps the curve and the bloom. */

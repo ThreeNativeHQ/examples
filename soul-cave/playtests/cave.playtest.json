@@ -22,7 +22,7 @@
       "kind": "input",
       "label": "walk-into-the-chamber",
       "press": "ArrowUp",
-      "holdTicks": 90,
+      "holdTicks": 22,
       "release": true
     },
     {
@@ -46,7 +46,7 @@
       {
         "id": "state",
         "path": "fabPiecesLoaded",
-        "equals": 20,
+        "equals": 37,
         "allowTrivial": "Published when the imported models resolve, before the first observation; the run proves they loaded and drew."
       }
     ],
