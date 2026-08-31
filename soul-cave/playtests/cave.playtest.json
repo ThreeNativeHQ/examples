@@ -1,0 +1,57 @@
+{
+  "name": "soul-cave-renders",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 30,
+  "subject": "player",
+  "artifacts": {
+    "screenshots": "after"
+  },
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "cave-resolves-through-the-manifest",
+      "waitTicks": 420,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-into-the-chamber",
+      "press": "ArrowUp",
+      "holdTicks": 90,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-before-reading-pixels",
+      "waitTicks": 150,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "playerZ",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "fabPiecesLoaded",
+        "equals": 13,
+        "allowTrivial": "Published when the imported models resolve, before the first observation; the run proves they loaded and drew."
+      }
+    ],
+    "performance": {
+      "maxFrameMsP95": 33
+    }
+  }
+}

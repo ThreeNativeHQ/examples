@@ -1,0 +1,10 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch({ headless: true, args: ["--enable-unsafe-swiftshader"] });
+const page = await browser.newPage({ viewport: { width: 800, height: 450 } });
+const logs = [];
+page.on("console", m => logs.push(`[${m.type()}] ${m.text()}`));
+page.on("pageerror", e => logs.push(`[pageerror] ${e.message}\n${(e.stack||"").split("\n").slice(0,4).join("\n")}`));
+await page.goto("http://127.0.0.1:5174/", { waitUntil: "load", timeout: 60000 });
+await page.waitForTimeout(15000);
+console.log(logs.slice(0, 40).join("\n"));
+await browser.close();

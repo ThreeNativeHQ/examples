@@ -1,0 +1,688 @@
+{
+  "importer": {
+    "name": "threenative-asset-mcp",
+    "version": 1
+  },
+  "source": {
+    "kind": "fab-listing",
+    "path": "/home/joao/.cache/threenative-asset-mcp/fab-downloads/75f42402-40bb-4a1b-b557-18e2c9604273/SoulCave418",
+    "listingId": "75f42402-40bb-4a1b-b557-18e2c9604273",
+    "fileCount": 605,
+    "totalBytes": 1236600164,
+    "sourceHash": "sha256:68a14869c9da1761e11c4a4e2f7fd69e8a90e41c1fb59a4dbc6e81182ce5932f"
+  },
+  "entitlement": {
+    "provider": "fab",
+    "authenticatedDownload": true,
+    "acquisition": "none",
+    "license": {
+      "verdict": "allowed",
+      "slugs": [
+        "personal",
+        "professional"
+      ],
+      "reason": "Entitled under Fab Standard (Personal) and Fab Standard (Professional)."
+    }
+  },
+  "toolchain": {
+    "umodel": "Compiled Aug 30 2026 (build 1)",
+    "fabcli": "fabcli 0.1.0"
+  },
+  "cacheKey": "93e67e48da43c17b1a615ea170495ed96d49116e0c57d61a1f4eaace4b5c9fb2",
+  "reused": false,
+  "materials": "degraded",
+  "counts": {
+    "packages": 10,
+    "exported": 10,
+    "skipped": 0,
+    "failed": 0
+  },
+  "models": [
+    {
+      "name": "SM_Cave_Chain_02",
+      "package": "Content/SoulCave/Environment/Meshes/Building/SM_Cave_Chain_02.uasset",
+      "glb": "SoulCave/Environment/Meshes/Building/SM_Cave_Chain_02.glb",
+      "bytes": 3316376,
+      "sha256": "b6712e46c1d51fccacab5be7e9c7f4cfeb636095b8cd66348751d38a8078f64f",
+      "vertices": 11424,
+      "primitives": 1,
+      "boundsMetres": [
+        5.483431622385979,
+        12.422979041934013,
+        0.9180859178304672
+      ],
+      "materials": [
+        {
+          "name": "M_Cave_Chain",
+          "resolved": true,
+          "sidecarTextures": [],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Chain_D",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Chain_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": true
+        }
+      ]
+    },
+    {
+      "name": "SM_Cave_Floor_Stairs_Quarter",
+      "package": "Content/SoulCave/Environment/Meshes/Building/SM_Cave_Floor_Stairs_Quarter.uasset",
+      "glb": "SoulCave/Environment/Meshes/Building/SM_Cave_Floor_Stairs_Quarter.glb",
+      "bytes": 8925636,
+      "sha256": "a71d57c95a8418d590bf2dcc85ff7800baff52bc1a8a9832ef9298e9b39e9d54",
+      "vertices": 8940,
+      "primitives": 2,
+      "boundsMetres": [
+        25.579368988022907,
+        4.314221382141113,
+        25.57910311888554
+      ],
+      "materials": [
+        {
+          "name": "M_Cave_Floor",
+          "resolved": true,
+          "sidecarTextures": [],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Floor_D",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Floor_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "emissive",
+              "texture": "T_Cave_E",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": true
+        },
+        {
+          "name": "M_Cave_Spotlight",
+          "resolved": true,
+          "sidecarTextures": [],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Spotlight_D",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Spotlight_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "metallicRoughness",
+              "texture": "T_Cave_Spotlight_D",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "specPowerToRoughness"
+            },
+            {
+              "slot": "emissive",
+              "texture": "T_Cave_E",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": true
+        }
+      ]
+    },
+    {
+      "name": "SM_Cave_Pillars_NoFlag",
+      "package": "Content/SoulCave/Environment/Meshes/Building/SM_Cave_Pillars_NoFlag.uasset",
+      "glb": "SoulCave/Environment/Meshes/Building/SM_Cave_Pillars_NoFlag.glb",
+      "bytes": 5154972,
+      "sha256": "7bc37fefa93c39d030217461d6ce1c2e21dbfebf52db42099516e0b644575d03",
+      "vertices": 21792,
+      "primitives": 1,
+      "boundsMetres": [
+        12.667818069458008,
+        16.578509211540222,
+        21.192248463630676
+      ],
+      "materials": [
+        {
+          "name": "M_Cave_Pillar",
+          "resolved": true,
+          "sidecarTextures": [],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Pillar_D",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Pillar_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "emissive",
+              "texture": "T_Cave_E",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": true
+        }
+      ]
+    },
+    {
+      "name": "SM_MergedMesh_Cave_Rock_Large02_5",
+      "package": "Content/SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rock_Large02_5.uasset",
+      "glb": "SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rock_Large02_5.glb",
+      "bytes": 2694648,
+      "sha256": "d56422314fe8bbe5ac2a24c4a9466b6049eabaa981de3f06f53b1a07ed4a39d4",
+      "vertices": 21681,
+      "primitives": 1,
+      "boundsMetres": [
+        67.60135650634766,
+        95.02177429199219,
+        75.13879013061523
+      ],
+      "materials": [
+        {
+          "name": "MI_Cave_Rock_Large02",
+          "resolved": true,
+          "sidecarTextures": [
+            "T_Cave_Rock_Stalactite_M"
+          ],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Rock_Stalactite_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [
+            {
+              "texture": "T_Cave_Rock_Large02_M",
+              "reason": "no exact, parameter-name, or filename mapping"
+            },
+            {
+              "texture": "T_Cave_Rock_Large02_N",
+              "reason": "recognized but has no glTF PBR counterpart"
+            },
+            {
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "reason": "packed mask, not a base colour (saturation 0.80, channel correlation 0.16)"
+            }
+          ],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": false
+        }
+      ]
+    },
+    {
+      "name": "SM_MergedMesh_Cave_Rock_Path_Single_8",
+      "package": "Content/SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rock_Path_Single_8.uasset",
+      "glb": "SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rock_Path_Single_8.glb",
+      "bytes": 5156260,
+      "sha256": "f257c07fce23f5104a8abfea30eba6b11819f15fe12a775f1c56dd5e9cb09e13",
+      "vertices": 25287,
+      "primitives": 3,
+      "boundsMetres": [
+        90.32548141479492,
+        30.966073870658875,
+        45.26308250427246
+      ],
+      "materials": [
+        {
+          "name": "MI_Cave_Rock_Path",
+          "resolved": true,
+          "sidecarTextures": [
+            "T_Cave_Rock_Stalactite_M"
+          ],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Rock_Stalactite_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [
+            {
+              "texture": "T_Cave_Rock_Path_M",
+              "reason": "no exact, parameter-name, or filename mapping"
+            },
+            {
+              "texture": "T_Cave_Rock_Path_N",
+              "reason": "recognized but has no glTF PBR counterpart"
+            },
+            {
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "reason": "packed mask, not a base colour (saturation 0.80, channel correlation 0.16)"
+            }
+          ],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": false
+        },
+        {
+          "name": "MI_Cave_Rock_VertexPaint_Dirt_Path",
+          "resolved": true,
+          "sidecarTextures": [
+            "T_Cave_Rock_Stalactite_M"
+          ],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Rock_Stalactite_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [
+            {
+              "texture": "T_Cave_Rock_Path_M",
+              "reason": "no exact, parameter-name, or filename mapping"
+            },
+            {
+              "texture": "T_Cave_Rock_Path_N",
+              "reason": "recognized but has no glTF PBR counterpart"
+            },
+            {
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "reason": "packed mask, not a base colour (saturation 0.80, channel correlation 0.16)"
+            }
+          ],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": false
+        },
+        {
+          "name": "MI_Cave_Rock_Path_Moss",
+          "resolved": true,
+          "sidecarTextures": [
+            "T_Cave_Rock_Path_M"
+          ],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Rock_Path_M",
+              "source": "texture-set",
+              "confidence": "heuristic",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Rock_01_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [
+            {
+              "texture": "T_Cave_Rock_Path_N",
+              "reason": "recognized but has no glTF PBR counterpart"
+            },
+            {
+              "texture": "T_Cave_Rock_Path_M",
+              "reason": "packed mask, not a base colour (saturation 0.86, channel correlation 0.11)"
+            }
+          ],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": false
+        }
+      ]
+    },
+    {
+      "name": "SM_MergedMesh_Cave_Rock_Pillar01REDO_120",
+      "package": "Content/SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rock_Pillar01REDO_120.uasset",
+      "glb": "SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rock_Pillar01REDO_120.glb",
+      "bytes": 5295136,
+      "sha256": "5a7074a31b7324fcf02c03af225627a67d40999a933c2df2c2820cc6d20ddbfe",
+      "vertices": 82125,
+      "primitives": 1,
+      "boundsMetres": [
+        24.467714309692383,
+        65.61091521382332,
+        35.731903076171875
+      ],
+      "materials": [
+        {
+          "name": "MI_Cave_Rock_Pillar_Moss2",
+          "resolved": true,
+          "sidecarTextures": [
+            "T_Cave_Rock_Pillar_M"
+          ],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Rock_Pillar_M",
+              "source": "texture-set",
+              "confidence": "heuristic",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Rock_01_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [
+            {
+              "texture": "T_Cave_Rock_Pillar_N",
+              "reason": "recognized but has no glTF PBR counterpart"
+            },
+            {
+              "texture": "T_Cave_Rock_Pillar_M",
+              "reason": "packed mask, not a base colour (saturation 0.86, channel correlation 0.01)"
+            }
+          ],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": false
+        }
+      ]
+    },
+    {
+      "name": "SM_MergedMesh_Cave_Rock_Pillar03a_0",
+      "package": "Content/SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rock_Pillar03a_0.uasset",
+      "glb": "SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rock_Pillar03a_0.glb",
+      "bytes": 3977048,
+      "sha256": "6e61077a4d9dcc04854cc69e29fa57e3b1e8ea24598cddf0bc111887af00fb7f",
+      "vertices": 48189,
+      "primitives": 1,
+      "boundsMetres": [
+        52.56563186645508,
+        28.43555200099945,
+        26.954002380371094
+      ],
+      "materials": [
+        {
+          "name": "MI_Cave_Rock_Pillar_Moss2",
+          "resolved": true,
+          "sidecarTextures": [
+            "T_Cave_Rock_Pillar_M"
+          ],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Rock_Pillar_M",
+              "source": "texture-set",
+              "confidence": "heuristic",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Rock_01_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [
+            {
+              "texture": "T_Cave_Rock_Pillar_N",
+              "reason": "recognized but has no glTF PBR counterpart"
+            },
+            {
+              "texture": "T_Cave_Rock_Pillar_M",
+              "reason": "packed mask, not a base colour (saturation 0.86, channel correlation 0.01)"
+            }
+          ],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": false
+        }
+      ]
+    },
+    {
+      "name": "SM_MergedMesh_Cave_Rocks_Stalactite_01_7",
+      "package": "Content/SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rocks_Stalactite_01_7.uasset",
+      "glb": "SoulCave/Environment/Meshes/Merged/SM_MergedMesh_Cave_Rocks_Stalactite_01_7.glb",
+      "bytes": 3577876,
+      "sha256": "8635c9aad0f510a0c98bdba6cd62a7b24aecc0e7cd0822c77d9d11590c6a6c27",
+      "vertices": 47658,
+      "primitives": 1,
+      "boundsMetres": [
+        127.78858947753906,
+        73.8889389038086,
+        69.5197868347168
+      ],
+      "materials": [
+        {
+          "name": "MI_Cave_Rock_Stalactite",
+          "resolved": true,
+          "sidecarTextures": [
+            "T_Cave_Rock_Stalactite_M"
+          ],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Rock_Stalactite_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [
+            {
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "reason": "packed mask, not a base colour (saturation 0.80, channel correlation 0.16)"
+            }
+          ],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": false
+        }
+      ]
+    },
+    {
+      "name": "SM_Cave_Rock_Ceiling",
+      "package": "Content/SoulCave/Environment/Meshes/Rocks/SM_Cave_Rock_Ceiling.uasset",
+      "glb": "SoulCave/Environment/Meshes/Rocks/SM_Cave_Rock_Ceiling.glb",
+      "bytes": 2038640,
+      "sha256": "0663063e34ff93640c001bf4e122a8641f1aaf51e4923bd719447f07a66a8178",
+      "vertices": 2388,
+      "primitives": 1,
+      "boundsMetres": [
+        10.322165966033936,
+        3.655635714530945,
+        6.034323453903198
+      ],
+      "materials": [
+        {
+          "name": "MI_Cave_Rock_Ceiling",
+          "resolved": true,
+          "sidecarTextures": [
+            "T_Cave_Rock_Stalactite_M"
+          ],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Rock_Stalactite_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [
+            {
+              "texture": "T_Cave_Rock_Path_M",
+              "reason": "no exact, parameter-name, or filename mapping"
+            },
+            {
+              "texture": "T_Cave_Rock_Path_N",
+              "reason": "recognized but has no glTF PBR counterpart"
+            },
+            {
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "reason": "packed mask, not a base colour (saturation 0.80, channel correlation 0.16)"
+            }
+          ],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": false
+        }
+      ]
+    },
+    {
+      "name": "SM_Cave_Rocks_Stalactite_01",
+      "package": "Content/SoulCave/Environment/Meshes/Rocks/SM_Cave_Rocks_Stalactite_01.uasset",
+      "glb": "SoulCave/Environment/Meshes/Rocks/SM_Cave_Rocks_Stalactite_01.glb",
+      "bytes": 2137808,
+      "sha256": "a0d45b79d3579fa23411561eaaa4c893687c8dba1bf57c856106396df52be231",
+      "vertices": 5304,
+      "primitives": 1,
+      "boundsMetres": [
+        2.641832709312439,
+        5.725034452974796,
+        1.942175805568695
+      ],
+      "materials": [
+        {
+          "name": "MI_Cave_Rock_Stalactite",
+          "resolved": true,
+          "sidecarTextures": [
+            "T_Cave_Rock_Stalactite_M"
+          ],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Cave_Rock_Stalactite_N",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            }
+          ],
+          "unsupported": [
+            {
+              "texture": "T_Cave_Rock_Stalactite_M",
+              "reason": "packed mask, not a base colour (saturation 0.80, channel correlation 0.16)"
+            }
+          ],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "textured": false
+        }
+      ]
+    }
+  ],
+  "skipped": [],
+  "failed": [],
+  "materialCoverage": {
+    "sections": 13,
+    "textured": 4,
+    "exact": 27,
+    "heuristic": 3,
+    "unsupported": 20,
+    "unresolved": 0
+  },
+  "transforms": {
+    "none": 29,
+    "specPowerToRoughness": 1
+  },
+  "sidecarTextures": [
+    "textures/T_Cave_Rock_Path_M.png",
+    "textures/T_Cave_Rock_Pillar_M.png",
+    "textures/T_Cave_Rock_Stalactite_M.png"
+  ],
+  "warnings": [
+    "Wrote 3 unmappable textures to textures/ — they are packed Unreal masks with no glTF slot. Build the surface from them in your own material; the models carry a neutral base colour.",
+    "Dropped 274788 zero-length TANGENT vectors UE Viewer wrote for these meshes; the runtime derives the tangent frame from UVs instead.",
+    "Dropped 13 extra UV channels (TEXCOORD_1 and above); Unreal lightmap UVs have no runtime consumer here.",
+    "9 material sections have no base colour texture and use an explicit neutral fallback."
+  ],
+  "durationMs": 6122
+}
