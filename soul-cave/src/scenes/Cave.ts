@@ -14,12 +14,15 @@ import { CAVE_PIECES } from "../render/caveLayout.js";
 import { setupCaveLighting } from "../render/caveLighting.js";
 import { setupCavePost } from "../render/postprocessing.js";
 import { createCaveShell, createRockMaterial, inheritFrom } from "../render/rockMaterial.js";
+import { CAVE_POOLS, createWater } from "../render/water.js";
 import type { GameState } from "../state.js";
 
 export type CaveCtx = ICtx<GameState, IPhysicsContext>;
 
 /** Eye height, in the metres the Unreal pack was authored in. */
 const EYE_HEIGHT = 1.7;
+/** The lane in front of the camera that has to stay clear for the shot to read. */
+const CORRIDOR = { halfWidth: 5.5, zNear: 3, zFar: -13 } as const;
 const WALK_SPEED = 6;
 
 interface ILoadedPiece {
@@ -161,6 +164,22 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
         `Cave pieces with neither a texture nor a rebuilt surface: ${bare.map((p) => p.key).join(", ")}.`,
       );
     }
+    // Placing 57 irregular rock chunks by hand means repeatedly discovering, one screenshot at a
+    // time, that something enormous is parked in front of the lens. The corridor the camera looks
+    // along is a fact the scene can check for itself, so it does — and names the offenders.
+    const blockers = this.#pieces.flatMap((piece) => {
+      const box = new Box3().setFromObject(piece.scene);
+      const nearCamera = box.max.z > CORRIDOR.zFar && box.min.z < CORRIDOR.zNear;
+      const inLane = box.max.x > -CORRIDOR.halfWidth && box.min.x < CORRIDOR.halfWidth;
+      const aboveFloor = box.max.y > 0.6;
+      return nearCamera && inLane && aboveFloor
+        ? [`${piece.key}(x ${box.min.x.toFixed(0)}..${box.max.x.toFixed(0)}, z ${box.min.z.toFixed(0)}..${box.max.z.toFixed(0)})`]
+        : [];
+    });
+    if (blockers.length > 0) {
+      console.warn(`TN_CAVE_SIGHTLINE_BLOCKED:${blockers.join(" ")}`);
+    }
+
     console.info(
       `TN_CAVE_LOADED:${this.#pieces.length} pieces, ${this.#pieces.reduce((sum, p) => sum + p.texturedMeshes, 0)} textured, ${this.#pieces.reduce((sum, p) => sum + p.rebuiltMeshes, 0)} rebuilt from masks`,
     );
@@ -169,18 +188,19 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
   override enter(ctx: CaveCtx): SceneFrame<GameState, IPhysicsContext> {
     for (const piece of this.#pieces) ctx.add(piece.scene);
     if (this.#floorMasks) {
+      ctx.add(createWater({ rippleMap: this.#floorMasks.maskMap, pools: CAVE_POOLS }));
       ctx.add(
         createCaveShell({
           ...this.#floorMasks,
-          sizeMetres: 96,
-          heightMetres: 19,
+          sizeMetres: 50,
+          heightMetres: 17,
           // Rotating the shape flat maps its local +Y to world +Z, so the room in front of the
           // camera is negative z here too. Two openings, as the reference has: the main shaft
           // ahead, and a smaller one over the left aisle that keeps that side out of pure black.
           holes: [
-            { x: -1, z: -14, width: 17, depth: 13 },
+            { x: 1, z: -22, width: 16, depth: 12 },
             { x: -20, z: -18, width: 9, depth: 7 },
-            { x: 20, z: -40, width: 8, depth: 7 },
+            { x: 19, z: -39, width: 9, depth: 8 },
           ],
         }),
       );
@@ -241,7 +261,7 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
       camera.position.copy(this.#position);
       camera.lookAt(
         this.#position.x + Math.sin(this.#look) * 2.5,
-        EYE_HEIGHT + 2.6,
+        EYE_HEIGHT + 5.2,
         this.#position.z - 26,
       );
       frame.state.set({

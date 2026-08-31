@@ -1696,40 +1696,6 @@
           "textured": true
         }
       ]
-    },
-    {
-      "name": "SM_S_Soul_GodRay",
-      "package": "Content/SoulCave/Environment/Meshes/Nature/SM_S_Soul_GodRay.uasset",
-      "glb": "SoulCave/Environment/Meshes/Nature/SM_S_Soul_GodRay.glb",
-      "bytes": 93860,
-      "sha256": "a141ff69c99a5341e9d900d9ea7a6d9ce908df7e1e14a290d25494cacf557efa",
-      "vertices": 768,
-      "primitives": 1,
-      "boundsMetres": [
-        2.7870712280273438,
-        8,
-        2.7870712280273438
-      ],
-      "materials": [
-        {
-          "name": "M_Soul_GODRAY_MASTER2",
-          "resolved": true,
-          "sidecarTextures": [],
-          "bindings": [
-            {
-              "slot": "normal",
-              "texture": "T_GodRay_Mask02_N",
-              "source": "mat",
-              "confidence": "exact",
-              "transform": "none"
-            }
-          ],
-          "unsupported": [],
-          "alphaMode": "BLEND",
-          "doubleSided": true,
-          "textured": false
-        }
-      ]
     }
   ],
   "skipped": [],
