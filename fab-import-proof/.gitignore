@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-native/
+.threenative/
+public/fab/
+artifacts/
+
+# Fab marketplace content. The import is reproducible from the listing by anyone who owns it —
+# `threenative-asset-mcp import https://www.fab.com/listings/<uid> --out assets/fab/<name>` — and
+# the bytes themselves are licensed to this account, not redistributable through a public repo.
+assets/fab/

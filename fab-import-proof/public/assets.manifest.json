@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "entries": {
+    "fab/soul-cave/SoulCave/Environment/Meshes/Building/SM_S_Soul_Statue.glb": {
+      "bytes": 4129444,
+      "kind": "model",
+      "output": "fab/soul-cave/SoulCave/Environment/Meshes/Building/SM_S_Soul_Statue.acb94fea.glb",
+      "passes": []
+    },
+    "fab/soul-cave/SoulCave/Environment/Meshes/Nature/SM_LV_Soul_Tree01_B.glb": {
+      "bytes": 5220708,
+      "kind": "model",
+      "output": "fab/soul-cave/SoulCave/Environment/Meshes/Nature/SM_LV_Soul_Tree01_B.5af82abc.glb",
+      "passes": []
+    },
+    "fab/soul-cave/SoulCave/Environment/Meshes/Rocks/SM_S_Soul_Flatrock.glb": {
+      "bytes": 2319200,
+      "kind": "model",
+      "output": "fab/soul-cave/SoulCave/Environment/Meshes/Rocks/SM_S_Soul_Flatrock.b00bb150.glb",
+      "passes": []
+    },
+    "fab/soul-cave/import-report.json": {
+      "bytes": 8141,
+      "kind": "other",
+      "output": "fab/soul-cave/import-report.8fc1236b.json",
+      "passes": []
+    },
+    "native-proof.glb": {
+      "bytes": 624,
+      "kind": "model",
+      "output": "native-proof.391bf741.glb",
+      "passes": []
+    },
+    "native-proof.png": {
+      "bytes": 150,
+      "kind": "texture",
+      "output": "native-proof.e5a83e26.png",
+      "passes": []
+    },
+    "pickup.wav": {
+      "bytes": 39246,
+      "kind": "audio",
+      "output": "pickup.6776b013.wav",
+      "passes": []
+    }
+  }
+}

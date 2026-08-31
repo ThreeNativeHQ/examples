@@ -1,0 +1,66 @@
+{
+  "name": "fab-import-renders-native",
+  "target": "desktop",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 10,
+  "subject": "player",
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "imported-models-resolve-through-the-manifest",
+      "waitTicks": 420,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-past-the-imported-statue",
+      "press": "ArrowRight",
+      "holdTicks": 150,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-before-reading-pixels",
+      "waitTicks": 120,
+      "release": true
+    }
+  ],
+  "assert": {
+    "movement": {
+      "entity": "player",
+      "minDistance": 0.5
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "fabImportsLoaded",
+        "equals": 3,
+        "allowTrivial": "The scene publishes these the moment the imported models resolve, which is before the first observation; the run proves the native host loaded and drew them, not that the number changed mid-run."
+      },
+      {
+        "id": "state",
+        "path": "fabImportsTextured",
+        "equals": 7,
+        "allowTrivial": "The scene publishes these the moment the imported models resolve, which is before the first observation; the run proves the native host loaded and drew them, not that the number changed mid-run."
+      },
+      {
+        "id": "state",
+        "path": "fabImportsMasked",
+        "equals": 2,
+        "allowTrivial": "The scene publishes these the moment the imported models resolve, which is before the first observation; the run proves the native host loaded and drew them, not that the number changed mid-run."
+      },
+      {
+        "id": "state",
+        "path": "playerX",
+        "changed": true
+      }
+    ]
+  },
+  "artifacts": {
+    "screenshots": "after"
+  }
+}

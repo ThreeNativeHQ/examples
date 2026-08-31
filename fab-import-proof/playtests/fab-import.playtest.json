@@ -1,0 +1,60 @@
+{
+  "name": "fab-import-renders",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 10,
+  "subject": "player",
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "imported-models-resolve-through-the-manifest",
+      "waitTicks": 420,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-past-the-imported-statue",
+      "press": "ArrowRight",
+      "holdTicks": 150,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-before-reading-pixels",
+      "waitTicks": 120,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "visibility": [
+      {
+        "allowTrivial": "The three Fab-imported meshes are placed in the opening frame on purpose: this scenario asks whether an Unreal asset converted by fab_import_asset draws at all, not whether the player can walk to it.",
+        "entity": "soulStatue",
+        "minProjectedPixels": 400
+      },
+      {
+        "allowTrivial": "Same frame, same question, for the masked-foliage case.",
+        "entity": "soulTree",
+        "minProjectedPixels": 400
+      },
+      {
+        "allowTrivial": "Same frame, same question, for the smallest of the three.",
+        "entity": "soulRock",
+        "minProjectedPixels": 100
+      }
+    ],
+    "movement": {
+      "entity": "player",
+      "minDistance": 0.5
+    }
+  }
+}
