@@ -109,8 +109,13 @@ export interface ICaveShellOptions {
   /** Inside dimension of the chamber, in metres. */
   readonly sizeMetres: number;
   readonly heightMetres: number;
-  /** The opening in the roof the daylight falls through. */
-  readonly hole: { readonly x: number; readonly z: number; readonly width: number; readonly depth: number };
+  /** Openings in the roof the daylight falls through. */
+  readonly holes: readonly {
+    readonly x: number;
+    readonly z: number;
+    readonly width: number;
+    readonly depth: number;
+  }[];
 }
 
 /**
@@ -172,15 +177,16 @@ export function createCaveShell(options: ICaveShellOptions): Group {
     .lineTo(half, half)
     .lineTo(-half, half)
     .lineTo(-half, -half);
-  const { x, z, width, depth } = options.hole;
-  outline.holes.push(
-    new Path()
-      .moveTo(x - width / 2, z - depth / 2)
-      .lineTo(x - width / 2, z + depth / 2)
-      .lineTo(x + width / 2, z + depth / 2)
-      .lineTo(x + width / 2, z - depth / 2)
-      .lineTo(x - width / 2, z - depth / 2),
-  );
+  for (const { x, z, width, depth } of options.holes) {
+    outline.holes.push(
+      new Path()
+        .moveTo(x - width / 2, z - depth / 2)
+        .lineTo(x - width / 2, z + depth / 2)
+        .lineTo(x + width / 2, z + depth / 2)
+        .lineTo(x + width / 2, z - depth / 2)
+        .lineTo(x - width / 2, z - depth / 2),
+    );
+  }
   const geometry = new ShapeGeometry(outline);
   // ShapeGeometry lays UVs out in world units; bring them back to the same tiling as the walls.
   const uvAttribute = geometry.getAttribute("uv");

@@ -17,7 +17,7 @@ const cavePreset = {
   godraysEnabled: true,
   godraysDensity: 0.62,
   godraysIntensity: 1.7,
-  godraysSteps: 48,
+  godraysSteps: 32,
   godraysMaxDensity: 0.3,
   godraysFloor: 0.02,
 
@@ -25,13 +25,13 @@ const cavePreset = {
   ssgiEnabled: true,
   ssgiQuality: "medium",
   ssgiIntensity: 2.0,
-  ssgiRadius: 9,
+  ssgiRadius: 6,
   denoiseEnabled: true,
 
   // Wet floor. Kept at half resolution — it is a highlight, not a mirror.
   ssrEnabled: true,
   ssrResolutionScale: 0.5,
-  ssrMaxDistance: 24,
+  ssrMaxDistance: 18,
 
   // Seats the pillars where they meet the ground; without it they float.
   gtaoEnabled: true,
@@ -50,7 +50,7 @@ const cavePreset = {
 
   tonemapMode: "aces",
   // Below 1: the reference's foreground is nearly black and its shaft is the only bright thing.
-  exposure: 1.0,
+  exposure: 1.08,
 } as const;
 
 /** Mobile has no budget for raymarched shafts plus GI; it keeps the curve and the bloom. */

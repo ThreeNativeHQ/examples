@@ -28,7 +28,7 @@ const SUN_INTENSITY = 9.0;
 /** Sky above the gap against damp rock below — the ambient the shaft is read against. */
 const SKY_COLOUR = 0x3a4b63;
 const GROUND_COLOUR = 0x2a1d12;
-const AMBIENT_INTENSITY = 0.95;
+const AMBIENT_INTENSITY = 1.5;
 /** The warm kick on rock next to the shaft, standing in for the first bounce. */
 const BOUNCE_COLOUR = 0xffb066;
 
@@ -96,6 +96,20 @@ export function setupCaveLighting(scene: Scene, renderer: ShadowRenderer): ICave
   const nearBounce = new PointLight(BOUNCE_COLOUR, 34, 26, 2);
   nearBounce.position.set(0, 3, -14);
   scene.add(nearBounce);
+
+  // The second opening over the left aisle, and the daylight falling through it.
+  const sideOpening = new Mesh(
+    new PlaneGeometry(8.2, 6.2),
+    new MeshBasicMaterial({ color: 0xfff4e2, fog: false, side: DoubleSide, toneMapped: false }),
+  );
+  sideOpening.position.set(-21, 19.3, -13);
+  sideOpening.rotation.x = Math.PI / 2;
+  sideOpening.name = "caveSideOpening";
+  scene.add(sideOpening);
+
+  const sideShaft = new PointLight(0xd8e2f0, 60, 34, 2);
+  sideShaft.position.set(-21, 9, -13);
+  scene.add(sideShaft);
 
   return { sun, opening };
 }

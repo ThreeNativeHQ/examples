@@ -46,7 +46,7 @@
       {
         "id": "state",
         "path": "fabPiecesLoaded",
-        "equals": 13,
+        "equals": 20,
         "allowTrivial": "Published when the imported models resolve, before the first observation; the run proves they loaded and drew."
       }
     ],

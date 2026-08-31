@@ -100,6 +100,8 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
         const root = model.scene.clone(true);
         root.name = piece.key;
         if (piece.rotationY !== undefined) root.rotation.y = piece.rotationY;
+        if (piece.rotationX !== undefined) root.rotation.x = piece.rotationX;
+        if (piece.rotationZ !== undefined) root.rotation.z = piece.rotationZ;
         root.updateMatrixWorld(true);
         let texturedMeshes = 0;
         let rebuiltMeshes = 0;
@@ -165,7 +167,13 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
           ...this.#floorMasks,
           sizeMetres: 88,
           heightMetres: 19,
-          hole: { x: 2, z: -24, width: 15, depth: 11 },
+          // Rotating the shape flat maps its local +Y to world +Z, so the room in front of the
+          // camera is negative z here too. Two openings, as the reference has: the main shaft
+          // ahead, and a smaller one over the left aisle that keeps that side out of pure black.
+          holes: [
+            { x: 2, z: -24, width: 15, depth: 11 },
+            { x: -21, z: -13, width: 8, depth: 6 },
+          ],
         }),
       );
     }
@@ -197,14 +205,6 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
         setupCavePost(frame.renderer, frame.scene, camera, this.#sun);
       }
 
-      // Temporary layout probe: ?debugcam=1 lifts the camera out of the room so the whole
-      // chamber can be seen at once. Removed once the composition is settled.
-      if (new URLSearchParams(location.search).has("debugcam")) {
-        camera.position.set(0, 95, 60);
-        camera.lookAt(0, 0, -35);
-        return;
-      }
-
       const move = frame.input.vector("move");
       // Walking, not flying: the camera stays at eye height so the pillars keep their scale.
       this.#position.x += move.x * WALK_SPEED * dt;
@@ -214,7 +214,7 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
       camera.position.copy(this.#position);
       camera.lookAt(
         this.#position.x + Math.sin(this.#look) * 2.5,
-        EYE_HEIGHT + 4.5,
+        EYE_HEIGHT + 2.6,
         this.#position.z - 26,
       );
       frame.state.set({

@@ -21,6 +21,9 @@ export interface ICavePiece {
   readonly anchor: readonly [number, number, number];
   readonly mode: AnchorMode;
   readonly rotationY?: number;
+  /** Tipping a stalactite on its side is how the pack's rock becomes fallen rubble. */
+  readonly rotationX?: number;
+  readonly rotationZ?: number;
   readonly castShadow?: boolean;
 }
 
@@ -54,6 +57,16 @@ export const CAVE_PIECES: readonly ICavePiece[] = [
   { key: "stalactiteNear", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [4, 18.5, -12], mode: "top" },
   { key: "stalactiteFar", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [-6, 18.5, -19], mode: "top", rotationY: 1.4 },
   { key: "ceilingRock", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [-3, 18.8, -8], mode: "top", rotationY: 0.7 },
+
+  // Fallen rock. The reference's floor is strewn with broken blocks catching the shaft; a clean
+  // floor reads as a stage. These are the ceiling pieces tipped over, which is where they came
+  // from in the fiction anyway.
+  { key: "debrisA", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [-6.5, 0, -4], mode: "base", rotationZ: 1.75, rotationY: 0.6 },
+  { key: "debrisB", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [6, 0, -6], mode: "base", rotationZ: -1.5, rotationY: 2.2 },
+  { key: "debrisC", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [-10, 0, -11], mode: "base", rotationX: 0.25, rotationY: 1.1 },
+  { key: "debrisD", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [10, 0, -14], mode: "base", rotationX: -0.2, rotationY: 2.7 },
+  { key: "debrisE", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [3.5, 0, -12], mode: "base", rotationZ: 1.62, rotationY: 1.9 },
+  { key: "debrisF", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [-14, 0, -22], mode: "base", rotationX: 0.15, rotationY: 0.4 },
 
   // Foreground silhouettes. The reference hangs chains close to camera on both sides.
   { key: "chainLeft", path: `${BUILDING}/SM_Cave_Chain_02.glb`, anchor: [-5.5, 18.6, -6], mode: "top", rotationY: 0.2 },
