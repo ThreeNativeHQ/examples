@@ -39,28 +39,54 @@ The game now dedupes by name before constructing the player (`src/scenes/Office.
 game combining two clip sources will have to write. Either the player should take the first
 occurrence and report the drop, or there should be a named helper for merging clip sets.
 
-## 4. `ctx.pointer.on` cannot be given a loaded model, and a skinned mesh does not answer it
+## 4. Withdrawn — picking works; the hit target was too small
 
-Two separate walls, one symptom: nothing is ever clickable.
+This section claimed `ctx.pointer.on` could not be given a loaded `Group` and that a `SkinnedMesh`
+answered no raycast. **Both claims were wrong**, and three tests now say so in the engine
+(`packages/core/__tests__/picking.spec.ts`): the dispatcher walks a hit's parents so registering
+the group works, the picker hits a skinned mesh exactly as it hits a static one, and it follows the
+mesh to wherever its bones moved it.
 
-`pointer.on(object, ...)` tests the object it was handed and does not walk children. Every model
-that comes out of `ctx.assets.model` is a `Group`, so the obvious call registers something with no
-geometry and no event ever fires. Registering the `SkinnedMesh` underneath does not fix it either —
-under the BVH-patched raycaster it returns no hit where a static mesh in the same place does.
+What actually happened is duller: a seated mannequin behind a desk divider is a few dozen pixels,
+and the coordinates being clicked missed it. The invisible box proxy in `src/office/Worker.ts`
+stays because it is the right hit-target size — not as a workaround.
 
-The game now gives each worker an invisible box proxy (`src/office/Worker.ts`) and registers that.
-It is the right answer for hit-target size anyway, but every game that wants a clickable character
-will rediscover both walls first. The capability's own example — `ctx.pointer.on(tile, "tapped",
-…)` — is a static mesh, and grep finds **no live caller of `pointer.on` anywhere in the engine**:
-only the capability manifest, the `@example`, and six templates' AGENTS tables.
+Left in rather than deleted: a false engine bug in a friction log costs more than a missing one.
 
-## 5. No framework way to instance one skinned mesh many times
+## 4b. Fixed upstream: turning SSGI off produced invalid WebGPU pipelines
+
+An interior lit by its own practical lights has no use for screen-space bounce, and on this
+office's large flat walls SSGI's sampling reads as falling rain. Turning it off printed twelve
+console errors a frame:
+
+```
+THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshStandardMaterial_76):
+Color target has no corresponding fragment stage output but writeMask is not zero.
+```
+
+The generated `worldEnvironment.ts` asked the scene pass for `normal`, `metalness` and `roughness`
+whether or not anything wrote them, and PassNode adds every requested target to its framebuffer.
+**The sailing template already had the fix and it had never been propagated to the other seven.**
+Fixed in the engine (`d114c509`); this game runs with SSGI off and zero console errors.
+
+## 5. An entity added during the frame loop has no screen bounds for `at: { entity }`
+
+`playtests/office.playtest.json` clicks a worker to open its card. With `at: { entity: "worker-…" }`
+the runner reports `has no observed screen bounds` and refuses to click, even though the same
+entity's `movement` assertion resolves and passes — so the entity is observed for position and not
+for bounds. Workers are added inside the frame function as sessions appear, which is the only place
+they can be added.
+
+Worked around by clicking the panel's own list row at a coordinate, which proves the same selection
+path through the UI. Not chased to a root cause in the engine.
+
+## 6. No framework way to instance one skinned mesh many times
 
 The office needs sixteen copies of one rigged mannequin. That is
 `three/examples/jsm/utils/SkeletonUtils.js`'s `clone`, imported by hand in `src/office/Worker.ts`.
 It is not a look decision and every crowd, enemy wave and NPC set needs it.
 
-## 6. A playtest scenario has no wall-clock wait, and ticks run far faster than real time
+## 7. A playtest scenario has no wall-clock wait, and ticks run far faster than real time
 
 A scenario that reads as fifteen seconds of waiting completes in about one and a half. Anything the
 proof must synchronise with that is *not* driven by ticks — here, a scripted bridge on the other
@@ -69,7 +95,7 @@ by having the office send a viewer heartbeat and the fixture advance on heartbea
 (`tools/office-bridge/fixture.ts`). A `waitMs` step, or a documented tick-to-wall-clock contract,
 would remove the workaround.
 
-## 7. `warmupFrames` consumes the boot transition, so boot invariants can only be waived
+## 8. `warmupFrames` consumes the boot transition, so boot invariants can only be waived
 
 With any warmup at all, the runner's "before" sample already shows the connected, populated state,
 so `bridgeOnline` and `workerCount` are reported as trivial. Waiving them all then trips

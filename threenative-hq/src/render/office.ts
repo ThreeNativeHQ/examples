@@ -6,7 +6,9 @@
 // only thing in the room allowed to be bright. Nothing here knows what a session is.
 import {
   BoxGeometry,
+  ClampToEdgeWrapping,
   CylinderGeometry,
+  DataTexture,
   Group,
   InstancedMesh,
   Matrix4,
@@ -15,9 +17,19 @@ import {
   MeshStandardMaterial,
   type Object3D,
   PlaneGeometry,
+  SRGBColorSpace,
   Vector3,
 } from "three";
 import { office } from "./palette.js";
+
+export interface IColliderBox {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+}
 
 export interface IDeskAnchor {
   /** Where the worker's feet go when seated, in world space. */
@@ -32,6 +44,15 @@ export interface IDeskAnchor {
 
 export interface IOffice {
   readonly root: Group;
+  /**
+   * Simplified boxes the physics world uses as static geometry.
+   *
+   * Descriptions, not meshes. A desk is four thin slabs and a column is fourteen bands, and giving
+   * the physics world all of that to test against buys nothing a walk-through can feel — and an
+   * invisible mesh in the scene graph is a pipeline WebGPU has opinions about. One box per solid
+   * thing, sized to what the body should bump into, and nothing added to the render graph.
+   */
+  readonly colliders: readonly IColliderBox[];
   /** Every desk in the room, in a stable order — desk 0 is nearest the lift. */
   readonly desks: readonly IDeskAnchor[];
   /** The floor mesh, handed to the navmesh bake. */
@@ -70,13 +91,50 @@ export function createOffice(deskCount: number): IOffice {
   root.add(backWall(), slatWall(), glassWall(), columns(), stripLights(), lounge(), shelving());
 
   const desks: IDeskAnchor[] = [];
+  const colliders: IColliderBox[] = [];
   for (let index = 0; index < deskCount; index += 1) {
     const anchor = placeDesk(index);
     root.add(anchor.group);
     desks.push(anchor.desk);
+    colliders.push(collider(anchor.group.position.x, 0.4, anchor.group.position.z, 1.7, 0.8, 1.5));
   }
+  // Walls, columns and the lounge, as boxes — plus a slab under the floor. The rendered floor is
+  // a rotated plane, and a body built from it inherits that rotation: the box that should have
+  // been the ground stands up on its edge and everything walks straight through where it wasn't.
+  colliders.push(
+    collider(0, -0.15, 0, ROOM_WIDTH, 0.3, ROOM_DEPTH),
+    collider(0, 1.6, -ROOM_DEPTH / 2 - 0.2, ROOM_WIDTH, 3.2, 0.4),
+    collider(0, 1.6, ROOM_DEPTH / 2 + 0.2, ROOM_WIDTH, 3.2, 0.4),
+    collider(-ROOM_WIDTH / 2 - 0.2, 1.6, 0, 0.4, 3.2, ROOM_DEPTH),
+    collider(ROOM_WIDTH / 2 + 0.2, 1.6, 0, 0.4, 3.2, ROOM_DEPTH),
+    collider(-3.9, 0.35, 5.7, 1.6, 0.7, 0.9),
+    collider(3.4, 0.65, 4.4, 0.4, 1.3, 3.7),
+  );
+  for (const x of [-10.2, -2.4, 5.4]) colliders.push(collider(x, 1.6, -2.9, 0.9, 3.2, 0.9));
+  for (const [x, z, wide] of [
+    [-6.5, 4.6, true],
+    [-1.2, 4.6, true],
+    [-3.9, 6.9, true],
+  ] as const)
+    colliders.push(collider(x, 0.4, z, wide ? 2.4 : 1.0, 0.8, 1.0));
 
-  return { root, desks, floor, entrance: new Vector3(-ROOM_WIDTH / 2 + 1.5, 0, ROOM_DEPTH / 2 - 2) };
+  // The door is at the far end, away from the camera: arrivals should cross the room in front of
+  // you, not spawn in the lens.
+  const entrance = new Vector3(ROOM_WIDTH / 2 - 2.2, 0, ROOM_DEPTH / 2 - 2.4);
+  desks.sort((a, b) => a.seat.distanceTo(entrance) - b.seat.distanceTo(entrance));
+  return { colliders, root, desks, floor, entrance };
+}
+
+/** One box for the physics world, described rather than drawn. */
+function collider(
+  x: number,
+  y: number,
+  z: number,
+  width: number,
+  height: number,
+  depth: number,
+): IColliderBox {
+  return { depth, height, width, x, y, z };
 }
 
 /** The tan end wall, plain, so the slats and the glass carry the room. */
@@ -122,8 +180,9 @@ function glassWall(): Object3D {
   const group = new Group();
   const glass = new Mesh(
     new PlaneGeometry(ROOM_WIDTH, CEILING - 0.6),
-    // Basic, not standard: this is the world outside, not a surface being lit by the office.
-    new MeshBasicMaterial({ color: office.glass }),
+    // Basic, not standard: this is the world outside, not a surface being lit by the office. The
+    // gradient is what stops it reading as painted board — a dusk sky is never one flat blue.
+    new MeshBasicMaterial({ map: duskGradient() }),
   );
   glass.position.set(0, CEILING / 2 + 0.1, ROOM_DEPTH / 2 - 0.02);
   glass.rotation.y = Math.PI;
@@ -132,14 +191,6 @@ function glassWall(): Object3D {
   const transom = new Mesh(new BoxGeometry(ROOM_WIDTH, 0.1, 0.14), standard(office.deskFrame, 0.5));
   transom.position.set(0, 1.9, ROOM_DEPTH / 2 - 0.08);
   group.add(transom);
-  const horizon = new Mesh(
-    new PlaneGeometry(ROOM_WIDTH, 0.9),
-    new MeshBasicMaterial({ color: 0x7b93b5 }),
-  );
-  horizon.position.set(0, 1.45, ROOM_DEPTH / 2 - 0.03);
-  horizon.rotation.y = Math.PI;
-  group.add(horizon);
-
   const mullions = 14;
   const bars = new InstancedMesh(
     new BoxGeometry(0.08, CEILING, 0.12),
@@ -155,6 +206,32 @@ function glassWall(): Object3D {
   bars.instanceMatrix.needsUpdate = true;
   group.add(bars);
   return group;
+}
+
+/**
+ * Dusk, as sixteen pixels.
+ *
+ * A `DataTexture` rather than a painted canvas: no 2D context, no DOM, and it is the same three
+ * lines on every target the game runs on.
+ */
+function duskGradient(): DataTexture {
+  const height = 16;
+  const pixels = new Uint8Array(height * 4);
+  for (let index = 0; index < height; index += 1) {
+    // Bottom of the strip is the horizon and the top is the sky above it, so the ramp runs from a
+    // pale warm haze up into deep blue.
+    const t = index / (height - 1);
+    pixels[index * 4] = Math.round(150 - t * 108);
+    pixels[index * 4 + 1] = Math.round(172 - t * 120);
+    pixels[index * 4 + 2] = Math.round(196 - t * 110);
+    pixels[index * 4 + 3] = 255;
+  }
+  const texture = new DataTexture(pixels, 1, height);
+  texture.needsUpdate = true;
+  texture.colorSpace = SRGBColorSpace;
+  texture.wrapS = ClampToEdgeWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  return texture;
 }
 
 /** Banded columns: the reference's most recognisable shape, and cheap — stacked boxes. */

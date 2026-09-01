@@ -2,6 +2,7 @@ import { defineGame, replay } from "@threenative/core";
 import { playtest } from "@threenative/core/playtest";
 import type { IPhysicsContext } from "@threenative/physics";
 import { rapier } from "@threenative/physics";
+import { recast } from "@threenative/physics/navigation";
 import config from "../threenative.config.js";
 import { Office } from "./scenes/Office.js";
 import type { GameState } from "./state.js";
@@ -20,9 +21,11 @@ const game = defineGame<GameState, IPhysicsContext>({
     restart: { keys: ["KeyR"] },
     // Wheel, pinch and the right stick share one portable camera intent. Negative DOM deltaY
     // (toward-user) is positive scroll intent on browser and native; the scene owns the framing.
+    look: { pointerRelative: true },
+    sprint: { keys: ["ShiftLeft", "ShiftRight"] },
     zoom: { gamepadAxes: [3], pinch: true, scroll: true },
   },
-  plugins: [rapier(), replay(), playtest()],
+  plugins: [rapier(), recast(), replay(), playtest()],
   display: config.display,
   render: config.renderer,
   scenes: { office: Office },
@@ -40,6 +43,13 @@ export default game;
  * state instead, which keeps one source of truth on the side that owns the simulation.
  */
 game.ui.onIntent((intent) => {
+  // The panel can pick a session by id. Intents are strings, so the id rides in the name and the
+  // scene consumes it on its next frame — one direction, one owner of the selection.
+  if (intent.startsWith("select:")) {
+    game.state.set({ requestedSelection: intent.slice("select:".length) });
+    game.state.flush();
+    return;
+  }
   if (intent === "restart") void game.goto("office");
   if (intent === "pause") game.pause();
   if (intent === "resume") game.resume();

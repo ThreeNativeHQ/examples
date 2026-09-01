@@ -1,6 +1,16 @@
 import type { WorkerState } from "./office/states.js";
 
+/** One row of the office roster, as the panel reads it. */
+export type SessionRow = {
+  id: string;
+  project: string;
+  host: string;
+  state: string;
+};
+
 export type GameState = {
+  /** Every session on the floor, oldest first — the panel's list and its summary. */
+  sessions: SessionRow[];
   /** Workers currently on the floor — one per live agent session. */
   workerCount: number;
   /** How many desks the room was furnished with. */
@@ -28,6 +38,11 @@ export type GameState = {
   selectedTool: string;
   /** Which lane produced that session: a host hook, the process table, or a transcript. */
   selectedSource: string;
+  /** Where you are standing, so a proof can show the walls actually stopped you. */
+  visitorX: number;
+  visitorZ: number;
+  /** A session the UI asked to select, consumed by the scene on its next frame. */
+  requestedSelection: string;
   /** True once the office scene has built its room. */
   officeReady: boolean;
   /** Set from the UI's pause and resume intents, and read back by the menu. */

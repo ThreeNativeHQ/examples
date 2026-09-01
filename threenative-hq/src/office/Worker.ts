@@ -1,6 +1,6 @@
 import { AnimationPlayer, normaliseToMetres } from "@threenative/core";
 import type { AnimationClip, Group, Material, Object3D } from "three";
-import { BoxGeometry, Color, Mesh, MeshBasicMaterial, MeshStandardMaterial } from "three";
+import { BoxGeometry, Color, Group as ThreeGroup, Mesh, MeshBasicMaterial, MeshStandardMaterial } from "three";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { hostTint } from "../render/palette.js";
 import { SIT_DOWN, STAND_UP, type WorkerState, clipForState } from "./states.js";
@@ -23,14 +23,22 @@ export interface IWorkerOptions {
  * only place a state becomes a pose.
  */
 export class Worker {
+  /**
+   * The body the game moves. The rig hangs underneath it.
+   *
+   * Two objects rather than one, because stride sync measures the ground a body covers against the
+   * clip driving the feet — and if the thing being moved is also the thing the mixer writes, the
+   * measurement reads the clip's own root motion back and the legs run at a speed nothing on
+   * screen is travelling at.
+   */
   readonly object: Object3D;
   /**
    * The meshes a pointer can actually hit.
    *
    * `ctx.pointer.on` registers one object and tests that object; it does not walk children. Every
-   * loaded model is a `Group`, so registering `object` registers something with no geometry and
-   * the worker silently cannot be clicked. The meshes are collected once, here, where the reason
-   * is visible.
+   * loaded model is a `Group`, so registering the rig registers something with no geometry — and
+   * the `SkinnedMesh` underneath answers no raycast under the BVH-patched raycaster either. An
+   * explicit box is both the fix and the kinder hit target.
    */
   readonly picks: readonly Object3D[];
   readonly #player: AnimationPlayer;
@@ -39,27 +47,29 @@ export class Worker {
   #transition: WorkerState | undefined;
 
   constructor(options: IWorkerOptions) {
-    this.object = cloneSkinned(options.source);
+    const body = new ThreeGroup();
+    body.name = "worker";
+    const rig = cloneSkinned(options.source);
     // A mannequin is authored at whatever height its author liked; an office is a real room and
     // the desks are 0.74 m. Normalising here keeps every asset swap honest about scale.
-    normaliseToMetres(this.object, { metres: 1.8, axis: "height" });
-    tint(this.object, hostTint[options.host]);
-    // A plain box the pointer can hit, rather than the skinned body.
-    //
-    // Two reasons, both learned the hard way. `ctx.pointer.on` tests the object it was given and
-    // does not walk children, so the loaded `Group` can never be hit; and the skinned mesh under
-    // it does not answer a raycast the way a static mesh does, so registering it hits nothing
-    // either. A box is also a kinder target: at office scale a seated figure is forty pixels wide.
+    normaliseToMetres(rig, { metres: 1.8, axis: "height" });
+    tint(rig, hostTint[options.host]);
+    body.add(rig);
+
     const proxy = new Mesh(
       new BoxGeometry(0.75, 1.8, 0.75),
-      new MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
+      // Transparent rather than zero-write: WebGPU rejects a pipeline that writes no colour while
+      // its target still has a write mask, and this box must stay visible to the raycaster.
+      new MeshBasicMaterial({ depthWrite: false, opacity: 0, transparent: true }),
     );
     proxy.position.y = 0.9;
     proxy.renderOrder = -1;
     proxy.name = "worker-pick-proxy";
-    this.object.add(proxy);
+    body.add(proxy);
+
+    this.object = body;
     this.picks = [proxy];
-    this.#player = new AnimationPlayer({ clips: options.clips, root: this.object });
+    this.#player = new AnimationPlayer({ clips: options.clips, root: rig, strideRoot: body });
     this.#player.play(clipForState(this.#state).clip);
   }
 
@@ -130,8 +140,6 @@ function tint(root: Object3D, colour: number): void {
     object.material = materials.map((material) => {
       const copy = material.clone();
       if (copy instanceof MeshStandardMaterial) {
-        // The joints material stays dark so the figure still reads as a mannequin rather than
-        // as a solid-colour silhouette; only the body carries the host's colour.
         // Body in office charcoal, host colour on the joints: a figure painted entirely in the
         // host's accent reads as a mascot, and the reference floor has people in dark clothes.
         const joints = /joint/i.test(material.name);

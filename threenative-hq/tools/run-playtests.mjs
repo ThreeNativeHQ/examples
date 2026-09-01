@@ -58,13 +58,11 @@ start("npx", ["tsx", "tools/office-bridge/fixture.ts"], "fixture");
 await sleep(4_000);
 
 let failures = 0;
-process.stderr.write("\n== proof: the office against a scripted bridge ==\n");
-failures += (await playtest(
-  "playtests/office.playtest.json",
-  `http://127.0.0.1:${String(port)}/?bridge=ws://127.0.0.1:${String(FIXTURE_PORT)}/office`,
-)) === 0
-  ? 0
-  : 1;
+const fixtureUrl = `http://127.0.0.1:${String(port)}/?bridge=ws://127.0.0.1:${String(FIXTURE_PORT)}/office`;
+for (const scenario of ["playtests/office.playtest.json", "playtests/visitor.playtest.json"]) {
+  process.stderr.write(`\n== proof: ${scenario} against a scripted bridge ==\n`);
+  failures += (await playtest(scenario, fixtureUrl)) === 0 ? 0 : 1;
+}
 
 const live = await liveSessions();
 if (live > 0) {

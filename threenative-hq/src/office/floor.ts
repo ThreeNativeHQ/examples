@@ -57,3 +57,11 @@ export function assignDesks(
 export function workerStateFor(session: ISessionSummary): WorkerState {
   return session.state;
 }
+
+/**
+ * A worker's own phase, which is not the session's state.
+ *
+ * A session is "working" the moment the bridge says so; its worker may still be walking across the
+ * floor. Keeping the two apart is what stops a mannequin typing in mid-stride.
+ */
+export type ActorPhase = "walkingIn" | "seated" | "walkingOut";

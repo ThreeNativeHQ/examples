@@ -1,0 +1,73 @@
+{
+  "name": "hq-visitor",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "spawn",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-into-the-room",
+      "press": "KeyW",
+      "holdTicks": 240,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-walk",
+      "waitTicks": 60,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "keep-walking-into-the-wall",
+      "press": "KeyW",
+      "holdTicks": 600,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-wall",
+      "waitTicks": 60,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "movement": {
+      "entity": "visitor",
+      "minDistance": 2
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "visitorX",
+        "gte": -16,
+        "lte": 16,
+        "changed": true,
+        "allowTrivial": "The room contains you before you move, too \u2014 that is the point. The proof is the movement row above: twenty-seven metres of walking, and you are still inside these bounds."
+      },
+      {
+        "id": "state",
+        "path": "visitorZ",
+        "gte": -8.5,
+        "lte": 8.5,
+        "changed": true,
+        "allowTrivial": "The room contains you before you move, too \u2014 that is the point. The proof is the movement row above: twenty-seven metres of walking, and you are still inside these bounds."
+      }
+    ]
+  }
+}

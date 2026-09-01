@@ -1,20 +1,34 @@
 import { type ICtx, Scene, type SceneFrame, isMobile } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
+import { CollisionShape3D, RigidBody3D } from "@threenative/physics";
+import { NavigationAgent3D, NavigationRegion3D } from "@threenative/physics/navigation";
 import type { AnimationClip, Group, PerspectiveCamera } from "three";
 import { Color, Mesh, MeshStandardMaterial, Vector3 } from "three";
 import { BridgeClient } from "../office/bridge-client.js";
 import { Worker } from "../office/Worker.js";
-import { assignDesks, workerStateFor } from "../office/floor.js";
+import { type ActorPhase, assignDesks, workerStateFor } from "../office/floor.js";
 import { requiredClips } from "../office/states.js";
 import { setupOfficeLighting } from "../render/lighting.js";
 import { type IOffice, createOffice } from "../render/office.js";
 import { setupPost } from "../render/postprocessing.js";
 import { setupSky } from "../render/sky.js";
-import type { GameState } from "../state.js";
+import { Visitor, capturePointerOnClick } from "../office/Visitor.js";
+import type { GameState, SessionRow } from "../state.js";
 
 export type GameCtx = ICtx<GameState, IPhysicsContext>;
 
 const DESK_COUNT = 16;
+/** Metres per second a worker walks across the floor. An office is not a race. */
+const WALK_SPEED = 2.1;
+/** How close counts as arrived. */
+const ARRIVED_METRES = 0.45;
+
+interface IActor {
+  readonly worker: Worker;
+  readonly agent: NavigationAgent3D | undefined;
+  phase: ActorPhase;
+  deskIndex: number;
+}
 
 export class Office extends Scene<GameState, IPhysicsContext> {
   #rig: Group | undefined;
@@ -30,6 +44,9 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     focusProject: "",
     focusState: "none",
     officeReady: false,
+    requestedSelection: "",
+    visitorX: 0,
+    visitorZ: 0,
     selectedHost: "",
     selectedId: "",
     selectedProject: "",
@@ -37,6 +54,7 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     selectedState: "",
     selectedTool: "",
     paused: false,
+    sessions: [],
     uiReady: false,
     workerCount: 0,
   };
@@ -85,15 +103,34 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     const room: IOffice = createOffice(DESK_COUNT);
     ctx.add(room.root);
 
+    // The room is solid: one static body per simplified box, so a visitor bumps into desks and
+    // columns rather than walking through the furniture.
+    for (const box of room.colliders) {
+      new RigidBody3D({
+        physics: ctx.physics,
+        position: { x: box.x, y: box.y, z: box.z },
+        shape: CollisionShape3D.box(box.width, box.height, box.depth),
+        type: "fixed",
+      });
+    }
     ctx.add(ctx.camera);
     const camera = ctx.camera as PerspectiveCamera;
-    // Framing after the reference: eye height, off to one side, looking down the desk rows so the
-    // slat wall fills the background and the glass throws the far edge of the floor into light.
-    camera.position.set(-13.4, 1.55, 4.6);
-    camera.lookAt(new Vector3(-3.4, 1.0, -4.2));
+    // You start by the door, looking down the floor — the same framing the reference frames use,
+    // except now you can walk out of it.
+    const visitor = new Visitor(ctx, new Vector3(11.6, 0.7, 4.6), 1.19);
+    const releasePointer = capturePointerOnClick();
+    ctx.entities.add("visitor", visitor.object);
+    visitor.update(ctx, 0, camera);
+
+    // Bake before any agent exists: the region is the floor the workers walk on, and an agent
+    // created against an unbaked navmesh has nowhere to path.
+    const navigation = ctx.physics.navigation;
+    if (navigation !== undefined) new NavigationRegion3D({ meshes: [room.floor], navigation });
 
     const bridge = new BridgeClient();
     const workers = new Map<string, Worker>();
+    const actors = new Map<string, IActor>();
+    const leaving: IActor[] = [];
     // Clicking a worker asks "what is this one doing", so the answer is the session's own summary
     // — repository, host, state, last tool. Never a prompt: the bridge does not carry one, and the
     // office is a wall display.
@@ -104,6 +141,10 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     });
     let seating = new Map<string, number>();
     let arrivals = 0;
+    let logTick = 0;
+    // The sessions already running when the office opens were not born at the door. Only the ones
+    // that start after the first snapshot walk in — otherwise every reload stages a fake commute.
+    let seenFirstSnapshot = false;
     let departures = 0;
     let blockedSeen = false;
 
@@ -111,7 +152,15 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     ctx.state.flush();
 
     return (frameCtx, dt) => {
-      if (frameCtx.state.getState().paused) return;
+      const store = frameCtx.state.getState();
+      if (store.paused) return;
+      visitor.update(frameCtx, dt, camera);
+      // The panel can ask for a selection; the scene is the only thing that owns one.
+      if (store.requestedSelection !== "") {
+        selectedId = store.requestedSelection === selectedId ? "" : store.requestedSelection;
+        frameCtx.state.set({ requestedSelection: "" });
+      }
+      logTick += 1;
       bridge.tick();
       const sessions = bridge.sessions();
       const assignment = assignDesks(sessions, room.desks.length, seating);
@@ -123,9 +172,15 @@ export class Office extends Scene<GameState, IPhysicsContext> {
         if (deskIndex === undefined) continue;
         const desk = room.desks[deskIndex];
         if (desk === undefined) continue;
-        let worker = workers.get(session.id);
-        if (worker === undefined) {
-          worker = new Worker({ clips: this.#clips, host: session.host, source: rig });
+        let actor = actors.get(session.id);
+        if (actor === undefined) {
+          const worker = new Worker({ clips: this.#clips, host: session.host, source: rig });
+          // Everyone comes in through the door and walks to their desk. Placing them in the chair
+          // would be one line shorter and would make a busy machine look like a photograph.
+          // Fan the doorway out a little so four arrivals in one second do not walk as one body.
+          worker.object.position.copy(room.entrance);
+          worker.object.position.x -= (arrivals % 4) * 0.55;
+          worker.object.position.z -= ((arrivals + 1) % 3) * 0.5;
           frameCtx.add(worker.object);
           frameCtx.entities.add(entityId(session.id), worker);
           workers.set(session.id, worker);
@@ -136,36 +191,76 @@ export class Office extends Scene<GameState, IPhysicsContext> {
               selectedId = selectedId === clicked ? "" : clicked;
             });
           }
+          const agent =
+            navigation === undefined
+              ? undefined
+              : new NavigationAgent3D({ maxSpeed: WALK_SPEED, navigation, object: worker.object });
+          agent?.setTargetPosition(desk.stand);
+          const walks = seenFirstSnapshot;
+          if (!walks) worker.object.position.copy(desk.seat);
+          actor = { agent, deskIndex, phase: walks ? "walkingIn" : "seated", worker };
+          actors.set(session.id, actor);
+        }
+        if (actor.deskIndex !== deskIndex) {
+          actor.deskIndex = deskIndex;
+          if (actor.phase === "walkingIn") actor.agent?.setTargetPosition(desk.stand);
         }
         const state = workerStateFor(session);
         if (state === "blocked") blockedSeen = true;
-        worker.setState(state);
-        // A standing worker steps back from the chair; a seated one sits in it.
-        const anchor = worker.standing ? desk.stand : desk.seat;
-        worker.object.position.copy(anchor);
-        worker.object.rotation.y = desk.facing;
+        if (actor.phase === "walkingIn") {
+          actor.worker.setState("arriving");
+          if (step(actor, desk.stand, dt)) {
+            actor.phase = "seated";
+            actor.worker.setState(state);
+          }
+        } else {
+          actor.worker.setState(state);
+          // A standing worker steps back from the chair; a seated one sits in it.
+          actor.worker.object.position.copy(actor.worker.standing ? desk.stand : desk.seat);
+          actor.worker.object.rotation.y = desk.facing;
+        }
         // A working session lights its own monitor. It is the cheapest way to read the floor at a
         // glance — a room of dark screens with three lit ones says where the work is.
-        setScreen(desk.screen, state === "working" || state === "thinking");
+        setScreen(desk.screen, actor.phase === "seated" && (state === "working" || state === "thinking"));
       }
 
-      // Departures: a worker whose session is gone from the snapshot leaves the floor entirely.
-      for (const [id, worker] of workers) {
+      // Departures: a worker whose session is gone walks out. Its desk frees immediately — the
+      // count on the wall is about sessions, and the walk is about the room.
+      for (const [id, actor] of actors) {
         if (assignment.desks.has(id)) continue;
-        worker.object.removeFromParent();
-        worker.dispose();
-        frameCtx.entities.remove(entityId(id));
+        actor.phase = "walkingOut";
+        actor.worker.setState("leaving");
+        actor.agent?.setTargetPosition(room.entrance);
+        setScreen(room.desks[actor.deskIndex]?.screen ?? room.desks[0]!.screen, false);
+        actors.delete(id);
         workers.delete(id);
         seating.delete(id);
+        leaving.push(actor);
         departures += 1;
       }
 
-      for (const worker of workers.values()) worker.update(dt);
+      for (let index = leaving.length - 1; index >= 0; index -= 1) {
+        const actor = leaving[index] as IActor;
+        if (!step(actor, room.entrance, dt)) continue;
+        actor.worker.object.removeFromParent();
+        actor.worker.dispose();
+        leaving.splice(index, 1);
+      }
+
+      for (const actor of actors.values()) actor.worker.update(dt);
+      for (const actor of leaving) actor.worker.update(dt);
 
       if (selectedId !== "" && !workers.has(selectedId)) selectedId = "";
       const selected = sessions.find((session) => session.id === selectedId);
       const focus = sessions[0];
       const focusWorker = focus === undefined ? undefined : workers.get(focus.id);
+      if (sessions.length > 0) seenFirstSnapshot = true;
+      const roster: SessionRow[] = sessions.map((session) => ({
+        host: session.host,
+        id: session.id,
+        project: session.project,
+        state: session.state,
+      }));
       const next = {
         arrivals,
         blockedSeen,
@@ -180,17 +275,51 @@ export class Office extends Scene<GameState, IPhysicsContext> {
         selectedSource: selected?.source ?? "",
         selectedState: selected?.state ?? "",
         selectedTool: selected?.tool ?? "",
+        visitorX: Math.round(visitor.object.position.x * 100) / 100,
+        visitorZ: Math.round(visitor.object.position.z * 100) / 100,
         workerCount: workers.size,
       };
       const current = frameCtx.state.getState();
       const changed = (Object.keys(next) as (keyof typeof next)[]).some(
         (field) => current[field] !== next[field],
       );
-      if (changed) frameCtx.state.set(next);
+      // The roster is an array, so it is compared by content rather than by identity — publishing
+      // an equal array every frame would wake every React subscriber ten times a second.
+      const rosterChanged = JSON.stringify(current.sessions) !== JSON.stringify(roster);
+      if (changed || rosterChanged) frameCtx.state.set({ ...next, sessions: roster });
+      void releasePointer;
     };
   }
 }
 
+/**
+ * Move one actor toward a point and report arrival.
+ *
+ * The navmesh supplies the next position on the path; the game moves the body, because the walk
+ * cycle's rate is matched to the ground the body actually covers and a crowd that teleports its
+ * agents would leave the feet skating.
+ */
+function step(actor: IActor, goal: Vector3, dt: number): boolean {
+  const object = actor.worker.object;
+  const next = actor.agent?.getNextPathPosition(SCRATCH) ?? SCRATCH.copy(goal);
+  next.y = 0;
+  const flat = SCRATCH_GOAL.copy(goal);
+  flat.y = 0;
+  const here = SCRATCH_HERE.copy(object.position);
+  here.y = 0;
+  if (here.distanceTo(flat) <= ARRIVED_METRES) return true;
+  const toward = next.sub(here);
+  if (toward.lengthSq() < 1e-6) toward.copy(flat).sub(here);
+  if (toward.lengthSq() < 1e-6) return true;
+  toward.normalize();
+  object.position.addScaledVector(toward, Math.min(WALK_SPEED * dt, here.distanceTo(flat)));
+  object.rotation.y = Math.atan2(toward.x, toward.z);
+  return false;
+}
+
+const SCRATCH = new Vector3();
+const SCRATCH_GOAL = new Vector3();
+const SCRATCH_HERE = new Vector3();
 const SCREEN_ON = new Color(0x9fd4e8);
 const SCREEN_OFF = new Color(0x14161a);
 
@@ -206,7 +335,13 @@ function setScreen(screen: Mesh, lit: boolean): void {
   material.needsUpdate = true;
 }
 
-/** Entity ids are how a playtest names a worker, so they must be stable and readable. */
+/**
+ * Entity ids are how a playtest names a worker, so they must be stable, readable and plain.
+ *
+ * Plain matters: a session id carries a colon, and an entity id that carries one is silently
+ * absent from the runner's observations — a scenario that clicks it fails with "no observed
+ * screen bounds" and nothing says why.
+ */
 function entityId(sessionId: string): string {
-  return `worker-${sessionId.replace(/[^a-zA-Z0-9:-]/g, "")}`;
+  return `worker-${sessionId.replace(/[^a-zA-Z0-9]+/g, "-")}`;
 }

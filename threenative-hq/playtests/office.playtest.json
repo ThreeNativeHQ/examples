@@ -15,22 +15,36 @@
       "release": true
     },
     {
+      "kind": "input",
+      "label": "walk-onto-the-floor",
+      "press": "KeyW",
+      "holdTicks": 150,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "walk-in",
+      "waitTicks": 420,
+      "release": true
+    },
+    {
       "kind": "wait",
       "label": "script-plays",
-      "waitTicks": 240,
+      "waitTicks": 300,
       "release": true
     },
     {
       "kind": "wait",
       "label": "settle",
-      "waitTicks": 120,
+      "waitTicks": 180,
       "release": true
     },
     {
       "kind": "click",
-      "label": "inspect-a-worker",
+      "label": "pick-a-session-in-the-panel",
       "at": {
-        "entity": "worker-claude:103"
+        "x": 1100,
+        "y": 262
       }
     },
     {
@@ -74,9 +88,13 @@
       {
         "id": "state",
         "path": "selectedProject",
-        "equals": "threenative-engine",
+        "equals": "rpg-api",
         "changed": true
       }
-    ]
+    ],
+    "movement": {
+      "entity": "worker-claude-104",
+      "minDistance": 2
+    }
   }
 }

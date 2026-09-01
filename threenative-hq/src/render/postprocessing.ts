@@ -16,11 +16,12 @@ import type { OutputRenderer } from "./worldEnvironment.js";
 const sharpenStrength = 0.28;
 
 const desktopPreset = {
-  ssgiEnabled: true,
-  ssgiQuality: "medium",
-  denoiseEnabled: true,
-  ssrEnabled: true,
-  ssrResolutionScale: 0.5,
+  // No screen-space GI or reflections in here. Both sample the screen stochastically, and on
+  // this office's large flat matte walls that reads as falling rain; the room is lit by twelve
+  // practical lights and gains nothing from the bounce they fake.
+  ssgiEnabled: false,
+  denoiseEnabled: false,
+  ssrEnabled: false,
   bloomEnabled: true,
   bloomStrength: 0.22,
   sharpenEnabled: true,
