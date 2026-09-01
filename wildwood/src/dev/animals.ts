@@ -102,7 +102,7 @@ const animals = await spawnWildwoodAnimals({
   // The harness stands in for ctx.assets.model: same logical paths, same manifest resolution,
   // raw GLTFLoader instead of the engine's loader.
   load: async (path) => {
-    const gltf = await loader.loadAsync(resolveModel(`fab/${ANIMAL_LISTING}/raw/${path}`));
+    const gltf = await loader.loadAsync(resolveModel(`fab/${ANIMAL_LISTING}/ue/Models/${path}`));
     return { scene: gltf.scene, animations: gltf.animations };
   },
   ground: () => 0,
