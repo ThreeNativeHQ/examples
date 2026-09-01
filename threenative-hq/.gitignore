@@ -1,0 +1,10 @@
+node_modules/
+dist/
+artifacts/
+public/assets/
+public/*.glb
+public/*.png
+public/assets.manifest.json
+# The untrimmed 15 MB animation libraries. `tools/trim-clips.mjs` regenerates assets/ from them,
+# and the asset MCP re-downloads them from itch on any machine that needs them again.
+tools/source-assets/
