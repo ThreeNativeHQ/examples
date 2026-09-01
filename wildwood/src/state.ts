@@ -42,6 +42,7 @@ export type GameState = {
   /** What the valley was built out of, for the performance panel and the load proof. */
   treeCount: number;
   fernCount: number;
+  boulderCount: number;
   grassCount: number;
   terrainTriangles: number;
   /** True once the valley has finished building. */

@@ -1,234 +1,6 @@
 {
   "outputs": [
     {
-      "bytes": 17266,
-      "path": "landscape-pro/import-report.3da393a5.json",
-      "producer": "",
-      "source": "landscape-pro/import-report.json"
-    },
-    {
-      "bytes": 2563209,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/BrokenTree/T_dead_tree_trunk_diffuse.a2f98ac3.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/BrokenTree/T_dead_tree_trunk_diffuse.png"
-    },
-    {
-      "bytes": 2912005,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/BrokenTree/T_dead_tree_trunk_normal.81a1c0bb.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/BrokenTree/T_dead_tree_trunk_normal.png"
-    },
-    {
-      "bytes": 558140,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Clover/T_clover_diffuse.330d6746.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Clover/T_clover_diffuse.png"
-    },
-    {
-      "bytes": 1363360,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Clover/T_clover_normal.1214da87.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Clover/T_clover_normal.png"
-    },
-    {
-      "bytes": 1102087,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Farn/T_farn_alphas.282cb699.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Farn/T_farn_alphas.png"
-    },
-    {
-      "bytes": 722985,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Farn/T_farn_diffuse.37c4d966.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Farn/T_farn_diffuse.png"
-    },
-    {
-      "bytes": 1023980,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Farn/T_farn_normal.1e103103.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Farn/T_farn_normal.png"
-    },
-    {
-      "bytes": 238728,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Grass/T_GrassGroup_Diffuse.9c0cc384.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Grass/T_GrassGroup_Diffuse.png"
-    },
-    {
-      "bytes": 21691,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/GrassBush/T_grass_bush_atlas_alpha.6116fd1c.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/GrassBush/T_grass_bush_atlas_alpha.png"
-    },
-    {
-      "bytes": 209364,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/GrassBush/T_grass_bush_atlas_diffuse.a49955b7.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/GrassBush/T_grass_bush_atlas_diffuse.png"
-    },
-    {
-      "bytes": 270696,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/GrassBush/T_grass_bush_atlas_normal.9830b954.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/GrassBush/T_grass_bush_atlas_normal.png"
-    },
-    {
-      "bytes": 1128133,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_leafs_diffuse.8cdd39e3.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_leafs_diffuse.png"
-    },
-    {
-      "bytes": 1275222,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_leafs_normal.1a06a253.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_leafs_normal.png"
-    },
-    {
-      "bytes": 3712922,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_pine_bark_diffuse.f2830b63.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_pine_bark_diffuse.png"
-    },
-    {
-      "bytes": 2947333,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_pine_bark_normal.f317da15.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_pine_bark_normal.png"
-    },
-    {
-      "bytes": 716793,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_tree_pine_barkDetail_diffuse.e74eadd3.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_tree_pine_barkDetail_diffuse.png"
-    },
-    {
-      "bytes": 1340258,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_tree_pine_barkDetail_normal.db70ec46.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/Pines/T_tree_pine_barkDetail_normal.png"
-    },
-    {
-      "bytes": 2470174,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/RocksLarge/T_cliffrock01_moss_diffuse.68b499c3.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/RocksLarge/T_cliffrock01_moss_diffuse.png"
-    },
-    {
-      "bytes": 2026444,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/RocksLarge/T_cliffrock01_moss_normal.9622b35f.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/RocksLarge/T_cliffrock01_moss_normal.png"
-    },
-    {
-      "bytes": 2566088,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/RocksLarge/T_cliffrocks_diffuse.29413c6f.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/RocksLarge/T_cliffrocks_diffuse.png"
-    },
-    {
-      "bytes": 2852684,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/RocksLarge/T_cliffrocks_normal.aa71c353.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Foliage/RocksLarge/T_cliffrocks_normal.png"
-    },
-    {
-      "bytes": 3436462,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_dirt_01_diffuse.7b7a7764.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_dirt_01_diffuse.png"
-    },
-    {
-      "bytes": 4047842,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_dirt_01_normal.ad90053e.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_dirt_01_normal.png"
-    },
-    {
-      "bytes": 3557834,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_forest_diffuse.05b8660f.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_forest_diffuse.png"
-    },
-    {
-      "bytes": 3980544,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_forest_normal.38438b2e.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_forest_normal.png"
-    },
-    {
-      "bytes": 3307581,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_grass_01_diffuse.f88494c5.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_grass_01_diffuse.png"
-    },
-    {
-      "bytes": 3006546,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_grass_01_normal.a8decee0.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_grass_01_normal.png"
-    },
-    {
-      "bytes": 3288893,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_grass_02_diffuse.0c3c6022.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_grass_02_diffuse.png"
-    },
-    {
-      "bytes": 3879619,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_grass_02_normal.8e344a7c.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_grass_02_normal.png"
-    },
-    {
-      "bytes": 3311793,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_01_diffuse.47a5524f.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_01_diffuse.png"
-    },
-    {
-      "bytes": 3953283,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_01_normal.1bd3ced9.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_01_normal.png"
-    },
-    {
-      "bytes": 3093738,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_02_diffuse.078fca0d.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_02_diffuse.png"
-    },
-    {
-      "bytes": 3994529,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_02_normal.855c663e.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_02_normal.png"
-    },
-    {
-      "bytes": 2532070,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_03_diffuse.14048b54.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_03_diffuse.png"
-    },
-    {
-      "bytes": 3608410,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_03_normal.2e169599.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Landscape/T_ground_rock_03_normal.png"
-    },
-    {
-      "bytes": 557166,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Water/T_water01.a0b1221d.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Water/T_water01.png"
-    },
-    {
-      "bytes": 2205679,
-      "path": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Water/T_waves_normal.0ac36335.png",
-      "producer": "",
-      "source": "landscape-pro/textures/Content/STF/Pack03-LandscapePro/Environment/Landscape/Water/T_waves_normal.png"
-    },
-    {
       "bytes": 242282,
       "path": "landscape/cliffrock01_moss_diffuse.d8cca7ba.jpg",
       "producer": "",
@@ -283,10 +55,10 @@
       "source": "landscape/farn_alphas.jpg"
     },
     {
-      "bytes": 147976,
-      "path": "landscape/farn_diffuse.b68d9713.jpg",
+      "bytes": 733988,
+      "path": "landscape/farn_diffuse.b52ce384.png",
       "producer": "",
-      "source": "landscape/farn_diffuse.jpg"
+      "source": "landscape/farn_diffuse.png"
     },
     {
       "bytes": 333975,
@@ -313,10 +85,10 @@
       "source": "landscape/grass_bush_atlas_normal.jpg"
     },
     {
-      "bytes": 81243,
-      "path": "landscape/grassgroup_diffuse.ec535ad8.jpg",
+      "bytes": 241948,
+      "path": "landscape/grassgroup_diffuse.419e412b.png",
       "producer": "",
-      "source": "landscape/grassgroup_diffuse.jpg"
+      "source": "landscape/grassgroup_diffuse.png"
     },
     {
       "bytes": 329268,
@@ -403,10 +175,10 @@
       "source": "landscape/ground_rock_03_normal.jpg"
     },
     {
-      "bytes": 196452,
-      "path": "landscape/leafs_diffuse.6dab237f.jpg",
+      "bytes": 1092240,
+      "path": "landscape/leafs_diffuse.1d0c471f.png",
       "producer": "",
-      "source": "landscape/leafs_diffuse.jpg"
+      "source": "landscape/leafs_diffuse.png"
     },
     {
       "bytes": 488020,

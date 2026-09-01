@@ -74,8 +74,8 @@ const high: IWorldEnvironmentOptions = {
   // Bloom: ~4.6 ms — the second most expensive stage in the chain, and the one nobody expects
   // to be.
   bloomEnabled: true,
-  bloomStrength: 0.95,
-  exposure: 1.42,
+  bloomStrength: 0.72,
+  exposure: 1.24,
   // The two full-resolution denoise passes over the AO and GI terms: ~1.9 ms. Only worth running
   // when SSGI is on — its noise is what they clean up.
   denoiseEnabled: true,
@@ -108,8 +108,8 @@ const medium: IWorldEnvironmentOptions = {
   // Bloom: ~4.6 ms — the second most expensive stage in the chain, and the one nobody expects
   // to be.
   bloomEnabled: true,
-  bloomStrength: 0.95,
-  exposure: 1.42,
+  bloomStrength: 0.72,
+  exposure: 1.24,
   // Screen-space reflections: ~4.1 ms.
   ssrEnabled: true,
   // A reflection carries almost no high-frequency detail, so half resolution costs a quarter of
@@ -134,8 +134,8 @@ const low: IWorldEnvironmentOptions = {
   // Bloom: ~4.6 ms — the second most expensive stage in the chain, and the one nobody expects
   // to be.
   bloomEnabled: true,
-  bloomStrength: 0.95,
-  exposure: 1.42,
+  bloomStrength: 0.72,
+  exposure: 1.24,
   // RCAS sharpen: unmeasured — never ablated on its own here. It puts back the micro-detail the
   // denoiser and the half-resolution reflection take out, so it earns its cost only on a tier
   // that runs one of them.

@@ -29,10 +29,10 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 const errors = [];
 const logs = [];
-page.on("pageerror", (e) => errors.push(String(e).slice(0, 400)));
+page.on("pageerror", (e) => errors.push(((e && e.stack) || (e && e.message) || String(e)).slice(0, 900)));
 page.on("console", (m) => {
   const t = m.text();
-  if (/TN_|error|Error|WARN/.test(t)) logs.push(t.slice(0, 240));
+  if (/TN_|error|Error|WARN|fail/i.test(t)) logs.push(t.slice(0, 400));
 });
 
 const shoot = async (name, at) => {

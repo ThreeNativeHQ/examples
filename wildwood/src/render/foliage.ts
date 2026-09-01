@@ -25,6 +25,7 @@ import {
   CylinderGeometry,
   DoubleSide,
   Float32BufferAttribute,
+  Euler,
   IcosahedronGeometry,
   InstancedMesh,
   Matrix4,
@@ -38,7 +39,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { MeshStandardNodeMaterial } from "three/webgpu";
 import { attribute, float, instanceIndex, positionLocal, sin, texture, time, uv, vec3 } from "three/tsl";
 import { palette } from "./palette.js";
-import { WATER_LEVEL, hash2, heightAt, slopeAt } from "./terrain.js";
+import { WATER_LEVEL, hash2, heightAt, slopeAt, surfaceAt } from "./terrain.js";
 
 /** The pack's foliage maps. Bark tiles; the rest are atlases of cut-out plants on black. */
 export interface IFoliageMaps {
@@ -46,6 +47,10 @@ export interface IFoliageMaps {
   readonly barkNormal: Texture;
   readonly frond: Texture;
   readonly plants: Texture;
+  /** Pine branch sprays, for the conifer canopies. */
+  readonly needles: Texture;
+  /** Mossy cliff rock, for the boulders strewn across the floor. */
+  readonly rock: Texture;
 }
 
 /**
@@ -90,6 +95,25 @@ const FROND_CELLS: readonly ICell[] = [
 ];
 
 /** Where a plant may live, and how thickly. All distances in metres. */
+/**
+ * Pine branch sprays from `leafs_diffuse` (1024x1024, four usable sprays on black).
+ *
+ * `stemAtRight` matters: a spray is a woody stem with needles hanging off it, and the stem end has
+ * to be the end that meets the trunk. Two of these were photographed running right-to-left, so
+ * their U is mirrored when the card is built. Backwards, branches attach by their tips and the
+ * tree reads as assembled inside-out.
+ */
+interface IBranchCell extends ICell {
+  readonly stemAtRight: boolean;
+}
+
+const BRANCH_CELLS: readonly IBranchCell[] = [
+  { stemAtRight: false, u0: 0.02, u1: 0.72, v0: 0.70, v1: 0.96 },
+  { stemAtRight: true, u0: 0.37, u1: 0.99, v0: 0.55, v1: 0.71 },
+  { stemAtRight: false, u0: 0.01, u1: 0.67, v0: 0.03, v1: 0.35 },
+  { stemAtRight: false, u0: 0.72, u1: 0.95, v0: 0.74, v1: 0.96 },
+];
+
 export interface IScatterRule {
   readonly count: number;
   /** Reject ground steeper than this |gradient|. */
@@ -130,7 +154,9 @@ export function scatter(rule: IScatterRule, extent: number): IScatterPoint[] {
     const x = -extent + (ix + jitterX) * cell;
     const z = -extent + (iz + jitterZ) * cell;
     if (Math.hypot(x, z) < rule.clearing) continue;
-    const y = heightAt(x, z);
+    // The drawn surface, not the analytic one — see `surfaceAt`. Placing on `heightAt`
+    // leaves every plant on a hilltop hovering a few centimetres clear of the ground.
+    const y = surfaceAt(x, z);
     if (y < WATER_LEVEL + rule.minHeight) continue;
     if (y > rule.maxHeight) continue;
     if (slopeAt(x, z) > rule.maxSlope) continue;
@@ -205,6 +231,26 @@ function canopyMaterial(): MeshStandardNodeMaterial {
 }
 
 /**
+ * The needle canopy: the pack's own branch sprays, alpha-tested out of their black background.
+ *
+ * `alphaTest` is 0.05, not the 0.4-ish a cut-out atlas usually wants — this atlas means 0.075
+ * brightness because it is authored for Unreal's exposure, and a conventional threshold deletes the
+ * whole canopy. Double-sided including `shadowSide`, or a branch seen from beneath is a hole.
+ */
+function needleMaterial(maps: IFoliageMaps): MeshStandardNodeMaterial {
+  maps.needles.wrapS = RepeatWrapping;
+  maps.needles.wrapT = RepeatWrapping;
+  const material = windMaterial(0.024, 1.5, 0.19);
+  material.side = DoubleSide;
+  material.shadowSide = DoubleSide;
+  material.alphaTest = 0.05;
+  const sample = texture(maps.needles, uv());
+  material.colorNode = sample.rgb.mul(vec3(3.1, 3.5, 2.6));
+  material.opacityNode = sample.r.max(sample.g).max(sample.b);
+  return material;
+}
+
+/**
  * A quad standing on the ground, textured from one atlas cell.
  *
  * `width` and `height` are metres. Segmented vertically so the wind can bend it into a curve
@@ -226,6 +272,57 @@ function card(width: number, height: number, cell: ICell): BufferGeometry {
   }
   attribute.needsUpdate = true;
   return geometry;
+}
+
+/**
+ * One branch: a quad whose inner edge sits on the trunk and which extends outward from there.
+ *
+ * Built lying in the XZ plane rather than standing like a grass blade, because a conifer branch is
+ * a horizontal thing. `droop` bends the far end down with the square of the distance out, so the
+ * branch leaves the trunk level and sags as it goes — a linear droop reads as a stick pointing at
+ * the floor, and none at all reads as a wheel of spokes.
+ */
+function branchCard(length: number, width: number, cell: IBranchCell, droop: number): BufferGeometry {
+  const geometry = new PlaneGeometry(length, width, 5, 1);
+  geometry.translate(length / 2, 0, 0);
+  geometry.rotateX(-Math.PI / 2);
+  const position = geometry.getAttribute("position");
+  const attribute = geometry.getAttribute("uv");
+  for (let index = 0; index < attribute.count; index += 1) {
+    const along = attribute.getX(index);
+    const u = cell.stemAtRight ? 1 - along : along;
+    attribute.setXY(
+      index,
+      cell.u0 + u * (cell.u1 - cell.u0),
+      cell.v0 + attribute.getY(index) * (cell.v1 - cell.v0),
+    );
+    const t = position.getX(index) / length;
+    position.setY(index, position.getY(index) - droop * t * t);
+  }
+  attribute.needsUpdate = true;
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/**
+ * A ring of branches around the trunk at one height; a tree is a stack of these.
+ *
+ * Real conifers put out branches in rough whorls, longest at the bottom — which is what makes the
+ * cone silhouette without anyone drawing a cone.
+ */
+function whorl(count: number, length: number, width: number, y: number, twist: number, droop: number): BufferGeometry[] {
+  const parts: BufferGeometry[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const cell = BRANCH_CELLS[index % BRANCH_CELLS.length];
+    if (cell === undefined) continue;
+    const branch = branchCard(length, width, cell, droop);
+    branch.rotateZ(index % 2 === 0 ? 0.09 : -0.05);
+    branch.rotateY((index / count) * Math.PI * 2 + twist);
+    branch.translate(0, y, 0);
+    parts.push(painted(branch, 0xffffff));
+  }
+  return parts;
 }
 
 /**
@@ -353,65 +450,109 @@ interface ITreeGeometry {
 }
 
 /**
- * One conifer: a tapered trunk and four stacked cones, origin at the base of the trunk.
+ * A boulder: an icosahedron pushed around by noise until it stops being an icosahedron.
  *
- * The trunk is deliberately long and bare before the first tier starts. The reference photograph
- * is mostly *trunk* — dark verticals in the near field with the canopy above the frame — and a
- * tree whose branches start at knee height reads as a bush however good its texture is.
+ * The trick is that the displacement is per-vertex and *seeded by the vertex position*, so it is
+ * stable, and the geometry is welded afterwards — an unwelded displaced sphere shows every facet
+ * seam as a crack of daylight. Flat-shaded on purpose: a rock reads as faceted stone, and smooth
+ * normals over this silhouette look like a deflated ball.
  */
-function coniferGeometry(): ITreeGeometry {
-  const trunk = new CylinderGeometry(0.15, 0.36, 9.4, 7);
-  trunk.translate(0, 4.7, 0);
-  // The bark tiles up the trunk rather than stretching once over seven metres.
+function boulderGeometry(seed: number, detail: number): BufferGeometry {
+  const geometry = new IcosahedronGeometry(1, detail);
+  const position = geometry.getAttribute("position");
+  const vertex = new Vector3();
+  for (let index = 0; index < position.count; index += 1) {
+    vertex.fromBufferAttribute(position, index);
+    // Two octaves: a big lumpiness that makes the overall shape, and a small one for surface grain.
+    const coarse = hash2(Math.round(vertex.x * 3), Math.round(vertex.z * 3 + vertex.y * 7), seed);
+    const fine = hash2(Math.round(vertex.x * 11), Math.round(vertex.z * 11 + vertex.y * 13), seed + 7);
+    vertex.multiplyScalar(0.84 + coarse * 0.24 + fine * 0.07);
+    // Squash: boulders sit, they do not float. Wider than tall reads as weight.
+    vertex.y *= 0.66;
+    position.setXYZ(index, vertex.x, vertex.y, vertex.z);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/** Mossy rock, lifted for this scene's exposure like everything else out of the pack. */
+function rockMaterial(maps: IFoliageMaps): MeshStandardNodeMaterial {
+  maps.rock.wrapS = RepeatWrapping;
+  maps.rock.wrapT = RepeatWrapping;
+  const material = new MeshStandardNodeMaterial({ metalness: 0, roughness: 0.95 });
+  material.colorNode = texture(maps.rock, uv().mul(2.2)).rgb.mul(float(1.45));
+  return material;
+}
+
+/**
+ * The shape of one pine, as numbers.
+ *
+ * Every tree in the valley comes out of this one function. A wood drawn from a single geometry
+ * reads as wallpaper however good that geometry is — the eye finds the repeat in about a second,
+ * and per-instance rotation does not hide it, because rotating a tree does not change its
+ * silhouette. Height, taper, where the branches start and how far they reach do.
+ */
+interface IPineShape {
+  readonly trunkHeight: number;
+  readonly trunkTop: number;
+  readonly trunkBottom: number;
+  /** How far up the trunk the lowest branch sits — the single biggest silhouette change. */
+  readonly firstBranch: number;
+  /** Fraction of trunk height the topmost whorl reaches. */
+  readonly crownTop: number;
+  readonly tiers: number;
+  /** Length of the lowest, longest branch. */
+  readonly reach: number;
+  /** Higher tapers to a spire; lower stays columnar. */
+  readonly taper: number;
+  /** Radians off vertical. A wood where every trunk is plumb reads as planted, not grown. */
+  readonly lean: number;
+}
+
+function pineGeometry(shape: IPineShape): ITreeGeometry {
+  const trunk = new CylinderGeometry(shape.trunkTop, shape.trunkBottom, shape.trunkHeight, 7);
+  trunk.translate(0, shape.trunkHeight / 2, 0);
   const trunkUv = trunk.getAttribute("uv");
   for (let index = 0; index < trunkUv.count; index += 1) {
-    trunkUv.setXY(index, trunkUv.getX(index) * 2, trunkUv.getY(index) * 4);
+    trunkUv.setXY(index, trunkUv.getX(index) * 2, trunkUv.getY(index) * (shape.trunkHeight / 2.4));
   }
+  if (shape.lean !== 0) trunk.rotateZ(shape.lean);
 
-  const tiers = [
-    { height: 3.6, radius: 1.75, shade: 0.66, y: 7.6 },
-    { height: 3.1, radius: 1.4, shade: 0.88, y: 9.6 },
-    { height: 2.6, radius: 1.02, shade: 1.1, y: 11.4 },
-    { height: 2.1, radius: 0.62, shade: 1.36, y: 13.0 },
-  ];
-  const cones: BufferGeometry[] = [];
-  for (const tier of tiers) {
-    const cone = new ConeGeometry(tier.radius, tier.height, 7);
-    cone.translate(0, tier.y, 0);
-    cones.push(painted(cone, palette.canopy, tier.shade));
+  const rings: BufferGeometry[] = [];
+  const top = shape.trunkHeight * shape.crownTop;
+  for (let tier = 0; tier < shape.tiers; tier += 1) {
+    const t = shape.tiers === 1 ? 0 : tier / (shape.tiers - 1);
+    const y = shape.firstBranch + t * (top - shape.firstBranch);
+    const length = shape.reach * (1 - t) ** shape.taper + 0.32;
+    const ring = whorl(t < 0.35 ? 7 : t < 0.7 ? 6 : 5, length, length * 0.66, y, tier * 2.399_96, length * 0.3);
+    if (shape.lean !== 0) for (const branch of ring) branch.rotateZ(shape.lean);
+    rings.push(...ring);
   }
-  const canopy = mergeGeometries(cones, false);
-  if (canopy === null) throw new Error("The conifer canopy failed to merge.");
+  const canopy = mergeGeometries(rings, false);
+  if (canopy === null) throw new Error("A pine canopy failed to merge.");
   return { canopy, trunk: painted(trunk, 0xffffff) };
 }
 
-/** One broadleaf: a leaning trunk under a cluster of three low-poly blobs. */
-function broadleafGeometry(): ITreeGeometry {
-  const trunk = new CylinderGeometry(0.18, 0.44, 7.0, 7);
-  trunk.translate(0, 3.5, 0);
-  const trunkUv = trunk.getAttribute("uv");
-  for (let index = 0; index < trunkUv.count; index += 1) {
-    trunkUv.setXY(index, trunkUv.getX(index) * 2, trunkUv.getY(index) * 3);
-  }
-
-  const blobs = [
-    { radius: 1.75, shade: 0.98, x: 0, y: 8.2, z: 0 },
-    { radius: 1.25, shade: 0.76, x: 1.3, y: 7.4, z: 0.6 },
-    { radius: 1.15, shade: 1.2, x: -1.0, y: 7.7, z: -0.8 },
-  ];
-  const balls: BufferGeometry[] = [];
-  for (const blob of blobs) {
-    const ball = new IcosahedronGeometry(blob.radius, 1);
-    ball.translate(blob.x, blob.y, blob.z);
-    balls.push(painted(ball, palette.canopyLight, blob.shade));
-  }
-  const canopy = mergeGeometries(balls, false);
-  if (canopy === null) throw new Error("The broadleaf canopy failed to merge.");
-  return { canopy, trunk: painted(trunk, 0xffffff) };
-}
+/**
+ * Six pines — six different trees, not one tree at six scales.
+ *
+ * A stand of one species at different ages: two old giants bare for their lower third, two
+ * middle-aged, one squat and wind-beaten, one young and branched almost to the ground. That age
+ * spread is most of what separates a wood from a plantation.
+ */
+const PINE_SHAPES: readonly IPineShape[] = [
+  { crownTop: 0.99, firstBranch: 5.4, lean: 0.02, reach: 2.5, taper: 1.5, tiers: 9, trunkBottom: 0.38, trunkHeight: 15.5, trunkTop: 0.14 },
+  { crownTop: 0.97, firstBranch: 4.8, lean: -0.055, reach: 2.8, taper: 1.3, tiers: 9, trunkBottom: 0.4, trunkHeight: 14.0, trunkTop: 0.16 },
+  { crownTop: 0.98, firstBranch: 3.4, lean: 0.035, reach: 2.6, taper: 1.25, tiers: 8, trunkBottom: 0.32, trunkHeight: 11.5, trunkTop: 0.13 },
+  { crownTop: 1.0, firstBranch: 3.9, lean: -0.02, reach: 2.1, taper: 1.6, tiers: 8, trunkBottom: 0.28, trunkHeight: 12.5, trunkTop: 0.11 },
+  { crownTop: 0.94, firstBranch: 2.6, lean: 0.075, reach: 3.0, taper: 0.95, tiers: 7, trunkBottom: 0.34, trunkHeight: 8.4, trunkTop: 0.15 },
+  { crownTop: 0.96, firstBranch: 2.2, lean: -0.04, reach: 2.2, taper: 1.05, tiers: 7, trunkBottom: 0.24, trunkHeight: 6.8, trunkTop: 0.1 },
+];
 
 export interface IFoliage {
   readonly meshes: readonly InstancedMesh[];
+  readonly boulderCount: number;
   readonly treeCount: number;
   readonly fernCount: number;
   readonly grassCount: number;
@@ -445,12 +586,19 @@ export function createFoliage(extent: number, clearing: number, maps: IFoliageMa
     { clearing: clearing * 0.45, count: 2_600, maxHeight: 18, maxSlope: 0.8, minHeight: 0.4, seed: 15_527 },
     extent,
   );
+  // Boulders. Allowed on ground far steeper than anything that grows, and right down to the
+  // waterline, because a rock in the shallows is exactly where a rock ends up.
+  const boulders = scatter(
+    { clearing: 4, count: 900, maxHeight: 30, maxSlope: 1.6, minHeight: -1.5, seed: 33_301 },
+    extent,
+  );
   const grass = scatter(
     { clearing: 0, count: 7_400, maxHeight: 20, maxSlope: 0.95, minHeight: 0.15, seed: 27_449 },
     extent,
   );
 
   const treeMaterial = barkMaterial(maps);
+  const stoneMat = rockMaterial(maps);
   const fernMaterial = cutoutMaterial(maps.frond, 0.09, 1.2, 0.34, 4.2);
   const grassMaterial = cutoutMaterial(maps.plants, 0.19, 1.15, 0.46, 5.0);
 
@@ -461,8 +609,10 @@ export function createFoliage(extent: number, clearing: number, maps: IFoliageMa
       // Trees stand up straight whatever the slope beneath them. A tree rotated onto the surface
       // normal on a 30-degree hillside looks felled, not planted.
       scratch.setFromAxisAngle(up, point.roll * Math.PI * 2);
-      // Sink the base a little so a trunk on a rounded vertex never shows daylight underneath.
-      position.set(point.x, point.y - 0.2, point.z);
+      // A small sink, and only a small one now that `surfaceAt` matches the drawn triangle: this
+      // is here to hide the seam where a cylinder meets a slope, not to compensate for bad height
+      // data. Larger values bury the undergrowth.
+      position.set(point.x, point.y - 0.06, point.z);
       scale.set(size, size * (0.9 + point.roll * 0.3), size);
       matrix.compose(position, scratch, scale);
       if (record) trunks.push(new Vector3(point.x, point.y, point.z));
@@ -477,32 +627,82 @@ export function createFoliage(extent: number, clearing: number, maps: IFoliageMa
     grass.filter((_, index) => index % 3 === 2),
   ];
 
-  const conifer = coniferGeometry();
-  const broadleaf = broadleafGeometry();
-  const canopyMat = canopyMaterial();
+  const needleMat = needleMaterial(maps);
   // Trunk and canopy share one placement function, so the two meshes of a tree land on the same
   // transform for the same instance index and stay welded together.
   // Only the trunk pass records a trunk position. Both passes derive the same transform from the
   // same scatter point, so the canopy lands on its trunk; but running the recording closure twice
   // would put every tree in the list twice.
-  const meshes = [
-    instance(conifer.trunk, treeMaterial, conifers, placeUpright(0.85, 0.65, true), "conifer-trunks"),
-    instance(conifer.canopy, canopyMat, conifers, placeUpright(0.85, 0.65, false), "conifer-canopies"),
-    instance(broadleaf.trunk, treeMaterial, broadleaves, placeUpright(0.8, 0.55, true), "broadleaf-trunks"),
-    instance(broadleaf.canopy, canopyMat, broadleaves, placeUpright(0.8, 0.55, false), "broadleaf-canopies"),
+  // Deal every scattered point to one of the six shapes. Interleaving by index rather than
+  // splitting the list into blocks keeps the mix even across the valley, instead of growing all the
+  // giants in one corner. Only the trunk pass records a position; both derive the same transform
+  // from the same point, so canopy and trunk stay welded.
+  const stand = [...conifers, ...broadleaves];
+  const meshes: InstancedMesh[] = [];
+  PINE_SHAPES.forEach((shape, variant) => {
+    const trees = stand.filter((_, index) => index % PINE_SHAPES.length === variant);
+    if (trees.length === 0) return;
+    const pine = pineGeometry(shape);
+    meshes.push(
+      instance(pine.trunk, treeMaterial, trees, placeUpright(0.84, 0.42, true), `pine-${String(variant)}-trunks`),
+      instance(pine.canopy, needleMat, trees, placeUpright(0.84, 0.42, false), `pine-${String(variant)}-canopies`),
+    );
+  });
+  meshes.push(
     instance(cluster(1.15, 0.95, FROND_CELLS, 3), fernMaterial, ferns, placeUpright(0.75, 0.7, false), "ferns"),
     instance(cluster(0.62, 0.62, TUFT_CELLS, 3), grassMaterial, grassThirds[0] ?? [], placeUpright(0.8, 0.9, false), "grass-a"),
     instance(cluster(0.55, 0.55, TUFT_CELLS.slice(2), 3), grassMaterial, grassThirds[1] ?? [], placeUpright(0.8, 0.9, false), "grass-b"),
     // The flower cards. Fewer, taller, and the only warm colour on the valley floor.
     instance(cluster(0.42, 0.52, PLANT_CELLS, 2), grassMaterial, grassThirds[2] ?? [], placeUpright(0.7, 0.8, false), "plants"),
+  );
+
+  // Three boulder shapes at three sizes, dealt out like the pines. Sunk well into the ground:
+  // a rock resting exactly on the surface reads as dropped, a rock half-buried reads as ancient.
+  const BOULDERS = [
+    { detail: 1, scale: 0.34, sink: 0.42, spread: 0.3 },
+    { detail: 1, scale: 0.7, sink: 0.38, spread: 0.5 },
+    { detail: 2, scale: 1.5, sink: 0.34, spread: 0.9 },
   ];
+  BOULDERS.forEach((rock, variant) => {
+    const points = boulders.filter((_, index) => index % BOULDERS.length === variant);
+    if (points.length === 0) return;
+    const geometry = boulderGeometry(41 + variant * 13, rock.detail);
+    const mesh = new InstancedMesh(geometry, stoneMat, points.length);
+    mesh.name = `boulders-${String(variant)}`;
+    const matrix = new Matrix4();
+    const spin = new Quaternion();
+    const at = new Vector3();
+    const size = new Vector3();
+    points.forEach((point, index) => {
+      const s0 = rock.scale + point.roll * rock.spread;
+      // Tumbled to a random orientation on all three axes — a boulder has no up.
+      spin.setFromEuler(
+        new Euler(point.roll * 6.283, hash2(index, 2, 77) * 6.283, hash2(index, 3, 79) * 6.283),
+      );
+      at.set(point.x, point.y - s0 * rock.sink, point.z);
+      size.set(s0, s0 * (0.7 + point.roll * 0.4), s0 * (0.85 + hash2(index, 4, 83) * 0.3));
+      matrix.compose(at, spin, size);
+      mesh.setMatrixAt(index, matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = false;
+    meshes.push(mesh);
+  });
   // Grass and ferns never cast: at this count the shadow pass costs more than the contact shadows
   // are worth, and a 0.5 m blade's shadow is invisible under the canopy shadow it stands in.
   // Undergrowth never casts: at this count the shadow pass costs more than a 0.5 m blade's
   // shadow is worth, and it is standing inside the canopy's own shadow anyway.
-  for (const mesh of meshes.slice(4)) mesh.castShadow = false;
+  // Undergrowth never casts: at this count the shadow pass costs more than a 0.5 m blade's shadow
+  // is worth, and it stands inside the canopy's own shadow anyway. Boulders DO cast — a rock with
+  // no contact shadow floats however well it is placed — so this slice stops before them.
+  for (const mesh of meshes.slice(PINE_SHAPES.length * 2, PINE_SHAPES.length * 2 + 4)) {
+    mesh.castShadow = false;
+  }
 
   return {
+    boulderCount: boulders.length,
     fernCount: ferns.length,
     grassCount: grass.length,
     meshes,

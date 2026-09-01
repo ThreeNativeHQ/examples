@@ -54,6 +54,6 @@ export function setupSky(scene: Scene, options?: SkyOptions): void {
   dome.matrixAutoUpdate = false;
   dome.frustumCulled = false;
   scene.background = new Color(palette.fog);
-  scene.fog = new Fog(palette.fog, 75, 300);
+  scene.fog = new Fog(palette.fog, 110, 400);
   scene.add(dome);
 }

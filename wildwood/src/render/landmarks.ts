@@ -11,26 +11,80 @@
 //
 // `src/world/landmarks.ts` owns where they are and what finding one means. This file owns nothing
 // but their shape.
-import { CylinderGeometry, Group, Mesh, Object3D, Vector3 } from "three";
+import { CylinderGeometry, Group, IcosahedronGeometry, Mesh, Object3D, Vector3 } from "three";
 import type { createMaterials } from "./materials.js";
 import { ball, block, spike, tube } from "./shapes.js";
 import { hash2, normalAt } from "./terrain.js";
 
 type Materials = ReturnType<typeof createMaterials>;
 
-/** A monolith: one slab, leaning, on a base of rubble. Reads from two hundred metres. */
+/**
+ * A monolith: one weathered upright stone on a scatter of rubble.
+ *
+ * This was a `roundedBox` slab with two spheres at its foot, and it read exactly as that — a dark
+ * rectangle stuck in the ground. Three things fix it, and all three matter:
+ *
+ * 1. **Taper and irregularity.** A standing stone is wider at the base, narrower and broken at the
+ *    top, and never the same width on two axes. A box is none of those.
+ * 2. **Displaced vertices.** Every vertex is pushed along its own normal by seeded noise, then the
+ *    geometry is re-normalled, so the faces catch light unevenly the way stone does.
+ * 3. **A lean that is not a rotation about one axis.** Tilting a box about Z alone still reads as a
+ *    box that fell over; leaning on both X and Z reads as something that settled.
+ */
 function standingStone(materials: Materials): Group {
   const group = new Group();
-  const slab = block(1.9, 7.4, 0.95, materials.stone, { radius: 0.3 });
-  slab.position.y = 3.5;
-  slab.rotation.z = 0.11;
-  slab.rotation.x = -0.06;
-  group.add(slab);
-  for (let index = 0; index < 7; index += 1) {
-    const angle = (index / 7) * Math.PI * 2 + 0.4;
-    const radius = 1.5 + hash2(index, 3, 601) * 1.4;
-    const rubble = ball(0.3 + hash2(index, 5, 607) * 0.45, materials.stone, { segments: 6 });
-    rubble.position.set(Math.cos(angle) * radius, 0.15, Math.sin(angle) * radius);
+
+  // A tall prism, segmented enough to displace. Six sides, not four: an even-sided stone reads as
+  // cut, and a six-sided one reads as split from a larger rock.
+  const slab = new CylinderGeometry(0.62, 1.05, 6.8, 6, 7);
+  slab.translate(0, 3.4, 0);
+  const position = slab.getAttribute("position");
+  const vertex = new Vector3();
+  for (let index = 0; index < position.count; index += 1) {
+    vertex.fromBufferAttribute(position, index);
+    const noise = hash2(Math.round(vertex.x * 6), Math.round(vertex.y * 3 + vertex.z * 6), 907);
+    const second = hash2(Math.round(vertex.z * 9), Math.round(vertex.y * 7), 911);
+    // Push out from the axis, not from the origin — pushing from the origin would fan the top and
+    // pinch the base into a spindle.
+    const radial = Math.hypot(vertex.x, vertex.z);
+    if (radial > 1e-4) {
+      const push = 1 + (noise - 0.5) * 0.34 + (second - 0.5) * 0.14;
+      vertex.x *= push;
+      vertex.z *= push;
+    }
+    // The top is broken: displace it downward much more than the flanks.
+    if (vertex.y > 5.6) vertex.y -= (noise + second) * 0.75;
+    position.setXYZ(index, vertex.x, vertex.y, vertex.z);
+  }
+  position.needsUpdate = true;
+  slab.computeVertexNormals();
+  const stone = new Mesh(slab, materials.stone);
+  stone.rotation.z = 0.1;
+  stone.rotation.x = -0.07;
+  group.add(stone);
+
+  // Rubble at the foot, half-buried, so the stone emerges from the ground rather than resting on
+  // it. Irregular blobs rather than spheres: a sphere at this size is unmistakably a sphere.
+  for (let index = 0; index < 11; index += 1) {
+    const angle = (index / 11) * Math.PI * 2 + 0.4;
+    const radius = 1.3 + hash2(index, 3, 601) * 1.9;
+    const size = 0.26 + hash2(index, 5, 607) * 0.5;
+    const chunk = new IcosahedronGeometry(size, 1);
+    const chunkPosition = chunk.getAttribute("position");
+    for (let v = 0; v < chunkPosition.count; v += 1) {
+      vertex.fromBufferAttribute(chunkPosition, v);
+      // 0.86-1.14, not 0.75-1.25. The wider range spiked individual vertices far enough out that
+      // the flat-shaded facets read as black shards rather than as a weathered lump.
+      vertex.multiplyScalar(0.86 + hash2(Math.round(vertex.x * 9), Math.round(vertex.z * 9 + v), 613 + index) * 0.28);
+      vertex.y *= 0.7;
+      chunkPosition.setXYZ(v, vertex.x, vertex.y, vertex.z);
+    }
+    chunkPosition.needsUpdate = true;
+    chunk.computeVertexNormals();
+    const rubble = new Mesh(chunk, materials.stone);
+    // Sunk to half depth: rubble sitting on the surface looks scattered by hand.
+    rubble.position.set(Math.cos(angle) * radius, -size * 0.35, Math.sin(angle) * radius);
+    rubble.rotation.set(hash2(index, 6, 617) * 3, hash2(index, 7, 619) * 3, hash2(index, 8, 631) * 3);
     group.add(rubble);
   }
   return group;

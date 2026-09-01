@@ -71,6 +71,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
   static override readonly initialState: GameState = {
     canInspect: false,
     discovered: 0,
+    boulderCount: 0,
     fernCount: 0,
     grassCount: 0,
     groundGap: 0,
@@ -192,7 +193,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     // than a buried one nobody can reach.
     hideFoliageNearLandmarks(foliage.meshes);
 
-    const materials = createMaterials();
+    const materials = createMaterials(foliageMaps.rock);
     for (const landmark of LANDMARKS) {
       ctx.add(
         createLandmark(landmark.id, materials, landmark.x, heightAt(landmark.x, landmark.z), landmark.z),
@@ -209,6 +210,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     this.#releasePointer = capturePointerOnClick();
 
     ctx.state.set({
+      boulderCount: foliage.boulderCount,
       fernCount: foliage.fernCount,
       grassCount: foliage.grassCount,
       landmarkTotal: LANDMARKS.length,
@@ -218,7 +220,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     });
     ctx.state.flush();
     console.info(
-      `TN_VALLEY_BUILT trees=${String(foliage.treeCount)} ferns=${String(foliage.fernCount)} grass=${String(foliage.grassCount)} terrain=${String(terrain.triangles)}`,
+      `TN_VALLEY_BUILT trees=${String(foliage.treeCount)} ferns=${String(foliage.fernCount)} grass=${String(foliage.grassCount)} boulders=${String(foliage.boulderCount)} terrain=${String(terrain.triangles)}`,
     );
 
     const found = new Set<string>();
@@ -302,7 +304,20 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
  */
 async function loadGround(ctx: GameCtx): Promise<ITerrainMaps> {
   const load = async (file: string, data: boolean): Promise<Texture> => {
-    const map = await ctx.assets.texture(`landscape/${file}.jpg`);
+    // Extension matters here, and not for size. A cut-out atlas keyed on a black background must
+    // be lossless: JPEG puts ringing halos around every frond edge, `alphaTest` keeps the brighter
+    // half of that ringing, and the result is white speckles and vertical smears that look like a
+    // particle bug. Ground tiles have no alpha key and stay JPEG.
+    const path = `landscape/${file}`;
+    let map: Texture;
+    try {
+      map = await ctx.assets.texture(path);
+    } catch (cause) {
+      // A texture loader rejects with a DOM `Event`, whose `toString` is "[object Event]" — so the
+      // loading screen shows exactly that and names neither the file nor the reason. Re-throw with
+      // the path attached; it is the difference between a five-second fix and a hunt.
+      throw new Error(`Failed to load texture ${path}.`, { cause });
+    }
     map.colorSpace = data ? NoColorSpace : SRGBColorSpace;
     return map;
   };
@@ -312,10 +327,10 @@ async function loadGround(ctx: GameCtx): Promise<ITerrainMaps> {
     rockDiffuse, rockNormal,
     dirtDiffuse, dirtNormal,
   ] = await Promise.all([
-    load("ground_grass_01_diffuse", false), load("ground_grass_01_normal", true),
-    load("ground_forest_diffuse", false), load("ground_forest_normal", true),
-    load("ground_rock_01_diffuse", false), load("ground_rock_01_normal", true),
-    load("ground_dirt_01_diffuse", false), load("ground_dirt_01_normal", true),
+    load("ground_grass_01_diffuse.jpg", false), load("ground_grass_01_normal.jpg", true),
+    load("ground_forest_diffuse.jpg", false), load("ground_forest_normal.jpg", true),
+    load("ground_rock_01_diffuse.jpg", false), load("ground_rock_01_normal.jpg", true),
+    load("ground_dirt_01_diffuse.jpg", false), load("ground_dirt_01_normal.jpg", true),
   ]);
   console.info("TN_GROUND_LAYERS_LOADED:grass,forest,rock,dirt");
   return {
@@ -329,18 +344,37 @@ async function loadGround(ctx: GameCtx): Promise<ITerrainMaps> {
 /** Bark for the trunks, and the two cut-out atlases the undergrowth is stamped from. */
 async function loadFoliage(ctx: GameCtx): Promise<IFoliageMaps> {
   const load = async (file: string, data: boolean): Promise<Texture> => {
-    const map = await ctx.assets.texture(`landscape/${file}.jpg`);
+    // Extension matters here, and not for size. A cut-out atlas keyed on a black background must
+    // be lossless: JPEG puts ringing halos around every frond edge, `alphaTest` keeps the brighter
+    // half of that ringing, and the result is white speckles and vertical smears that look like a
+    // particle bug. Ground tiles have no alpha key and stay JPEG.
+    const path = `landscape/${file}`;
+    let map: Texture;
+    try {
+      map = await ctx.assets.texture(path);
+    } catch (cause) {
+      // A texture loader rejects with a DOM `Event`, whose `toString` is "[object Event]" — so the
+      // loading screen shows exactly that and names neither the file nor the reason. Re-throw with
+      // the path attached; it is the difference between a five-second fix and a hunt.
+      throw new Error(`Failed to load texture ${path}.`, { cause });
+    }
     map.colorSpace = data ? NoColorSpace : SRGBColorSpace;
     return map;
   };
-  const [bark, barkNormal, frond, plants] = await Promise.all([
-    load("pine_bark_diffuse", false),
-    load("pine_bark_normal", true),
-    load("farn_diffuse", false),
-    load("grassgroup_diffuse", false),
+  const [bark, barkNormal, frond, plants, needles, rock] = await Promise.all([
+    load("pine_bark_diffuse.jpg", false),
+    load("pine_bark_normal.jpg", true),
+    load("farn_diffuse.png", false),
+    load("grassgroup_diffuse.png", false),
+    load("leafs_diffuse.png", false),
+    // `cliffrocks_diffuse`, not `cliffrock01_moss_diffuse`. The latter measures mean 0.091 with a
+    // maximum of 0.56 — it never reaches half brightness, because in the pack it is a moss overlay
+    // layered onto a base, not a base itself. Used as a base colour it renders every rock in the
+    // valley as a black silhouette, and no amount of gain fixes a texture with no highlights.
+    load("cliffrocks_diffuse.jpg", false),
   ]);
-  console.info("TN_FOLIAGE_MAPS_LOADED:bark,frond,plants");
-  return { bark, barkNormal, frond, plants };
+  console.info("TN_FOLIAGE_MAPS_LOADED:bark,frond,plants,needles,rock");
+  return { bark, barkNormal, frond, needles, plants, rock };
 }
 
 /** A tenth of a metre is finer than anything here needs, and keeps the published state readable. */

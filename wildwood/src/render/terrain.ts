@@ -282,6 +282,41 @@ export function createTerrain(material: MeshStandardNodeMaterial): ITerrain {
   };
 }
 
+/**
+ * The height of the **drawn** surface at a point, which is not quite `heightAt`.
+ *
+ * `heightAt` is the analytic function. The mesh is a grid sampled from it, so between grid points
+ * the visible surface is a flat interpolation across a triangle — which on convex ground sits
+ * *below* the analytic curve, by up to a few centimetres at this grid spacing. Plants placed with
+ * `heightAt` therefore hover on every hilltop, and the gap is exactly the sort of thing that reads
+ * as "the vegetation is floating" without being obvious enough to measure by eye.
+ *
+ * This samples the same four grid corners the mesh is built from and interpolates them the same
+ * way, so anything placed with it sits on the surface actually being drawn.
+ */
+export function surfaceAt(x: number, z: number): number {
+  const step = TERRAIN_SIZE / (TERRAIN_SAMPLES - 1);
+  const half = TERRAIN_SIZE / 2;
+  const fx = (x + half) / step;
+  const fz = (z + half) / step;
+  const ix = Math.floor(fx);
+  const iz = Math.floor(fz);
+  // Off the grid entirely: nothing is drawn there, so the analytic value is the honest answer.
+  if (ix < 0 || iz < 0 || ix >= TERRAIN_SAMPLES - 1 || iz >= TERRAIN_SAMPLES - 1) return heightAt(x, z);
+  const tx = fx - ix;
+  const tz = fz - iz;
+  const x0 = -half + ix * step;
+  const z0 = -half + iz * step;
+  const h00 = heightAt(x0, z0);
+  const h10 = heightAt(x0 + step, z0);
+  const h01 = heightAt(x0, z0 + step);
+  const h11 = heightAt(x0 + step, z0 + step);
+  // The mesh splits each cell into two triangles along the a-d diagonal; interpolate within
+  // whichever half the point falls in, or a plant on the seam sits a centimetre off.
+  if (tx + tz <= 1) return h00 + (h10 - h00) * tx + (h01 - h00) * tz;
+  return h11 + (h01 - h11) * (1 - tx) + (h10 - h11) * (1 - tz);
+}
+
 /** The surface normal at a point, for anything that has to sit flat on the ground. */
 export function normalAt(x: number, z: number, target = new Vector3()): Vector3 {
   const h = 0.5;
