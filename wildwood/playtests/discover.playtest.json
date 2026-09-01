@@ -1,0 +1,72 @@
+{
+  "name": "wildwood-discover",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "spawn-short-of-the-standing-stone",
+      "waitTicks": 75,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-up-to-it",
+      "press": "KeyW",
+      "holdTicks": 150,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-in-reach",
+      "waitTicks": 40,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "inspect-the-stone",
+      "press": "KeyE",
+      "holdTicks": 12,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "let-the-journal-publish",
+      "waitTicks": 45,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "discovered",
+        "equals": 1,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "canInspect",
+        "changed": true,
+        "equals": false,
+        "allowTrivial": "False at the end because the stone has just been found and a found landmark leaves reach. The proof it was ever true is `discovered` going 0 -> 1 above, which only the E keypress can do."
+      },
+      {
+        "id": "state",
+        "path": "objectiveComplete",
+        "equals": false,
+        "allowTrivial": "One of five is not five. Asserted so a discovery that wrongly completes the objective fails here rather than in a capture nobody opens."
+      }
+    ]
+  }
+}

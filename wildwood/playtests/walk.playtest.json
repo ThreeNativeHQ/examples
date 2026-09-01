@@ -1,0 +1,93 @@
+{
+  "name": "wildwood-walk",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "settle-onto-the-ground",
+      "waitTicks": 60,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-north-east-into-the-wood",
+      "press": "KeyW",
+      "holdTicks": 480,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle-walk",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "keep-going-uphill",
+      "press": "KeyW",
+      "holdTicks": 420,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle",
+      "waitTicks": 45,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "movement": {
+      "entity": "walker",
+      "minDistance": 15
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "odometer",
+        "gte": 25,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "groundGap",
+        "gte": -0.6,
+        "lte": 0.6,
+        "allowTrivial": "The gap starts near zero and the proof is that it STAYS there across twelve seconds of walking over uneven ground. Rapier stores a heightfield column-major with rows along z; transpose it and the collider becomes the valley reflected about its diagonal, which looks correct from above and reads metres here. A bound that never trips is the whole assertion."
+      },
+      {
+        "id": "state",
+        "path": "walkerX",
+        "gte": -95,
+        "lte": 95,
+        "changed": true,
+        "allowTrivial": "Wide bounds on purpose: this asserts the walker is still INSIDE the valley after a minute of walking, which a runaway controller or a collider it can fall through would break. The distance it covered is the movement row; this is the containment."
+      },
+      {
+        "id": "state",
+        "path": "walkerZ",
+        "gte": -95,
+        "lte": 95,
+        "changed": true,
+        "allowTrivial": "Wide bounds on purpose: this asserts the walker is still INSIDE the valley after a minute of walking, which a runaway controller or a collider it can fall through would break. The distance it covered is the movement row; this is the containment."
+      },
+      {
+        "id": "state",
+        "path": "heading",
+        "gte": 0,
+        "lte": 360,
+        "allowTrivial": "Bounds on a published compass bearing: a look system that lets pitch or yaw run away puts a NaN or a five-hundred-degree heading here."
+      }
+    ]
+  }
+}

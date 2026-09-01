@@ -1,0 +1,86 @@
+{
+  "name": "wildwood-survives",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "build-the-valley",
+      "waitTicks": 90,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "take-a-few-steps",
+      "press": "KeyW",
+      "holdTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle",
+      "waitTicks": 30,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "valleyReady",
+        "equals": true,
+        "allowTrivial": "The valley either builds or it does not; there is no transition to observe. Every count below is what makes this more than a boolean."
+      },
+      {
+        "id": "state",
+        "path": "treeCount",
+        "gte": 800,
+        "allowTrivial": "Written once when the scatter finishes. A rule that rejects every candidate reads zero here."
+      },
+      {
+        "id": "state",
+        "path": "grassCount",
+        "gte": 4000,
+        "allowTrivial": "Written once when the scatter finishes."
+      },
+      {
+        "id": "state",
+        "path": "fernCount",
+        "gte": 1500,
+        "allowTrivial": "Written once when the scatter finishes."
+      },
+      {
+        "id": "state",
+        "path": "terrainTriangles",
+        "gte": 50000,
+        "allowTrivial": "Written once when the mesh is built."
+      },
+      {
+        "id": "state",
+        "path": "landmarkTotal",
+        "equals": 5,
+        "allowTrivial": "Constant by construction; asserted so a landmark deleted by accident fails a proof rather than quietly shrinking the game."
+      },
+      {
+        "id": "state",
+        "path": "odometer",
+        "gte": 2,
+        "changed": true
+      }
+    ],
+    "movement": {
+      "entity": "walker",
+      "minDistance": 2
+    }
+  }
+}

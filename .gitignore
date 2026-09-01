@@ -48,3 +48,18 @@ artifacts/
 
 # Playtest run output; regenerate by running the scenarios.
 artifacts/
+
+# Landscape Pro 2.0 (Fab listing 1ac647da-b1bc-4e72-a56d-60aaeb6918e1) and everything derived from
+# it. This remote is PUBLIC and the Fab Standard License does not permit redistributing a pack's
+# assets as standalone files — so the downloaded `.uasset` tree, the converted PNGs, and the
+# compressed JPGs the game actually loads all stay local. `wildwood/tools/import-landscape-pro.mjs`
+# is committed instead: anyone who owns the pack can regenerate all of it in one command.
+/.fab-source/
+/wildwood/assets/landscape/
+/wildwood/assets/landscape-pro*/
+# `vite build` copies and content-hashes everything under assets/ into public/, so the licensed
+# maps reappear there under a second set of names. Ignoring only the source directory is not
+# enough — this line is the one that actually keeps them out of a public commit.
+/wildwood/public/landscape/
+/wildwood/public/landscape-pro*/
+/.mcp-tools/
