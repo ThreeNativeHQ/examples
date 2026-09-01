@@ -17,10 +17,11 @@ import {
   Color,
   DoubleSide,
   Mesh,
+  type Texture,
   Vector2,
 } from "three";
 import { MeshStandardNodeMaterial } from "three/webgpu";
-import { attribute, float, positionLocal, sin, time, vec3 } from "three/tsl";
+import { attribute, float, positionLocal, sin, texture, time, vec2, vec3 } from "three/tsl";
 import { palette } from "./palette.js";
 import { WATER_LEVEL, heightAt } from "./terrain.js";
 
@@ -34,6 +35,11 @@ export interface IWater {
   readonly level: number;
 }
 
+/** Optional realism inputs. `wavesNormal` is the pack's own ripple normal map. */
+export interface IWaterOptions {
+  readonly wavesNormal?: Texture;
+}
+
 /**
  * Build a lake surface over a circular patch of the valley.
  *
@@ -42,7 +48,7 @@ export interface IWater {
  * pushes the real waterline in and out by several metres, which is exactly what makes it look
  * like a shore instead of a drawn circle.
  */
-export function createWater(centre: Vector2, radius: number, samples = 96): IWater {
+export function createWater(centre: Vector2, radius: number, options: IWaterOptions = {}, samples = 96): IWater {
   const span = radius * 2.4;
   const step = span / (samples - 1);
   const half = span / 2;
@@ -101,13 +107,17 @@ export function createWater(centre: Vector2, radius: number, samples = 96): IWat
 
   const material = new MeshStandardNodeMaterial({
     depthWrite: false,
-    metalness: 0.1,
-    roughness: 0.12,
+    metalness: 0,
+    roughness: 0.18,
     // Both sides: the surface is thin, and standing in the shallows puts the camera under it.
     side: DoubleSide,
     transparent: true,
     vertexColors: true,
   });
+  // Darken the surface well below its vertex colour. Under this scene's screen-space reflections a
+  // full-bright water plane mirrors the gained-up grass and blooms into radioactive lime; a dark
+  // base keeps the same reflections reading as sky and treeline instead.
+  material.colorNode = attribute<"vec3">("color", "vec3").mul(float(0.38));
   // The generic is written out: `attribute()` infers its node type from the argument, which
   // widens to `string` and produces a node with none of the `.mul`/`.add` methods the ripple
   // below is built from.
@@ -122,6 +132,20 @@ export function createWater(centre: Vector2, radius: number, samples = 96): IWat
   // Clear at the margin, opaque over the deep. The floor keeps a sheen on the very edge so the
   // waterline is still visible against wet silt of nearly the same colour.
   material.opacityNode = depth.mul(float(0.82)).add(float(0.18));
+  // Ripple detail: the pack's own normal map, sampled twice at incommensurate scales and drifts,
+  // so the specular never settles into one visible tiling. This is what turns a flat shaded disc
+  // into water: the vertex waves move the silhouette, but these move the *light*. The close scale
+  // carries the visible ripple texture; the far one breaks up its repeat.
+  const wavesNormal = options.wavesNormal;
+  if (wavesNormal !== undefined) {
+    const uvA = vec2(positionLocal.x, positionLocal.z).mul(0.38).add(vec2(time.mul(0.024), time.mul(0.016)));
+    const uvB = vec2(positionLocal.x, positionLocal.z).mul(0.083).add(vec2(time.mul(-0.018), time.mul(0.011)));
+    const sampleA = texture(wavesNormal, uvA);
+    const sampleB = texture(wavesNormal, uvB);
+    // glTF convention puts up in B; a horizontal plane's perturbation is (x, z-up, y) into world.
+    const detail = sampleA.rgb.add(sampleB.rgb).mul(0.5).sub(vec3(0.5, 0.5, 0.5)).mul(vec3(2.6, 2.6, 1.0));
+    material.normalNode = vec3(detail.x, detail.z, detail.y);
+  }
 
   const mesh = new Mesh(geometry, material);
   mesh.name = "water";

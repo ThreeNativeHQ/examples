@@ -178,7 +178,11 @@ export class Wanderer {
     // sliding, and leaves `velocity.y` at terminal the instant the ground runs out.
     const grounded = this.body.grounded;
     if (grounded) {
-      this.body.velocity.y = !wading && ctx.input.justPressed("jump") ? JUMP_SPEED : -2;
+      // A jump is the one escape a wader has when a bank turns out steeper than it looked, so it
+      // stays available in water — at about three fifths power, because a full leap from a pond
+      // reads as a dolphin show, not a climb.
+      const jump = ctx.input.justPressed("jump") ? (wading ? JUMP_SPEED * 0.62 : JUMP_SPEED) : 0;
+      this.body.velocity.y = jump !== 0 ? jump : -2;
     }
 
     // Measured from the last frame's end position, before this frame's step is queued — see the

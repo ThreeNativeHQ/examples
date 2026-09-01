@@ -39,10 +39,20 @@ ImportError: 18 uncooked static-mesh packages use UE4 object version 514.
 
 Passing a later `--engine` does not help — Fab serves one artifact for every listed engine version
 (4.24 and 4.27 are byte-identical at 3,225,681,826 bytes); the compatibility list is metadata, not
-a re-cook. So every piece of geometry in this game is procedural, written in `src/render/`, and
-wears the pack's textures. See `FRICTION.md`.
+a re-cook. That was the state when this file was written; the importer has since been fixed and
+**every mesh in the valley is now the pack's real geometry** — see the Landscape Pro section below
+and `FRICTION.md` entry 5a.
 
 ## Everything else
 
 `assets/native-proof.glb`, `assets/native-proof.png` and `assets/pickup.wav` ship with the
 ThreeNative starter template.
+
+## Landscape Pro 2.0 Auto-Generated Material — STF/sc3d.de
+
+Fab listing `1ac647da-b1bc-4e72-a56d-60aaeb6918e1` (paid, Personal/Professional licence).
+Ground layer textures, every tree, shrub, plant, rock, cliff and branch mesh in
+`assets/fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/` come from this pack, imported with
+`asset_import_unreal` and served locally. **The imported pack binaries are gitignored — the
+licence does not permit redistributing them through this public repository.** Rebuild them with
+`tools/import-landscape-pro.mjs` after downloading the pack from Fab into `.fab-source/`.

@@ -2,3 +2,9 @@
 # (favicon, launcher icons) stay in public/ and are committed; these outputs never are.
 public/assets.manifest.json
 public/*.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].*
+
+# Landscape Pro 2.0 (Fab 1ac647da) is a paid marketplace pack: its imported meshes and textures
+# are licensed per-seat and must never reach the public remote. Rebuild by importing the pack —
+# see CREDITS.md and tools/import-landscape-pro.mjs.
+assets/fab/
+public/fab/

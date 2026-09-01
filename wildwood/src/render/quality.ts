@@ -75,7 +75,7 @@ const high: IWorldEnvironmentOptions = {
   // to be.
   bloomEnabled: true,
   bloomStrength: 0.72,
-  exposure: 1.24,
+  exposure: 1.06,
   // The two full-resolution denoise passes over the AO and GI terms: ~1.9 ms. Only worth running
   // when SSGI is on — its noise is what they clean up.
   denoiseEnabled: true,
@@ -109,7 +109,7 @@ const medium: IWorldEnvironmentOptions = {
   // to be.
   bloomEnabled: true,
   bloomStrength: 0.72,
-  exposure: 1.24,
+  exposure: 1.06,
   // Screen-space reflections: ~4.1 ms.
   ssrEnabled: true,
   // A reflection carries almost no high-frequency detail, so half resolution costs a quarter of
@@ -135,7 +135,7 @@ const low: IWorldEnvironmentOptions = {
   // to be.
   bloomEnabled: true,
   bloomStrength: 0.72,
-  exposure: 1.24,
+  exposure: 1.06,
   // RCAS sharpen: unmeasured — never ablated on its own here. It puts back the micro-detail the
   // denoiser and the half-resolution reflection take out, so it earns its cost only on a tier
   // that runs one of them.

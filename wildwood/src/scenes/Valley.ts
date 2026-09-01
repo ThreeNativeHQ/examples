@@ -14,11 +14,12 @@ import {
   Vector2,
 } from "three";
 import { Wanderer, capturePointerOnClick } from "../entities/Wanderer.js";
-import { type IFoliageMaps, createFoliage } from "../render/foliage.js";
-import { createLandmark, createTrailhead } from "../render/landmarks.js";
+import { type IFoliageSets, type ITreeSpecies, createFoliage, extractTreeSpecies, retextureSpecies } from "../render/foliage.js";
+import { type ILandmarkProps, createLandmark, createTrailhead } from "../render/landmarks.js";
+import { createPond } from "../render/pond.js";
 import { setupForestLighting } from "../render/lighting.js";
 import { createLoadingScreen } from "../render/loading.js";
-import { createBannerMaterial, createMaterials } from "../render/materials.js";
+import { type ILandmarkMaps, createBannerMaterial, createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { setupSky } from "../render/sky.js";
 import {
@@ -34,6 +35,38 @@ import { LANDMARKS, TRAILHEAD, nearestUnfound, withinReach } from "../world/land
 import type { GameState } from "../state.js";
 
 export type GameCtx = ICtx<GameState, IPhysicsContext>;
+
+/** Where the Landscape Pro import landed; every mesh GLB resolves through the asset manifest. */
+const FAB = "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models";
+
+/**
+ * Every imported species, by niche.
+ *
+ * Conifers hold the high steep ground (five pack pines, and their saplings as the young generation);
+ * broadleaves and dead snags the low flat ground; shrubs, flowers and nettles the open margins;
+ * ferns the shade; grass the whole floor; boulders wherever soil gave up; and the cliff faces the
+ * ridge wall, where the slope is already steeper than soil holds.
+ *
+ * Left out on purpose, with reasons: `SM_tree_dead` decodes to a 1.1 m stump rather than a tree;
+ * `SM_waterPlane` is a 96-vertex plane this game's shader water supersedes; `SM_cliff_Mesh` is a
+ * one-off mega-mesh the valley has no place for; `SM_new_farn_Inst` duplicates `SM_new_farn01`.
+ */
+const FLORA: Record<keyof IFoliageSets, readonly string[]> = {
+  conifers: ["SM_pine01", "SM_pine02", "SM_pine03", "SM_pine04", "SM_pine05", "SM_pine-small01", "SM_pine-small02", "SM_pine-small03"],
+  broadleaves: ["SM_green-tree01", "SM_green-tree02", "SM_dead-tree01", "SM_dead-tree02", "SM_dead-tree03", "SM_dead-tree04", "SM_dead-tree05"],
+  shrubs: ["SM_bush01", "SM_FlowerGroup01", "SM_FlowerGroup02", "SM_NettleGroup01", "SM_NettleGroup02", "SM_PlantGroup01", "SM_LargePlant", "SM_WeathGroup01", "SM_WeathGroup02"],
+  ferns: ["SM_FarnGroup01", "SM_FarnGroup02", "SM_FarnGroup03", "SM_new_farn01", "SM_new_farn02"],
+  grasses: ["SM_GrassGroup01", "SM_GrassGroup02", "SM_GrassGroup03", "SM_grass_bush01_lod00", "SM_grass_bush02_lod00", "SM_grass_bush03_lod00", "SM_grass_bush04_lod00", "SM_clover01", "SM_clover02", "SM_clover03"],
+  rocks: ["SM_rock01_lod000", "SM_rock02_lod000", "SM_rock03_lod000", "SM_rock04_lod000", "SM_RockGroup01", "SM_RockGroup02"],
+  cliffs: ["SM_cliff01", "SM_cliff02", "SM_cliff03", "SM_cliffrock01_lod00", "SM_cliffrock02_lod00", "SM_cliffrock03_lod00", "SM_cliffrock04_lod00"],
+};
+
+/** The species the landmarks and the pond dress themselves from. */
+const LANDMARK_STONE = {
+  cliffs: ["SM_cliffrock01_lod00", "SM_cliffrock02_lod00"],
+  boughs: ["SM_BoughGroup01", "SM_BoughGroup02", "SM_BoughGroup03"],
+  rocks: ["SM_rock01_lod000", "SM_rock02_lod000", "SM_rock03_lod000", "SM_rock04_lod000", "SM_RockGroup01", "SM_RockGroup02"],
+} as const;
 
 /** How much space the scatter leaves around the trailhead, so the first frame can see out. */
 const CLEARING = 9;
@@ -66,7 +99,10 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
   #banner: Mesh | undefined;
   #releasePointer: (() => void) | undefined;
   #ground: ITerrainMaps | undefined;
-  #foliage: IFoliageMaps | undefined;
+  #flora: IFoliageSets | undefined;
+  #props: ILandmarkProps | undefined;
+  #stoneMaps: ILandmarkMaps | undefined;
+  #wavesNormal: Texture | undefined;
 
   static override readonly initialState: GameState = {
     canInspect: false,
@@ -98,14 +134,43 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     // The packaged proof asset. It earns its place on the trailhead waymarker rather than parked
     // in the scene as a debug object, and the console marker below is what the desktop asset gate
     // greps for — keep both.
-    const [texture, model, ground, foliageMaps] = await Promise.all([
+    const [texture, model, ground, flora, props, stoneMaps, wavesNormal] = await Promise.all([
       ctx.assets.texture("native-proof.png"),
       ctx.assets.model<{ scene: Group }>("native-proof.glb"),
       loadGround(ctx),
-      loadFoliage(ctx),
+      loadFlora(ctx),
+      loadLandmarkStone(ctx),
+      loadStoneMaps(ctx),
+      ctx.assets.texture("landscape/waves_normal.jpg"),
     ]);
     this.#ground = ground;
-    this.#foliage = foliageMaps;
+    this.#flora = flora;
+    this.#props = props;
+    this.#stoneMaps = stoneMaps;
+    // The stone species wear the scene's own rock maps: the importer could only bind their packed
+    // height/AO/curvature data texture as a base colour, which glows radioactive under a gain.
+    // `cliffrocks` is the diffuse the terrain's rock layer already uses, so every stone now
+    // matches the ground it sits in.
+    const rockMap = stoneMaps.rock;
+    const rockNormalMap = stoneMaps.rockNormal;
+    if (rockMap === undefined || rockNormalMap === undefined) {
+      throw new Error("The rock maps did not load; the stone species cannot be retextured.");
+    }
+    const restone = (species: ITreeSpecies): ITreeSpecies =>
+      retextureSpecies(species, rockMap, rockNormalMap);
+    this.#flora = {
+      ...flora,
+      cliffs: flora.cliffs.map(restone),
+      rocks: flora.rocks.map(restone),
+    };
+    this.#props = {
+      cliffs: props.cliffs.map(restone),
+      rocks: props.rocks.map(restone),
+      boughs: props.boughs,
+    };
+    // A normal map is three signed numbers pretending to be a colour: it must not decode as sRGB.
+    wavesNormal.colorSpace = NoColorSpace;
+    this.#wavesNormal = wavesNormal;
     // A 16-pixel check filtered smoothly is a grey smear at banner size; nearest keeps the squares
     // square, which is what makes the waymarker legible from across the clearing.
     texture.magFilter = NearestFilter;
@@ -179,12 +244,14 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       type: "fixed",
     });
 
-    const water = createWater(new Vector2(LAKE.x, LAKE.z), LAKE.radius);
+    const water = createWater(new Vector2(LAKE.x, LAKE.z), LAKE.radius, { wavesNormal: this.#wavesNormal });
     ctx.add(water.mesh);
 
-    const foliageMaps = this.#foliage;
-    if (foliageMaps === undefined) throw new Error("The foliage textures did not load.");
-    const foliage = createFoliage(TERRAIN_SIZE / 2 - 4, CLEARING, foliageMaps);
+    const flora = this.#flora;
+    if (flora === undefined) throw new Error("The flora meshes did not load.");
+    const props = this.#props;
+    if (props === undefined) throw new Error("The landmark stone did not load.");
+    const foliage = createFoliage(TERRAIN_SIZE / 2 - 4, CLEARING, flora);
     for (const mesh of foliage.meshes) ctx.add(mesh);
     // Clear the trees standing inside a landmark. Scattering first and clearing after is cheaper
     // in code than teaching the scatter about the landmarks, and instanced meshes cannot drop an
@@ -193,10 +260,15 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     // than a buried one nobody can reach.
     hideFoliageNearLandmarks(foliage.meshes);
 
-    const materials = createMaterials(foliageMaps.rock);
+    const materials = createMaterials(this.#stoneMaps);
+    // The pond, on the eastern walk between the standing stone and the charcoal ring: water, rock
+    // ring, reeds, and the wet margin, all dressed from the same species the wood is built from.
+    const pond = createPond(materials, props.rocks, flora.ferns, flora.shrubs, this.#wavesNormal);
+    ctx.add(pond.water.mesh);
+    ctx.add(pond.group);
     for (const landmark of LANDMARKS) {
       ctx.add(
-        createLandmark(landmark.id, materials, landmark.x, heightAt(landmark.x, landmark.z), landmark.z),
+        createLandmark(landmark.id, materials, props, landmark.x, heightAt(landmark.x, landmark.z), landmark.z),
       );
     }
     ctx.add(createTrailhead(materials, banner, heightAt(TRAILHEAD.x, TRAILHEAD.z)));
@@ -341,13 +413,47 @@ async function loadGround(ctx: GameCtx): Promise<ITerrainMaps> {
   } as ITerrainMaps;
 }
 
-/** Bark for the trunks, and the two cut-out atlases the undergrowth is stamped from. */
-async function loadFoliage(ctx: GameCtx): Promise<IFoliageMaps> {
+/**
+ * Load every imported flora species, by niche.
+ *
+ * The GLB materials arrive as plain `MeshStandardMaterial`s; the maps and alpha thresholds travel
+ * with them, and `extractTreeSpecies` records both plus the species' measured size, so
+ * `createFoliage` can rebuild each section as a wind-blown node material without the look
+ * decisions leaking into the scene. None of these meshes is rigged, so nothing here needs
+ * `SkeletonUtils`.
+ */
+async function loadFlora(ctx: GameCtx): Promise<IFoliageSets> {
+  const niches = Object.keys(FLORA) as (keyof IFoliageSets)[];
+  const sets = await Promise.all(
+    niches.map(async (niche): Promise<[keyof IFoliageSets, ITreeSpecies[]]> => {
+      const species: ITreeSpecies[] = [];
+      for (const name of FLORA[niche]) {
+        const model = await ctx.assets.model<{ scene: Group }>(`${FAB}/${name}.glb`);
+        species.push(extractTreeSpecies(name, model));
+      }
+      console.info(`TN_FLORA_LOADED:${niche}=${String(species.length)}species`);
+      return [niche, species];
+    }),
+  );
+  return Object.fromEntries(sets) as unknown as IFoliageSets;
+}
+
+/** The cliff faces, bough piles, and boulders the landmarks are dressed from. */
+async function loadLandmarkStone(ctx: GameCtx): Promise<ILandmarkProps> {
+  const load = async (name: string): Promise<ITreeSpecies> =>
+    extractTreeSpecies(name, await ctx.assets.model<{ scene: Group }>(`${FAB}/${name}.glb`));
+  const [cliffs, boughs, rocks] = await Promise.all([
+    Promise.all(LANDMARK_STONE.cliffs.map(load)),
+    Promise.all(LANDMARK_STONE.boughs.map(load)),
+    Promise.all(LANDMARK_STONE.rocks.map(load)),
+  ]);
+  console.info("TN_LANDMARK_STONE_LOADED:cliffs,boughs,rocks");
+  return { boughs, cliffs, rocks };
+}
+
+/** The two pack maps the landmark *procedural* pieces still wear: dead bark, and cliff rock. */
+async function loadStoneMaps(ctx: GameCtx): Promise<ILandmarkMaps> {
   const load = async (file: string, data: boolean): Promise<Texture> => {
-    // Extension matters here, and not for size. A cut-out atlas keyed on a black background must
-    // be lossless: JPEG puts ringing halos around every frond edge, `alphaTest` keeps the brighter
-    // half of that ringing, and the result is white speckles and vertical smears that look like a
-    // particle bug. Ground tiles have no alpha key and stay JPEG.
     const path = `landscape/${file}`;
     let map: Texture;
     try {
@@ -361,20 +467,18 @@ async function loadFoliage(ctx: GameCtx): Promise<IFoliageMaps> {
     map.colorSpace = data ? NoColorSpace : SRGBColorSpace;
     return map;
   };
-  const [bark, barkNormal, frond, plants, needles, rock] = await Promise.all([
-    load("pine_bark_diffuse.jpg", false),
-    load("pine_bark_normal.jpg", true),
-    load("farn_diffuse.png", false),
-    load("grassgroup_diffuse.png", false),
-    load("leafs_diffuse.png", false),
+  const [rock, rockNormal, deadBark, deadBarkNormal] = await Promise.all([
     // `cliffrocks_diffuse`, not `cliffrock01_moss_diffuse`. The latter measures mean 0.091 with a
     // maximum of 0.56 — it never reaches half brightness, because in the pack it is a moss overlay
     // layered onto a base, not a base itself. Used as a base colour it renders every rock in the
     // valley as a black silhouette, and no amount of gain fixes a texture with no highlights.
     load("cliffrocks_diffuse.jpg", false),
+    load("cliffrocks_normal.jpg", true),
+    load("dead_tree_trunk_diffuse.jpg", false),
+    load("dead_tree_trunk_normal.jpg", true),
   ]);
-  console.info("TN_FOLIAGE_MAPS_LOADED:bark,frond,plants,needles,rock");
-  return { bark, barkNormal, frond, needles, plants, rock };
+  console.info("TN_LANDMARK_MAPS_LOADED:rock,deadBark");
+  return { deadBark, deadBarkNormal, rock, rockNormal };
 }
 
 /** A tenth of a metre is finer than anything here needs, and keeps the published state readable. */

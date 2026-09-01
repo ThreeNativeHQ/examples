@@ -85,6 +85,16 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
 /** The lake: a bowl in the south-west, deep enough to read as water rather than a puddle. */
 const LAKE = { x: -46, z: 42, radius: 34 } as const;
 
+/**
+ * The pond: a small still-water pool on the eastern walk, between the standing stone and the
+ * charcoal ring. Unlike the lake — a basin *subtracted* from whatever ground was there — the pond
+ * is a **blend toward a target depth**, because a pond on high rolling ground must reach water
+ * level no matter what the noise was doing when it arrived. Blending also shelves the bank: the
+ * shore arrives at the waterline at a shallow angle, which is what makes a pond edge read as
+ * walked-to rather than as a hole.
+ */
+export const POND = { x: 44, z: 22, radius: 14, floor: -1.9 } as const;
+
 /** The ridge: a wall of rock along the north edge, and the only place with a view. */
 const RIDGE = { z: -64, height: 17, falloff: 62 } as const;
 
@@ -114,7 +124,16 @@ export function heightAt(x: number, z: number): number {
   const edge = Math.max(Math.abs(x), Math.abs(z));
   const rim = smoothstep(TERRAIN_SIZE * 0.34, TERRAIN_SIZE * 0.54, edge) * 13;
 
-  return rolling + ridge - basin + rim + 3.4;
+  const ground = rolling + ridge - basin + rim + 3.4;
+
+  // The pond, blended over the finished ground (see POND for why this is a blend, not a subtract).
+  // The band runs from twice the radius down to nine tenths of it: a bank this long tops out near
+  // 27 degrees, which the walker climbs at wade speed — the previous, shorter band built a 48
+  // degree wall, a degree short of the controller's climb limit, and anyone who waded in stayed in.
+  const pondDistance = Math.hypot(x - POND.x, z - POND.z);
+  const pond = smoothstep(POND.radius * 2.0, POND.radius * 0.9, pondDistance);
+
+  return ground * (1 - pond) + POND.floor * pond;
 }
 
 /** How steep the ground is, as |gradient|. Sampled by finite difference at half a metre. */

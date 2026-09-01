@@ -65,3 +65,32 @@ refusing to guess at a different binary layout.
 Downloading a later `--engine` does not help: Fab serves one artifact for every listed engine
 version (4.24 and 4.27 are byte-identical, 3,225,681,826 bytes). The compatibility list is
 metadata, not a re-cook. So the geometry here stays procedural and wears the pack's textures.
+
+## 5a. Update: the v514 refusal was already fixed, just never installed
+
+The refusal above was stale tooling, not a missing capability. `threenative-asset-mcp` source
+(commit 882f13f, working tree beyond it) already decodes v514 FRawMesh source models — but the
+sandbox's `.mcp-tools/` still held the v43 build. Repacking the repo into `.mcp-tools/` (v44)
+made every one of the pack's 61 meshes import: 12 minutes, zero failures, real geometry for the
+pines, the rocks, the cliffs, and every plant. Evidence:
+`wildwood/assets/fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/import-report.json`.
+
+**Rule for the next agent:** after fixing `threenative-asset-mcp`, repack it into the sandbox's
+`.mcp-tools/` or the games keep running the old importer.
+
+## 6. No water abstraction in the engine for ponds/lakes
+
+Asked for: realistic pond/lake water with depth-based shore transparency. Two
+`engine_search_capabilities` sweeps (request + mechanic: "animated water surface shader with
+depth-based shore transparency over a heightfield terrain", "water rendering with reflections and
+ripples", "ocean or sea surface with large waves, buoyancy, and underwater rendering") all return
+empty, **but the engine does ship `SpectralOcean`** (`packages/core/src/ocean/spectral.ts`, FFT
+wave spectra with buoyancy and GPU readback) — the searches missed it because the manifest the
+MCP serves (`fps-framework/capabilities.json`) is stale. A second agent is fixing the manifest
+pipeline. `SpectralOcean` itself is an ocean-with-ships abstraction: cascaded FFT patches, no
+depth-based shore blending — wrong fit for a forest pond, and rule 2 means a pond-shaped water
+look ships as game render code regardless.
+
+Evidence: `engine_search_capabilities` outputs (empty) vs
+`threenative-engine/packages/core/capabilities.json` lines 380-427. The game keeps its own
+depth-baked water (`src/render/water.ts`) with the pack's `waves_normal` map for ripple detail.
