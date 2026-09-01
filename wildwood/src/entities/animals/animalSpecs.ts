@@ -73,7 +73,7 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
   {
     id: "fox",
     label: "Fox",
-    length: 0.7,
+    length: 1.05,
     clips: CANINE_CLIPS,
     walkSpeed: 1.3,
     runSpeed: 8,
@@ -83,7 +83,7 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
   {
     id: "wolf",
     label: "Wolf",
-    length: 1.2,
+    length: 1.55,
     clips: CANINE_CLIPS,
     walkSpeed: 1.5,
     runSpeed: 10,
@@ -93,7 +93,7 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
   {
     id: "husky",
     label: "Husky",
-    length: 1.1,
+    length: 1.4,
     clips: CANINE_CLIPS,
     walkSpeed: 1.5,
     runSpeed: 9,

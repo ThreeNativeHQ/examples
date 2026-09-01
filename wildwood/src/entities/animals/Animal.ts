@@ -431,20 +431,33 @@ function stripJunkTriangles(root: Object3D): void {
         matrix[2]! * x + matrix[6]! * y + matrix[10]! * z + matrix[14]!,
       ];
     };
+    // Group-aware: a multi-primitive mesh (one per material) carries `groups` as (start, count)
+    // slices of ONE index. Filtering the whole index in one pass and keeping the old groups
+    // would hand the surviving triangles the wrong material — so filter per group and rebuild
+    // the group list against the new index lengths.
+    const groups = geometry.groups.length > 0 ? geometry.groups : [{ start: 0, count: index.count, materialIndex: 0 }];
     const keep: number[] = [];
-    for (let triangle = 0; triangle < index.count; triangle += 3) {
-      const a = index.getX(triangle);
-      const b = index.getX(triangle + 1);
-      const c = index.getX(triangle + 2);
-      // Majority vote, not any-vertex: a triangle with one vertex on the body and two out at
-      // ±100 units still spans the whole sky. Fewer than two inside reads as junk.
-      const votes =
-        (inside(...world(a)) ? 1 : 0) +
-        (inside(...world(b)) ? 1 : 0) +
-        (inside(...world(c)) ? 1 : 0);
-      if (votes >= 2) keep.push(a, b, c);
+    const newGroups: typeof geometry.groups = [];
+    for (const group of groups) {
+      const start = keep.length;
+      for (let triangle = group.start; triangle < group.start + group.count; triangle += 3) {
+        const a = index.getX(triangle);
+        const b = index.getX(triangle + 1);
+        const c = index.getX(triangle + 2);
+        // Majority vote, not any-vertex: a triangle with one vertex on the body and two out at
+        // ±100 units still spans the whole sky. Fewer than two inside reads as junk.
+        const votes =
+          (inside(...world(a)) ? 1 : 0) +
+          (inside(...world(b)) ? 1 : 0) +
+          (inside(...world(c)) ? 1 : 0);
+        if (votes >= 2) keep.push(a, b, c);
+      }
+      const count = keep.length - start;
+      if (count > 0) newGroups.push({ start, count, materialIndex: group.materialIndex });
     }
     if (keep.length === index.count) return;
+    if (newGroups.length === 0) return;
     geometry.setIndex(keep);
+    geometry.groups = newGroups;
   });
 }

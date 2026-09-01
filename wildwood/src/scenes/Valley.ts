@@ -167,7 +167,6 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       placements: [
         { id: "fox", x: 28, z: 8 },
         { id: "husky", x: 8, z: 18 },
-        { id: "pig", x: 20, z: 36 },
         { id: "stag", x: 28, z: 2 },
         { id: "doe", x: 54, z: 2 },
         { id: "wolf", x: -6, z: -30 },
