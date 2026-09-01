@@ -34,8 +34,18 @@ export function Hud() {
       <div className="mt-3 text-[10px] uppercase tracking-[0.14em] text-dim">
         watching
         <div className="mt-1 text-sm uppercase tracking-[0.08em] text-text">{state.focusState}</div>
-        <div className="text-[10px] normal-case tracking-normal text-dim">{state.focusClip}</div>
+        <div className="text-[10px] normal-case tracking-normal text-dim">
+          {state.focusProject || "—"}
+        </div>
       </div>
+      {state.bridgeOnline ? null : (
+        <div className="mt-4 border border-line bg-panel p-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-lume">bridge offline</div>
+          <div className="mt-1 text-[10px] normal-case tracking-normal text-dim">
+            run <b className="font-normal text-text">pnpm office</b> to fill the floor
+          </div>
+        </div>
+      )}
     </div>
   );
 }

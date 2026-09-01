@@ -13,8 +13,11 @@
     "build:ios": "threenative build --target ios",
     "test:native": "pnpm build:desktop && node node_modules/@threenative/runtime-native/scripts/verify-starter-desktop.mjs",
     "pretest": "playwright install chromium",
-    "test": "vite build && threenative-playtest --scenario \"playtests/*.playtest.json\" --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port $PORT --strictPort\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "test": "vite build && node tools/run-playtests.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "office": "tsx tools/office-bridge/main.ts",
+    "assets:trim": "node tools/trim-clips.mjs",
+    "office:fixture": "tsx tools/office-bridge/fixture.ts"
   },
   "dependencies": {
     "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.0-348eb2f788a8.tgz",
@@ -34,14 +37,17 @@
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
     "@types/three": "0.185.3",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "6.0.5",
     "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.3-6bc8c1e0481f.tgz",
     "esbuild": "0.27.0",
     "playwright": "1.62.1",
     "tailwindcss": "4.3.3",
     "threenative-engine-mcp": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-engine-mcp-0.2.0-fa2d3f69fd14.tgz",
+    "tsx": "^4.23.13",
     "typescript": "5.9.3",
-    "vite": "8.2.0"
+    "vite": "8.2.0",
+    "ws": "^8.21.3"
   },
   "optionalDependencies": {
     "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-runtime-native-0.3.0-edd1bc2aa63b.tgz"

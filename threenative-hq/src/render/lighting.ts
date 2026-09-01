@@ -92,8 +92,8 @@ export function setupOfficeLighting(scene: Scene, renderer: ShadowRenderer): Dir
   key.shadow.bias = -0.0006;
   scene.add(key);
 
-  for (const z of [-4.5, 0.5, 5]) {
-    for (const x of [-8, 0, 8]) {
+  for (const z of [-5.4, -1.2, 3, 6.4]) {
+    for (const x of [-10, -2, 6, 13]) {
       const strip = new PointLight(0xffd9a8, 3.2, 9, 2);
       strip.position.set(x, 2.7, z);
       scene.add(strip);

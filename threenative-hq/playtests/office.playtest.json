@@ -1,0 +1,63 @@
+{
+  "name": "hq-office",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "first-frame",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "script-plays",
+      "waitTicks": 240,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle",
+      "waitTicks": 120,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "arrivals",
+        "gte": 4,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "departures",
+        "gte": 1,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "blockedSeen",
+        "equals": true,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "focusProject",
+        "equals": "rpg-api",
+        "changed": true
+      }
+    ]
+  }
+}

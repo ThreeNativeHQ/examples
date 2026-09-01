@@ -40,8 +40,8 @@ export interface IOffice {
   readonly entrance: Vector3;
 }
 
-const ROOM_WIDTH = 26;
-const ROOM_DEPTH = 16;
+const ROOM_WIDTH = 32;
+const ROOM_DEPTH = 17;
 const CEILING = 3.2;
 const DESK_HEIGHT = 0.74;
 
@@ -99,7 +99,7 @@ function slatWall(): Object3D {
   backing.position.set(0, CEILING / 2, -ROOM_DEPTH / 2 + 0.06);
   group.add(backing);
 
-  const count = 96;
+  const count = 118;
   const slats = new InstancedMesh(
     new BoxGeometry(0.07, CEILING - 0.1, 0.09),
     standard(office.slatLight, 0.6),
@@ -162,7 +162,7 @@ function columns(): Object3D {
   const group = new Group();
   const bandHeight = 0.22;
   const bands = Math.floor(CEILING / bandHeight);
-  for (const x of [-7, 0, 7]) {
+  for (const x of [-10.2, -2.4, 5.4]) {
     for (let index = 0; index < bands; index += 1) {
       const wide = index % 2 === 0;
       const size = wide ? 0.82 : 0.72;
@@ -170,7 +170,7 @@ function columns(): Object3D {
         new BoxGeometry(size, bandHeight, size),
         standard(wide ? office.columnLight : office.columnDark, 0.8),
       );
-      band.position.set(x, bandHeight / 2 + index * bandHeight, -1.2);
+      band.position.set(x, bandHeight / 2 + index * bandHeight, -2.9);
       band.castShadow = true;
       band.receiveShadow = true;
       group.add(band);
@@ -184,8 +184,8 @@ function stripLights(): Object3D {
   const group = new Group();
   const material = new MeshBasicMaterial({ color: office.strip });
   const housing = standard(office.deskFrame, 0.5);
-  for (const z of [-4.5, 0.5, 5]) {
-    for (const x of [-8, 0, 8]) {
+  for (const z of [-5.4, -1.2, 3, 6.4]) {
+    for (const x of [-10, -2, 6, 13]) {
       const strip = new Mesh(new BoxGeometry(5.6, 0.035, 0.1), material);
       strip.position.set(x, CEILING - 0.38, z);
       group.add(strip);
@@ -280,14 +280,14 @@ function shelving(): Object3D {
 /** One desk, its divider, its monitor and its chair, plus where a worker sits at it. */
 function placeDesk(index: number): { group: Group; desk: IDeskAnchor } {
   const group = new Group();
-  const perRow = 4;
+  const perRow = 8;
   const row = Math.floor(index / perRow);
   const column = index % perRow;
   // Rows face the slat wall; a second bank behind it faces the glass, so the room reads as an
   // open-plan floor rather than a classroom.
   const facingWall = row % 2 === 0;
-  const x = -9 + column * 5.2;
-  const z = -5 + row * 4.4;
+  const x = -13.6 + column * 3.9;
+  const z = -5.4 + row * 4.2;
   group.position.set(x, 0, z);
   group.rotation.y = facingWall ? 0 : Math.PI;
 
