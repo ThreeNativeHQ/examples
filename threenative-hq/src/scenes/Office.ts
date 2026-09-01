@@ -1,4 +1,4 @@
-import { type ICtx, Scene, type SceneFrame, isMobile } from "@threenative/core";
+import { type ICtx, Scene, type SceneFrame, isMobile, isWeb } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
 import { CollisionShape3D, RigidBody3D } from "@threenative/physics";
 import { NavigationAgent3D, NavigationRegion3D } from "@threenative/physics/navigation";
@@ -12,6 +12,7 @@ import { setupOfficeLighting } from "../render/lighting.js";
 import { type IOffice, createOffice } from "../render/office.js";
 import { setupPost } from "../render/postprocessing.js";
 import { setupSky } from "../render/sky.js";
+import { type IActorReport, deriveChecks, vectorOf, worldOf } from "../office/inspect.js";
 import { Visitor, capturePointerOnClick } from "../office/Visitor.js";
 import type { GameState, SessionRow } from "../state.js";
 
@@ -22,6 +23,8 @@ const DESK_COUNT = 16;
 const WALK_SPEED = 2.1;
 /** How close counts as arrived. */
 const ARRIVED_METRES = 0.45;
+/** How fast a keyboard slides under the hands that are reaching for it. */
+const BOARD_EASE = 0.08;
 
 interface IActor {
   readonly worker: Worker;
@@ -117,7 +120,10 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     const camera = ctx.camera as PerspectiveCamera;
     // You start by the door, looking down the floor — the same framing the reference frames use,
     // except now you can walk out of it.
-    const visitor = new Visitor(ctx, new Vector3(11.6, 0.7, 4.6), 1.19);
+    const visitor = new Visitor(ctx, new Vector3(11.6, 1.0, 4.6), 1.19, {
+      clips: this.#clips,
+      source: rig,
+    });
     const releasePointer = capturePointerOnClick();
     ctx.entities.add("visitor", visitor.object);
     visitor.update(ctx, 0, camera);
@@ -145,6 +151,11 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     // The sessions already running when the office opens were not born at the door. Only the ones
     // that start after the first snapshot walk in — otherwise every reload stages a fake commute.
     let seenFirstSnapshot = false;
+    let lastDt = 0;
+    /** Desks whose keyboard has been measured against a seated worker's hands. */
+    const alignedDesks = new Set<number>();
+    let alignAttempts = 0;
+    const alignSkips = new Map<string, number>();
     let departures = 0;
     let blockedSeen = false;
 
@@ -161,6 +172,7 @@ export class Office extends Scene<GameState, IPhysicsContext> {
         frameCtx.state.set({ requestedSelection: "" });
       }
       logTick += 1;
+      lastDt = dt;
       bridge.tick();
       const sessions = bridge.sessions();
       const assignment = assignDesks(sessions, room.desks.length, seating);
@@ -218,6 +230,35 @@ export class Office extends Scene<GameState, IPhysicsContext> {
           // A standing worker steps back from the chair; a seated one sits in it.
           actor.worker.object.position.copy(actor.worker.standing ? desk.stand : desk.seat);
           actor.worker.object.rotation.y = desk.facing;
+          // Put the keyboard under the hands rather than the hands over the keyboard: the clip is
+          // fixed and the desk is not. Eased every frame rather than measured once, because the
+          // arms bend into place over half a second and a single early sample lands the board
+          // where the hands were passing through.
+          // Why an alignment did not run is worth reporting: "the keyboard never moved" and
+          // "the keyboard moved to the wrong place" look identical on screen and are different
+          // bugs. `pnpm inspect` prints this tally.
+          const alignBlocker = actor.worker.standing
+            ? "standing"
+            : !actor.worker.settled
+              ? "pose-not-settled"
+              : state !== "working"
+                ? `state:${state}`
+                : "none";
+          alignSkips.set(alignBlocker, (alignSkips.get(alignBlocker) ?? 0) + 1);
+          if (alignBlocker === "none") alignAttempts += 1;
+          if (!actor.worker.standing && actor.worker.settled && state === "working") {
+            const hand = actor.worker.handPosition(HAND);
+            const parent = desk.keyboard.parent;
+            if (hand !== undefined && parent !== null) {
+              // Horizontally only. The board stays on the desk at desk height; the driving pose
+              // holds the hands a little above it, which is what the pose is and what it looked
+              // like before anything tried to correct it.
+              parent.worldToLocal(hand);
+              desk.keyboard.position.x += (hand.x - desk.keyboard.position.x) * BOARD_EASE;
+              desk.keyboard.position.z += (hand.z + 0.02 - desk.keyboard.position.z) * BOARD_EASE;
+              alignedDesks.add(deskIndex);
+            }
+          }
         }
         // A working session lights its own monitor. It is the cheapest way to read the floor at a
         // glance — a room of dark screens with three lit ones says where the work is.
@@ -252,6 +293,60 @@ export class Office extends Scene<GameState, IPhysicsContext> {
 
       if (selectedId !== "" && !workers.has(selectedId)) selectedId = "";
       const selected = sessions.find((session) => session.id === selectedId);
+      // The numeric window onto this scene. Web only, read by `tools/inspect.mjs`, and the first
+      // thing to reach for when something looks wrong — a screenshot cannot tell you that a
+      // keyboard is four centimetres inside a desk.
+      if (isWeb() && typeof globalThis !== "undefined") {
+        (globalThis as Record<string, unknown>).__hq = () => {
+          const reports: IActorReport[] = [];
+          for (const [id, entry] of actors) {
+            const board = room.desks[entry.deskIndex]?.keyboard;
+            reports.push({
+              advancedFrames: entry.worker.animation.advancedFrames,
+              clip: entry.worker.clip ?? "",
+              hand: worldOf(
+                entry.worker.object.getObjectByName("hand_r") ??
+                  entry.worker.object.getObjectByName("hand_l"),
+              ),
+              id,
+              keyboard: worldOf(board),
+              boardLocal: board === undefined ? undefined : vectorOf(board.position),
+              deskIndex: entry.deskIndex,
+              phase: entry.phase,
+              position: vectorOf(entry.worker.object.position),
+              clipAge: Math.round(entry.worker.clipAge * 100) / 100,
+              settled: entry.worker.settled,
+              stateChanges: entry.worker.stateChanges,
+              transitioning: entry.worker.transitioning,
+              state: entry.worker.state,
+            });
+          }
+          const headAt = worldOf(visitor.object.getObjectByName("Head"));
+          const chestAt = worldOf(visitor.object.getObjectByName("spine_03"));
+          const cameraReport = {
+            chestY: chestAt?.[1],
+            headDistance:
+              headAt === undefined
+                ? undefined
+                : Math.hypot(camera.position.x - headAt[0], camera.position.z - headAt[2]),
+            headY: headAt?.[1],
+            pitch: Math.round(camera.rotation.x * 1000) / 1000,
+            x: Math.round(camera.position.x * 1000) / 1000,
+            y: Math.round(camera.position.y * 1000) / 1000,
+            yaw: Math.round(camera.rotation.y * 1000) / 1000,
+            z: Math.round(camera.position.z * 1000) / 1000,
+          };
+          return {
+            actors: reports,
+            camera: cameraReport,
+            alignAttempts,
+            alignSkips: Object.fromEntries(alignSkips),
+            checks: deriveChecks(reports, camera, cameraReport),
+            dt: Math.round(lastDt * 100000) / 100000,
+            frames: logTick,
+          };
+        };
+      }
       const focus = sessions[0];
       const focusWorker = focus === undefined ? undefined : workers.get(focus.id);
       if (sessions.length > 0) seenFirstSnapshot = true;
@@ -317,6 +412,7 @@ function step(actor: IActor, goal: Vector3, dt: number): boolean {
   return false;
 }
 
+const HAND = new Vector3();
 const SCRATCH = new Vector3();
 const SCRATCH_GOAL = new Vector3();
 const SCRATCH_HERE = new Vector3();

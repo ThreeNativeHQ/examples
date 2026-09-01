@@ -19,8 +19,10 @@ export interface IClipChoice {
 const CHOICES: Readonly<Record<WorkerState, IClipChoice>> = {
   // Walking in for the first time: the formal walk is the one that reads as an office.
   arriving: { clip: "Walk_Formal_Loop", mode: "loop", standing: true },
-  // Hands forward over the desk. The library has no typing clip; the seated driving pose puts
-  // both hands where a keyboard is, which is what a typing worker looks like from two metres.
+  // The library has no typing clip. The seated driving pose is the one that reads as typing —
+  // both hands forward, level, in front of the body — so the keyboard is slid under them rather
+  // than the hands being dragged down to it. Bending the arms was tried and swings them open
+  // sideways; the pose the animator authored is left alone.
   working: { clip: "Driving_Loop", mode: "loop", standing: false },
   thinking: { clip: "Sitting_Talking_Loop", mode: "loop", standing: false },
   // Standing and on the phone. Deliberately the only standing seated-desk state, because this is

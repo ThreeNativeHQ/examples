@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "office": "tsx tools/office-bridge/main.ts",
     "assets:trim": "node tools/trim-clips.mjs",
-    "office:fixture": "tsx tools/office-bridge/fixture.ts"
+    "office:fixture": "tsx tools/office-bridge/fixture.ts",
+    "inspect": "node tools/inspect.mjs"
   },
   "dependencies": {
     "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.0-348eb2f788a8.tgz",

@@ -18,6 +18,9 @@ const KEEP = new Set([
   "Sitting_Enter",
   "Sitting_Exit",
   "Idle_TalkingPhone_Loop",
+  // The visitor's own two: you stand about, and you walk.
+  "Idle_Loop",
+  "Jog_Fwd_Loop",
 ]);
 
 const io = new NodeIO();

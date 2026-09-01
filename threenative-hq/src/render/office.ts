@@ -32,6 +32,8 @@ export interface IColliderBox {
 }
 
 export interface IDeskAnchor {
+  /** The keyboard, so a seated worker's hands can be measured against it. */
+  readonly keyboard: Mesh;
   /** Where the worker's feet go when seated, in world space. */
   readonly seat: Vector3;
   /** Where the worker stands when it gets up — half a step back from the chair. */
@@ -397,6 +399,29 @@ function placeDesk(index: number): { group: Group; desk: IDeskAnchor } {
   stand.position.set(0, DESK_HEIGHT + 0.06, -0.24);
   group.add(stand);
 
+  // A keyboard, a mouse and a tower under the desk. A desk with nothing on it makes a seated
+  // worker look like someone waiting rather than someone working.
+  const keyboard = new Mesh(new BoxGeometry(0.44, 0.02, 0.15), standard(0x22201e, 0.6));
+  keyboard.position.set(0, DESK_HEIGHT + 0.04, 0.03);
+  keyboard.rotation.x = -0.04;
+  keyboard.castShadow = true;
+  group.add(keyboard);
+  // Parented to the board, because the board gets moved to wherever the seated hands turn out to
+  // be and a key bed left behind on the desk is worse than no keys at all.
+  const keys = new Mesh(new BoxGeometry(0.4, 0.006, 0.11), standard(0x3a3733, 0.9));
+  keys.position.set(0, 0.015, 0);
+  keyboard.add(keys);
+  const mouse = new Mesh(new BoxGeometry(0.06, 0.025, 0.1), standard(0x22201e, 0.5));
+  mouse.position.set(0.33, DESK_HEIGHT + 0.04, 0.05);
+  group.add(mouse);
+  const tower = new Mesh(new BoxGeometry(0.2, 0.42, 0.45), standard(0x1d1b19, 0.6));
+  tower.position.set(0.6, 0.21, -0.12);
+  tower.castShadow = true;
+  group.add(tower);
+  const towerLight = new Mesh(new BoxGeometry(0.02, 0.02, 0.01), new MeshBasicMaterial({ color: 0x8fe3ff }));
+  towerLight.position.set(0.5, 0.36, -0.12);
+  group.add(towerLight);
+
   group.add(chair());
 
   const seatLocal = new Vector3(0, 0, 0.52);
@@ -405,7 +430,7 @@ function placeDesk(index: number): { group: Group; desk: IDeskAnchor } {
   const stand2 = standLocal.clone().applyEuler(group.rotation).add(group.position);
   return {
     group,
-    desk: { seat, stand: stand2, facing: group.rotation.y + Math.PI, screen },
+    desk: { seat, stand: stand2, facing: group.rotation.y + Math.PI, keyboard, screen },
   };
 }
 

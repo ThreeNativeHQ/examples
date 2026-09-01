@@ -1,17 +1,32 @@
 import type { ICtx } from "@threenative/core";
-import { isWeb } from "@threenative/core";
+import { AnimationPlayer, isWeb, normaliseToMetres } from "@threenative/core";
 import { CharacterBody3D, CollisionShape3D, type IPhysicsContext } from "@threenative/physics";
-import { Group, type PerspectiveCamera, Vector3 } from "three";
+import type { AnimationClip } from "three";
+import { Group, type Object3D, type PerspectiveCamera, Vector3 } from "three";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { tintMannequin } from "./mannequin.js";
 import type { GameState } from "../state.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
 
 const EYE_HEIGHT = 1.62;
+/** Half the capsule, so the body's feet land on the floor its centre floats above. */
+const BODY_DROP = 0.92;
+/**
+ * The lens sits on the body's own turning axis, not in front of it.
+ *
+ * Any forward offset puts the camera on an arm: the body pivots in place, the camera swings, and a
+ * shoulder sweeps through the frame every time you turn or the run cycle rolls. On the axis, the
+ * body rotates around the lens and only what is genuinely below it — chest, arms, legs — is ever
+ * in shot.
+ */
+const EYE_FORWARD = 0;
 const WALK_SPEED = 3.1;
 const SPRINT_SPEED = 5.4;
 /** Radians per unit of relative pointer motion. */
 const LOOK_SENSITIVITY = 0.0016;
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
+const HEAD_AT = new Vector3();
 /** The most the view may swing in one frame, in radians. */
 const MAX_LOOK_STEP = 0.25;
 
@@ -37,18 +52,50 @@ function lookIsCaptured(): boolean {
  * The body is physics-owned so the desks and columns are solid; the look angles are game-owned
  * because framing is a feel decision and nothing in the framework should choose it.
  */
+export interface IVisitorOptions {
+  readonly source: Group;
+  readonly clips: readonly AnimationClip[];
+}
+
 export class Visitor {
   readonly object: Group;
   readonly body: CharacterBody3D;
+  readonly #rig: Group;
+  #head: Object3D | undefined;
+  readonly #player: AnimationPlayer;
+  #clip = "Idle_Loop";
   #yaw: number;
   #pitch = -0.05;
 
-  constructor(ctx: GameCtx, spawn: Vector3, yaw: number) {
+  constructor(ctx: GameCtx, spawn: Vector3, yaw: number, options: IVisitorOptions) {
     this.#yaw = yaw;
     this.object = new Group();
     this.object.name = "visitor";
     this.object.position.copy(spawn);
     ctx.add(this.object);
+
+    // You have a body. Look down and it is there; the office is a place you are standing in
+    // rather than a camera flying through it.
+    const rig = cloneSkinned(options.source) as Group;
+    normaliseToMetres(rig, { metres: 1.8, axis: "height" });
+    tintMannequin(rig, 0xc9a227);
+    rig.position.y = -BODY_DROP;
+    // Your own head is behind the lens, and a head behind the lens is a head *through* the lens
+    // the moment you look down or the walk cycle bobs. Shrink it away and keep the rest: arms,
+    // legs and the shadow you cast are the point of having a body at all.
+    // The head and the neck are where the lens is. Shrink them away rather than moving the camera
+    // out of the body, which is what put a shoulder in the frame on every turn. The bones keep
+    // their positions, and the camera rides the head one.
+    this.#head = rig.getObjectByName("Head");
+    for (const name of ["Head", "neck_01"]) rig.getObjectByName(name)?.scale.setScalar(0.001);
+    this.object.add(rig);
+    this.#rig = rig;
+    this.#player = new AnimationPlayer({
+      clips: options.clips,
+      root: rig,
+      strideRoot: this.object,
+    });
+    this.#player.play(this.#clip);
     this.body = new CharacterBody3D({
       autostep: { maxHeight: 0.3, minWidth: 0.2 },
       object: this.object,
@@ -73,9 +120,9 @@ export class Visitor {
       const yawDelta = clamp(look.x * LOOK_SENSITIVITY, MAX_LOOK_STEP);
       const pitchDelta = clamp(look.y * LOOK_SENSITIVITY, MAX_LOOK_STEP);
       this.#yaw -= yawDelta;
-      // Positive look.y is upward pointer motion on every platform the framework normalises, so
-      // the sign here is the only place "inverted mouse" would live.
-      this.#pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.#pitch + pitchDelta));
+      // Push the mouse forward and the view goes up. The framework reports upward pointer motion
+      // as positive, and this game subtracts it — the opposite convention read as inverted.
+      this.#pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.#pitch - pitchDelta));
     }
 
     const move = ctx.input.vector("move");
@@ -89,9 +136,41 @@ export class Visitor {
     this.body.velocity.y = -9.81 * 0.35;
     this.body.moveAndSlide(dt);
 
-    camera.position.set(this.object.position.x, this.object.position.y + EYE_HEIGHT, this.object.position.z);
+    // The body turns with the view; only the head pitches, because a mannequin bent backwards at
+    // the waist is not what looking up looks like.
+    this.#rig.rotation.y = Math.PI;
+    this.object.rotation.y = this.#yaw;
+    const moving = Math.hypot(this.body.velocity.x, this.body.velocity.z) > 0.2;
+    const wanted = moving ? (speed > WALK_SPEED ? "Jog_Fwd_Loop" : "Walk_Loop") : "Idle_Loop";
+    if (wanted !== this.#clip) {
+      this.#clip = wanted;
+      this.#player.play(wanted, { fade: 0.18 });
+    }
+    this.#player.update(dt);
+
+    // Eyes just in front of the head, so the body is under you and never through the lens.
+    // Eye height comes from the skeleton, not from a constant: the capsule's centre drifts with
+    // the ground under it, and a lens placed a fixed distance above that ends up in the chest.
+    // Measured before this changed: the lens sat 0.13 m below the head bone, which is exactly how
+    // much of your own torso was in the frame.
+    const head = this.#head;
+    let eyeY = this.object.position.y - BODY_DROP + EYE_HEIGHT;
+    if (head !== undefined) {
+      head.updateWorldMatrix(true, false);
+      eyeY = HEAD_AT.setFromMatrixPosition(head.matrixWorld).y;
+    }
+    camera.position.set(
+      this.object.position.x - Math.sin(this.#yaw) * EYE_FORWARD,
+      eyeY,
+      this.object.position.z - Math.cos(this.#yaw) * EYE_FORWARD,
+    );
     camera.rotation.order = "YXZ";
     camera.rotation.set(this.#pitch, this.#yaw, 0);
+  }
+
+  /** The clip the body is playing, so a proof can see you walk rather than glide. */
+  get clip(): string | undefined {
+    return this.#player.current;
   }
 }
 
