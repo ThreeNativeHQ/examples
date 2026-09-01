@@ -42,90 +42,73 @@ const NATURE = `${MESHES}/Nature`;
  * leading up to it, cave rock closing in on both sides, rubble and standing water underfoot, and
  * chains hanging out of the dark overhead.
  */
-/**
- * The chamber, read off the reference.
- *
- * The reference never shows a flat surface: every wall and every stretch of ceiling is broken rock,
- * and the room is a forest of slender columns with daylight coming down between them. So the built
- * shell is treated as a backstop to be hidden — rock masses ring the perimeter to cover the walls,
- * and ceiling rock breaks up the roof — while the columns and the light between them carry the shot.
- */
 export const CAVE_PIECES: readonly ICavePiece[] = [
-  // --- The colonnade. The subject of the reference. Two ranks the camera looks along, plus
-  // stragglers so the rows never read as a grid.
-  { key: "colL1", path: `${BUILDING}/SM_Cave_Rock_Pillar01REDO.glb`, anchor: [-8.5, 0, -10], mode: "base", rotationY: 0.2 },
-  { key: "colL2", path: `${BUILDING}/SM_Cave_Rock_Pillar03b.glb`, anchor: [-8, 0, -18], mode: "base", rotationY: 1.1 },
-  { key: "colL3", path: `${BUILDING}/SM_Cave_Rock_Pillar01REDO.glb`, anchor: [-7, 0, -26], mode: "base", rotationY: 2.3 },
-  { key: "colL4", path: `${BUILDING}/SM_Cave_Rock_Pillar03b.glb`, anchor: [-9, 0, -34], mode: "base", rotationY: 0.7 },
-  { key: "colL5", path: `${BUILDING}/SM_Cave_Rock_Pillar01REDO.glb`, anchor: [-13, 0, -22], mode: "base", rotationY: 1.6 },
-  { key: "colR1", path: `${BUILDING}/SM_Cave_Rock_Pillar03b.glb`, anchor: [8.5, 0, -12], mode: "base", rotationY: 1.7 },
-  { key: "colR2", path: `${BUILDING}/SM_Cave_Rock_Pillar01REDO.glb`, anchor: [8, 0, -20], mode: "base", rotationY: 0.5 },
-  { key: "colR3", path: `${BUILDING}/SM_Cave_Rock_Pillar03b.glb`, anchor: [7, 0, -28], mode: "base", rotationY: 2.6 },
-  { key: "colR4", path: `${BUILDING}/SM_Cave_Rock_Pillar01REDO.glb`, anchor: [9.5, 0, -36], mode: "base", rotationY: 1.3 },
-  { key: "colR5", path: `${BUILDING}/SM_Cave_Rock_Pillar03b.glb`, anchor: [13, 0, -25], mode: "base", rotationY: 0.4 },
-  { key: "colC1", path: `${BUILDING}/SM_Cave_Rock_Pillar01REDO.glb`, anchor: [0.5, 0, -31], mode: "base", rotationY: 0.9 },
-  { key: "colC2", path: `${BUILDING}/SM_Cave_Rock_Pillar03b.glb`, anchor: [-2.5, 0, -40], mode: "base", rotationY: 2.0 },
-  { key: "colC3", path: `${BUILDING}/SM_Cave_Rock_Pillar01REDO.glb`, anchor: [3.5, 0, -43], mode: "base", rotationY: 1.5 },
-  // Broken stubs, as the reference has among the standing ones.
-  { key: "stubA", path: `${BUILDING}/SM_Cave_Rock_PillarBottom.glb`, anchor: [-3, 0, -15], mode: "base", rotationY: 0.3 },
-  { key: "stubB", path: `${BUILDING}/SM_Cave_Rock_Pillar_Broken01a.glb`, anchor: [4, 0, -24], mode: "base", rotationY: 1.2 },
-  { key: "stubC", path: `${BUILDING}/SM_Cave_Rock_PillarBroken01b.glb`, anchor: [-5, 0, -33], mode: "base", rotationY: 2.1 },
-  { key: "stubD", path: `${BUILDING}/SM_Cave_Rock_PillarTop.glb`, anchor: [11, 0, -31], mode: "base", rotationY: 2.4 },
+  // The hero, built in three parts as the reference has it: a raised plinth, a gilded arch
+  // standing on it, and the robed figure hanging inside the arch where the shaft lands.
+  { key: "shrinePlinth", path: `${BUILDING}/SM_Cave_Floor_Stairs_Quarter.glb`, anchor: [1, 0, -21], mode: "base", rotationY: 0.8 },
+  { key: "shrineArch", path: `${BUILDING}/SM_Cave_Pillars_NoFlag.glb`, anchor: [1, 2.4, -24], mode: "base", rotationY: 1.45 },
+  { key: "shrineFigure", path: `${BUILDING}/SM_S_Soul_Statue.glb`, anchor: [-2, 0.62, -17], mode: "base", rotationY: 0.35 },
+  { key: "archFragments", path: `${BUILDING}/SM_Cave_Arches.glb`, anchor: [-16, 0, -44], mode: "base", rotationY: 0.6 },
 
-  // --- The enclosure. These exist to make sure a flat wall is never in frame.
-  // Human-scale rock, many of them, ringing the room outside the camera's lane. Big enough to
-  // hide a wall, small enough that one does not contain the whole chamber.
-  { key: "wallL1", path: `${ROCKS}/SM_Cave_Rock_Large02.glb`, anchor: [-17, 0, -6], mode: "base", rotationY: 0.5 },
-  { key: "wallL2", path: `${ROCKS}/SM_Cave_Rock_Large01_REDO.glb`, anchor: [-19, 0, -16], mode: "base", rotationY: 1.7 },
-  { key: "wallL3", path: `${ROCKS}/SM_Cave_Rock_Large02.glb`, anchor: [-18, 0, -27], mode: "base", rotationY: 2.6 },
-  { key: "wallL4", path: `${ROCKS}/SM_Cave_Rock_Large01_REDO.glb`, anchor: [-16, 0, -37], mode: "base", rotationY: 0.9 },
-  { key: "wallR1", path: `${ROCKS}/SM_Cave_Rock_Large01_REDO.glb`, anchor: [17, 0, -7], mode: "base", rotationY: -0.8 },
-  { key: "wallR2", path: `${ROCKS}/SM_Cave_Rock_Large02.glb`, anchor: [19, 0, -18], mode: "base", rotationY: 2.1 },
-  { key: "wallR3", path: `${ROCKS}/SM_Cave_Rock_Large01_REDO.glb`, anchor: [18, 0, -29], mode: "base", rotationY: 1.2 },
-  { key: "wallR4", path: `${ROCKS}/SM_Cave_Rock_Large02.glb`, anchor: [16, 0, -39], mode: "base", rotationY: 0.3 },
-  { key: "wallB1", path: `${ROCKS}/SM_Cave_Rock_Large02.glb`, anchor: [-7, 0, -44], mode: "base", rotationY: 2.2 },
-  { key: "wallB2", path: `${ROCKS}/SM_Cave_Rock_Large01_REDO.glb`, anchor: [6, 0, -45], mode: "base", rotationY: 0.6 },
-  { key: "wallB3", path: `${ROCKS}/SM_Cave_Rock_Large02.glb`, anchor: [0, 0, -47], mode: "base", rotationY: 1.4 },
+  // Cave rock closing in on both sides, near enough to frame the shot.
+  { key: "rockLeft", path: `${MERGED}/SM_MergedMesh_Cave_Rock_Pillar01REDO_120.glb`, anchor: [-27, 0, -20], mode: "base", rotationY: 1.1 },
+  { key: "rockRight", path: `${MERGED}/SM_MergedMesh_Cave_Rock_Pillar01REDO_120.glb`, anchor: [28, 0, -26], mode: "base", rotationY: -1.9 },
+  { key: "rockBack", path: `${MERGED}/SM_MergedMesh_Cave_Rock_Pillar03a_0.glb`, anchor: [-4, 0, -56], mode: "base", rotationY: 0.7 },
+  { key: "rockMassLeft", path: `${ROCKS}/SM_Cave_Rock_Large02.glb`, anchor: [-21, 0, -14], mode: "base", rotationY: 0.5 },
+  { key: "rockMassRight", path: `${ROCKS}/SM_Cave_Rock_Large01_REDO.glb`, anchor: [21, 0, -18], mode: "base", rotationY: -0.8 },
 
-  // --- Ceiling rock, so the roof never reads as a plane.
-  { key: "ceilA", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [-11, 14.9, -8], mode: "top", rotationY: 0.7 },
-  { key: "ceilB", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [12, 14.9, -15], mode: "top", rotationY: 2.1 },
-  { key: "ceilC", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [-9, 14.9, -26], mode: "top", rotationY: 1.4 },
-  { key: "ceilD", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [5, 14.9, -33], mode: "top", rotationY: 0.3 },
-  { key: "stalA", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [-9, 14.7, -13], mode: "top", rotationY: 0.9 },
-  { key: "stalB", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_02.glb`, anchor: [6, 14.7, -22], mode: "top", rotationY: 2.2 },
-  { key: "stalC", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [12, 14.7, -9], mode: "top", rotationY: 1.5 },
-  { key: "stalD", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_02.glb`, anchor: [-11, 14.7, -27], mode: "top", rotationY: 0.6 },
-  { key: "stalE", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [2, 14.7, -35], mode: "top", rotationY: 2.8 },
+  // Broken columns. The reference has a row of stumps walking away from camera on the left.
+  { key: "columnA", path: `${BUILDING}/SM_Cave_Rock_Pillar01REDO.glb`, anchor: [-11, 0, -18], mode: "base", rotationY: 0.3 },
+  { key: "columnTall", path: `${BUILDING}/SM_Cave_Rock_Pillar03b.glb`, anchor: [-15, 0, -30], mode: "base", rotationY: 1.5 },
+  { key: "columnB", path: `${BUILDING}/SM_Cave_Rock_Pillar_Broken01a.glb`, anchor: [-6, 0, -22], mode: "base", rotationY: 1.2 },
+  { key: "columnC", path: `${BUILDING}/SM_Cave_Rock_PillarTop.glb`, anchor: [-11, 0, -27], mode: "base", rotationY: 2.4 },
+  { key: "columnD", path: `${BUILDING}/SM_Cave_Rock_PillarBottom.glb`, anchor: [-4, 0, -30], mode: "base", rotationY: 1.9 },
+  { key: "columnE", path: `${BUILDING}/SM_Cave_Rock_Pillar_Broken01a.glb`, anchor: [12, 0, -28], mode: "base", rotationY: 0.6 },
+  { key: "columnFallen", path: `${BUILDING}/SM_Cave_Rock_PillarBroken01b.glb`, anchor: [7, 0, -20], mode: "base", rotationY: 2.1 },
 
-  // --- Chains, hanging near camera on both sides as the reference frames it.
-  { key: "chainLeft", path: `${BUILDING}/SM_Cave_Chain_02.glb`, anchor: [-9, 14.6, -7], mode: "top", rotationY: 0.2 },
-  { key: "chainRight", path: `${BUILDING}/SM_Cave_Chain_02.glb`, anchor: [10, 14.6, -11], mode: "top", rotationY: -0.5 },
-  { key: "chainFar", path: `${BUILDING}/SM_Cave_Chain_02.glb`, anchor: [3, 14.6, -26], mode: "top", rotationY: 1.1 },
+  // Statues flanking the shrine, as the reference has.
+  { key: "statueLeft", path: `${BUILDING}/SM_Cave_Statue_01.glb`, anchor: [-6, 0.4, -23], mode: "base", rotationY: 0.4 },
+  { key: "statueRight", path: `${BUILDING}/SM_Cave_Statue_Torso.glb`, anchor: [10, 0.4, -26], mode: "base", rotationY: -0.7 },
 
-  // --- Fallen rock among the columns.
-  { key: "debrisA", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [-11, 0, -6], mode: "base", rotationZ: 1.75, rotationY: 0.6 },
-  { key: "debrisB", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_02.glb`, anchor: [12, 0, -7], mode: "base", rotationZ: -1.5, rotationY: 2.2 },
-  { key: "debrisC", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [-4, 0, -21], mode: "base", rotationZ: 1.62, rotationY: 1.9 },
-  { key: "debrisD", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_02.glb`, anchor: [5, 0, -34], mode: "base", rotationZ: -1.6, rotationY: 0.8 },
+  // Stalactites out of the dark overhead.
+  { key: "stalactiteA", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [-2, 18.6, -12], mode: "top", rotationY: 0.9 },
+  { key: "stalactiteB", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_02.glb`, anchor: [6, 18.6, -16], mode: "top", rotationY: 2.2 },
+  { key: "stalactiteC", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [13, 18.6, -9], mode: "top", rotationY: 1.5 },
+  { key: "ceilingRock", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [-8, 18.8, -7], mode: "top", rotationY: 0.7 },
 
-  // --- Ground cover: grass at the water's edge, leaf litter drifted against the stone.
-  { key: "grassA", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [-5, 0, -11], mode: "base", rotationY: 0.4 },
-  { key: "grassB", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [3, 0, -9], mode: "base", rotationY: 1.9 },
-  { key: "grassC", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [-10, 0, -19], mode: "base", rotationY: 2.7 },
-  { key: "grassD", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [7, 0, -18], mode: "base", rotationY: 0.9 },
-  { key: "grassE", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [0, 0, -25], mode: "base", rotationY: 1.4 },
-  { key: "grassF", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [-2, 0, -5], mode: "base", rotationY: 2.2 },
-  { key: "grassG", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [9, 0, -29], mode: "base", rotationY: 0.6 },
-  { key: "leafPileA", path: `${NATURE}/SM_Cave_Leaf_Pile01.glb`, anchor: [-7, 0, -8], mode: "base", rotationY: 0.6 },
-  { key: "leafPileB", path: `${NATURE}/SM_Cave_Leaf_Pile02.glb`, anchor: [6, 0, -15], mode: "base", rotationY: 2.1 },
-  { key: "leafPileC", path: `${NATURE}/SM_Cave_Leaf_Pile03_1.glb`, anchor: [-12, 0, -32], mode: "base", rotationY: 1.1 },
-  { key: "leavesA", path: `${NATURE}/SM_S_Soul_Leaves1.glb`, anchor: [2, 0, -12], mode: "base", rotationY: 1.6 },
-  { key: "fernA", path: `${NATURE}/SM_S_Soul_Plants_Fern.glb`, anchor: [-4, 0, -28], mode: "base", rotationY: 0.9 },
-  { key: "fernB", path: `${NATURE}/SM_S_Soul_Plants_Fern2.glb`, anchor: [8, 0, -24], mode: "base", rotationY: 2.4 },
-  { key: "bushA", path: `${NATURE}/SM_S_Soul_bush.glb`, anchor: [-16, 0, -20], mode: "base", rotationY: 0.8 },
+  // Chains, hanging near camera on both sides.
+  { key: "chainLeft", path: `${BUILDING}/SM_Cave_Chain_02.glb`, anchor: [-8, 18.6, -6], mode: "top", rotationY: 0.2 },
+  { key: "chainRight", path: `${BUILDING}/SM_Cave_Chain_02.glb`, anchor: [9, 18.6, -10], mode: "top", rotationY: -0.5 },
 
-  // --- The shrine, kept as something to walk to rather than the subject of this shot.
-  { key: "shrinePlinth", path: `${BUILDING}/SM_Cave_Floor_Stairs_Quarter.glb`, anchor: [19, 0, -37], mode: "base", rotationY: 1.4 },
-  { key: "shrineFigure", path: `${BUILDING}/SM_S_Soul_Statue.glb`, anchor: [18, 0.62, -35], mode: "base", rotationY: 2.2 },
+  // Fallen rock. The reference's floor is strewn with broken blocks catching the light.
+  { key: "debrisA", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [-7, 0, -5], mode: "base", rotationZ: 1.75, rotationY: 0.6 },
+  { key: "debrisB", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_02.glb`, anchor: [7, 0, -7], mode: "base", rotationZ: -1.5, rotationY: 2.2 },
+  { key: "debrisC", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [-12, 0, -10], mode: "base", rotationX: 0.25, rotationY: 1.1 },
+  { key: "debrisD", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [3, 0, -14], mode: "base", rotationZ: 1.62, rotationY: 1.9 },
+  { key: "debrisE", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [14, 0, -22], mode: "base", rotationX: -0.2, rotationY: 2.7 },
+
+  { key: "debrisNearA", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_02.glb`, anchor: [-13, 0, -4], mode: "base", rotationZ: 1.68, rotationY: 1.2 },
+  { key: "debrisNearB", path: `${ROCKS}/SM_Cave_Rock_Ceiling.glb`, anchor: [14, 0, -5], mode: "base", rotationX: 0.18, rotationY: 2.3 },
+  { key: "debrisNearC", path: `${ROCKS}/SM_Cave_Rocks_Stalactite_01.glb`, anchor: [-14, 0, -12], mode: "base", rotationZ: -1.55, rotationY: 0.8 },
+
+  // Greenery where the daylight lands, which is the only place it grows.
+  { key: "fernA", path: `${NATURE}/SM_S_Soul_Plants_Fern.glb`, anchor: [-2, 0, -25], mode: "base", rotationY: 0.9 },
+  { key: "fernB", path: `${NATURE}/SM_S_Soul_Plants_Fern2.glb`, anchor: [6, 0, -27], mode: "base", rotationY: 2.4 },
+  { key: "fernC", path: `${NATURE}/SM_S_Soul_Plants_Fern.glb`, anchor: [9, 0, -18], mode: "base", rotationY: 1.7 },
+  { key: "foliageA", path: `${NATURE}/SM_LV_Soul_Foliage021SM.glb`, anchor: [-5, 0, -19], mode: "base", rotationY: 0.2 },
+  { key: "foliageB", path: `${NATURE}/SM_LV_Soul_Foliage021SM.glb`, anchor: [2, 0, -21], mode: "base", rotationY: 2.8 },
+
+  // Grass at the water's edge and leaf litter drifted against the stone. The reference's floor is
+  // never bare rock, and the grass is what tells you the puddles are puddles.
+  { key: "grassA", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [-5, 0, -8], mode: "base", rotationY: 0.4 },
+  { key: "grassB", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [6, 0, -12], mode: "base", rotationY: 1.9 },
+  { key: "grassC", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [-10, 0, -17], mode: "base", rotationY: 2.7 },
+  { key: "grassD", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [8, 0, -23], mode: "base", rotationY: 0.9 },
+  { key: "grassE", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [-4, 0, -31], mode: "base", rotationY: 1.4 },
+  { key: "grassF", path: `${NATURE}/SM_Cave_Grass01.glb`, anchor: [-13, 0, -25], mode: "base", rotationY: 2.2 },
+  { key: "leafPileA", path: `${NATURE}/SM_Cave_Leaf_Pile01.glb`, anchor: [-8, 0, -10], mode: "base", rotationY: 0.6 },
+  { key: "leafPileB", path: `${NATURE}/SM_Cave_Leaf_Pile02.glb`, anchor: [7, 0, -20], mode: "base", rotationY: 2.1 },
+  { key: "leafPileC", path: `${NATURE}/SM_Cave_Leaf_Pile03_1.glb`, anchor: [-12, 0, -33], mode: "base", rotationY: 1.1 },
+  { key: "leavesA", path: `${NATURE}/SM_S_Soul_Leaves1.glb`, anchor: [3, 0, -11], mode: "base", rotationY: 1.6 },
+  { key: "bushA", path: `${NATURE}/SM_S_Soul_bush.glb`, anchor: [-17, 0, -21], mode: "base", rotationY: 0.8 },
 ];

@@ -27,7 +27,7 @@ const desktopPreset = {
   sharpenEnabled: true,
   sharpenStrength,
   tonemapMode: "aces",
-  exposure: 0.88,
+  exposure: 0.76,
 } as const;
 
 const mobilePreset = {
@@ -36,7 +36,7 @@ const mobilePreset = {
   sharpenEnabled: true,
   sharpenStrength,
   tonemapMode: "aces",
-  exposure: 0.88,
+  exposure: 0.76,
 } as const;
 
 export function setupPost(

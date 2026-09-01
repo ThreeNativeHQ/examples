@@ -1,0 +1,94 @@
+{
+  "name": "hq-office-animation",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "first-frame",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "script-plays",
+      "waitTicks": 420,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "the-late-arrival-walks-in-and-sits",
+      "waitTicks": 420,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle",
+      "waitTicks": 300,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "states": [
+      {
+        "entity": "worker-codex-102",
+        "equals": "blocked"
+      },
+      {
+        "entity": "worker-claude-103",
+        "equals": "working"
+      },
+      {
+        "entity": "worker-claude-104",
+        "equals": "working"
+      }
+    ],
+    "animation": [
+      {
+        "entity": "worker-claude-103",
+        "clip": "Typing_Loop",
+        "entered": true,
+        "advancedFrames": 240,
+        "finished": false
+      },
+      {
+        "entity": "worker-claude-104",
+        "clip": "Typing_Loop",
+        "entered": true,
+        "advancedFrames": 120,
+        "finished": false
+      },
+      {
+        "entity": "worker-codex-102",
+        "clip": "Texting_Standing_Loop",
+        "entered": true,
+        "advancedFrames": 240,
+        "finished": false
+      }
+    ],
+    "resources": [
+      {
+        "id": "state",
+        "path": "focusClip",
+        "equals": "Texting_Standing_Loop",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "focusState",
+        "equals": "blocked",
+        "changed": true
+      }
+    ]
+  }
+}

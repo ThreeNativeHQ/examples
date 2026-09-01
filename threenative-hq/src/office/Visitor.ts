@@ -12,23 +12,15 @@ type GameCtx = ICtx<GameState, IPhysicsContext>;
 const EYE_HEIGHT = 1.62;
 /** Half the capsule, so the body's feet land on the floor its centre floats above. */
 const BODY_DROP = 0.92;
-/**
- * The lens sits on the body's own turning axis, not in front of it.
- *
- * Any forward offset puts the camera on an arm: the body pivots in place, the camera swings, and a
- * shoulder sweeps through the frame every time you turn or the run cycle rolls. On the axis, the
- * body rotates around the lens and only what is genuinely below it — chest, arms, legs — is ever
- * in shot.
- */
-const EYE_FORWARD = 0;
 const WALK_SPEED = 3.1;
 const SPRINT_SPEED = 5.4;
 /** Radians per unit of relative pointer motion. */
 const LOOK_SENSITIVITY = 0.0016;
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
-const HEAD_AT = new Vector3();
 /** The most the view may swing in one frame, in radians. */
 const MAX_LOOK_STEP = 0.25;
+/** How close a worker may stand to you: your capsule radius plus a bit of its chest. */
+const WORKER_CLEARANCE = 0.75;
 
 function clamp(value: number, limit: number): number {
   return Math.max(-limit, Math.min(limit, value));
@@ -51,6 +43,12 @@ function lookIsCaptured(): boolean {
  * A capsule that collides with the room's static boxes, and a camera at eye height on top of it.
  * The body is physics-owned so the desks and columns are solid; the look angles are game-owned
  * because framing is a feel decision and nothing in the framework should choose it.
+ *
+ * You have no drawn body. An earlier build gave you a mannequin you could look down at, and it
+ * spent its days in the frame: a shoulder on every turn, a chest whenever the walk bobbed, and a
+ * dark wedge whenever a worker crossed you — first-person bodies are a lens problem more than a
+ * feature. The rig still exists and still animates, because the walk measurement and the playtest
+ * clip report read from it; it simply never joins the scene graph, so nothing can draw it.
  */
 export interface IVisitorOptions {
   readonly source: Group;
@@ -74,22 +72,13 @@ export class Visitor {
     this.object.position.copy(spawn);
     ctx.add(this.object);
 
-    // You have a body. Look down and it is there; the office is a place you are standing in
-    // rather than a camera flying through it.
     const rig = cloneSkinned(options.source) as Group;
     normaliseToMetres(rig, { metres: 1.8, axis: "height" });
     tintMannequin(rig, 0xc9a227);
     rig.position.y = -BODY_DROP;
-    // Your own head is behind the lens, and a head behind the lens is a head *through* the lens
-    // the moment you look down or the walk cycle bobs. Shrink it away and keep the rest: arms,
-    // legs and the shadow you cast are the point of having a body at all.
-    // The head and the neck are where the lens is. Shrink them away rather than moving the camera
-    // out of the body, which is what put a shoulder in the frame on every turn. The bones keep
-    // their positions, and the camera rides the head one.
-    this.#head = rig.getObjectByName("Head");
-    for (const name of ["Head", "neck_01"]) rig.getObjectByName(name)?.scale.setScalar(0.001);
-    this.object.add(rig);
+    // Deliberately not added to `this.object`: an invisible lens-width body is worse than none.
     this.#rig = rig;
+    this.#head = rig.getObjectByName("Head");
     this.#player = new AnimationPlayer({
       clips: options.clips,
       root: rig,
@@ -109,8 +98,21 @@ export class Visitor {
     return this.#yaw;
   }
 
-  /** Advance the body from input and put the camera on its shoulders. */
-  update(ctx: GameCtx, dt: number, camera: PerspectiveCamera): void {
+  /** The animated but never drawn body, for measurements that want a bone. */
+  get rigRoot(): Group {
+    return this.#rig;
+  }
+
+  /**
+   * Advance the body from input and put the camera on its shoulders.
+   *
+   * `obstacles` carries the positions of the room's workers. They are solid: without this a
+   * worker — or a worker walking out through the door you spawned at — can end up with its chest
+   * pressed against the lens, which fills the whole frame with a dark blur that reads as your own
+   * body wedged into the camera. The push is horizontal and small, so it feels like shoulder-to-
+   * shoulder contact, not a force field.
+   */
+  update(ctx: GameCtx, dt: number, camera: PerspectiveCamera, obstacles?: readonly Vector3[]): void {
     // Relative look is only meaningful while the pointer is captured. Without this, moving the
     // mouse across the page to reach a button swings the view, and one click anywhere lands the
     // camera facing a wall — the pointer's absolute jump arrives as a huge relative delta.
@@ -135,9 +137,26 @@ export class Visitor {
     this.body.velocity.z = (-forwardZ * move.y - forwardX * move.x) * speed;
     this.body.velocity.y = -9.81 * 0.35;
     this.body.moveAndSlide(dt);
+    if (obstacles !== undefined) {
+      for (const obstacle of obstacles) {
+        const awayX = this.object.position.x - obstacle.x;
+        const awayZ = this.object.position.z - obstacle.z;
+        const distance = Math.hypot(awayX, awayZ);
+        if (distance >= WORKER_CLEARANCE) continue;
+        if (distance < 1e-3) {
+          // Dead centre: there is no away vector, so pick one — the body's own right — and let
+          // the next frames' normal push carry the separation the rest of the way.
+          this.object.position.x += Math.cos(this.#yaw) * WORKER_CLEARANCE;
+          this.object.position.z -= Math.sin(this.#yaw) * WORKER_CLEARANCE;
+          continue;
+        }
+        const push = (WORKER_CLEARANCE - distance) / distance;
+        this.object.position.x += awayX * push;
+        this.object.position.z += awayZ * push;
+      }
+    }
 
-    // The body turns with the view; only the head pitches, because a mannequin bent backwards at
-    // the waist is not what looking up looks like.
+    // The body turns with the view; the rig keeps time with it off screen.
     this.#rig.rotation.y = Math.PI;
     this.object.rotation.y = this.#yaw;
     const moving = Math.hypot(this.body.velocity.x, this.body.velocity.z) > 0.2;
@@ -148,24 +167,13 @@ export class Visitor {
     }
     this.#player.update(dt);
 
-    // Eyes just in front of the head, so the body is under you and never through the lens.
-    // Eye height comes from the skeleton, not from a constant: the capsule's centre drifts with
-    // the ground under it, and a lens placed a fixed distance above that ends up in the chest.
-    // Measured before this changed: the lens sat 0.13 m below the head bone, which is exactly how
-    // much of your own torso was in the frame.
-    const head = this.#head;
-    let eyeY = this.object.position.y - BODY_DROP + EYE_HEIGHT;
-    if (head !== undefined) {
-      head.updateWorldMatrix(true, false);
-      eyeY = HEAD_AT.setFromMatrixPosition(head.matrixWorld).y;
-    }
-    camera.position.set(
-      this.object.position.x - Math.sin(this.#yaw) * EYE_FORWARD,
-      eyeY,
-      this.object.position.z - Math.cos(this.#yaw) * EYE_FORWARD,
-    );
+    // Eyes at a fixed height above the capsule centre. The skeleton used to measure this, which
+    // mattered when the lens had to stay out of its own head; with no drawn body a constant is
+    // the honest answer, and the capsule's ground drift is a centimetre at most.
+    camera.position.set(this.object.position.x, this.object.position.y - BODY_DROP + EYE_HEIGHT, this.object.position.z);
     camera.rotation.order = "YXZ";
     camera.rotation.set(this.#pitch, this.#yaw, 0);
+    void this.#head;
   }
 
   /** The clip the body is playing, so a proof can see you walk rather than glide. */

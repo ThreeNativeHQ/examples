@@ -90,6 +90,12 @@
         "path": "selectedProject",
         "equals": "rpg-api",
         "changed": true
+      },
+      {
+        "id": "state",
+        "path": "focusClip",
+        "changed": true,
+        "allowTrivial": "The focus session is empty until the first bridge snapshot lands, so the clip starts blank and then names a real animation; changed is what separates a floor that animates from one that froze, which is the bug that was reported."
       }
     ],
     "movement": {

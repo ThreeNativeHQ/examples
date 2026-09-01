@@ -32,6 +32,9 @@ export const office = {
   sofa: 0x4c3b31,
   cushion: 0x3a312c,
   shelf: 0x8f6237,
+  keyCase: 0x2a2724,
+  keyCapLight: 0xbdb2a0,
+  keyCapDark: 0x4f4a43,
 } as const;
 
 /** One accent per agent host, so a glance at the floor says who is running what. */

@@ -6,10 +6,22 @@ import type { AnimationClip, Group, PerspectiveCamera } from "three";
 import { Color, Mesh, MeshStandardMaterial, Vector3 } from "three";
 import { BridgeClient } from "../office/bridge-client.js";
 import { Worker } from "../office/Worker.js";
-import { type ActorPhase, assignDesks, workerStateFor } from "../office/floor.js";
+import {
+  type ActorPhase,
+  activityForSession,
+  assignDesks,
+  hashSession,
+  workerStateFor,
+} from "../office/floor.js";
 import { requiredClips } from "../office/states.js";
 import { setupOfficeLighting } from "../render/lighting.js";
-import { type IOffice, createOffice } from "../render/office.js";
+import {
+  type IActivitySpot,
+  type IOffice,
+  type IOfficeAssets,
+  SEAT_HEIGHT,
+  createOffice,
+} from "../render/office.js";
 import { setupPost } from "../render/postprocessing.js";
 import { setupSky } from "../render/sky.js";
 import { type IActorReport, deriveChecks, vectorOf, worldOf } from "../office/inspect.js";
@@ -25,17 +37,35 @@ const WALK_SPEED = 2.1;
 const ARRIVED_METRES = 0.45;
 /** How fast a keyboard slides under the hands that are reaching for it. */
 const BOARD_EASE = 0.08;
+/**
+ * How long a session state must hold before its worker adopts it.
+ *
+ * The bridge re-derives session state from live process activity every heartbeat, and a session
+ * that flips between snapshots — working, idle, working — used to flip its worker's clip with it.
+ * A worker changing pose every heartbeat looks broken and never settles long enough for the
+ * keyboard to align. Half a second eats the flaps and delays real changes imperceptibly.
+ * "blocked" is exempt: it is the one state whose whole job is to be noticed, and noticing late
+ * reads as not noticing at all.
+ */
+const STATE_HOLD_SECONDS = 0.5;
 
 interface IActor {
   readonly worker: Worker;
   readonly agent: NavigationAgent3D | undefined;
   phase: ActorPhase;
   deskIndex: number;
+  /** The furniture this worker uses while its session idles, if any. */
+  activity: IActivitySpot | undefined;
+  /** A session state seen but not yet held long enough to act on. */
+  candidate: string;
+  /** Seconds the candidate state has held. */
+  candidateAge: number;
 }
 
 export class Office extends Scene<GameState, IPhysicsContext> {
   #rig: Group | undefined;
   #clips: readonly AnimationClip[] = [];
+  #officeAssets: IOfficeAssets = {};
 
   static override readonly initialState: GameState = {
     arrivals: 0,
@@ -63,13 +93,41 @@ export class Office extends Scene<GameState, IPhysicsContext> {
   };
 
   override async load(ctx: GameCtx): Promise<void> {
-    // Two CC0 libraries, one rig: library 1 carries the mannequin and the walk and sitting clips,
-    // library 2 the phone call. Both were authored on the same 65-joint skeleton, so the clips
-    // merge onto one mixer without retargeting — checked here rather than assumed.
+    // Two libraries, one rig: library 1 carries the mannequin and the walk and sitting clips,
+    // library 3 the retargeted Mixamo takes (typing, texting, furniture). Both were authored or
+    // retargeted onto the same 65-joint skeleton, so the clips merge onto one mixer without
+    // further work — checked here rather than assumed.
     const [base, extra] = await Promise.all([
       ctx.assets.model<{ scene: Group; animations: AnimationClip[] }>("worker.glb"),
-      ctx.assets.model<{ scene: Group; animations: AnimationClip[] }>("worker-clips-2.glb"),
+      ctx.assets.model<{ scene: Group; animations: AnimationClip[] }>("worker-mixamo.glb"),
     ]);
+    const baseAssetNames = ["SM_Table_1", "SM_Chair_1", "SM_Cabinet_1"] as const;
+    const expandedAssetNames = [
+      "SM_Bar_1",
+      "SM_Bench_1",
+      "SM_Counter_1",
+      "SM_Decoration_1",
+      "SM_Door_1_A",
+      "SM_Door_Frame_1",
+      "SM_Elevator_1",
+      "SM_Monitor_1",
+      "SM_Sofa_2",
+      "SM_Table_2",
+      "SM_Table_3",
+      "SM_Trash",
+      "SM_flower_pot_1",
+      "SM_lamp_2",
+    ] as const;
+    const loadedBase = await Promise.all(
+      baseAssetNames.map((name) =>
+        ctx.assets.model<{ scene: Group }>(`fab/office-pack-vol-1/Models/${name}.glb`),
+      ),
+    );
+    const loadedExpanded = await Promise.all(
+      expandedAssetNames.map((name) =>
+        ctx.assets.model<{ scene: Group }>(`fab/office-pack-vol-1-expanded/Models/${name}.glb`),
+      ),
+    );
     const clips: AnimationClip[] = [];
     const names = new Set<string>();
     for (const clip of [...base.animations, ...extra.animations]) {
@@ -89,6 +147,11 @@ export class Office extends Scene<GameState, IPhysicsContext> {
       throw new Error(`worker.glb is missing required clips: ${missing.join(", ")}.`);
     this.#rig = base.scene;
     this.#clips = clips;
+    this.#officeAssets = Object.fromEntries([
+      ...baseAssetNames.map((name, index) => [name, loadedBase[index]?.scene]),
+      ...expandedAssetNames.map((name, index) => [name, loadedExpanded[index]?.scene]),
+    ]);
+    console.info("TN_HQ_FAB_OFFICE_LOADED:Office Pack Vol.1:17 models");
     console.info(`TN_HQ_CLIPS_LOADED:${String(clips.length)}`);
   }
 
@@ -103,7 +166,7 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     );
     setupPost(ctx.renderer, ctx.scene, ctx.camera, { godraysLight: key, mobile: isMobile() });
 
-    const room: IOffice = createOffice(DESK_COUNT);
+    const room: IOffice = createOffice(DESK_COUNT, this.#officeAssets);
     ctx.add(room.root);
 
     // The room is solid: one static body per simplified box, so a visitor bumps into desks and
@@ -119,8 +182,21 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     ctx.add(ctx.camera);
     const camera = ctx.camera as PerspectiveCamera;
     // You start by the door, looking down the floor — the same framing the reference frames use,
-    // except now you can walk out of it.
-    const visitor = new Visitor(ctx, new Vector3(11.6, 1.0, 4.6), 1.19, {
+    // except now you can walk out of it. `?spawn=x,z,yaw` pins the start for captures, the same
+    // way the inspector global pins the numbers: web-only, read once at enter, never on native.
+    let spawn = new Vector3(11.6, 1.0, 4.6);
+    let spawnYaw = 1.19;
+    if (isWeb() && typeof location !== "undefined") {
+      const pinned = new URLSearchParams(location.search).get("spawn");
+      if (pinned !== null) {
+        const parts = pinned.split(",").map((part) => Number.parseFloat(part));
+        if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
+          spawn = new Vector3(parts[0] as number, 1.0, parts[1] as number);
+          spawnYaw = parts[2] as number;
+        }
+      }
+    }
+    const visitor = new Visitor(ctx, spawn, spawnYaw, {
       clips: this.#clips,
       source: rig,
     });
@@ -165,7 +241,13 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     return (frameCtx, dt) => {
       const store = frameCtx.state.getState();
       if (store.paused) return;
-      visitor.update(frameCtx, dt, camera);
+      // The workers are solid to you, and you are solid to them. The list is last frame's
+      // positions — a walking worker covers three centimetres a frame, which no push notices.
+      VISITOR_AT.copy(visitor.object.position);
+      obstacleScratch.length = 0;
+      for (const actor of actors.values()) obstacleScratch.push(actor.worker.object.position);
+      for (const actor of leaving) obstacleScratch.push(actor.worker.object.position);
+      visitor.update(frameCtx, dt, camera, obstacleScratch);
       // The panel can ask for a selection; the scene is the only thing that owns one.
       if (store.requestedSelection !== "") {
         selectedId = store.requestedSelection === selectedId ? "" : store.requestedSelection;
@@ -210,25 +292,87 @@ export class Office extends Scene<GameState, IPhysicsContext> {
           agent?.setTargetPosition(desk.stand);
           const walks = seenFirstSnapshot;
           if (!walks) worker.object.position.copy(desk.seat);
-          actor = { agent, deskIndex, phase: walks ? "walkingIn" : "seated", worker };
+          actor = {
+            activity: undefined,
+            agent,
+            candidate: "",
+            candidateAge: 0,
+            deskIndex,
+            phase: walks ? "walkingIn" : "seated",
+            worker,
+          };
           actors.set(session.id, actor);
         }
         if (actor.deskIndex !== deskIndex) {
           actor.deskIndex = deskIndex;
           if (actor.phase === "walkingIn") actor.agent?.setTargetPosition(desk.stand);
         }
-        const state = workerStateFor(session);
-        if (state === "blocked") blockedSeen = true;
+        const raw = workerStateFor(session);
+        if (raw === "blocked") blockedSeen = true;
+        // A session state must hold before its worker adopts it; see STATE_HOLD_SECONDS. While a
+        // candidate is pending the worker keeps doing what it is already doing.
+        let state = raw;
+        if (raw !== "blocked" && raw !== actor.worker.state) {
+          if (actor.candidate === raw) actor.candidateAge += dt;
+          else {
+            actor.candidate = raw;
+            actor.candidateAge = 0;
+          }
+          if (actor.candidateAge < STATE_HOLD_SECONDS) state = actor.worker.state;
+        } else {
+          actor.candidate = "";
+          actor.candidateAge = 0;
+        }
         if (actor.phase === "walkingIn") {
           actor.worker.setState("arriving");
           if (step(actor, desk.stand, dt)) {
             actor.phase = "seated";
             actor.worker.setState(state);
           }
+        } else if (actor.phase === "walkingToActivity" && actor.activity !== undefined) {
+          actor.worker.setState("arriving");
+          if (step(actor, actor.activity.stand, dt)) {
+            actor.phase = "atActivity";
+            actor.worker.setState(state);
+          }
+        } else if (actor.phase === "atActivity") {
+          if (state !== "filing" && state !== "faxing") {
+            // The session needs its worker back at the desk; the walkingIn branch carries it there.
+            actor.phase = "walkingIn";
+          } else if (actor.activity !== undefined) {
+            actor.worker.object.position.copy(actor.activity.stand);
+            actor.worker.object.rotation.y = actor.activity.facing;
+          }
         } else {
-          actor.worker.setState(state);
+          // Seated at the desk. An idle session may send its worker to the furniture instead: the
+          // state change stands the worker up (the Worker owns its stand-up one-shot), and the walk
+          // starts once that one-shot has finished moving its legs.
+          const spot =
+            state === "filing" || state === "faxing" ? spotFor(session.id, room) : undefined;
+          actor.activity = spot;
+          if (spot !== undefined && actor.worker.standing && !actor.worker.transitioning) {
+            actor.phase = "walkingToActivity";
+            actor.agent?.setTargetPosition(spot.stand);
+          } else {
+            actor.worker.setState(state);
           // A standing worker steps back from the chair; a seated one sits in it.
           actor.worker.object.position.copy(actor.worker.standing ? desk.stand : desk.seat);
+          // Land the seated pose on the actual seat. The clip decides where the hips are relative
+          // to the body; the room decides where the seat is; only the game knows both, so the
+          // difference is taken here rather than baked into either. Measured against the body's
+          // own origin, so subtracting it is a one-step correction and not a feedback loop.
+          if (!actor.worker.standing) {
+            const rise = actor.worker.pelvisRise;
+            if (rise !== undefined) {
+              const onSeat = SEAT_HEIGHT - rise;
+              // The seat wins unless it would bury the shoes: the seated clips do not agree on how
+              // far below the hips the feet reach, and a worker standing 1.3 cm inside the carpet
+              // reads as badly as one hovering above the chair. Hips give way, never the floor.
+              const feet = actor.worker.lowestFootRise;
+              actor.worker.object.position.y =
+                feet === undefined ? onSeat : Math.max(onSeat, -feet);
+            }
+          }
           actor.worker.object.rotation.y = desk.facing;
           // Put the keyboard under the hands rather than the hands over the keyboard: the clip is
           // fixed and the desk is not. Eased every frame rather than measured once, because the
@@ -247,7 +391,7 @@ export class Office extends Scene<GameState, IPhysicsContext> {
           alignSkips.set(alignBlocker, (alignSkips.get(alignBlocker) ?? 0) + 1);
           if (alignBlocker === "none") alignAttempts += 1;
           if (!actor.worker.standing && actor.worker.settled && state === "working") {
-            const hand = actor.worker.handPosition(HAND);
+            const hand = actor.worker.handCentre(HAND);
             const parent = desk.keyboard.parent;
             if (hand !== undefined && parent !== null) {
               // Horizontally only. The board stays on the desk at desk height; the driving pose
@@ -258,6 +402,7 @@ export class Office extends Scene<GameState, IPhysicsContext> {
               desk.keyboard.position.z += (hand.z + 0.02 - desk.keyboard.position.z) * BOARD_EASE;
               alignedDesks.add(deskIndex);
             }
+          }
           }
         }
         // A working session lights its own monitor. It is the cheapest way to read the floor at a
@@ -297,6 +442,28 @@ export class Office extends Scene<GameState, IPhysicsContext> {
       // thing to reach for when something looks wrong — a screenshot cannot tell you that a
       // keyboard is four centimetres inside a desk.
       if (isWeb() && typeof globalThis !== "undefined") {
+        // A size audit of every drawn mesh, for "something huge and dark is in the frame" — the
+        // question a screenshot cannot answer and a radius list can.
+        (globalThis as Record<string, unknown>).__hqSizes = () => {
+          const report: { name: string; kind: string; radius: number; at: number[] }[] = [];
+          frameCtx.scene.traverse((object) => {
+            const mesh = object as Mesh;
+            if (!mesh.isMesh && !(object as { isSkinnedMesh?: boolean }).isSkinnedMesh) return;
+            const geometry = mesh.geometry;
+            if (geometry === undefined) return;
+            if (geometry.boundingSphere === null) geometry.computeBoundingSphere();
+            const radius = (geometry.boundingSphere?.radius ?? 0) * mesh.getWorldScale(tmpScale).x;
+            if (radius < 1.2) return;
+            const at = mesh.getWorldPosition(tmpVec);
+            report.push({
+              at: [Math.round(at.x), Math.round(at.y), Math.round(at.z)],
+              kind: (object as { isSkinnedMesh?: boolean }).isSkinnedMesh ? "skinned" : "mesh",
+              name: mesh.name || mesh.parent?.name || "(unnamed)",
+              radius: Math.round(radius * 10) / 10,
+            });
+          });
+          return report;
+        };
         (globalThis as Record<string, unknown>).__hq = () => {
           const reports: IActorReport[] = [];
           for (const [id, entry] of actors) {
@@ -304,10 +471,14 @@ export class Office extends Scene<GameState, IPhysicsContext> {
             reports.push({
               advancedFrames: entry.worker.animation.advancedFrames,
               clip: entry.worker.clip ?? "",
-              hand: worldOf(
-                entry.worker.object.getObjectByName("hand_r") ??
-                  entry.worker.object.getObjectByName("hand_l"),
-              ),
+              // The midpoint of both hands, which is what the keyboard is aligned to. Reporting
+              // one hand instead made the inspector's own keyboard-under-hands check measure
+              // against a point nothing tracks, so it failed by a quarter of a metre for as long
+              // as the board was correct.
+              hand: (() => {
+                const centre = entry.worker.handCentre(HAND);
+                return centre === undefined ? undefined : vectorOf(centre);
+              })(),
               id,
               keyboard: worldOf(board),
               boardLocal: board === undefined ? undefined : vectorOf(board.position),
@@ -321,15 +492,7 @@ export class Office extends Scene<GameState, IPhysicsContext> {
               state: entry.worker.state,
             });
           }
-          const headAt = worldOf(visitor.object.getObjectByName("Head"));
-          const chestAt = worldOf(visitor.object.getObjectByName("spine_03"));
           const cameraReport = {
-            chestY: chestAt?.[1],
-            headDistance:
-              headAt === undefined
-                ? undefined
-                : Math.hypot(camera.position.x - headAt[0], camera.position.z - headAt[2]),
-            headY: headAt?.[1],
             pitch: Math.round(camera.rotation.x * 1000) / 1000,
             x: Math.round(camera.position.x * 1000) / 1000,
             y: Math.round(camera.position.y * 1000) / 1000,
@@ -407,7 +570,18 @@ function step(actor: IActor, goal: Vector3, dt: number): boolean {
   if (toward.lengthSq() < 1e-6) toward.copy(flat).sub(here);
   if (toward.lengthSq() < 1e-6) return true;
   toward.normalize();
-  object.position.addScaledVector(toward, Math.min(WALK_SPEED * dt, here.distanceTo(flat)));
+  const stride = Math.min(WALK_SPEED * dt, here.distanceTo(flat));
+  // Give way: a worker whose next step would end inside you stops and waits — the office politely
+  // queues behind a body instead of walking through one. It resumes the moment you move.
+  const nextX = here.x + toward.x * stride;
+  const nextZ = here.z + toward.z * stride;
+  const fromVisitor = Math.hypot(nextX - VISITOR_AT.x, nextZ - VISITOR_AT.z);
+  if (fromVisitor < VISITOR_MARGIN) {
+    object.rotation.y = Math.atan2(toward.x, toward.z);
+    return false;
+  }
+  object.position.x = nextX;
+  object.position.z = nextZ;
   object.rotation.y = Math.atan2(toward.x, toward.z);
   return false;
 }
@@ -416,18 +590,40 @@ const HAND = new Vector3();
 const SCRATCH = new Vector3();
 const SCRATCH_GOAL = new Vector3();
 const SCRATCH_HERE = new Vector3();
-const SCREEN_ON = new Color(0x9fd4e8);
+/** Where you are standing, so walking workers give way instead of crossing the lens. */
+const VISITOR_AT = new Vector3();
+const obstacleScratch: Vector3[] = [];
+/** How close a walking worker will come to you before it stops and waits. */
+const VISITOR_MARGIN = 0.6;
+/** Scratch for the size audit's world measurements. */
+const tmpScale = new Vector3();
+const tmpVec = new Vector3();
+/**
+ * A lit screen glows; it does not become a lamp.
+ *
+ * The first version drove a near-white emissive at 1.4 and set the panel's diffuse to the same
+ * colour, so the two stacked and every monitor clipped to a flat white slab that blew out the
+ * worker behind it — bright enough, from two metres, to hide the hands it was supposed to light.
+ * The glow is carried by the emissive alone now, over a panel that stays as dark as an unlit one,
+ * which is also how a real screen looks: dark glass with an image on it.
+ */
+const SCREEN_ON = new Color(0x6aa8c4);
 const SCREEN_OFF = new Color(0x14161a);
+/** Bright enough to pick a working desk out from across the room, dim enough not to clip. */
+const SCREEN_GLOW = 0.55;
 
 /** Light or darken one desk's monitor. The material is the desk's own, cloned by `createOffice`. */
 function setScreen(screen: Mesh, lit: boolean): void {
-  const material = screen.material;
+  const candidates = Array.isArray(screen.material) ? screen.material : [screen.material];
+  const material =
+    candidates.find((candidate) => candidate.name === "M_Display_1") ?? candidates[0];
   if (!(material instanceof MeshStandardMaterial)) return;
   const wanted = lit ? SCREEN_ON : SCREEN_OFF;
   if (material.emissive.equals(wanted)) return;
   material.emissive.copy(wanted);
-  material.emissiveIntensity = lit ? 1.4 : 0;
-  material.color.copy(lit ? SCREEN_ON : SCREEN_OFF);
+  material.emissiveIntensity = lit ? SCREEN_GLOW : 0;
+  // The panel itself stays dark whether lit or not; only the emissive changes.
+  material.color.copy(SCREEN_OFF);
   material.needsUpdate = true;
 }
 
@@ -440,4 +636,23 @@ function setScreen(screen: Mesh, lit: boolean): void {
  */
 function entityId(sessionId: string): string {
   return `worker-${sessionId.replace(/[^a-zA-Z0-9]+/g, "-")}`;
+}
+
+/**
+ * Where a session's worker stands while it idles at the furniture, or nothing to stay seated.
+ *
+ * Sessions that draw the same piece of furniture still draw their own stand point: the point is
+ * fanned out sideways by a stable offset from the id, so two workers at the cabinet stand side by
+ * side rather than inside each other.
+ */
+function spotFor(sessionId: string, room: IOffice): IActivitySpot | undefined {
+  const activity = activityForSession(sessionId);
+  if (activity === "desk") return undefined;
+  const base = room.activities.find((spot) => spot.kind === activity);
+  if (base === undefined) return undefined;
+  const lateral = ((hashSession(sessionId) % 3) - 1) * 0.45;
+  const stand = base.stand.clone();
+  stand.x += Math.cos(base.facing) * lateral;
+  stand.z -= Math.sin(base.facing) * lateral;
+  return { kind: base.kind, facing: base.facing, stand };
 }

@@ -11,6 +11,14 @@ import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 
 const FIXTURE_PORT = 7374;
+/**
+ * The pose fixture's port.
+ *
+ * A second scripted bridge, because the arrival/departure script never moves a session between two
+ * *seated* states — so `SitToType` and `TypeToSit` never run under it, and two of the four sit/stand
+ * one-shots were unproven. `tools/office-bridge/fixture-poses.ts` drives all four.
+ */
+const POSE_FIXTURE_PORT = 7375;
 const children = [];
 
 function start(command, args, label) {
@@ -55,14 +63,26 @@ function playtest(scenario, url) {
 const port = 5273;
 start("npx", ["vite", "dev", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], "vite");
 start("npx", ["tsx", "tools/office-bridge/fixture.ts"], "fixture");
+start("npx", ["tsx", "tools/office-bridge/fixture-poses.ts"], "pose-fixture");
 await sleep(4_000);
 
 let failures = 0;
 const fixtureUrl = `http://127.0.0.1:${String(port)}/?bridge=ws://127.0.0.1:${String(FIXTURE_PORT)}/office`;
-for (const scenario of ["playtests/office.playtest.json", "playtests/visitor.playtest.json"]) {
+for (const scenario of [
+  "playtests/office.playtest.json",
+  "playtests/visitor.playtest.json",
+  "playtests/office-animation.playtest.json",
+]) {
   process.stderr.write(`\n== proof: ${scenario} against a scripted bridge ==\n`);
   failures += (await playtest(scenario, fixtureUrl)) === 0 ? 0 : 1;
 }
+
+// The pose lane. Its scenario samples `focusClip` at two labelled ticks either side of the last
+// chair<->keyboard one-shot, which is the only thing here that can tell a transition that ended
+// because its clip finished from one that ended because Worker's 2.5 s timeout rescued it.
+const poseUrl = `http://127.0.0.1:${String(port)}/?bridge=ws://127.0.0.1:${String(POSE_FIXTURE_PORT)}/office`;
+process.stderr.write("\n== proof: playtests/office-poses.playtest.json against the pose bridge ==\n");
+failures += (await playtest("playtests/office-poses.playtest.json", poseUrl)) === 0 ? 0 : 1;
 
 const live = await liveSessions();
 if (live > 0) {

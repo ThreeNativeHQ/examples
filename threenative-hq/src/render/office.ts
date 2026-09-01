@@ -5,6 +5,7 @@
 // columns down the middle, cold glass on the long side, and suspended strip lights that are the
 // only thing in the room allowed to be bright. Nothing here knows what a session is.
 import {
+  Box3,
   BoxGeometry,
   ClampToEdgeWrapping,
   CylinderGeometry,
@@ -20,6 +21,7 @@ import {
   SRGBColorSpace,
   Vector3,
 } from "three";
+import { keyboard } from "./keyboard.js";
 import { office } from "./palette.js";
 
 export interface IColliderBox {
@@ -44,6 +46,15 @@ export interface IDeskAnchor {
   readonly screen: Mesh;
 }
 
+/** A piece of furniture an idle worker can get up and use, and where it stands to do that. */
+export interface IActivitySpot {
+  readonly kind: "filing" | "faxing";
+  /** Where the worker stands while using the furniture. */
+  readonly stand: Vector3;
+  /** Heading in radians the worker faces while using it. */
+  readonly facing: number;
+}
+
 export interface IOffice {
   readonly root: Group;
   /**
@@ -57,23 +68,49 @@ export interface IOffice {
   readonly colliders: readonly IColliderBox[];
   /** Every desk in the room, in a stable order — desk 0 is nearest the lift. */
   readonly desks: readonly IDeskAnchor[];
+  /** Furniture an idle worker can walk to, in a stable order. */
+  readonly activities: readonly IActivitySpot[];
   /** The floor mesh, handed to the navmesh bake. */
   readonly floor: Mesh;
   /** Where a worker enters and leaves the floor. */
   readonly entrance: Vector3;
 }
 
+/** Fab furniture is optional so the committed procedural office remains the portable fallback. */
+export interface IOfficeAssets {
+  readonly [name: string]: Object3D | undefined;
+}
+
 const ROOM_WIDTH = 32;
 const ROOM_DEPTH = 17;
 const CEILING = 3.2;
-const DESK_HEIGHT = 0.74;
+/**
+ * Desk height, set against the seated typing pose rather than against a catalogue.
+ *
+ * The clip holds the hands 0.28 m above the hips; a seat at {@link SEAT_HEIGHT} therefore puts
+ * them at 0.77, and a 0.74 desk carried its keys above that — the worker's hands passed over the
+ * keyboard without ever meeting it, which is what "he's not typing" looks like from the floor.
+ * Two centimetres lower and the pose lands on the keys. Measured with tools/verify-seating.mjs.
+ */
+const DESK_HEIGHT = 0.72;
+
+/**
+ * The height of the chair's seat surface, exported because a seated worker has to land on it.
+ *
+ * An animation library is authored against whatever chair its author had, and this office's is
+ * 8 cm lower than the Mixamo takes assume — a difference small enough to look like nothing in a
+ * clip preview and unmistakable in the room, where the worker hovers above the seat with its feet
+ * off the floor and its hands above the keys. The scene reads this number and drops the body onto
+ * it; nothing else should hard-code 0.49.
+ */
+export const SEAT_HEIGHT = 0.49;
 
 function standard(colour: number, roughness = 0.85): MeshStandardMaterial {
   return new MeshStandardMaterial({ color: colour, roughness, metalness: 0 });
 }
 
 /** Build the floor a game plays on. `deskCount` sets how many pods the room is furnished with. */
-export function createOffice(deskCount: number): IOffice {
+export function createOffice(deskCount: number, assets: IOfficeAssets = {}): IOffice {
   if (!Number.isInteger(deskCount) || deskCount < 1)
     throw new Error(`An office needs at least one desk, got ${String(deskCount)}.`);
   const root = new Group();
@@ -90,12 +127,20 @@ export function createOffice(deskCount: number): IOffice {
   ceiling.position.y = CEILING;
   root.add(ceiling);
 
-  root.add(backWall(), slatWall(), glassWall(), columns(), stripLights(), lounge(), shelving());
+  root.add(
+    backWall(),
+    slatWall(),
+    glassWall(),
+    assets.SM_Bar_1 === undefined ? columns() : importedColumns(assets.SM_Bar_1),
+    stripLights(),
+    assets.SM_Sofa_2 === undefined ? lounge() : importedOfficeZones(assets),
+    shelving(),
+  );
 
   const desks: IDeskAnchor[] = [];
   const colliders: IColliderBox[] = [];
   for (let index = 0; index < deskCount; index += 1) {
-    const anchor = placeDesk(index);
+    const anchor = placeDesk(index, assets);
     root.add(anchor.group);
     desks.push(anchor.desk);
     colliders.push(collider(anchor.group.position.x, 0.4, anchor.group.position.z, 1.7, 0.8, 1.5));
@@ -124,7 +169,37 @@ export function createOffice(deskCount: number): IOffice {
   // you, not spawn in the lens.
   const entrance = new Vector3(ROOM_WIDTH / 2 - 2.2, 0, ROOM_DEPTH / 2 - 2.4);
   desks.sort((a, b) => a.seat.distanceTo(entrance) - b.seat.distanceTo(entrance));
-  return { colliders, root, desks, floor, entrance };
+
+  // The furniture idle sessions get up to use: a filing cabinet on the back wall and a fax table
+  // by the glass. Each carries the point its worker stands at and the heading it faces.
+  const cabinet =
+    assets.SM_Cabinet_1 === undefined
+      ? filingCabinet()
+      : importedCabinet(assets.SM_Cabinet_1);
+  cabinet.position.set(9.6, 0, -8.1);
+  root.add(cabinet);
+  const cabinetStand = new Vector3(9.6, 0, -7.2);
+  const fax = faxTable();
+  fax.position.set(-9.8, 0, 7.6);
+  root.add(fax);
+  const faxStand = new Vector3(-9.8, 0, 6.6);
+  colliders.push(
+    collider(9.6, 0.75, -8.1, 1.1, 1.5, 0.55),
+    collider(-9.8, 0.45, 7.6, 1.0, 0.9, 0.7),
+  );
+  const activities: IActivitySpot[] = [
+    {
+      kind: "filing",
+      stand: cabinetStand,
+      facing: Math.atan2(cabinet.position.x - cabinetStand.x, cabinet.position.z - cabinetStand.z),
+    },
+    {
+      kind: "faxing",
+      stand: faxStand,
+      facing: Math.atan2(fax.position.x - faxStand.x, fax.position.z - faxStand.z),
+    },
+  ];
+  return { activities, colliders, root, desks, floor, entrance };
 }
 
 /** One box for the physics world, described rather than drawn. */
@@ -357,7 +432,7 @@ function shelving(): Object3D {
 }
 
 /** One desk, its divider, its monitor and its chair, plus where a worker sits at it. */
-function placeDesk(index: number): { group: Group; desk: IDeskAnchor } {
+function placeDesk(index: number, assets: IOfficeAssets): { group: Group; desk: IDeskAnchor } {
   const group = new Group();
   const perRow = 8;
   const row = Math.floor(index / perRow);
@@ -370,6 +445,9 @@ function placeDesk(index: number): { group: Group; desk: IDeskAnchor } {
   group.position.set(x, 0, z);
   group.rotation.y = facingWall ? 0 : Math.PI;
 
+  // The pack's SM_Table_1 is a 60 cm-high glass coffee table. It belongs in the sofa lounge;
+  // using it here made the keyboard, tower and monitor appear to float. Workstations need an
+  // opaque 72 cm surface with enough depth for the worker's hands and the imported monitor.
   const top = new Mesh(new BoxGeometry(1.6, 0.05, 0.78), standard(office.deskTop, 0.55));
   top.position.y = DESK_HEIGHT;
   top.castShadow = true;
@@ -377,40 +455,37 @@ function placeDesk(index: number): { group: Group; desk: IDeskAnchor } {
   group.add(top);
 
   for (const side of [-0.72, 0.72]) {
-    const leg = new Mesh(new BoxGeometry(0.06, DESK_HEIGHT, 0.68), standard(office.deskFrame, 0.5));
+    const leg = new Mesh(
+      new BoxGeometry(0.06, DESK_HEIGHT, 0.68),
+      standard(office.deskFrame, 0.5),
+    );
     leg.position.set(side, DESK_HEIGHT / 2, 0);
     group.add(leg);
   }
 
-  const divider = new Mesh(new BoxGeometry(1.6, 0.42, 0.05), standard(office.divider, 0.95));
-  divider.position.set(0, DESK_HEIGHT + 0.21, -0.4);
+  // Keep the privacy rail below the display. At monitor height it overlaps the Fab monitor in
+  // profile and reads as a second brown screen instead of workstation separation.
+  const divider = new Mesh(new BoxGeometry(1.6, 0.18, 0.05), standard(office.divider, 0.95));
+  divider.position.set(0, DESK_HEIGHT + 0.09, -0.4);
   divider.castShadow = true;
   group.add(divider);
 
-  const screen = new Mesh(
-    new BoxGeometry(0.62, 0.36, 0.03),
-    // Per desk, deliberately: one shared material would light the whole floor when one session
-    // starts working.
-    new MeshStandardMaterial({ color: office.screenOff, metalness: 0.1, roughness: 0.3 }),
-  );
-  screen.position.set(0, DESK_HEIGHT + 0.28, -0.24);
-  group.add(screen);
-  const stand = new Mesh(new BoxGeometry(0.16, 0.12, 0.14), standard(office.deskFrame, 0.4));
-  stand.position.set(0, DESK_HEIGHT + 0.06, -0.24);
-  group.add(stand);
+  const screen =
+    assets.SM_Monitor_1 === undefined
+      ? proceduralMonitor(group)
+      : importedMonitor(group, assets.SM_Monitor_1);
 
   // A keyboard, a mouse and a tower under the desk. A desk with nothing on it makes a seated
   // worker look like someone waiting rather than someone working.
-  const keyboard = new Mesh(new BoxGeometry(0.44, 0.02, 0.15), standard(0x22201e, 0.6));
-  keyboard.position.set(0, DESK_HEIGHT + 0.04, 0.03);
-  keyboard.rotation.x = -0.04;
-  keyboard.castShadow = true;
-  group.add(keyboard);
-  // Parented to the board, because the board gets moved to wherever the seated hands turn out to
-  // be and a key bed left behind on the desk is worse than no keys at all.
-  const keys = new Mesh(new BoxGeometry(0.4, 0.006, 0.11), standard(0x3a3733, 0.9));
-  keys.position.set(0, 0.015, 0);
-  keyboard.add(keys);
+  //
+  // The board is `src/render/keyboard.ts`: a real key field, sized to the mannequin's hand rather
+  // than to a human's. Its caps are its children, so they ride along when the scene slides the
+  // board under a seated worker's hands — a key bed left behind on the desk is worse than no keys
+  // at all. Its origin is the centre of its own footprint at tray level, so this y is the desk
+  // face itself: the top is 0.05 thick and centred on DESK_HEIGHT.
+  const board = keyboard();
+  board.position.set(0, DESK_HEIGHT + 0.025, 0.05);
+  group.add(board);
   const mouse = new Mesh(new BoxGeometry(0.06, 0.025, 0.1), standard(0x22201e, 0.5));
   mouse.position.set(0.33, DESK_HEIGHT + 0.04, 0.05);
   group.add(mouse);
@@ -422,7 +497,17 @@ function placeDesk(index: number): { group: Group; desk: IDeskAnchor } {
   towerLight.position.set(0.5, 0.36, -0.12);
   group.add(towerLight);
 
-  group.add(chair());
+  if (assets.SM_Chair_1 === undefined) group.add(chair());
+  else {
+    // Centre the chair's actual bounds on the same local point used to land the worker's hips.
+    const taskChair = groundedImported(assets.SM_Chair_1);
+    // Geometry proof: above y=1 m the backrest spans 62.3 cm on Z but only 7.4 cm on X, with its
+    // back at +X. The authored chair therefore faces -X; this quarter-turn faces it toward the
+    // desk's -Z instead of leaving it sideways under the worker.
+    taskChair.rotation.y = -Math.PI / 2;
+    taskChair.position.set(0, 0, 0.52);
+    group.add(taskChair);
+  }
 
   const seatLocal = new Vector3(0, 0, 0.52);
   const standLocal = new Vector3(0, 0, 1.15);
@@ -430,8 +515,43 @@ function placeDesk(index: number): { group: Group; desk: IDeskAnchor } {
   const stand2 = standLocal.clone().applyEuler(group.rotation).add(group.position);
   return {
     group,
-    desk: { seat, stand: stand2, facing: group.rotation.y + Math.PI, keyboard, screen },
+    desk: { seat, stand: stand2, facing: group.rotation.y + Math.PI, keyboard: board, screen },
   };
+}
+
+/** Fallback monitor used only when the Fab pack is unavailable. */
+function proceduralMonitor(parent: Group): Mesh {
+  const screen = new Mesh(
+    new BoxGeometry(0.62, 0.36, 0.03),
+    new MeshStandardMaterial({ color: office.screenOff, metalness: 0.1, roughness: 0.3 }),
+  );
+  screen.position.set(0, DESK_HEIGHT + 0.28, -0.24);
+  parent.add(screen);
+  const stand = new Mesh(new BoxGeometry(0.16, 0.12, 0.14), standard(office.deskFrame, 0.4));
+  stand.position.set(0, DESK_HEIGHT + 0.06, -0.24);
+  parent.add(stand);
+  return screen;
+}
+
+/** Place one Fab monitor and return its real display mesh for per-session emissive state. */
+function importedMonitor(parent: Group, source: Object3D): Mesh {
+  const monitor = groundedImported(source);
+  monitor.rotation.y = -Math.PI / 2;
+  monitor.position.set(0, DESK_HEIGHT + 0.02, -0.3);
+  let display: Mesh | undefined;
+  monitor.traverse((object) => {
+    const mesh = object as Mesh;
+    if (!mesh.isMesh) return;
+    // Each desk owns its materials: lighting one live session must not light every shared clone.
+    mesh.material = Array.isArray(mesh.material)
+      ? mesh.material.map((material) => material.clone())
+      : mesh.material.clone();
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    if (materials.some((material) => material.name === "M_Display_1")) display = mesh;
+  });
+  if (display === undefined) throw new Error("SM_Monitor_1 has no M_Display_1 material.");
+  parent.add(monitor);
+  return display;
 }
 
 /** A plain task chair: seat, back, post, base. */
@@ -439,7 +559,7 @@ function chair(): Object3D {
   const group = new Group();
   const dark = standard(office.seat, 0.6);
   const seat = new Mesh(new BoxGeometry(0.5, 0.08, 0.5), dark);
-  seat.position.set(0, 0.45, 0.52);
+  seat.position.set(0, SEAT_HEIGHT - 0.04, 0.52);
   seat.castShadow = true;
   group.add(seat);
   const back = new Mesh(new BoxGeometry(0.48, 0.6, 0.07), dark);
@@ -452,5 +572,172 @@ function chair(): Object3D {
   const base = new Mesh(new CylinderGeometry(0.3, 0.3, 0.04, 12), dark);
   base.position.set(0, 0.03, 0.52);
   group.add(base);
+  return group;
+}
+
+/** Clone one imported furniture root while retaining shared immutable geometry and textures. */
+function imported(source: Object3D): Object3D {
+  const clone = source.clone(true);
+  clone.traverse((object) => {
+    const mesh = object as Mesh;
+    if (!mesh.isMesh) return;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+  });
+  return clone;
+}
+
+/** Ground an imported Fab mesh at its authored size and move its horizontal centre to its pivot. */
+function groundedImported(source: Object3D): Object3D {
+  const clone = imported(source);
+  clone.updateMatrixWorld(true);
+  const bounds = new Box3().setFromObject(clone); // engine-override: placement measurement, not scaling
+  const centre = bounds.getCenter(new Vector3());
+  clone.position.set(-centre.x, -bounds.min.y, -centre.z);
+  // Keep centring on the child and placement on a clean parent. Rotating or scaling the same
+  // object that carries the pivot correction makes the correction orbit and shifts the model.
+  const placement = new Group();
+  placement.add(clone);
+  return placement;
+}
+
+/** The pack's banded structural columns, which define nearly every interior listing screenshot. */
+function importedColumns(source: Object3D): Object3D {
+  const group = new Group();
+  for (const x of [-10.2, -2.4, 5.4]) {
+    const column = groundedImported(source);
+    column.scale.setScalar(0.8);
+    column.position.x += x;
+    column.position.z -= 2.9;
+    group.add(column);
+  }
+  return group;
+}
+
+/**
+ * Compose the south half of the floor from the Fab kit: conference, lounge, reception and lift.
+ * These are distinct workplace zones from the listing, not decorative models scattered at desks.
+ */
+function importedOfficeZones(assets: IOfficeAssets): Object3D {
+  const group = new Group();
+  const place = (
+    name: string,
+    x: number,
+    z: number,
+    yaw = 0,
+    scale = 1,
+  ): Object3D | undefined => {
+    const source = assets[name];
+    if (source === undefined) return undefined;
+    const model = groundedImported(source);
+    model.position.x += x;
+    model.position.z += z;
+    model.rotation.y = yaw;
+    model.scale.setScalar(scale);
+    group.add(model);
+    return model;
+  };
+
+  // Conference zone: the five-metre pack table, a feature shelf and its authored pendant.
+  place("SM_Table_3", -10.2, 5.5);
+  place("SM_Decoration_1", -15.2, 4.3);
+  place("SM_lamp_2", -10.2, 5.5);
+
+  // Lounge zone: a pair of sofas around the low pack table, matching the hero gallery frame.
+  place("SM_Sofa_2", -2.8, 5.4);
+  place("SM_Sofa_2", 2.8, 6.8, Math.PI);
+  place("SM_Table_1", 0, 5.9, Math.PI / 2);
+  place("SM_Table_2", 5.8, 5.2, Math.PI / 2, 0.55);
+  place("SM_Bench_1", 0, 7.7, Math.PI);
+  place("SM_flower_pot_1", 4.8, 7.3, 0, 0.9);
+
+  // Reception and circulation: a long counter leads to a framed door and the lift bank.
+  place("SM_Counter_1", 11.8, 4.3);
+  place("SM_Trash", 7.6, 7.4);
+  place("SM_Door_Frame_1", 11.3, -8.35, Math.PI / 2);
+  place("SM_Door_1_A", 11.3, -8.31, Math.PI / 2);
+  place("SM_Elevator_1", 14.3, -8.32, Math.PI / 2);
+  return group;
+}
+
+/** Place SM_Cabinet_1 on the same footprint and facing as the procedural filing cabinet. */
+function importedCabinet(source: Object3D): Object3D {
+  const cabinet = imported(source);
+  cabinet.rotation.y = Math.PI;
+  cabinet.scale.setScalar(0.82);
+  return cabinet;
+}
+
+/**
+ * A three-drawer filing cabinet against the back wall.
+ *
+ * Faces +z (into the room); the worker stands in front of it and goes through the drawers.
+ */
+function filingCabinet(): Object3D {
+  const group = new Group();
+  const body = standard(office.deskFrame, 0.5);
+  const shell = new Mesh(new BoxGeometry(1.0, 1.4, 0.5), body);
+  shell.position.y = 0.7;
+  shell.castShadow = true;
+  shell.receiveShadow = true;
+  group.add(shell);
+  for (const level of [0.28, 0.7, 1.12]) {
+    const drawer = new Mesh(new BoxGeometry(0.9, 0.36, 0.04), standard(office.divider, 0.7));
+    drawer.position.set(0, level, 0.26);
+    drawer.castShadow = true;
+    group.add(drawer);
+    const handle = new Mesh(new BoxGeometry(0.22, 0.035, 0.03), standard(office.slatLight, 0.4));
+    handle.position.set(0, level, 0.29);
+    group.add(handle);
+  }
+  // A stack of folders on top, so the cabinet reads as used rather than placed.
+  for (const [dx, colour] of [
+    [-0.18, 0x8a6d3b],
+    [0.02, 0x7a6244],
+    [0.2, 0x94764a],
+  ] as const) {
+    const folder = new Mesh(new BoxGeometry(0.26, 0.06, 0.34), standard(colour, 0.9));
+    folder.position.set(dx, 1.44, 0.02);
+    folder.rotation.y = 0.06;
+    folder.castShadow = true;
+    group.add(folder);
+  }
+  return group;
+}
+
+/** A small table by the glass with a fax machine on it, facing into the room. */
+function faxTable(): Object3D {
+  const group = new Group();
+  const top = new Mesh(new BoxGeometry(0.9, 0.04, 0.6), standard(office.deskTop, 0.55));
+  top.position.y = 0.85;
+  top.castShadow = true;
+  top.receiveShadow = true;
+  group.add(top);
+  for (const [dx, dz] of [
+    [-0.38, -0.22],
+    [0.38, -0.22],
+    [-0.38, 0.22],
+    [0.38, 0.22],
+  ] as const) {
+    const leg = new Mesh(new BoxGeometry(0.04, 0.85, 0.04), standard(office.deskFrame, 0.5));
+    leg.position.set(dx, 0.425, dz);
+    group.add(leg);
+  }
+  const machine = new Mesh(new BoxGeometry(0.5, 0.16, 0.38), standard(office.slatDark, 0.6));
+  machine.position.y = 0.95;
+  machine.castShadow = true;
+  group.add(machine);
+  const feeder = new Mesh(new BoxGeometry(0.34, 0.05, 0.2), standard(office.divider, 0.8));
+  feeder.position.set(0, 1.06, -0.06);
+  feeder.rotation.x = -0.35;
+  group.add(feeder);
+  // A sheet half-fed, so the machine is mid-conversation rather than a black box on a table.
+  const paper = new Mesh(
+    new BoxGeometry(0.2, 0.004, 0.26),
+    standard(0xe8e4da, 0.95),
+  );
+  paper.position.set(0.02, 1.04, 0.16);
+  paper.rotation.x = -0.5;
+  group.add(paper);
   return group;
 }

@@ -74,8 +74,8 @@ export function setupOfficeLighting(scene: Scene, renderer: ShadowRenderer): Dir
 
   // Warm ceiling bounce over cream carpet: the ambient term is doing the work of a hundred
   // recessed downlights this room does not model.
-  scene.add(new HemisphereLight(0xfff0d8, 0xb3a488, 0.5));
-  scene.add(new AmbientLight(0xfff1dc, 0.18));
+  scene.add(new HemisphereLight(0xffe6c8, 0x6f6254, 0.38));
+  scene.add(new AmbientLight(0xffe1bd, 0.1));
 
   // Dusk through the glass, from outside the long window wall.
   const key = new DirectionalLight(0x9fc0e8, 0.9);
@@ -94,7 +94,7 @@ export function setupOfficeLighting(scene: Scene, renderer: ShadowRenderer): Dir
 
   for (const z of [-5.4, -1.2, 3, 6.4]) {
     for (const x of [-10, -2, 6, 13]) {
-      const strip = new PointLight(0xffd9a8, 3.2, 9, 2);
+      const strip = new PointLight(0xffcf91, 2.45, 8, 2);
       strip.position.set(x, 2.7, z);
       scene.add(strip);
     }

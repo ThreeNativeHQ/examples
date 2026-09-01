@@ -22,6 +22,8 @@ export interface IRegistryOptions {
   readonly hookAuthorityMs?: number;
   /** CPU milliseconds between scans above which a session counts as working. */
   readonly busyCpuMs?: number;
+  /** Sustained quiet required before a process-driven working session becomes idle. */
+  readonly busyHoldMs?: number;
   readonly now?: () => number;
 }
 
@@ -33,9 +35,12 @@ export class OfficeRegistry {
   readonly #sessions = new Map<string, ISessionSummary>();
   /** Last CPU reading per session, so "is it doing anything" is a difference, not a guess. */
   readonly #cpu = new Map<string, number>();
+  /** Last observed CPU activity per session; remote model work is quiet between streamed chunks. */
+  readonly #lastBusy = new Map<string, number>();
   readonly #departAfterMs: number;
   readonly #hookAuthorityMs: number;
   readonly #busyCpuMs: number;
+  readonly #busyHoldMs: number;
   readonly #now: () => number;
   readonly startedMs: number;
 
@@ -45,6 +50,7 @@ export class OfficeRegistry {
     // 40 ms of CPU between two scans two seconds apart. An agent generating tokens or running a
     // tool clears this easily; one parked at a prompt does not.
     this.#busyCpuMs = options.busyCpuMs ?? 40;
+    this.#busyHoldMs = options.busyHoldMs ?? 30_000;
     this.#now = options.now ?? (() => Date.now());
     this.startedMs = this.#now();
   }
@@ -70,6 +76,8 @@ export class OfficeRegistry {
       const existing = this.#sessions.get(id);
       if (existing === undefined) return { id, kind: "gone" };
       this.#sessions.delete(id);
+      this.#cpu.delete(id);
+      this.#lastBusy.delete(id);
       return { id, kind: "gone" };
     }
     const previous = this.#sessions.get(id);
@@ -109,11 +117,21 @@ export class OfficeRegistry {
       const previousCpu = this.#cpu.get(candidate.id);
       this.#cpu.set(candidate.id, candidate.cpuMs);
       const busy = previousCpu !== undefined && candidate.cpuMs - previousCpu > this.#busyCpuMs;
+      if (busy) this.#lastBusy.set(candidate.id, now);
+      const lastBusy = this.#lastBusy.get(candidate.id);
+      const busyRecently =
+        busy || (lastBusy !== undefined && now - lastBusy <= this.#busyHoldMs);
       const hookDriven =
         previous !== undefined &&
         previous.source === "hook" &&
         now - previous.lastSeenMs < this.#hookAuthorityMs;
-      const state = hookDriven ? previous.state : busy ? "working" : (previous?.state === "arriving" ? "arriving" : "idle");
+      const state = hookDriven
+        ? previous.state
+        : busyRecently
+          ? "working"
+          : previous?.state === "arriving"
+            ? "arriving"
+            : "idle";
       const session: ISessionSummary = {
         cwd: candidate.cwd,
         host: candidate.host,
@@ -143,6 +161,7 @@ export class OfficeRegistry {
       if (session.source === "hook" && now - session.lastSeenMs < this.#hookAuthorityMs) continue;
       this.#sessions.delete(id);
       this.#cpu.delete(id);
+      this.#lastBusy.delete(id);
       changes.push({ id, kind: "gone" });
     }
     return changes;
@@ -189,6 +208,8 @@ export class OfficeRegistry {
     for (const [id, session] of this.#sessions) {
       if (now - session.lastSeenMs <= this.#departAfterMs) continue;
       this.#sessions.delete(id);
+      this.#cpu.delete(id);
+      this.#lastBusy.delete(id);
       changes.push({ id, kind: "gone" });
     }
     return changes;

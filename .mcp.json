@@ -3,7 +3,7 @@
     "threenative-assets": {
       "command": "node",
       "args": [
-        "/home/joao/projects/threenative/sandbox/fps-framework/node_modules/threenative-asset-mcp/dist/index.js"
+        "/home/joao/projects/threenative/sandbox/.mcp-tools/node_modules/threenative-asset-mcp/dist/index.js"
       ],
       "env": {
         "ASSET_DOWNLOAD_DIR": "/home/joao/projects/threenative/sandbox/fps-framework/public/assets",
@@ -20,10 +20,7 @@
       "command": "node",
       "args": [
         "/home/joao/projects/threenative/threenative-engine/packages/engine-mcp/dist/index.js"
-      ],
-      "env": {
-        "THREENATIVE_CAPABILITIES_MANIFEST": "/home/joao/projects/threenative/sandbox/fps-framework/capabilities.json"
-      }
+      ]
     }
   }
 }

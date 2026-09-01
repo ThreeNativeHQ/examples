@@ -59,9 +59,41 @@ export function workerStateFor(session: ISessionSummary): WorkerState {
 }
 
 /**
+ * What a session does with its worker while it has nothing for it to do.
+ *
+ * An office where every idle session sits perfectly still at its desk reads as a photograph — the
+ * room only looks alive when some of them get up. Which session goes where is a pure function of
+ * its id, so a worker's habits are stable across snapshots and across reloads: the same session
+ * always haunts the same piece of furniture, and no `Math.random()` is involved.
+ */
+export type IdleActivity = "desk" | "filing" | "faxing";
+
+/** Stable, small, and spread out: a 31-bit string hash, nothing clever. */
+export function hashSession(sessionId: string): number {
+  let hash = 0;
+  for (let index = 0; index < sessionId.length; index += 1)
+    hash = (Math.imul(hash, 31) + sessionId.charCodeAt(index)) | 0;
+  return Math.abs(hash);
+}
+
+export function activityForSession(sessionId: string): IdleActivity {
+  const bucket = hashSession(sessionId) % 100;
+  // Just over half stay at their desks; the rest split across the furniture the room actually has.
+  if (bucket < 55) return "desk";
+  if (bucket < 80) return "filing";
+  return "faxing";
+}
+
+/**
  * A worker's own phase, which is not the session's state.
  *
  * A session is "working" the moment the bridge says so; its worker may still be walking across the
- * floor. Keeping the two apart is what stops a mannequin typing in mid-stride.
+ * floor. Keeping the two apart is what stops a mannequin typing in mid-stride. The activity phases
+ * are the same idea at the furniture: walking there, then using it.
  */
-export type ActorPhase = "walkingIn" | "seated" | "walkingOut";
+export type ActorPhase =
+  | "walkingIn"
+  | "seated"
+  | "walkingToActivity"
+  | "atActivity"
+  | "walkingOut";

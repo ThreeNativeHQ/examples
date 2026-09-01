@@ -87,15 +87,13 @@ export function createWater(options: IWaterOptions): GroupType {
 
 /** Where the water sits. Low ground collects it, so the pools follow the walked route. */
 export const CAVE_POOLS: IWaterOptions["pools"] = [
-  // Puddles, not a lake. The reference's floor is wet gravel with water standing in the hollows,
-  // so these are small and separated — one sheet across the room reads as flooding.
-  { x: -3, z: -7, width: 8, depth: 6, rotationY: 0.2 },
-  { x: 5, z: -10, width: 7, depth: 5, rotationY: -0.4 },
-  { x: -9, z: -14, width: 8, depth: 6, rotationY: 0.7 },
-  { x: 1, z: -17, width: 6, depth: 5, rotationY: 0.9 },
-  { x: 10, z: -21, width: 7, depth: 6, rotationY: 0.3 },
-  { x: -6, z: -24, width: 9, depth: 7, rotationY: -0.6 },
-  { x: 3, z: -30, width: 8, depth: 6, rotationY: 0.1 },
-  { x: -11, z: -36, width: 7, depth: 6, rotationY: 1.1 },
-  { x: 9, z: -38, width: 6, depth: 5, rotationY: 0.5 },
+  // Puddles, not a lake: the reference's floor is wet gravel with water standing in the hollows.
+  // Placed in the open floor around the shrine platform, never on it.
+  { x: -6, z: -6, width: 9, depth: 6, rotationY: 0.2 },
+  { x: 7, z: -9, width: 7, depth: 5, rotationY: -0.4 },
+  { x: -11, z: -13, width: 8, depth: 6, rotationY: 0.7 },
+  { x: 9, z: -16, width: 7, depth: 6, rotationY: 0.3 },
+  { x: -8, z: -27, width: 9, depth: 7, rotationY: -0.6 },
+  { x: 10, z: -30, width: 7, depth: 6, rotationY: 1.1 },
+  { x: -2, z: -34, width: 8, depth: 6, rotationY: 0.1 },
 ];

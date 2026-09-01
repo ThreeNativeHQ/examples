@@ -81,12 +81,28 @@ scene.add(threatMarker);
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
 
+// Resolve through the same manifest the valley's ctx.assets.model uses. Resolving any other
+// way is how this harness once proved the animals clean while the valley rendered 70 m
+// giants: the manifest ships the FBX2glTF raw exports (node-transformed, untextured), while a
+// hand-picked assets/ path serves an older meshopt rebuild of the same pack — different
+// geometry, different node scales, different bugs. A harness that loads different bytes than
+// the scene verifies nothing.
+const manifest = (await (await fetch("/assets.manifest.json")).json()) as {
+  entries: Record<string, { output: string }>;
+};
+const resolveModel = (logical: string): string => {
+  const entry = manifest.entries[logical];
+  if (entry === undefined) throw new Error(`'${logical}' is not in the asset manifest.`);
+  return `/${entry.output}`;
+};
+const ANIMAL_LISTING = "2dd7964c-a601-4264-a53d-465dcae1644c";
+
 await renderer.init();
 const animals = await spawnWildwoodAnimals({
-  // The harness stands in for ctx.assets.model: same GLB names, raw loader instead of the
-  // engine's manifest-resolved path.
+  // The harness stands in for ctx.assets.model: same logical paths, same manifest resolution,
+  // raw GLTFLoader instead of the engine's loader.
   load: async (path) => {
-    const gltf = await loader.loadAsync(`/assets/fab/2dd7964c-a601-4264-a53d-465dcae1644c/${path}`);
+    const gltf = await loader.loadAsync(resolveModel(`fab/${ANIMAL_LISTING}/raw/${path}`));
     return { scene: gltf.scene, animations: gltf.animations };
   },
   ground: () => 0,

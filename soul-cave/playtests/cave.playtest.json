@@ -46,12 +46,17 @@
       {
         "id": "state",
         "path": "fabPiecesLoaded",
-        "equals": 60,
+        "equals": 48,
         "allowTrivial": "Published when the imported models resolve, before the first observation; the run proves they loaded and drew."
       }
     ],
     "performance": {
-      "maxFrameMsP95": 33
+      "maxFrameMsP95": 33,
+      "maxDrawCalls": 320,
+      "maxPhaseMsP95": {
+        "render": 14,
+        "update": 3
+      }
     }
   }
 }

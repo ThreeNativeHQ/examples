@@ -1,10 +1,19 @@
 node_modules/
 dist/
 artifacts/
+# Compiled asset output. The build hashes everything under assets/ into a mirror of its own
+# subdirectory layout, so listing the top level alone stops covering it the moment a model lands
+# in a subfolder — assets/office/ compiled straight into public/office/ and would have been
+# committed.
 public/assets/
+public/office/
+public/fab/
 public/*.glb
 public/*.png
 public/assets.manifest.json
+public/bake.receipt.json
+# Fab source assets are entitlement-bound and re-created with Asset MCP; do not publish them from
+# this public sandbox repository.
+assets/fab/
 # The untrimmed 15 MB animation libraries. `tools/trim-clips.mjs` regenerates assets/ from them,
-# and the asset MCP re-downloads them from itch on any machine that needs them again.
 tools/source-assets/

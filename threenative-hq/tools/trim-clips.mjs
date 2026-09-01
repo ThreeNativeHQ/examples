@@ -54,4 +54,5 @@ async function trim(source, destination, { keepMesh }) {
 }
 
 await trim("tools/source-assets/worker.source.glb", "assets/worker.glb", { keepMesh: true });
-await trim("tools/source-assets/worker-clips-2.source.glb", "assets/worker-clips-2.glb", { keepMesh: false });
+// Library 2 (the phone-call clip) is retired: blocked sessions now play the retargeted Mixamo
+// texting take from worker-clips-3.glb, so there is no second library to trim.

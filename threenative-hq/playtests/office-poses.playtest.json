@@ -1,0 +1,87 @@
+{
+  "name": "hq-office-poses",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "inside-the-last-sit-to-type",
+      "waitTicks": 910,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "the-one-shot-must-have-finished-by-now",
+      "waitTicks": 80,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "settle",
+      "waitTicks": 400,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "focusState",
+        "equals": "working",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "focusClip",
+        "equals": "Typing_Loop",
+        "changed": true,
+        "atSteps": [
+          {
+            "label": "inside-the-last-sit-to-type",
+            "equals": "SitToType"
+          },
+          {
+            "label": "the-one-shot-must-have-finished-by-now",
+            "equals": "Typing_Loop"
+          }
+        ]
+      }
+    ],
+    "states": [
+      {
+        "entity": "worker-claude-201",
+        "equals": "working"
+      },
+      {
+        "entity": "worker-codex-202",
+        "equals": "working"
+      }
+    ],
+    "animation": [
+      {
+        "entity": "worker-claude-201",
+        "clip": "Typing_Loop",
+        "entered": true,
+        "advancedFrames": 120,
+        "finished": false
+      },
+      {
+        "entity": "worker-codex-202",
+        "clip": "Typing_Loop",
+        "entered": true,
+        "advancedFrames": 120,
+        "finished": false
+      }
+    ]
+  }
+}

@@ -24,11 +24,11 @@ type ShadowRenderer = { shadowMap: { enabled: boolean; type: number } };
 
 /** Daylight through the ceiling gap: white-warm, and the only thing casting a shadow. */
 const SUN_COLOUR = 0xfff4e0;
-const SUN_INTENSITY = 11.0;
+const SUN_INTENSITY = 8.0;
 /** Sky above the gap against damp rock below — the ambient the shaft is read against. */
 const SKY_COLOUR = 0x74858c;
 const GROUND_COLOUR = 0x3b3527;
-const AMBIENT_INTENSITY = 3.2;
+const AMBIENT_INTENSITY = 3.4;
 /** The warm kick on rock next to the shaft, standing in for the first bounce. */
 const BOUNCE_COLOUR = 0xffcf9a;
 
@@ -47,12 +47,12 @@ export function setupCaveLighting(scene: Scene, renderer: ShadowRenderer): ICave
   scene.background = new Color(0x0d0f0e);
   // Thick enough that the far pillars fall away into the dark, thin enough that the shaft still
   // reaches the floor. The godrays stage raymarches against the same volume.
-  scene.fog = new FogExp2(0x4e5246, 0.0085);
+  scene.fog = new FogExp2(0x3c4038, 0.0075);
 
   const sun = new DirectionalLight(SUN_COLOUR, SUN_INTENSITY);
   // High and behind the far pillars, angled to land the shaft on the floor in front of camera.
-  sun.position.set(18, 44, -10);
-  sun.target.position.set(-3, 0, -20);
+  sun.position.set(8, 44, -12);
+  sun.target.position.set(-2, 3, -17);
   sun.castShadow = true;
   sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.bias = -0.0006;
@@ -72,43 +72,43 @@ export function setupCaveLighting(scene: Scene, renderer: ShadowRenderer): ICave
 
   // Two unshadowed warm fills where the shaft meets rock. Cheap, and they give the screen-space
   // GI something warm to gather; without them the walls stay the colour of the ambient alone.
-  const bounce = new PointLight(BOUNCE_COLOUR, 60, 34, 2);
-  bounce.position.set(-3, 1.6, -20);
+  const bounce = new PointLight(BOUNCE_COLOUR, 26, 30, 2);
+  bounce.position.set(1, 1.6, -26);
   scene.add(bounce);
 
-  const farBounce = new PointLight(BOUNCE_COLOUR, 45, 32, 2);
-  farBounce.position.set(3, 8, -18);
+  const farBounce = new PointLight(BOUNCE_COLOUR, 22, 34, 2);
+  farBounce.position.set(-7, 10, -32);
   scene.add(farBounce);
 
   // The reference's shaft ends in a hole full of white sky. Without something bright behind the
   // far pillars the godrays start from nowhere, which reads as haze rather than as daylight.
   const opening = new Mesh(
-    new PlaneGeometry(13.2, 10.2),
-    new MeshBasicMaterial({ color: 0xd9e2e6, fog: false, side: DoubleSide }),
+    new PlaneGeometry(15.2, 11.2),
+    new MeshBasicMaterial({ color: 0xfff4e2, fog: false, side: DoubleSide, toneMapped: false }),
   );
-  opening.position.set(5, 17.3, -16);
+  opening.position.set(3, 19.3, -19);
   opening.rotation.x = Math.PI / 2;
   opening.name = "caveOpening";
   scene.add(opening);
 
   // A third fill on the near rock. The reference's foreground is dark but never featureless: the
   // shaft lights the floor, and the floor lights everything around it.
-  const nearBounce = new PointLight(BOUNCE_COLOUR, 40, 26, 2);
+  const nearBounce = new PointLight(BOUNCE_COLOUR, 16, 24, 2);
   nearBounce.position.set(0, 2, -7);
   scene.add(nearBounce);
 
   // The second opening over the left aisle, and the daylight falling through it.
   const sideOpening = new Mesh(
-    new PlaneGeometry(8.2, 7.2),
-    new MeshBasicMaterial({ color: 0xd9e2e6, fog: false, side: DoubleSide }),
+    new PlaneGeometry(8.2, 6.2),
+    new MeshBasicMaterial({ color: 0xfff4e2, fog: false, side: DoubleSide, toneMapped: false }),
   );
-  sideOpening.position.set(-6, 17.3, -28);
+  sideOpening.position.set(-20, 19.3, -18);
   sideOpening.rotation.x = Math.PI / 2;
   sideOpening.name = "caveSideOpening";
   scene.add(sideOpening);
 
-  const sideShaft = new PointLight(0xd8e6f0, 130, 42, 2);
-  sideShaft.position.set(-6, 7, -28);
+  const sideShaft = new PointLight(0xd8e6f0, 95, 40, 2);
+  sideShaft.position.set(-20, 9, -18);
   scene.add(sideShaft);
 
   return { sun, opening };

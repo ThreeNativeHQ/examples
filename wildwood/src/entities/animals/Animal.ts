@@ -93,6 +93,13 @@ export class Animal {
     // fifth), and a plain box divides the body length by the junk — a 0.7 m fox rendered as a
     // 13 cm rat. Sampling positions and taking the 1st-99th percentile per axis reads the
     // animal, not its outliers.
+    //
+    // The span is measured in **world space**: the raw POSITION accessor values are whatever
+    // units the exporter felt like, with the real size living in the node transforms — the
+    // FBX2glTF exports hang a 100x unit scale off the armature and the mesh node both, and the
+    // meshopt rebuilds fold a quantisation dequantise matrix in there too. Measured raw, the
+    // fox's vertices span 0.06, the "normaliser" obligingly scales the group by 12x, and the
+    // fox stands on the valley 73 m long — the colossal panels over the spawn.
     const span = percentileSpan(model.scene);
     const scale = spec.length / Math.max(span, 1e-4);
     console.info(`TN_ANIMALS_SCALE:${spec.id} span=${span.toFixed(2)} scale=${scale.toFixed(4)}`);
@@ -325,20 +332,34 @@ class AnimalLookup {
 }
 
 /**
- * The animal's real span: the widest 1st-99th-percentile axis spread across every mesh.
+ * The animal's real span: the widest 1st-99th-percentile axis spread across every mesh,
+ * **in world space** — every sampled vertex goes through its mesh's `matrixWorld` first.
  *
  * `Box3` measures outliers; this measures the animal. The pack's GLBs each carry a handful of
  * junk vertices far outside the body (the fox spans ±100 on Z while its body fills the middle
- * fifth), which once shrank a 0.7 m fox to the size of a rat.
+ * fifth), which once shrank a 0.7 m fox to the size of a rat. And the raw accessor values are
+ * not the animal's size either — exporters park unit scales on the armature node (the FBX2glTF
+ * exports carry 100x on the armature and the mesh node both), so raw space measures tenths of
+ * a unit and the normaliser then inflates the animal into a 70 m giant. World space is the
+ * space the animal actually renders in; it is the only space with an honest answer.
  */
 function percentileSpan(root: Object3D): number {
   const samples: number[][] = [];
+  root.updateMatrixWorld(true);
   root.traverse((object) => {
     if (!(object instanceof Mesh)) return;
     const geometry: BufferGeometry = object.geometry;
     const position = geometry.getAttribute("position");
+    const matrix = object.matrixWorld.elements;
     for (let index = 0; index < position.count; index += 1) {
-      samples.push([position.getX(index), position.getY(index), position.getZ(index)]);
+      const x = position.getX(index);
+      const y = position.getY(index);
+      const z = position.getZ(index);
+      samples.push([
+        matrix[0]! * x + matrix[4]! * y + matrix[8]! * z + matrix[12]!,
+        matrix[1]! * x + matrix[5]! * y + matrix[9]! * z + matrix[13]!,
+        matrix[2]! * x + matrix[6]! * y + matrix[10]! * z + matrix[14]!,
+      ]);
     }
   });
   if (samples.length === 0) return 1;
@@ -353,7 +374,8 @@ function percentileSpan(root: Object3D): number {
 }
 
 /**
- * Remove every triangle with fewer than two vertices inside the 1st-99th-percentile box.
+ * Remove every triangle with fewer than two vertices inside the 1st-99th-percentile box,
+ * measured **in world space** for the same reason `percentileSpan` is.
  *
  * The Quaternius GLBs carry a handful of junk triangles far outside the body (the fox reaches
  * ±100 units on Z while the animal occupies the middle fifth). Skinned, their weights point at
@@ -363,14 +385,23 @@ function percentileSpan(root: Object3D): number {
  * close to the body is body.
  */
 function stripJunkTriangles(root: Object3D): void {
+  root.updateMatrixWorld(true);
   const boxLow = [Infinity, Infinity, Infinity];
   const boxHigh = [-Infinity, -Infinity, -Infinity];
   const axisSamples: number[][] = [[], [], []];
   root.traverse((object) => {
     if (!(object instanceof Mesh)) return;
     const position = object.geometry.getAttribute("position");
+    const matrix = object.matrixWorld.elements;
     for (let index = 0; index < position.count; index += 1) {
-      const vertex = [position.getX(index), position.getY(index), position.getZ(index)];
+      const x = position.getX(index);
+      const y = position.getY(index);
+      const z = position.getZ(index);
+      const vertex = [
+        matrix[0]! * x + matrix[4]! * y + matrix[8]! * z + matrix[12]!,
+        matrix[1]! * x + matrix[5]! * y + matrix[9]! * z + matrix[13]!,
+        matrix[2]! * x + matrix[6]! * y + matrix[10]! * z + matrix[14]!,
+      ];
       for (let axis = 0; axis < 3; axis += 1) (axisSamples[axis] ?? []).push(vertex[axis] ?? 0);
     }
   });
@@ -389,6 +420,17 @@ function stripJunkTriangles(root: Object3D): void {
     const position = geometry.getAttribute("position");
     const index = geometry.getIndex();
     if (index === null) return;
+    const matrix = object.matrixWorld.elements;
+    const world = (vertex: number): [number, number, number] => {
+      const x = position.getX(vertex);
+      const y = position.getY(vertex);
+      const z = position.getZ(vertex);
+      return [
+        matrix[0]! * x + matrix[4]! * y + matrix[8]! * z + matrix[12]!,
+        matrix[1]! * x + matrix[5]! * y + matrix[9]! * z + matrix[13]!,
+        matrix[2]! * x + matrix[6]! * y + matrix[10]! * z + matrix[14]!,
+      ];
+    };
     const keep: number[] = [];
     for (let triangle = 0; triangle < index.count; triangle += 3) {
       const a = index.getX(triangle);
@@ -397,9 +439,9 @@ function stripJunkTriangles(root: Object3D): void {
       // Majority vote, not any-vertex: a triangle with one vertex on the body and two out at
       // ±100 units still spans the whole sky. Fewer than two inside reads as junk.
       const votes =
-        (inside(position.getX(a), position.getY(a), position.getZ(a)) ? 1 : 0) +
-        (inside(position.getX(b), position.getY(b), position.getZ(b)) ? 1 : 0) +
-        (inside(position.getX(c), position.getY(c), position.getZ(c)) ? 1 : 0);
+        (inside(...world(a)) ? 1 : 0) +
+        (inside(...world(b)) ? 1 : 0) +
+        (inside(...world(c)) ? 1 : 0);
       if (votes >= 2) keep.push(a, b, c);
     }
     if (keep.length === index.count) return;

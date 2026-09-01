@@ -4,7 +4,14 @@ import { BoxGeometry, Group as ThreeGroup, Mesh, MeshBasicMaterial, Vector3 } fr
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { hostTint } from "../render/palette.js";
 import { tintMannequin } from "./mannequin.js";
-import { SIT_DOWN, STAND_UP, type WorkerState, clipForState } from "./states.js";
+import {
+  SIT_DOWN,
+  SIT_TO_TYPE,
+  STAND_UP,
+  TYPE_TO_SIT,
+  type WorkerState,
+  clipForState,
+} from "./states.js";
 
 export type WorkerHost = keyof typeof hostTint;
 
@@ -102,12 +109,63 @@ export class Worker {
     return this.#player;
   }
 
-  /** World position of a named bone, for a game that needs to put something where a hand is. */
-  handPosition(target: Vector3): Vector3 | undefined {
-    const hand = this.object.getObjectByName("hand_r") ?? this.object.getObjectByName("hand_l");
-    if (hand === undefined) return undefined;
-    hand.updateWorldMatrix(true, false);
-    return target.setFromMatrixPosition(hand.matrixWorld);
+  /**
+   * How far the pelvis sits above the body's own origin, in metres, in the pose running now.
+   *
+   * A seated clip is authored against the chair its animator had. Placing the body on the floor
+   * and trusting the clip leaves the worker hovering above this office's seat with its feet off
+   * the carpet and its hands above the keys — one offset, wrong in three visible ways. Measured
+   * relative to the body rather than the world so the scene can subtract it without feeding its
+   * own correction back in next frame.
+   */
+  get pelvisRise(): number | undefined {
+    const pelvis = this.object.getObjectByName("pelvis");
+    if (pelvis === undefined) return undefined;
+    pelvis.updateWorldMatrix(true, false);
+    return pelvis.matrixWorld.elements[13] - this.object.position.y;
+  }
+
+  /**
+   * How far the lower foot sits above the body's own origin, in the pose running now.
+   *
+   * The seat landing above is the right answer for the hips and the wrong one for the feet: the
+   * seated Quaternius clips reach 1.3 cm further down than the Mixamo typing take, so hips placed
+   * exactly on the seat put both shoes through the carpet. The scene clamps against this.
+   */
+  get lowestFootRise(): number | undefined {
+    let lowest: number | undefined;
+    for (const name of ["foot_l", "foot_r"]) {
+      const foot = this.object.getObjectByName(name);
+      if (foot === undefined) continue;
+      foot.updateWorldMatrix(true, false);
+      const rise = foot.matrixWorld.elements[13] - this.object.position.y;
+      if (lowest === undefined || rise < lowest) lowest = rise;
+    }
+    return lowest;
+  }
+
+  /**
+   * World position midway between both hands — where a keyboard belongs.
+   *
+   * One hand is the wrong answer and looks like a bug in something else. In the typing take the
+   * right hand ranges a quarter of a metre either side of the body while the left barely moves,
+   * so a board slid to the right hand alone sits well off to one side with the left hand hanging
+   * in the air beside it. Their midpoint tracks the body centre to within a few centimetres,
+   * which is what "the hands are on the keys" actually means.
+   */
+  handCentre(target: Vector3): Vector3 | undefined {
+    const left = this.object.getObjectByName("hand_l");
+    const right = this.object.getObjectByName("hand_r");
+    const hands = [left, right].filter((bone) => bone !== undefined);
+    if (hands.length === 0) return undefined;
+    target.set(0, 0, 0);
+    for (const hand of hands) {
+      hand.updateWorldMatrix(true, false);
+      target.x += hand.matrixWorld.elements[12];
+      target.y += hand.matrixWorld.elements[13];
+      target.z += hand.matrixWorld.elements[14];
+    }
+    return target.divideScalar(hands.length);
   }
 
   /**
@@ -144,20 +202,26 @@ export class Worker {
     this.#stateChanges += 1;
     const wasStanding = clipForState(this.#state).standing;
     const nowStanding = clipForState(next).standing;
+    const wasWorking = this.#state === "working";
+    const nowWorking = next === "working";
     this.#state = next;
-    // Sitting down and standing up are the only moves that would otherwise pop: a worker
-    // snapping from a walk cycle into a chair reads as a teleport even at 60 fps.
-    if (wasStanding && !nowStanding) {
+    // Changes that would otherwise pop get a one-shot: a worker snapping from a walk cycle into a
+    // chair reads as a teleport even at 60 fps. Between two seated states the Mixamo
+    // chair<->keyboard moves keep the worker in its chair; everywhere else the Quaternius
+    // stand<->chair moves carry the standing seam.
+    const oneShot = wasStanding && !nowStanding
+      ? SIT_DOWN
+      : !wasStanding && nowStanding
+        ? STAND_UP
+        : wasWorking && !nowWorking
+          ? TYPE_TO_SIT
+          : !wasWorking && nowWorking
+            ? SIT_TO_TYPE
+            : undefined;
+    if (oneShot !== undefined) {
       this.#transition = next;
       this.#transitionAge = 0;
-      this.#player.play(SIT_DOWN, { mode: "once", fade: 0.2 });
-      this.#clipAge = 0;
-      return;
-    }
-    if (!wasStanding && nowStanding) {
-      this.#transition = next;
-      this.#transitionAge = 0;
-      this.#player.play(STAND_UP, { mode: "once", fade: 0.2 });
+      this.#player.play(oneShot, { mode: "once", fade: 0.2 });
       this.#clipAge = 0;
       return;
     }

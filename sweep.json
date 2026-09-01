@@ -1,10 +1,10 @@
 {
   "arm": "framework",
-  "genre": "open-world",
-  "briefHash": "32929de51c299cb543c8c572f1aa9ac8ea50bfa1617fc10a26cdee111d2dede5",
-  "proofHash": "e85176372b5e3b80cc50bc6932cf38f13188da08d5ccb98b0c5a4e9215a835d2",
+  "genre": "exploration",
+  "briefHash": "a70bf0e7a2ed42e741f3ed4709545231833dea0e84c883516bcb9f2f139d64d5",
+  "proofHash": "ad1a3f4bc098352de7490256abd5936582b4ac83f28ffdc0525995f10633626e",
   "template": "starter",
-  "date": "2026-08-30T21:30:30.494Z",
+  "date": "2026-09-01T02:04:20.689Z",
   "frameworkVersion": "0.1.0",
   "sourceLines": 0
 }

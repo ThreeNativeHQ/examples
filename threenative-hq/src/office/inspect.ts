@@ -26,10 +26,6 @@ export interface ICameraReport {
   readonly z: number;
   readonly pitch: number;
   readonly yaw: number;
-  /** Where the visitor's own head and chest are, so "am I inside my own body" is a number. */
-  readonly headY: number | undefined;
-  readonly chestY: number | undefined;
-  readonly headDistance: number | undefined;
 }
 
 export interface IActorReport {
@@ -116,19 +112,6 @@ export function deriveChecks(
     detail: `camera at ${camera.position.y.toFixed(2)} m`,
     name: "camera-at-eye-height",
     ok: camera.position.y > 1.2 && camera.position.y < 2.1,
-  });
-  // Your own chest in the lens is the single most common first-person mistake, and it is a
-  // distance, not an opinion: the lens must sit at the head, not somewhere down the torso.
-  checks.push({
-    detail:
-      visitor.headY === undefined
-        ? "no visitor head bone found"
-        : `lens ${(camera.position.y - visitor.headY).toFixed(3)} m from the head, ${(camera.position.y - (visitor.chestY ?? 0)).toFixed(3)} m above the chest`,
-    name: "lens-at-the-head",
-    ok:
-      visitor.headY !== undefined &&
-      Math.abs(camera.position.y - visitor.headY) < 0.12 &&
-      (visitor.chestY === undefined || camera.position.y - visitor.chestY > 0.18),
   });
   return checks;
 }

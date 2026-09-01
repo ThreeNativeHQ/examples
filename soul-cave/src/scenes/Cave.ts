@@ -164,21 +164,18 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
         `Cave pieces with neither a texture nor a rebuilt surface: ${bare.map((p) => p.key).join(", ")}.`,
       );
     }
-    // Placing 57 irregular rock chunks by hand means repeatedly discovering, one screenshot at a
+    // Placing irregular rock chunks by hand means repeatedly discovering, one screenshot at a
     // time, that something enormous is parked in front of the lens. The corridor the camera looks
     // along is a fact the scene can check for itself, so it does — and names the offenders.
     const blockers = this.#pieces.flatMap((piece) => {
       const box = new Box3().setFromObject(piece.scene);
       const nearCamera = box.max.z > CORRIDOR.zFar && box.min.z < CORRIDOR.zNear;
       const inLane = box.max.x > -CORRIDOR.halfWidth && box.min.x < CORRIDOR.halfWidth;
-      const aboveFloor = box.max.y > 0.6;
-      return nearCamera && inLane && aboveFloor
+      return nearCamera && inLane && box.max.y > 0.6
         ? [`${piece.key}(x ${box.min.x.toFixed(0)}..${box.max.x.toFixed(0)}, z ${box.min.z.toFixed(0)}..${box.max.z.toFixed(0)})`]
         : [];
     });
-    if (blockers.length > 0) {
-      console.warn(`TN_CAVE_SIGHTLINE_BLOCKED:${blockers.join(" ")}`);
-    }
+    if (blockers.length > 0) console.warn(`TN_CAVE_SIGHTLINE_BLOCKED:${blockers.join(" ")}`);
 
     console.info(
       `TN_CAVE_LOADED:${this.#pieces.length} pieces, ${this.#pieces.reduce((sum, p) => sum + p.texturedMeshes, 0)} textured, ${this.#pieces.reduce((sum, p) => sum + p.rebuiltMeshes, 0)} rebuilt from masks`,
@@ -192,15 +189,15 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
       ctx.add(
         createCaveShell({
           ...this.#floorMasks,
-          sizeMetres: 50,
-          heightMetres: 17,
+          sizeMetres: 96,
+          heightMetres: 19,
           // Rotating the shape flat maps its local +Y to world +Z, so the room in front of the
           // camera is negative z here too. Two openings, as the reference has: the main shaft
           // ahead, and a smaller one over the left aisle that keeps that side out of pure black.
           holes: [
-            { x: 1, z: -22, width: 16, depth: 12 },
+            { x: -1, z: -14, width: 17, depth: 13 },
             { x: -20, z: -18, width: 9, depth: 7 },
-            { x: 19, z: -39, width: 9, depth: 8 },
+            { x: 20, z: -40, width: 8, depth: 7 },
           ],
         }),
       );
@@ -261,7 +258,7 @@ export class Cave extends Scene<GameState, IPhysicsContext> {
       camera.position.copy(this.#position);
       camera.lookAt(
         this.#position.x + Math.sin(this.#look) * 2.5,
-        EYE_HEIGHT + 5.2,
+        EYE_HEIGHT + 2.6,
         this.#position.z - 26,
       );
       frame.state.set({
