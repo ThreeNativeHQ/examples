@@ -35,13 +35,33 @@ page.on("console", (m) => {
   if (/TN_|error|Error|WARN|fail/i.test(t)) logs.push(t.slice(0, 400));
 });
 
+// The engine holds the world render behind its startup-readiness gate: the whole scene goes
+// through `compileAsync` first, bounded at 15 s, then a stable-frame window, and until both
+// resolve the canvas shows the loading layer — uniform grey, HUD fine, console clean, zero
+// errors. Every fixed wait short of ~20 s screenshots that frozen loader. The engine publishes
+// the one signal that means "the world is on screen": game.ts sets `__TN_STARTUP_READY__` when
+// readiness resolves, and the native screenshot path waits on the same flag. Wait for it.
+const waitReady = async () => {
+  const ready = await page
+    .waitForFunction(() => globalThis.__TN_STARTUP_READY__ === true, undefined, {
+      timeout: 120_000,
+      polling: 500,
+    })
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!ready) console.log("WARN __TN_STARTUP_READY__ never flipped; shooting the loading layer");
+  // First frames after readiness still land pipelines the timed-out warm-up skipped.
+  await page.waitForTimeout(3000);
+};
+
 const shoot = async (name, at) => {
   const target = at === undefined ? url : `${url}${url.includes("?") ? "&" : "?"}spawn=${at}`;
   // networkidle, not a clock: the valley loads ~70 GLBs through the dev server, and every fixed
   // wait this game ever tried screenshotted a half-loaded scene whose console still said loading.
   await page.goto(target, { waitUntil: "networkidle", timeout: 180_000 });
-  // Then give the first frames time to draw: pipeline compilation lands after the last asset.
-  await page.waitForTimeout(8000);
+  await waitReady();
   await page.screenshot({ path: `${out}/${name}.png` });
   console.log(`shot ${name}`);
 };

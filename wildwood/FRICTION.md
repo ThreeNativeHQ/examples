@@ -94,3 +94,34 @@ look ships as game render code regardless.
 Evidence: `engine_search_capabilities` outputs (empty) vs
 `threenative-engine/packages/core/capabilities.json` lines 380-427. The game keeps its own
 depth-baked water (`src/render/water.ts`) with the pack's `waves_normal` map for ripple detail.
+
+## 6a. Update: the water abstraction existed; the manifest was lying
+
+The capabilities agent fixed the pipeline: the engine's manifest generator
+(`pnpm tsx scripts/build-capability-manifest.ts` in threenative-engine, doc-derived, 231
+entries) was never re-run into the copy the MCP serves — fps-framework held a 115-entry
+old-generation artifact. With the fresh manifest, the searches above now resolve:
+
+- `WaveField` (@threenative/core) — analytic waves on CPU + matching TSL displacement; the game
+  supplies every wave number. This is where this game's two hand-rolled swell sines in
+  `water.ts` land if a second use appears (a floating prop, an animal drinking) — the "twice"
+  rule. The ripple normals, colour and opacity stay game-side regardless: rule 2, that is look.
+- `SpectralOcean` / `Buoyancy3D` / `FluidField2D` — ocean-scale, confirmed wrong fit for a pond.
+
+Evidence: capability-agent report (manifest diff 115 → 231, generator path, MCP verification
+outputs resolving SpectralOcean and WaveField without a server restart).
+
+## 7. Uncooked skeletal meshes (v510-514) are the next import gap; and a substitution
+
+The Animal Variety Pack (Fab 2dd7964c) downloads fine through `fab_import_asset` once the user's
+FabCLI session exists — 220 packages, 29 textures to 4096², 17 material instances, entitlement
+recognised. The six **skeletal** meshes produce no GLB ("the modern UE5 mesh converter produced
+no GLB"), so all ~150 ActorX PSA animations fail to bind at the 80% threshold — nothing exists
+to bind to. A lane is absorbing the user's `three-ueformat-loader` (parses UEFormat v10 skeletal
+LODs, skin weights, skeleton metadata from CUE4Parse `.uemodel` exports) into the MCP to close
+this. Until then the game ships Quaternius CC0 animals (fox, wolf, husky, stag, doe — rigged,
+12 clips each, all bound), which are stylised-low-poly and smaller than the real pack.
+
+Also recorded: Fab's own `isFree` flag is false for sponsored free listings whose every
+license priceTier prices 0 — the tiers are the truth, and both the normaliser and the
+free-download gate now read them.

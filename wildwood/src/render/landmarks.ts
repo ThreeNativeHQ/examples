@@ -60,11 +60,12 @@ function standingStone(materials: Materials, props: ILandmarkProps): Group {
   const group = new Group();
   const cliff = props.cliffs[0];
   if (cliff === undefined) throw new Error("No cliff species loaded for the standing stone.");
-  const slab = stone(cliff, 7.0);
+  const slab = stone(cliff, 5.2);
   // The pack's cliff meshes are wall formations: metres wide, a metre or two thick, low. Stood on
-  // its long edge (X up) the same mesh is a broken monolith instead of a fallen lintel.
+  // its long edge (X up) the same mesh is a broken monolith instead of a fallen lintel. Kept at
+  // five metres and sunk deep: at seven it read as a smooth pale egg looming over the path.
   slab.rotation.x = -Math.PI / 2;
-  slab.position.y = 2.2;
+  slab.position.y = 1.2;
   slab.rotation.z = 0.1;
   slab.rotation.y = -0.07;
   group.add(slab);

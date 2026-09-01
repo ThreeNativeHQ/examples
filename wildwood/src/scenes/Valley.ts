@@ -156,7 +156,10 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     this.#stoneMaps = stoneMaps;
     // The wood's fauna, from the Animal Variety pack: six animals placed away from water and
     // landmarks, each with its own idle/graze/wander/flee machine over the pack's real clips.
+    // `?noanimals` is the capture bisect hook: the pack's GLBs carry junk vertices far outside
+    // the body, and isolating whether those render is what this flag is for.
     console.info("TN_ANIMALS_SPAWN_START");
+    if (isWeb() && new URLSearchParams(window.location.search).has("noanimals") === false) {
     this.#animals = await spawnWildwoodAnimals({
       load: (path) => ctx.assets.model(`fab/${ANIMAL_LISTING}/raw/${path}`),
       ground: heightAt,
@@ -171,6 +174,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       ],
     });
     console.info(`TN_ANIMALS_LIVE:${String(this.#animals.animals.length)}`);
+    }
     // The stone species wear the scene's own rock maps: the importer could only bind their packed
     // height/AO/curvature data texture as a base colour, which glows radioactive under a gain.
     // `cliffrocks` is the diffuse the terrain's rock layer already uses, so every stone now
@@ -306,7 +310,10 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const pond = createPond(materials, props.rocks, flora.ferns, flora.shrubs, this.#wavesNormal);
     ctx.add(pond.water.mesh);
     ctx.add(pond.group);
-    for (const landmark of LANDMARKS) {
+    // `?nolandmarks` is the capture bisect hook: isolates whether a landmark prop is what a
+    // given frame's artifact is made of. Gameplay never sets it.
+    const skipLandmarks = isWeb() && new URLSearchParams(window.location.search).has("nolandmarks");
+    for (const landmark of skipLandmarks ? [] : LANDMARKS) {
       ctx.add(
         createLandmark(landmark.id, materials, props, landmark.x, heightAt(landmark.x, landmark.z), landmark.z),
       );

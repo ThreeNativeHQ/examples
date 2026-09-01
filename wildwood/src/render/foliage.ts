@@ -361,13 +361,9 @@ export function createFoliage(extent: number, clearing: number, sets: IFoliageSe
     { clearing: 0, count: 7_400, maxHeight: 20, maxSlope: 0.95, minHeight: 0.15, seed: 27_449 },
     extent,
   );
-  // Cliff faces: big rock slabs sown only where the ground is already steeper than soil holds and
-  // high enough to be the ridge wall — the pack's cliff meshes belong on the skyline, not in the
-  // meadow. A few dozen, sunk deep, at the scale the ridge needs to read as rock from the floor.
-  const cliffs = scatter(
-    { clearing: 26, count: 26, maxHeight: 40, maxSlope: 2.2, minHeight: 9, seed: 37_013 },
-    extent,
-  );
+  // The cliff meshes are NOT scattered. Sown on high steep ground they lean off slopes as dark
+  // prisms that loom over the trailhead; the ridge already reads as rock from the boulders, and
+  // the cliff faces' one good use is the standing stone they become in landmarks.ts.
 
   const placeUpright =
     (niche: INiche, species: ITreeSpecies, record: boolean) =>
@@ -445,10 +441,6 @@ export function createFoliage(extent: number, clearing: number, sets: IFoliageSe
   sown({
     castShadows: true, gain: [3.0, 2.9, 2.7], name: "rocks", normalizeTo: 1.2,
     points: boulders, recordTrunks: false, sink: 0.35, size: [0.3, 1.0], species: sets.rocks, wind: STILL,
-  });
-  sown({
-    castShadows: true, gain: [3.0, 2.9, 2.7], name: "cliff", normalizeTo: 7,
-    points: cliffs, recordTrunks: false, sink: 0.5, size: [0.9, 0.5], species: sets.cliffs, wind: STILL,
   });
 
   return {

@@ -95,6 +95,13 @@ export class Animal {
     // animal, not its outliers.
     const span = percentileSpan(model.scene);
     const scale = spec.length / Math.max(span, 1e-4);
+    console.info(`TN_ANIMALS_SCALE:${spec.id} span=${span.toFixed(2)} scale=${scale.toFixed(4)}`);
+
+    // The junk vertices are not just a measurement problem — they render. Skinned triangles
+    // whose vertices sit outside the animal's real bounds draw as colossal translucent slabs
+    // across the valley, because nothing in the skin weights pulls them onto the body. Strip
+    // every triangle that lives entirely outside the percentile box, once, at load.
+    stripJunkTriangles(clone);
 
     this.object = new Group();
     this.object.name = `animal-${spec.id}`;
@@ -343,4 +350,59 @@ function percentileSpan(root: Object3D): number {
     best = Math.max(best, high - low);
   }
   return best;
+}
+
+/**
+ * Remove every triangle with fewer than two vertices inside the 1st-99th-percentile box.
+ *
+ * The Quaternius GLBs carry a handful of junk triangles far outside the body (the fox reaches
+ * ±100 units on Z while the animal occupies the middle fifth). Skinned, their weights point at
+ * bones that never influence them, so they render as enormous translucent slabs hanging over
+ * whichever clearing the animal spawns in — the geometry equivalent of the outlier that also
+ * broke `percentileSpan`. A triangle with even one vertex inside the box survives: junk that
+ * close to the body is body.
+ */
+function stripJunkTriangles(root: Object3D): void {
+  const boxLow = [Infinity, Infinity, Infinity];
+  const boxHigh = [-Infinity, -Infinity, -Infinity];
+  const axisSamples: number[][] = [[], [], []];
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const position = object.geometry.getAttribute("position");
+    for (let index = 0; index < position.count; index += 1) {
+      const vertex = [position.getX(index), position.getY(index), position.getZ(index)];
+      for (let axis = 0; axis < 3; axis += 1) (axisSamples[axis] ?? []).push(vertex[axis] ?? 0);
+    }
+  });
+  for (let axis = 0; axis < 3; axis += 1) {
+    const values = [...(axisSamples[axis] ?? [])].sort((a, b) => a - b);
+    boxLow[axis] = values[Math.floor(values.length * 0.01)] ?? -Infinity;
+    boxHigh[axis] = values[Math.floor(values.length * 0.99)] ?? Infinity;
+  }
+  const [lowX = -Infinity, lowY = -Infinity, lowZ = -Infinity] = boxLow;
+  const [highX = Infinity, highY = Infinity, highZ = Infinity] = boxHigh;
+  const inside = (x: number, y: number, z: number): boolean =>
+    x >= lowX && x <= highX && y >= lowY && y <= highY && z >= lowZ && z <= highZ;
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const geometry = object.geometry;
+    const position = geometry.getAttribute("position");
+    const index = geometry.getIndex();
+    if (index === null) return;
+    const keep: number[] = [];
+    for (let triangle = 0; triangle < index.count; triangle += 3) {
+      const a = index.getX(triangle);
+      const b = index.getX(triangle + 1);
+      const c = index.getX(triangle + 2);
+      // Majority vote, not any-vertex: a triangle with one vertex on the body and two out at
+      // ±100 units still spans the whole sky. Fewer than two inside reads as junk.
+      const votes =
+        (inside(position.getX(a), position.getY(a), position.getZ(a)) ? 1 : 0) +
+        (inside(position.getX(b), position.getY(b), position.getZ(b)) ? 1 : 0) +
+        (inside(position.getX(c), position.getY(c), position.getZ(c)) ? 1 : 0);
+      if (votes >= 2) keep.push(a, b, c);
+    }
+    if (keep.length === index.count) return;
+    geometry.setIndex(keep);
+  });
 }
