@@ -9,7 +9,7 @@
 // margin. The shoreline is found, not assumed: the heightfield's noise moves the waterline in and
 // out by a metre or more around the nominal radius, so each rock's spot is bisected between the
 // flooded middle and the dry bank at build time.
-import { CylinderGeometry, Euler, Group, InstancedMesh, Matrix4, Mesh, type Texture, Quaternion, Vector2, Vector3 } from "three";
+import { CylinderGeometry, Euler, Group, InstancedMesh, Matrix4, Mesh, Quaternion, Vector2, Vector3 } from "three";
 import type { createMaterials } from "./materials.js";
 import { createWater, type IWater } from "./water.js";
 import { type ITreeSpecies, packSectionMaterial } from "./foliage.js";
@@ -57,12 +57,11 @@ export function createPond(
   rocks: readonly ITreeSpecies[],
   ferns: readonly ITreeSpecies[],
   nettles: readonly ITreeSpecies[],
-  wavesNormal?: Texture,
 ): { readonly group: Group; readonly water: IWater } {
   const group = new Group();
   group.name = "pond";
 
-  const water = createWater(new Vector2(POND.x, POND.z), POND.radius * 1.7, { wavesNormal });
+  const water = createWater(new Vector2(POND.x, POND.z), POND.radius * 1.7);
   group.add(water.mesh);
 
   // The rock ring. Sixteen stones close enough to read as a tended shore, every one a different

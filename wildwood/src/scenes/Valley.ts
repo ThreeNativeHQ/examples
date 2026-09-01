@@ -33,7 +33,7 @@ import {
   createTerrainMaterial,
   heightAt,
 } from "../render/terrain.js";
-import { createWater } from "../render/water.js";
+import { createWater, type IWater } from "../render/water.js";
 import { LANDMARKS, TRAILHEAD, nearestUnfound, withinReach } from "../world/landmarks.js";
 import type { GameState } from "../state.js";
 
@@ -108,8 +108,9 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
   #flora: IFoliageSets | undefined;
   #props: ILandmarkProps | undefined;
   #stoneMaps: ILandmarkMaps | undefined;
-  #wavesNormal: Texture | undefined;
   #animals: IWildwoodAnimals | undefined;
+  /** The two water surfaces, held only so their mirrored passes are released on exit. */
+  #waters: IWater[] = [];
 
   static override readonly initialState: GameState = {
     canInspect: false,
@@ -141,14 +142,13 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     // The packaged proof asset. It earns its place on the trailhead waymarker rather than parked
     // in the scene as a debug object, and the console marker below is what the desktop asset gate
     // greps for — keep both.
-    const [texture, model, ground, flora, props, stoneMaps, wavesNormal] = await Promise.all([
+    const [texture, model, ground, flora, props, stoneMaps] = await Promise.all([
       ctx.assets.texture("native-proof.png"),
       ctx.assets.model<{ scene: Group }>("native-proof.glb"),
       loadGround(ctx),
       loadFlora(ctx),
       loadLandmarkStone(ctx),
       loadStoneMaps(ctx),
-      ctx.assets.texture("landscape/waves_normal.jpg"),
     ]);
     this.#ground = ground;
     this.#flora = flora;
@@ -196,9 +196,6 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       rocks: props.rocks.map(restone),
       boughs: props.boughs,
     };
-    // A normal map is three signed numbers pretending to be a colour: it must not decode as sRGB.
-    wavesNormal.colorSpace = NoColorSpace;
-    this.#wavesNormal = wavesNormal;
     // A 16-pixel check filtered smoothly is a grey smear at banner size; nearest keeps the squares
     // square, which is what makes the waymarker legible from across the clearing.
     texture.magFilter = NearestFilter;
@@ -288,7 +285,8 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       type: "fixed",
     });
 
-    const water = createWater(new Vector2(LAKE.x, LAKE.z), LAKE.radius, { wavesNormal: this.#wavesNormal });
+    const water = createWater(new Vector2(LAKE.x, LAKE.z), LAKE.radius);
+    this.#waters.push(water);
     ctx.add(water.mesh);
 
     const flora = this.#flora;
@@ -307,7 +305,8 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const materials = createMaterials(this.#stoneMaps);
     // The pond, on the eastern walk between the standing stone and the charcoal ring: water, rock
     // ring, reeds, and the wet margin, all dressed from the same species the wood is built from.
-    const pond = createPond(materials, props.rocks, flora.ferns, flora.shrubs, this.#wavesNormal);
+    const pond = createPond(materials, props.rocks, flora.ferns, flora.shrubs);
+    this.#waters.push(pond.water);
     ctx.add(pond.water.mesh);
     ctx.add(pond.group);
     // `?nolandmarks` is the capture bisect hook: isolates whether a landmark prop is what a
@@ -413,6 +412,8 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     this.#releasePointer = undefined;
     this.#animals?.dispose();
     this.#animals = undefined;
+    for (const water of this.#waters) water.dispose();
+    this.#waters = [];
   }
 }
 
