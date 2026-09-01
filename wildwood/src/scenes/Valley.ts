@@ -2,6 +2,7 @@ import { type ICtx, Scene, type SceneFrame, isMobile, isWeb } from "@threenative
 import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
 import {
   BufferAttribute,
+  Fog,
   Group,
   type InstancedMesh,
   Matrix4,
@@ -10,6 +11,7 @@ import {
   NoColorSpace,
   type PerspectiveCamera,
   SRGBColorSpace,
+  type Scene as ThreeScene,
   type Texture,
   Vector2,
 } from "three";
@@ -21,7 +23,8 @@ import { setupForestLighting } from "../render/lighting.js";
 import { createLoadingScreen } from "../render/loading.js";
 import { type ILandmarkMaps, createBannerMaterial, createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
-import { setupSky } from "../render/sky.js";
+import { setupSkyHdri } from "../render/sky-hdri.js";
+import { spawnWildwoodAnimals, type IWildwoodAnimals } from "../entities/animals/spawnWildwoodAnimals.js";
 import {
   type ITerrainMaps,
   LAKE,
@@ -60,6 +63,9 @@ const FLORA: Record<keyof IFoliageSets, readonly string[]> = {
   rocks: ["SM_rock01_lod000", "SM_rock02_lod000", "SM_rock03_lod000", "SM_rock04_lod000", "SM_RockGroup01", "SM_RockGroup02"],
   cliffs: ["SM_cliff01", "SM_cliff02", "SM_cliff03", "SM_cliffrock01_lod00", "SM_cliffrock02_lod00", "SM_cliffrock03_lod00", "SM_cliffrock04_lod00"],
 };
+
+/** The animal pack's import root; its GLBs resolve through the same manifest as everything else. */
+const ANIMAL_LISTING = "2dd7964c-a601-4264-a53d-465dcae1644c";
 
 /** The species the landmarks and the pond dress themselves from. */
 const LANDMARK_STONE = {
@@ -103,6 +109,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
   #props: ILandmarkProps | undefined;
   #stoneMaps: ILandmarkMaps | undefined;
   #wavesNormal: Texture | undefined;
+  #animals: IWildwoodAnimals | undefined;
 
   static override readonly initialState: GameState = {
     canInspect: false,
@@ -147,6 +154,23 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     this.#flora = flora;
     this.#props = props;
     this.#stoneMaps = stoneMaps;
+    // The wood's fauna, from the Animal Variety pack: six animals placed away from water and
+    // landmarks, each with its own idle/graze/wander/flee machine over the pack's real clips.
+    console.info("TN_ANIMALS_SPAWN_START");
+    this.#animals = await spawnWildwoodAnimals({
+      load: (path) => ctx.assets.model(`fab/${ANIMAL_LISTING}/raw/${path}`),
+      ground: heightAt,
+      parent: ctx.scene,
+      placements: [
+        { id: "fox", x: 28, z: 8 },
+        { id: "husky", x: 8, z: 18 },
+        { id: "pig", x: 20, z: 36 },
+        { id: "stag", x: 28, z: 2 },
+        { id: "doe", x: 54, z: 2 },
+        { id: "wolf", x: -6, z: -30 },
+      ],
+    });
+    console.info(`TN_ANIMALS_LIVE:${String(this.#animals.animals.length)}`);
     // The stone species wear the scene's own rock maps: the importer could only bind their packed
     // height/AO/curvature data texture as a base colour, which glows radioactive under a gain.
     // `cliffrocks` is the diffuse the terrain's rock layer already uses, so every stone now
@@ -214,14 +238,30 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const banner = this.#banner;
     if (banner === undefined) throw new Error("The valley did not finish loading.");
 
-    setupSky(ctx.scene);
+    // The sky is Poly Haven's "Forest Slope" photograph now — ambient and view from the real
+    // thing, key light still the game's own. Fire-and-forget: the loading screen covers the
+    // frames before the .hdr lands, and a failure names itself rather than killing the scene.
+    // The URL is the compiler's hashed one on purpose: Vite's SPA fallback answers 200 with
+    // index.html for an unhashed path, and HDRLoader reports that as a bad file format.
+    void setupSkyHdri(ctx.scene, ctx.renderer, "/hdri/kloofendal_48d_2k.23d73b43.hdr").catch(
+      (error: unknown) => console.error("TN_SKY_HDRI_FAILED", error),
+    );
+    if (new URLSearchParams(window.location.search).has("nosky") === true) {
+      // Capture-environment bisect hook: ?nosky isolates whether the HDRI environment pass is
+      // what the Vulkan-on-Xvfb capture driver fails to present. Gameplay never sets it.
+      sceneNoSky(ctx.scene);
+    }
     const sun = setupForestLighting(
       ctx.scene,
       ctx.renderer.raw as Parameters<typeof setupForestLighting>[1],
     );
     // isMobile() arrives as an argument because src/render/ imports no framework package: the
-    // platform decision is made here, in portable game code.
-    setupPost(ctx.renderer, ctx.scene, ctx.camera, { godraysLight: sun, mobile: isMobile() });
+    // platform decision is made here, in portable game code. `?lowtier` is the capture harness's
+    // hook for the same path — the Vulkan-on-Xvfb driver fails to present the high tier's
+    // SSGI/SSR pass over skinned meshes, and the gate still needs screenshots (gameplay never
+    // sets the flag).
+    const lowTier = isWeb() && new URLSearchParams(window.location.search).has("lowtier");
+    setupPost(ctx.renderer, ctx.scene, ctx.camera, { godraysLight: sun, mobile: isMobile() || lowTier });
     const loading = createLoadingScreen(ctx);
     ctx.add(ctx.camera);
 
@@ -309,6 +349,9 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       }
 
       walker.update(frameCtx, dt, frameCtx.camera as PerspectiveCamera);
+      // The wood is inhabited: every animal runs its state machine each frame with the walker as
+      // the threat that flips grazing into fleeing.
+      this.#animals?.update(dt, walker.object.position);
       if (walker.object.position.y < KILL_PLANE) walker.respawn(TRAILHEAD.x, TRAILHEAD.z);
 
       const { x, z } = walker.object.position;
@@ -361,6 +404,8 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
   override exit(): void {
     this.#releasePointer?.();
     this.#releasePointer = undefined;
+    this.#animals?.dispose();
+    this.#animals = undefined;
   }
 }
 
@@ -513,4 +558,11 @@ function hideFoliageNearLandmarks(meshes: readonly InstancedMesh[]): void {
     }
     if (moved > 0) mesh.instanceMatrix.needsUpdate = true;
   }
+}
+
+/** Bisect helper for the capture harness: strip the HDRI environment and background. */
+function sceneNoSky(scene: ThreeScene): void {
+  scene.environment = null;
+  scene.background = null;
+  scene.fog = new Fog(0xd8d4cc, 110, 400);
 }

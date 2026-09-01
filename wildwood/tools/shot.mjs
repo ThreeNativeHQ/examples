@@ -37,9 +37,11 @@ page.on("console", (m) => {
 
 const shoot = async (name, at) => {
   const target = at === undefined ? url : `${url}${url.includes("?") ? "&" : "?"}spawn=${at}`;
-  await page.goto(target, { waitUntil: "load" });
-  // The valley builds ~11,000 instances and eight 1K textures; give it real time before judging.
-  await page.waitForTimeout(40000);
+  // networkidle, not a clock: the valley loads ~70 GLBs through the dev server, and every fixed
+  // wait this game ever tried screenshotted a half-loaded scene whose console still said loading.
+  await page.goto(target, { waitUntil: "networkidle", timeout: 180_000 });
+  // Then give the first frames time to draw: pipeline compilation lands after the last asset.
+  await page.waitForTimeout(8000);
   await page.screenshot({ path: `${out}/${name}.png` });
   console.log(`shot ${name}`);
 };

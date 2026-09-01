@@ -1,8 +1,9 @@
 import { AnimationPlayer, clipTrackBindings } from "@threenative/core";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import {
-  Box3,
+  BufferGeometry,
   MathUtils,
+  Mesh,
   Vector3,
   type AnimationClip,
   type Object3D,
@@ -86,9 +87,14 @@ export class Animal {
 
     // Normalise scale from the source's bind-pose bounds — the source, never the clone: a
     // SkeletonUtils clone measured before its first frame reports as a single point.
-    const bounds = new Box3().setFromObject(model.scene);
-    const span = Math.max(bounds.max.z - bounds.min.z, 1e-4);
-    const scale = spec.length / span;
+    //
+    // The span is a **percentile** spread, not a plain `Box3`: the pack's GLBs carry stray
+    // junk vertices (the fox measures ±100 units down Z while its body occupies the middle
+    // fifth), and a plain box divides the body length by the junk — a 0.7 m fox rendered as a
+    // 13 cm rat. Sampling positions and taking the 1st-99th percentile per axis reads the
+    // animal, not its outliers.
+    const span = percentileSpan(model.scene);
+    const scale = spec.length / Math.max(span, 1e-4);
 
     this.object = new Group();
     this.object.name = `animal-${spec.id}`;
@@ -309,4 +315,32 @@ class AnimalLookup {
     }
     return undefined;
   }
+}
+
+/**
+ * The animal's real span: the widest 1st-99th-percentile axis spread across every mesh.
+ *
+ * `Box3` measures outliers; this measures the animal. The pack's GLBs each carry a handful of
+ * junk vertices far outside the body (the fox spans ±100 on Z while its body fills the middle
+ * fifth), which once shrank a 0.7 m fox to the size of a rat.
+ */
+function percentileSpan(root: Object3D): number {
+  const samples: number[][] = [];
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const geometry: BufferGeometry = object.geometry;
+    const position = geometry.getAttribute("position");
+    for (let index = 0; index < position.count; index += 1) {
+      samples.push([position.getX(index), position.getY(index), position.getZ(index)]);
+    }
+  });
+  if (samples.length === 0) return 1;
+  let best = 1e-4;
+  for (let axis = 0; axis < 3; axis += 1) {
+    const values = samples.map((sample) => sample[axis] ?? 0).sort((a, b) => (a ?? 0) - (b ?? 0));
+    const low = values[Math.floor(values.length * 0.01)] ?? 0;
+    const high = values[Math.floor(values.length * 0.99)] ?? 0;
+    best = Math.max(best, high - low);
+  }
+  return best;
 }
