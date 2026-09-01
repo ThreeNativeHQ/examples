@@ -60,8 +60,20 @@ export function createWater(centre: Vector2, radius: number, options: IWaterOpti
   // decisions, and packing them together is how a shallows tint ends up controlling transparency.
   const depths = new Float32Array(vertexCount);
 
-  const shallow = new Color(palette.silt).lerp(new Color(palette.water), 0.45);
-  const deep = new Color(palette.water).multiplyScalar(0.6);
+  // Both ends of the ramp are pulled well down: under this scene's screen-space reflections a
+  // full-bright water plane mirrors the gained-up grass and blooms into radioactive lime, and a
+  // dark base keeps the same reflections reading as sky and treeline instead. Darkened here, in
+  // the bake — NOT as a `colorNode` on the material, which fights the vertex-colour path and
+  // renders the whole surface invisible.
+  // Both ends of the ramp are pulled well down: under this scene's screen-space reflections a
+  // full-bright water plane mirrors the gained-up grass and blooms into radioactive lime, and a
+  // dark base keeps the same reflections reading as sky and treeline instead. Darkened here, in
+  // the bake — NOT as a `colorNode` on the material, which fights the vertex-colour path and
+  // renders the whole surface invisible. The shallow end leans hard toward the water colour,
+  // because a bright silt floor seen through a translucent margin is what turned the pond into a
+  // glowing cream sheet.
+  const shallow = new Color(palette.silt).lerp(new Color(palette.water), 0.72).multiplyScalar(0.34);
+  const deep = new Color(palette.water).multiplyScalar(0.2);
   const colour = new Color();
 
   for (let ix = 0; ix < samples; ix += 1) {
@@ -114,10 +126,6 @@ export function createWater(centre: Vector2, radius: number, options: IWaterOpti
     transparent: true,
     vertexColors: true,
   });
-  // Darken the surface well below its vertex colour. Under this scene's screen-space reflections a
-  // full-bright water plane mirrors the gained-up grass and blooms into radioactive lime; a dark
-  // base keeps the same reflections reading as sky and treeline instead.
-  material.colorNode = attribute<"vec3">("color", "vec3").mul(float(0.38));
   // The generic is written out: `attribute()` infers its node type from the argument, which
   // widens to `string` and produces a node with none of the `.mul`/`.add` methods the ripple
   // below is built from.
@@ -129,9 +137,11 @@ export function createWater(centre: Vector2, radius: number, options: IWaterOpti
   const swellB = sin(positionLocal.x.mul(-0.35).add(positionLocal.z.mul(1.1)).add(time.mul(0.29)));
   const ripple = swellA.mul(0.035).add(swellB.mul(0.022)).mul(depth);
   material.positionNode = vec3(positionLocal.x, positionLocal.y.add(ripple), positionLocal.z);
-  // Clear at the margin, opaque over the deep. The floor keeps a sheen on the very edge so the
-  // waterline is still visible against wet silt of nearly the same colour.
-  material.opacityNode = depth.mul(float(0.82)).add(float(0.18));
+  // Clear at the very margin, then quickly honest: 40 cm of depth already reads as water, not as
+  // wet silt. The floor keeps a sheen on the edge so the waterline stays visible against silt of
+  // nearly the same colour, but a shallow pond whose floor shows through everywhere renders as a
+  // bright sheet, not as water.
+  material.opacityNode = depth.mul(float(1.4)).add(float(0.22)).min(float(0.97));
   // Ripple detail: the pack's own normal map, sampled twice at incommensurate scales and drifts,
   // so the specular never settles into one visible tiling. This is what turns a flat shaded disc
   // into water: the vertex waves move the silhouette, but these move the *light*. The close scale

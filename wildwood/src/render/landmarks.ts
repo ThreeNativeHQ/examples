@@ -55,15 +55,18 @@ function stone(species: ITreeSpecies, target: number): Group {
   return group;
 }
 
-/** A monolith: one weathered cliff mesh, leaning the way settled stone leans. */
+/** A monolith: one weathered cliff mesh stood on end, leaning the way settled stone leans. */
 function standingStone(materials: Materials, props: ILandmarkProps): Group {
   const group = new Group();
   const cliff = props.cliffs[0];
   if (cliff === undefined) throw new Error("No cliff species loaded for the standing stone.");
-  const slab = stone(cliff, 6.8);
-  slab.position.y = -0.4;
+  const slab = stone(cliff, 7.0);
+  // The pack's cliff meshes are wall formations: metres wide, a metre or two thick, low. Stood on
+  // its long edge (X up) the same mesh is a broken monolith instead of a fallen lintel.
+  slab.rotation.x = -Math.PI / 2;
+  slab.position.y = 2.2;
   slab.rotation.z = 0.1;
-  slab.rotation.x = -0.07;
+  slab.rotation.y = -0.07;
   group.add(slab);
 
   // Rubble at the foot, half-buried, so the stone emerges from the ground rather than resting on

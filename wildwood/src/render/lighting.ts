@@ -37,9 +37,9 @@ export function setupForestLighting(scene: Scene, renderer: ShadowRenderer): Dir
   // 0.85, not the 2.6 this had. A hemisphere light bright enough to lift the shadows also paints
   // every surface with its sky colour, and a blue sky colour turns an entire wood teal — which
   // reads as underwater, not as shade. Let the sun do the lifting and keep the fill quiet.
-  scene.add(new HemisphereLight(palette.skyFill, palette.bounce, 1.65));
+  scene.add(new HemisphereLight(palette.skyFill, palette.bounce, 1.2));
 
-  const key = new DirectionalLight(palette.accent, 7.4);
+  const key = new DirectionalLight(palette.accent, 4.0);
   // Low and from the east, so the ridge throws a long shadow across the valley and the trunks
   // have length. A sun overhead flattens a wood into a green carpet.
   key.position.set(-52, 46, -68);
@@ -70,7 +70,7 @@ export function setupForestLighting(scene: Scene, renderer: ShadowRenderer): Dir
   rim.position.set(48, 14, 58);
   scene.add(rim);
 
-  scene.add(new AmbientLight(palette.bounce, 0.42));
+  scene.add(new AmbientLight(palette.bounce, 0.3));
 
   return key;
 }

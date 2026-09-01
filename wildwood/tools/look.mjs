@@ -29,7 +29,7 @@ const WEBGPU_ARGS = [
 ];
 
 /** Milliseconds between load and the shot; scenes animate in over their first seconds. */
-const SETTLE_MS = 2500;
+const SETTLE_MS = 15000;
 
 function usage() {
   console.log("usage: node tools/look.mjs [--webgpu] [--vantage name=path ...]");

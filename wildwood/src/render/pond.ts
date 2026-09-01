@@ -77,7 +77,7 @@ export function createPond(
     const species = rocks[index % rocks.length];
     if (species === undefined) return;
     const stone = speciesGroup(species);
-    const scale = 0.32 + hash2(index, 3, 227) * 0.3;
+    const scale = 0.55 + hash2(index, 3, 227) * 0.55;
     stone.scale.setScalar(scale * (1 / species.maxDim));
     stone.position.set(
       POND.x + Math.cos(spot.angle) * spot.radius,
@@ -98,14 +98,14 @@ export function createPond(
   const reedPosition = new Vector3();
   const reedQuat = new Quaternion();
   const reedScale = new Vector3();
-  const reedShape = new CylinderGeometry(0.013, 0.03, 1.5, 3);
-  const reeds = new InstancedMesh(reedShape, materials.reed, 46);
-  for (let index = 0; index < 46; index += 1) {
+  const reedShape = new CylinderGeometry(0.016, 0.04, 1.5, 4);
+  const reeds = new InstancedMesh(reedShape, materials.reed, 130);
+  for (let index = 0; index < 130; index += 1) {
     const angle = hash2(index, 7, 241) * Math.PI * 2;
-    const radius = shorelineRadius(angle) * (0.62 + hash2(index, 8, 251) * 0.3);
+    const radius = shorelineRadius(angle) * (0.55 + hash2(index, 8, 251) * 0.38);
     const x = POND.x + Math.cos(angle) * radius;
     const z = POND.z + Math.sin(angle) * radius;
-    const height = 1.1 + hash2(index, 9, 257) * 0.9;
+    const height = 0.65 + hash2(index, 9, 257) * 0.6;
     reedPosition.set(x, surfaceAt(x, z) + height * 0.4, z);
     reedQuat.setFromEuler(new Euler((hash2(index, 10, 263) - 0.5) * 0.3, hash2(index, 11, 269) * 6.283, (hash2(index, 12, 271) - 0.5) * 0.3));
     reedScale.set(1, height / 1.5, 1);

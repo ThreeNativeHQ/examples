@@ -46,8 +46,9 @@ export function createMaterials(maps: ILandmarkMaps = {}) {
       roughness: 0.6,
     }),
     // Reeds at the water's edge. Unlit: they stand against bright water and a standard material
-    // there goes to silhouette anyway, so the flat colour costs nothing and reads cleaner.
-    reed: new MeshBasicMaterial({ color: new Color(palette.blade).multiplyScalar(0.8), side: DoubleSide }),
+    // there goes to silhouette anyway, so the flat colour costs nothing and reads cleaner. Pulled
+    // down to a dull olive — the palette's blade green at full strength renders as neon straws.
+    reed: new MeshBasicMaterial({ color: new Color(palette.blade).multiplyScalar(0.42), side: DoubleSide }),
   };
 }
 

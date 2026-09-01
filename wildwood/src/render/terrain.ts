@@ -93,7 +93,7 @@ const LAKE = { x: -46, z: 42, radius: 34 } as const;
  * shore arrives at the waterline at a shallow angle, which is what makes a pond edge read as
  * walked-to rather than as a hole.
  */
-export const POND = { x: 44, z: 22, radius: 14, floor: -1.9 } as const;
+export const POND = { x: 44, z: 22, radius: 14, floor: -2.9 } as const;
 
 /** The ridge: a wall of rock along the north edge, and the only place with a view. */
 const RIDGE = { z: -64, height: 17, falloff: 62 } as const;
@@ -172,8 +172,9 @@ function layerWeights(height: number, slope: number, moisture: number): [number,
   // Slope draws rock, with no help from anyone. This is the line the reference is famous for.
   const rock = smoothstep(ROCK_SLOPE, ROCK_SLOPE + 0.45, slope);
 
-  // The wet margin reads as bare silt, which this pack spells "dirt".
-  const margin = 1 - smoothstep(0.15, 1.8, Math.abs(height - WATER_LEVEL));
+  // The wet margin reads as bare silt, which this pack spells "dirt". Narrow band: a beach this
+  // wide around every pond read as a bare ring the scatter was forbidden to fill.
+  const margin = 1 - smoothstep(0.15, 0.9, Math.abs(height - WATER_LEVEL));
 
   const soil = Math.max(0, 1 - rock);
   const dry = Math.min(1, dirt + margin);
@@ -398,21 +399,25 @@ export function createTerrainMaterial(maps: ITerrainMaps): MeshStandardNodeMater
   const tint = attribute<"vec3">("color", "vec3");
 
   const blend = (a: Texture, b: Texture, c: Texture, d: Texture) =>
-    texture(a, uv).mul(w.x).add(texture(b, uv).mul(w.y)).add(texture(c, uv).mul(w.z)).add(texture(d, uv).mul(w.w));
+    texture(a, uv).mul(w.x).add(texture(b, uv).mul(w.y))
+      .add(texture(c, uv).mul(w.z).mul(float(0.8))).add(texture(d, uv).mul(w.w).mul(float(0.55)));
 
   const detail = blend(maps.grassDiffuse, maps.litterDiffuse, maps.rockDiffuse, maps.dirtDiffuse);
   // The same four layers again at a far larger scale, and the two multiplied. One tiling texture
   // repeats visibly every couple of metres; the same texture times a slow copy of itself repeats
-  // at the lowest common multiple of the two, which is far past the fog.
+  // at the lowest common multiple of the two, which is far past the fog. Two layers are pulled
+  // down in both passes, both measured against the grass: rock is 1.8x brighter in the pack and
+  // every pond bank crosses the slope threshold; dirt carries pure-white texels that clip to a
+  // white-hot sheen under the gain.
   const macro = texture(maps.grassDiffuse, uvMacro).mul(w.x)
     .add(texture(maps.litterDiffuse, uvMacro).mul(w.y))
-    .add(texture(maps.rockDiffuse, uvMacro).mul(w.z))
-    .add(texture(maps.dirtDiffuse, uvMacro).mul(w.w));
+    .add(texture(maps.rockDiffuse, uvMacro).mul(w.z).mul(float(0.8)))
+    .add(texture(maps.dirtDiffuse, uvMacro).mul(w.w).mul(float(0.55)));
 
   // The pack's maps are authored for Unreal's exposure and read very dark under this scene's
   // tonemapper. The gain is a look decision, made once, here — not baked into the files, so the
   // imported textures stay byte-identical to what the pack shipped.
-  material.colorNode = detail.rgb.mul(macro.rgb.add(float(0.62))).mul(tint).mul(float(9.4));
+  material.colorNode = detail.rgb.mul(macro.rgb.add(float(0.62))).mul(tint).mul(float(6.5));
 
   return material;
 }

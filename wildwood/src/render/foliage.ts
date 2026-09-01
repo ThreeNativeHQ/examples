@@ -34,7 +34,7 @@ import {
   type Texture,
 } from "three";
 import { MeshStandardNodeMaterial } from "three/webgpu";
-import { float, instanceIndex, positionLocal, sin, texture, time, uv, vec3 } from "three/tsl";
+import { float, instanceIndex, positionGeometry, positionLocal, sin, texture, time, uv, vec3 } from "three/tsl";
 import { hash2, slopeAt, surfaceAt, WATER_LEVEL } from "./terrain.js";
 
 /**
@@ -239,11 +239,18 @@ function applyWind(
   const gust = sin(time.mul(speed).add(phase))
     .mul(0.82)
     .add(sin(time.mul(speed * 1.73).add(phase.mul(1.7))).mul(0.18));
+  // The lift reads **`positionGeometry`**, not `positionLocal`. This is the one trap in the file:
+  // for an InstancedMesh the pipeline multiplies the instance matrix into `positionLocal` BEFORE
+  // the material's `positionNode` runs, so `positionLocal.y` up here is the plant's height *in the
+  // world* — and lifting on it shoves the base around as much as the crown, which reads as the
+  // whole plant hovering. `positionGeometry` is the raw attribute: zero at the root, so the base
+  // is pinned and only the crown bends. The displacement itself is still applied to
+  // `positionLocal`, in instance space, which for yaw-only placements is world-aligned anyway.
   // `float(0)` and `float(stiffness)`, not `0` and `stiffness`. A bare JS number reaches the
   // generated GLSL as an int literal, and `max(float, int)` has no overload — the shader fails to
   // compile and the whole material silently falls back, which on screen looks like the wind simply
   // not working rather than like an error.
-  const lift = positionLocal.y.max(float(0)).pow(float(stiffness));
+  const lift = positionGeometry.y.max(float(0)).pow(float(stiffness));
   const bend = gust.mul(lift).mul(float(strength));
   material.positionNode = vec3(
     positionLocal.x.add(bend),

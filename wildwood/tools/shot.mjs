@@ -39,7 +39,7 @@ const shoot = async (name, at) => {
   const target = at === undefined ? url : `${url}${url.includes("?") ? "&" : "?"}spawn=${at}`;
   await page.goto(target, { waitUntil: "load" });
   // The valley builds ~11,000 instances and eight 1K textures; give it real time before judging.
-  await page.waitForTimeout(9000);
+  await page.waitForTimeout(40000);
   await page.screenshot({ path: `${out}/${name}.png` });
   console.log(`shot ${name}`);
 };
