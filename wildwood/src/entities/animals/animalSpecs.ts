@@ -3,9 +3,15 @@
  *
  * Every number here is a look or a feel decision, so it lives in the game and not in any shared
  * helper: the entity machinery (`Animal.ts`) reads a spec and would run a dragon or a duck
- * unchanged. Sizes are real-world, because the GLBs arrive at wildly different scales (the fox
- * is authored nearly six units long) and normalising by the model's own bounds is what keeps a
- * fox smaller than a stag without anyone hand-tuning per-file scale factors.
+ * unchanged. Sizes are real-world, because the GLBs arrive at wildly different scales and
+ * normalising by the model's own world-space bounds is what keeps a fox smaller than a stag
+ * without anyone hand-tuning per-file scale factors. `length` is the full nose-to-tail-tip
+ * extent, which is what the world-space span measures — a body-only number normalises the
+ * animal to half size.
+ *
+ * These are the PROTOFACTOR Animal Variety Pack rigs (Fab 2dd7964c), imported with their own
+ * ActorX clips; the clip names below are the pack's, and `Animal` audits at load that each one
+ * actually binds.
  */
 
 /** The clips an animal's state machine needs, named by what they mean, not what they are called. */
@@ -24,34 +30,84 @@ export interface AnimalClipMap {
   readonly jump: string;
 }
 
-const CANINE_CLIPS: AnimalClipMap = {
-  idle: "Idle",
-  idleAlt: "Idle_2",
-  alert: "Idle_2_HeadLow",
-  graze: "Eating",
-  walk: "Walk",
-  run: "Gallop",
-  attack: "Attack",
-  die: "Death",
-  hitReact: "Idle_HitReact_Left",
-  jump: "Jump_ToIdle",
+/**
+ * Clip names exactly as the importer wrote them: the ActorX package name, `ANIM_<Animal>_` prefix
+ * and all. The state machine loops idle/graze/walk/run; the one-shot clips play through. WOLF
+ * spreads FOX and DOE spreads STAG — same rig family, same clip tails, different prefix.
+ */
+const FOX_CLIPS: AnimalClipMap = {
+  idle: "ANIM_Fox_IdleBreathe",
+  idleAlt: "ANIM_Fox_IdleLookAround",
+  alert: "ANIM_Fox_IdleAggressive",
+  graze: "ANIM_Fox_IdleLookAround",
+  walk: "ANIM_Fox_Walk",
+  run: "ANIM_Fox_Run",
+  attack: "ANIM_Fox_Bite",
+  die: "ANIM_Fox_Death",
+  hitReact: "ANIM_Fox_GetHitFront",
+  jump: "ANIM_Fox_JumpBite",
 };
 
-/** The deer share a rig and a clip list, differing from the canines in two names. */
-const DEER_CLIPS: AnimalClipMap = {
-  ...CANINE_CLIPS,
-  alert: "Idle_Headlow",
-  attack: "Attack_Headbutt",
-  jump: "Jump_toIdle",
+const WOLF_CLIPS: AnimalClipMap = {
+  ...FOX_CLIPS,
+  graze: "ANIM_Wolf_Howl",
+  hitReact: "ANIM_Wolf_GetHitLeft",
+  jump: "ANIM_Wolf_JumpBite",
+};
+
+const STAG_CLIPS: AnimalClipMap = {
+  idle: "ANIM_DeerStag_IdleBreathe",
+  idleAlt: "ANIM_DeerStag_IdleLookAround",
+  alert: "ANIM_DeerStag_IdleLookAround",
+  graze: "ANIM_DeerStag_IdleGraze",
+  walk: "ANIM_DeerStag_Walk",
+  run: "ANIM_DeerStag_Run",
+  attack: "ANIM_DeerStag_AntlersAttack",
+  die: "ANIM_DeerStag_Death",
+  hitReact: "ANIM_DeerStag_GetHit",
+  jump: "ANIM_DeerStag_AntlersComboAttack",
+};
+
+const DOE_CLIPS: AnimalClipMap = {
+  ...STAG_CLIPS,
+  attack: "ANIM_DeerDoe_GrazeOnce",
+  jump: "ANIM_DeerDoe_WalkGraze",
+};
+
+const PIG_CLIPS: AnimalClipMap = {
+  idle: "ANIM_Pig_IdleBreathe",
+  idleAlt: "ANIM_Pig_IdleLookAround",
+  alert: "ANIM_Pig_IdleLookAround",
+  graze: "ANIM_Pig_Chew",
+  walk: "ANIM_Pig_Walk",
+  run: "ANIM_Pig_Run",
+  attack: "ANIM_Pig_attack",
+  die: "ANIM_Pig_Death",
+  hitReact: "ANIM_Pig_GetHit",
+  jump: "ANIM_Pig_JumpAttack",
+};
+
+const CROW_CLIPS: AnimalClipMap = {
+  idle: "ANIM_Crow_IdleLookAround",
+  idleAlt: "ANIM_Crow_IdleScratchWing",
+  alert: "ANIM_Crow_IdleLookAround",
+  graze: "ANIM_Crow_EatSomething",
+  walk: "ANIM_Crow_Walk",
+  run: "ANIM_Crow_Hop",
+  attack: "ANIM_Crow_FlyingAttack",
+  die: "ANIM_Crow_DeathGrounded",
+  hitReact: "ANIM_Crow_DeathHitTheGround",
+  jump: "ANIM_Crow_TakeOff",
 };
 
 export interface AnimalSpec {
-  /** Stable id, also the GLB file stem. */
+  /** Stable id used by placements, the HUD, and the DOM. */
   readonly id: string;
+  /** The GLB file stem in the pack's import output (`SK_Fox`, not the species id). */
+  readonly glb: string;
   readonly label: string;
   /**
-   * Nose-to-tail body length in metres; the loaded model is normalised to this. The brief's
-   * stag is "1.5 m at the head", which a red deer stag of ~1.9 m body length stands to.
+   * Full nose-to-tail body length in metres; the loaded model is normalised to this.
    */
   readonly length: number;
   readonly clips: AnimalClipMap;
@@ -72,9 +128,10 @@ export interface AnimalSpec {
 export const ANIMAL_SPECS: readonly AnimalSpec[] = [
   {
     id: "fox",
+    glb: "SK_Fox",
     label: "Fox",
     length: 1.05,
-    clips: CANINE_CLIPS,
+    clips: FOX_CLIPS,
     walkSpeed: 1.3,
     runSpeed: 8,
     fleeRadius: 7,
@@ -82,29 +139,21 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
   },
   {
     id: "wolf",
+    glb: "SK_Wolf",
     label: "Wolf",
     length: 1.55,
-    clips: CANINE_CLIPS,
+    clips: WOLF_CLIPS,
     walkSpeed: 1.5,
     runSpeed: 10,
     fleeRadius: 5,
     yawOffset: 0,
   },
   {
-    id: "husky",
-    label: "Husky",
-    length: 1.4,
-    clips: CANINE_CLIPS,
-    walkSpeed: 1.5,
-    runSpeed: 9,
-    fleeRadius: 4,
-    yawOffset: 0,
-  },
-  {
     id: "stag",
+    glb: "SK_DeerStag",
     label: "Stag",
-    length: 1.9,
-    clips: DEER_CLIPS,
+    length: 2.1,
+    clips: STAG_CLIPS,
     walkSpeed: 1.3,
     runSpeed: 12,
     fleeRadius: 10,
@@ -112,12 +161,35 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
   },
   {
     id: "doe",
+    glb: "SK_DeerDoe",
     label: "Doe",
-    length: 1.7,
-    clips: DEER_CLIPS,
+    length: 1.8,
+    clips: DOE_CLIPS,
     walkSpeed: 1.2,
     runSpeed: 11,
     fleeRadius: 11,
+    yawOffset: 0,
+  },
+  {
+    id: "pig",
+    glb: "SK_Pig",
+    label: "Pig",
+    length: 1.5,
+    clips: PIG_CLIPS,
+    walkSpeed: 1.1,
+    runSpeed: 7,
+    fleeRadius: 6,
+    yawOffset: 0,
+  },
+  {
+    id: "crow",
+    glb: "SK_Crow",
+    label: "Crow",
+    length: 0.5,
+    clips: CROW_CLIPS,
+    walkSpeed: 0.6,
+    runSpeed: 2.5,
+    fleeRadius: 5,
     yawOffset: 0,
   },
 ];

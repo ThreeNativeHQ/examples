@@ -69,9 +69,9 @@ export async function spawnWildwoodAnimals(options: ISpawnAnimalsOptions): Promi
     }
     let model = models.get(spec.id);
     if (model === undefined) {
-      model = await options.load(`${spec.id}.glb`);
+      model = await options.load(`${spec.glb}.glb`);
       models.set(spec.id, model);
-      log(`[animals] loaded ${spec.id}.glb with ${model.animations.length} clips`);
+      log(`[animals] loaded ${spec.glb}.glb with ${model.animations.length} clips`);
     }
     const animal = new Animal(spec, model, {
       ground: options.ground,

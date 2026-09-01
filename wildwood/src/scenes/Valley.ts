@@ -161,15 +161,16 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     console.info("TN_ANIMALS_SPAWN_START");
     if (isWeb() && new URLSearchParams(window.location.search).has("noanimals") === false) {
     this.#animals = await spawnWildwoodAnimals({
-      load: (path) => ctx.assets.model(`fab/${ANIMAL_LISTING}/raw/${path}`),
+      load: (path) => ctx.assets.model(`fab/${ANIMAL_LISTING}/ue/Models/${path}`),
       ground: heightAt,
       parent: ctx.scene,
       placements: [
         { id: "fox", x: 28, z: 8 },
-        { id: "husky", x: 8, z: 18 },
         { id: "stag", x: 28, z: 2 },
         { id: "doe", x: 54, z: 2 },
         { id: "wolf", x: -6, z: -30 },
+        { id: "pig", x: 20, z: 36 },
+        { id: "crow", x: 14, z: 26 },
       ],
     });
     console.info(`TN_ANIMALS_LIVE:${String(this.#animals.animals.length)}`);
