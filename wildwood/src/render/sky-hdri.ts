@@ -29,7 +29,7 @@ import { palette } from "./palette.js";
  * than the scene it lights, and under ACES at exposure ~1.24 it blows the frame out. 0.5 is a
  * conservative starting point — raise it until the ambient matches, watching the shadow floor.
  */
-const DEFAULT_ENVIRONMENT_INTENSITY = 0.5;
+const DEFAULT_ENVIRONMENT_INTENSITY = 0.34;
 
 /** The sky renders at full strength: what the photograph shows is what you see. */
 const DEFAULT_BACKGROUND_INTENSITY = 1;
@@ -93,7 +93,7 @@ export async function setupSkyHdri(
   if (options.fog === false) {
     scene.fog = null;
   } else {
-    const fog = options.fog ?? { color: palette.fog, near: 110, far: 400 };
+    const fog = options.fog ?? { color: palette.fog, near: 150, far: 430 };
     scene.fog = new Fog(fog.color, fog.near, fog.far);
   }
 
