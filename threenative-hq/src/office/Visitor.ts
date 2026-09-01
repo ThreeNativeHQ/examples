@@ -12,6 +12,23 @@ const SPRINT_SPEED = 5.4;
 /** Radians per unit of relative pointer motion. */
 const LOOK_SENSITIVITY = 0.0016;
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
+/** The most the view may swing in one frame, in radians. */
+const MAX_LOOK_STEP = 0.25;
+
+function clamp(value: number, limit: number): number {
+  return Math.max(-limit, Math.min(limit, value));
+}
+
+/**
+ * Whether relative look should be believed.
+ *
+ * On the web that means the pointer is locked. Everywhere else the platform delivers relative
+ * motion because a stick or a touch drag produced it, and there is nothing to capture.
+ */
+function lookIsCaptured(): boolean {
+  if (!isWeb() || typeof document === "undefined") return true;
+  return document.pointerLockElement !== null;
+}
 
 /**
  * You, walking around your own office.
@@ -47,11 +64,19 @@ export class Visitor {
 
   /** Advance the body from input and put the camera on its shoulders. */
   update(ctx: GameCtx, dt: number, camera: PerspectiveCamera): void {
-    const look = ctx.input.vector("look");
-    this.#yaw -= look.x * LOOK_SENSITIVITY;
-    // Positive look.y is upward pointer motion on every platform the framework normalises, so the
-    // sign here is the only place "inverted mouse" would live.
-    this.#pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.#pitch + look.y * LOOK_SENSITIVITY));
+    // Relative look is only meaningful while the pointer is captured. Without this, moving the
+    // mouse across the page to reach a button swings the view, and one click anywhere lands the
+    // camera facing a wall — the pointer's absolute jump arrives as a huge relative delta.
+    if (lookIsCaptured()) {
+      const look = ctx.input.vector("look");
+      // A single frame may deliver a large jump; a whole turn from one event is never intended.
+      const yawDelta = clamp(look.x * LOOK_SENSITIVITY, MAX_LOOK_STEP);
+      const pitchDelta = clamp(look.y * LOOK_SENSITIVITY, MAX_LOOK_STEP);
+      this.#yaw -= yawDelta;
+      // Positive look.y is upward pointer motion on every platform the framework normalises, so
+      // the sign here is the only place "inverted mouse" would live.
+      this.#pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.#pitch + pitchDelta));
+    }
 
     const move = ctx.input.vector("move");
     const speed = ctx.input.pressed("sprint") ? SPRINT_SPEED : WALK_SPEED;
