@@ -310,7 +310,9 @@ function placeDesk(index: number): { group: Group; desk: IDeskAnchor } {
 
   const screen = new Mesh(
     new BoxGeometry(0.62, 0.36, 0.03),
-    new MeshStandardMaterial({ color: office.screenOff, roughness: 0.3, metalness: 0.1 }),
+    // Per desk, deliberately: one shared material would light the whole floor when one session
+    // starts working.
+    new MeshStandardMaterial({ color: office.screenOff, metalness: 0.1, roughness: 0.3 }),
   );
   screen.position.set(0, DESK_HEIGHT + 0.28, -0.24);
   group.add(screen);

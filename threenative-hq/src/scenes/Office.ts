@@ -1,7 +1,7 @@
 import { type ICtx, Scene, type SceneFrame, isMobile } from "@threenative/core";
 import type { IPhysicsContext } from "@threenative/physics";
 import type { AnimationClip, Group, PerspectiveCamera } from "three";
-import { Vector3 } from "three";
+import { Color, Mesh, MeshStandardMaterial, Vector3 } from "three";
 import { BridgeClient } from "../office/bridge-client.js";
 import { Worker } from "../office/Worker.js";
 import { assignDesks, workerStateFor } from "../office/floor.js";
@@ -83,8 +83,8 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     const camera = ctx.camera as PerspectiveCamera;
     // Framing after the reference: eye height, off to one side, looking down the desk rows so the
     // slat wall fills the background and the glass throws the far edge of the floor into light.
-    camera.position.set(-14.6, 1.68, 7.4);
-    camera.lookAt(new Vector3(-1.2, 1.05, -3.4));
+    camera.position.set(-13.4, 1.55, 4.6);
+    camera.lookAt(new Vector3(-3.4, 1.0, -4.2));
 
     const bridge = new BridgeClient();
     const workers = new Map<string, Worker>();
@@ -124,6 +124,9 @@ export class Office extends Scene<GameState, IPhysicsContext> {
         const anchor = worker.standing ? desk.stand : desk.seat;
         worker.object.position.copy(anchor);
         worker.object.rotation.y = desk.facing;
+        // A working session lights its own monitor. It is the cheapest way to read the floor at a
+        // glance — a room of dark screens with three lit ones says where the work is.
+        setScreen(desk.screen, state === "working" || state === "thinking");
       }
 
       // Departures: a worker whose session is gone from the snapshot leaves the floor entirely.
@@ -158,6 +161,21 @@ export class Office extends Scene<GameState, IPhysicsContext> {
       if (changed) frameCtx.state.set(next);
     };
   }
+}
+
+const SCREEN_ON = new Color(0x9fd4e8);
+const SCREEN_OFF = new Color(0x14161a);
+
+/** Light or darken one desk's monitor. The material is the desk's own, cloned by `createOffice`. */
+function setScreen(screen: Mesh, lit: boolean): void {
+  const material = screen.material;
+  if (!(material instanceof MeshStandardMaterial)) return;
+  const wanted = lit ? SCREEN_ON : SCREEN_OFF;
+  if (material.emissive.equals(wanted)) return;
+  material.emissive.copy(wanted);
+  material.emissiveIntensity = lit ? 1.4 : 0;
+  material.color.copy(lit ? SCREEN_ON : SCREEN_OFF);
+  material.needsUpdate = true;
 }
 
 /** Entity ids are how a playtest names a worker, so they must be stable and readable. */
