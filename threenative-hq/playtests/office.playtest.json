@@ -25,6 +25,19 @@
       "label": "settle",
       "waitTicks": 120,
       "release": true
+    },
+    {
+      "kind": "click",
+      "label": "inspect-a-worker",
+      "at": {
+        "entity": "worker-claude:103"
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "card-opens",
+      "waitTicks": 60,
+      "release": true
     }
   ],
   "assert": {
@@ -56,6 +69,12 @@
         "id": "state",
         "path": "focusProject",
         "equals": "rpg-api",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "selectedProject",
+        "equals": "threenative-engine",
         "changed": true
       }
     ]

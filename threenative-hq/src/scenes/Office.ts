@@ -30,6 +30,12 @@ export class Office extends Scene<GameState, IPhysicsContext> {
     focusProject: "",
     focusState: "none",
     officeReady: false,
+    selectedHost: "",
+    selectedId: "",
+    selectedProject: "",
+    selectedSource: "",
+    selectedState: "",
+    selectedTool: "",
     paused: false,
     uiReady: false,
     workerCount: 0,
@@ -88,6 +94,14 @@ export class Office extends Scene<GameState, IPhysicsContext> {
 
     const bridge = new BridgeClient();
     const workers = new Map<string, Worker>();
+    // Clicking a worker asks "what is this one doing", so the answer is the session's own summary
+    // — repository, host, state, last tool. Never a prompt: the bridge does not carry one, and the
+    // office is a wall display.
+    let selectedId = "";
+    // Clicking the floor closes the card, which is the only way to dismiss it without a button.
+    ctx.pointer.on(room.floor, "tapped", () => {
+      selectedId = "";
+    });
     let seating = new Map<string, number>();
     let arrivals = 0;
     let departures = 0;
@@ -116,6 +130,12 @@ export class Office extends Scene<GameState, IPhysicsContext> {
           frameCtx.entities.add(entityId(session.id), worker);
           workers.set(session.id, worker);
           arrivals += 1;
+          const clicked = session.id;
+          for (const pick of worker.picks) {
+            frameCtx.pointer.on(pick, "tapped", () => {
+              selectedId = selectedId === clicked ? "" : clicked;
+            });
+          }
         }
         const state = workerStateFor(session);
         if (state === "blocked") blockedSeen = true;
@@ -142,6 +162,8 @@ export class Office extends Scene<GameState, IPhysicsContext> {
 
       for (const worker of workers.values()) worker.update(dt);
 
+      if (selectedId !== "" && !workers.has(selectedId)) selectedId = "";
+      const selected = sessions.find((session) => session.id === selectedId);
       const focus = sessions[0];
       const focusWorker = focus === undefined ? undefined : workers.get(focus.id);
       const next = {
@@ -152,6 +174,12 @@ export class Office extends Scene<GameState, IPhysicsContext> {
         focusClip: focusWorker?.clip ?? "",
         focusProject: focus?.project ?? "",
         focusState: focusWorker?.state ?? ("none" as const),
+        selectedHost: selected?.host ?? "",
+        selectedId: selected?.id ?? "",
+        selectedProject: selected?.project ?? "",
+        selectedSource: selected?.source ?? "",
+        selectedState: selected?.state ?? "",
+        selectedTool: selected?.tool ?? "",
         workerCount: workers.size,
       };
       const current = frameCtx.state.getState();

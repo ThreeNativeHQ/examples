@@ -19,6 +19,15 @@ export type GameState = {
   focusClip: string;
   /** The project that worker is working in. */
   focusProject: string;
+  /** The session whose worker was last clicked, or "" when the card is closed. */
+  selectedId: string;
+  /** That session's repository, host, state and last tool — never anything it typed. */
+  selectedProject: string;
+  selectedHost: string;
+  selectedState: string;
+  selectedTool: string;
+  /** Which lane produced that session: a host hook, the process table, or a transcript. */
+  selectedSource: string;
   /** True once the office scene has built its room. */
   officeReady: boolean;
   /** Set from the UI's pause and resume intents, and read back by the menu. */

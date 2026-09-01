@@ -39,13 +39,28 @@ The game now dedupes by name before constructing the player (`src/scenes/Office.
 game combining two clip sources will have to write. Either the player should take the first
 occurrence and report the drop, or there should be a named helper for merging clip sets.
 
-## 4. No framework way to instance one skinned mesh many times
+## 4. `ctx.pointer.on` cannot be given a loaded model, and a skinned mesh does not answer it
+
+Two separate walls, one symptom: nothing is ever clickable.
+
+`pointer.on(object, ...)` tests the object it was handed and does not walk children. Every model
+that comes out of `ctx.assets.model` is a `Group`, so the obvious call registers something with no
+geometry and no event ever fires. Registering the `SkinnedMesh` underneath does not fix it either —
+under the BVH-patched raycaster it returns no hit where a static mesh in the same place does.
+
+The game now gives each worker an invisible box proxy (`src/office/Worker.ts`) and registers that.
+It is the right answer for hit-target size anyway, but every game that wants a clickable character
+will rediscover both walls first. The capability's own example — `ctx.pointer.on(tile, "tapped",
+…)` — is a static mesh, and grep finds **no live caller of `pointer.on` anywhere in the engine**:
+only the capability manifest, the `@example`, and six templates' AGENTS tables.
+
+## 5. No framework way to instance one skinned mesh many times
 
 The office needs sixteen copies of one rigged mannequin. That is
 `three/examples/jsm/utils/SkeletonUtils.js`'s `clone`, imported by hand in `src/office/Worker.ts`.
 It is not a look decision and every crowd, enemy wave and NPC set needs it.
 
-## 5. A playtest scenario has no wall-clock wait, and ticks run far faster than real time
+## 6. A playtest scenario has no wall-clock wait, and ticks run far faster than real time
 
 A scenario that reads as fifteen seconds of waiting completes in about one and a half. Anything the
 proof must synchronise with that is *not* driven by ticks — here, a scripted bridge on the other
@@ -54,7 +69,7 @@ by having the office send a viewer heartbeat and the fixture advance on heartbea
 (`tools/office-bridge/fixture.ts`). A `waitMs` step, or a documented tick-to-wall-clock contract,
 would remove the workaround.
 
-## 6. `warmupFrames` consumes the boot transition, so boot invariants can only be waived
+## 7. `warmupFrames` consumes the boot transition, so boot invariants can only be waived
 
 With any warmup at all, the runner's "before" sample already shows the connected, populated state,
 so `bridgeOnline` and `workerCount` are reported as trivial. Waiving them all then trips

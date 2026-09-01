@@ -1,6 +1,6 @@
 import { AnimationPlayer, normaliseToMetres } from "@threenative/core";
 import type { AnimationClip, Group, Material, Object3D } from "three";
-import { Color, Mesh, MeshStandardMaterial } from "three";
+import { BoxGeometry, Color, Mesh, MeshBasicMaterial, MeshStandardMaterial } from "three";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { hostTint } from "../render/palette.js";
 import { SIT_DOWN, STAND_UP, type WorkerState, clipForState } from "./states.js";
@@ -24,6 +24,15 @@ export interface IWorkerOptions {
  */
 export class Worker {
   readonly object: Object3D;
+  /**
+   * The meshes a pointer can actually hit.
+   *
+   * `ctx.pointer.on` registers one object and tests that object; it does not walk children. Every
+   * loaded model is a `Group`, so registering `object` registers something with no geometry and
+   * the worker silently cannot be clicked. The meshes are collected once, here, where the reason
+   * is visible.
+   */
+  readonly picks: readonly Object3D[];
   readonly #player: AnimationPlayer;
   #state: WorkerState = "arriving";
   /** A one-shot sit/stand is playing and must finish before the state's own clip resumes. */
@@ -35,6 +44,21 @@ export class Worker {
     // the desks are 0.74 m. Normalising here keeps every asset swap honest about scale.
     normaliseToMetres(this.object, { metres: 1.8, axis: "height" });
     tint(this.object, hostTint[options.host]);
+    // A plain box the pointer can hit, rather than the skinned body.
+    //
+    // Two reasons, both learned the hard way. `ctx.pointer.on` tests the object it was given and
+    // does not walk children, so the loaded `Group` can never be hit; and the skinned mesh under
+    // it does not answer a raycast the way a static mesh does, so registering it hits nothing
+    // either. A box is also a kinder target: at office scale a seated figure is forty pixels wide.
+    const proxy = new Mesh(
+      new BoxGeometry(0.75, 1.8, 0.75),
+      new MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
+    );
+    proxy.position.y = 0.9;
+    proxy.renderOrder = -1;
+    proxy.name = "worker-pick-proxy";
+    this.object.add(proxy);
+    this.picks = [proxy];
     this.#player = new AnimationPlayer({ clips: options.clips, root: this.object });
     this.#player.play(clipForState(this.#state).clip);
   }
@@ -99,7 +123,7 @@ export class Worker {
 /** Recolour the cloned mannequin without touching the shared source material. */
 function tint(root: Object3D, colour: number): void {
   root.traverse((object) => {
-    if (!(object instanceof Mesh)) return;
+    if (!(object instanceof Mesh) || object.name === "worker-pick-proxy") return;
     object.castShadow = true;
     object.receiveShadow = true;
     const materials: Material[] = Array.isArray(object.material) ? object.material : [object.material];
