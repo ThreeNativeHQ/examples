@@ -113,3 +113,65 @@ rendered extent) and its own playtest, and it should land before `percentileSpan
 Grep the repo and the templates for `applyMatrix4` / `translate(` / `scale(` / `rotateX|Y|Z(` /
 `center()` / `toNonIndexed()` called on loader-provided geometry. The engine fix covers every one
 of them going forward, but any code that cached its own copy of an attribute still needs a look.
+
+---
+
+# Animals: three defects, two fixed, one is an engine bug
+
+## 1. FIXED — sized in the wrong space
+
+`Animal.ts` hand-rolled `percentileSpan()` = `matrixWorld × POSITION`. Correct for a rigid mesh,
+wrong for a skinned rig: a skinned vertex renders at `Σ w·(bone.matrixWorld · boneInverse)·position`.
+Every animal measured ~1.96 (the quantisation cube) against a fox skeleton spanning 0.33, so the
+fox rendered at a third size — an ant; the crow measured 1.06 and rendered 0.07.
+
+`normaliseToMetres()` from `@threenative/core` was installed the whole time and measures through
+`Box3.setFromObject`, which is skin-aware. Fox 0.535 → 0.981, crow 0.531 → 0.483.
+
+## 2. FIXED — the doe and the wolf were bound to another animal's clips
+
+`DOE_CLIPS` spread `STAG_CLIPS`, `WOLF_CLIPS` spread `FOX_CLIPS`, keeping the other animal's
+prefix. `SK_DeerDoe.glb` has no `ANIM_DeerStag_*`; `SK_Wolf.glb` has no `ANIM_Fox_*`. Doe bound
+0/10 clips, wolf 1/10 — both frozen in bind pose, silently.
+
+`Animal.audit()` reports this per clip and **nothing was calling it**. The dev harness now prints
+`TN_ANIMALS_AUDIT` every run: 10 MISSING → 30/30 bound.
+
+## 3. OPEN, ENGINE — the rig's root bone is mirrored in Z between bind pose and clips
+
+This is the folded spine, the backwards head, the abomination stag.
+
+Comparing each bone's bind transform against the clip's frame 0, on `SK_DeerStag.glb`:
+
+```
+T STAG_  bind=[0.000, 0.999, -0.504]        clip0=[0.000, 0.999, +0.504]
+R STAG_  bind=[-0.497, 0.503, 0.497, -0.503]
+         mirror-Z(bind) = [0.497, -0.503, 0.497, -0.503]
+         clip0          = [0.502, -0.498, 0.502, -0.498]    ← agrees to 0.006
+```
+
+Mirror-Z is `(x, y, z, w) → (−x, −y, z, w)`. Only the **root** bone shows it; `STAG_-Neck` and
+below differ only by genuine pose. `ANIM_DeerStag_IdleBreathe` shows the identical relation, and
+an idle-breathe frame 0 should sit on the bind pose — so this is systematic, not a pose difference.
+
+So the mesh/bind path and the animation path leave the Unreal→glTF conversion in different
+handedness. The moment any clip plays, the root bone snaps to the other convention and the whole
+chain below it disagrees.
+
+**Evidence it is the root bone and not the clips:** the clips are healthy — animation accessors are
+byte-identical source-vs-bake and all 803 quaternions are unit length. And dropping every
+root-bone track at runtime makes *every* animal fold instead of some, which is the same
+disagreement seen from the other side.
+
+**Layer: the Unreal importer** — `packages/raw-unreal` / `packages/ueformat`. Those packages took
+commits at 13:24, 14:15, 14:32, 14:41 and 17:00 on 2026-09-01, straddling the good→bad boundary in
+the original report. The fix is to apply one conversion to both paths, with a red test that loads a
+quantized Unreal-exported rig and asserts `mirrorZ(bindTransform) ≠ clipFrame0` for the root bone.
+
+**Do not** try to patch this in `Animal.ts`. Both halves are wrong relative to each other; only the
+importer knows which one is canonical.
+
+**Fallback if the importer fix is slow:** the pack also ships `stag.glb` / `doe.glb` / `fox.glb` /
+`wolf.glb` at its root, from a different export path (`AnimalArmature|Walk`-style clip names, 24-26
+clips). Not a drop-in — it needs its own clip map — but it is a second opinion on whether the rigs
+themselves are sound.
