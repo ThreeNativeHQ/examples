@@ -21,6 +21,7 @@
 // does nothing at all — silently. If a shader edit here appears to have no effect, that is the
 // first thing to check.
 import {
+  BufferAttribute,
   BufferGeometry,
   Box3,
   DoubleSide,
@@ -134,6 +135,32 @@ export function scatter(rule: IScatterRule, extent: number): IScatterPoint[] {
  * bounding box is measured here too, because placement normalises by size and a species whose
  * scale is only discovered at draw time normalises wrong.
  */
+
+/**
+ * Widen a quantized POSITION attribute to float before anything transforms it.
+ *
+ * The asset pipeline ships `KHR_mesh_quantization`: positions arrive as *normalized* int16, so
+ * every component means a value in [-1, 1]. `BufferGeometry.applyMatrix4` reads those out as
+ * floats, transforms them, and writes them back through `setXYZ`, which re-normalizes — and
+ * `normalize()` **clamps**. A species whose node scale is 5 has 99.7% of its vertices outside
+ * [-1, 1] after the bake, so all of them land on the faces of the unit cube and the tree collapses
+ * into a blocky slab. Silently: no error, no warning, a perfectly valid draw of ruined geometry.
+ */
+function dequantizePositions(geometry: BufferGeometry): BufferGeometry {
+  const position = geometry.getAttribute("position");
+  if (position === undefined) return geometry;
+  const plain = position instanceof BufferAttribute;
+  if (plain && !position.normalized && position.array instanceof Float32Array) return geometry;
+  const widened = new Float32Array(position.count * 3);
+  for (let index = 0; index < position.count; index += 1) {
+    widened[index * 3] = position.getX(index);
+    widened[index * 3 + 1] = position.getY(index);
+    widened[index * 3 + 2] = position.getZ(index);
+  }
+  geometry.setAttribute("position", new BufferAttribute(widened, 3));
+  return geometry;
+}
+
 export function extractTreeSpecies(name: string, model: { scene: Group }): ITreeSpecies {
   model.scene.updateMatrixWorld(true);
   const sections: ITreeSection[] = [];
@@ -145,7 +172,7 @@ export function extractTreeSpecies(name: string, model: { scene: Group }): ITree
     const map = material.map;
     if (map === undefined || map === null) throw new Error(`Species ${name} has an untextured section.`);
     const cutout = material.alphaTest > 0 || material.transparent || /leaf|grass|plant|fern|flower|clover|nettle|bush/i.test(material.name);
-    const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
+    const geometry = dequantizePositions(object.geometry.clone()).applyMatrix4(object.matrixWorld);
     geometry.computeBoundingBox();
     if (geometry.boundingBox !== null) bounds.union(geometry.boundingBox);
     sections.push({

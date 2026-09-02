@@ -1,6 +1,750 @@
 {
   "outputs": [
     {
+      "bytes": 10003420,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Materials/UnrealMaterialLibrary.fb0fd8c4.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Materials/UnrealMaterialLibrary.glb"
+    },
+    {
+      "bytes": 10530964,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.0d77b429.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.glb"
+    },
+    {
+      "bytes": 10521200,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup02.554f9861.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup02.glb"
+    },
+    {
+      "bytes": 10521640,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup03.749459d4.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup03.glb"
+    },
+    {
+      "bytes": 1751632,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup01.a845333d.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup01.glb"
+    },
+    {
+      "bytes": 1751424,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup02.dffb649c.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup02.glb"
+    },
+    {
+      "bytes": 1751460,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup03.1ee348d2.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup03.glb"
+    },
+    {
+      "bytes": 828544,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup01.fe1ff22c.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup01.glb"
+    },
+    {
+      "bytes": 830164,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup02.e1530d6e.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup02.glb"
+    },
+    {
+      "bytes": 831680,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup01.bcf89463.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup01.glb"
+    },
+    {
+      "bytes": 830924,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup02.16a1eb48.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup02.glb"
+    },
+    {
+      "bytes": 829800,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup03.d4fa6163.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup03.glb"
+    },
+    {
+      "bytes": 828196,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_LargePlant.2384b9f8.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_LargePlant.glb"
+    },
+    {
+      "bytes": 483036,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup01.f30cdb80.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup01.glb"
+    },
+    {
+      "bytes": 491568,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup02.56ae39d0.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup02.glb"
+    },
+    {
+      "bytes": 829680,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_PlantGroup01.05a3135a.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_PlantGroup01.glb"
+    },
+    {
+      "bytes": 3303220,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup01.f952f7b8.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup01.glb"
+    },
+    {
+      "bytes": 3302576,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup02.ecf7391c.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup02.glb"
+    },
+    {
+      "bytes": 844600,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup01.d288b9d9.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup01.glb"
+    },
+    {
+      "bytes": 835976,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup02.3b866cad.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup02.glb"
+    },
+    {
+      "bytes": 8168892,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_bush01.7b889bd8.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_bush01.glb"
+    },
+    {
+      "bytes": 4944880,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff01.ff167691.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff01.glb"
+    },
+    {
+      "bytes": 5279152,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff02.3487faa8.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff02.glb"
+    },
+    {
+      "bytes": 5333356,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff03.7fbb396f.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff03.glb"
+    },
+    {
+      "bytes": 7793176,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff_Mesh.91ba8e1f.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff_Mesh.glb"
+    },
+    {
+      "bytes": 4936976,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock01_lod00.bd135df1.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock01_lod00.glb"
+    },
+    {
+      "bytes": 5282632,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock02_lod00.46329337.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock02_lod00.glb"
+    },
+    {
+      "bytes": 5328048,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock03_lod00.51e14ae5.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock03_lod00.glb"
+    },
+    {
+      "bytes": 5248572,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock04_lod00.3524a8e8.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock04_lod00.glb"
+    },
+    {
+      "bytes": 2272804,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover01.570e9080.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover01.glb"
+    },
+    {
+      "bytes": 2272732,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover02.4774dd80.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover02.glb"
+    },
+    {
+      "bytes": 2272768,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover03.18031211.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover03.glb"
+    },
+    {
+      "bytes": 8994328,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree01.f42fddf1.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree01.glb"
+    },
+    {
+      "bytes": 9032896,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree02.320bd83a.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree02.glb"
+    },
+    {
+      "bytes": 9300704,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree03.e6d0048b.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree03.glb"
+    },
+    {
+      "bytes": 9273476,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree04.3609dfbb.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree04.glb"
+    },
+    {
+      "bytes": 9410588,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree05.80049008.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree05.glb"
+    },
+    {
+      "bytes": 503484,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush01_lod00.dccbc0bc.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush01_lod00.glb"
+    },
+    {
+      "bytes": 509896,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush02_lod00.0a9f97db.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush02_lod00.glb"
+    },
+    {
+      "bytes": 511812,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush03_lod00.decfc21d.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush03_lod00.glb"
+    },
+    {
+      "bytes": 509500,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush04_lod00.f261a7f2.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush04_lod00.glb"
+    },
+    {
+      "bytes": 9365852,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree01.1d8077ef.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree01.glb"
+    },
+    {
+      "bytes": 9404424,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree02.299ceff5.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree02.glb"
+    },
+    {
+      "bytes": 2711364,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn01.67a38a59.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn01.glb"
+    },
+    {
+      "bytes": 2706024,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn02.6875cece.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn02.glb"
+    },
+    {
+      "bytes": 9093564,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small01.17a44382.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small01.glb"
+    },
+    {
+      "bytes": 9090912,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small02.6c255d3b.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small02.glb"
+    },
+    {
+      "bytes": 9092052,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small03.35b65646.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small03.glb"
+    },
+    {
+      "bytes": 9208532,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine01.e8e092fc.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine01.glb"
+    },
+    {
+      "bytes": 9204540,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine02.ad041099.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine02.glb"
+    },
+    {
+      "bytes": 9194072,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine03.616e4c78.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine03.glb"
+    },
+    {
+      "bytes": 9218288,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine04.f02ffd93.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine04.glb"
+    },
+    {
+      "bytes": 9292876,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine05.440a7950.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine05.glb"
+    },
+    {
+      "bytes": 4908420,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock01_lod000.4cb12009.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock01_lod000.glb"
+    },
+    {
+      "bytes": 4909168,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock02_lod000.7938eeee.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock02_lod000.glb"
+    },
+    {
+      "bytes": 4909656,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock03_lod000.440138e0.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock03_lod000.glb"
+    },
+    {
+      "bytes": 4909432,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock04_lod000.2e48350f.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock04_lod000.glb"
+    },
+    {
+      "bytes": 6266944,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_tree_dead.e5c161e7.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_tree_dead.glb"
+    },
+    {
+      "bytes": 1812,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_waterPlane.c6755868.glb",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_waterPlane.glb"
+    },
+    {
+      "bytes": 155109,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/import-report.30189b5a.json",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/import-report.json"
+    },
+    {
+      "bytes": 19485043,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock01_normal.9ee6d61e.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock01_normal.png"
+    },
+    {
+      "bytes": 51375942,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock02_height_AO_Curvature_TGA.32d5d302.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock02_height_AO_Curvature_TGA.png"
+    },
+    {
+      "bytes": 49803806,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock03_height_AO_Curvature_TGA.0f9aba5c.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock03_height_AO_Curvature_TGA.png"
+    },
+    {
+      "bytes": 48306400,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock04_height_AO_Curvature.af8cd168.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock04_height_AO_Curvature.png"
+    },
+    {
+      "bytes": 1697206,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs.655b2dbb.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs.png"
+    },
+    {
+      "bytes": 1265876,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs_normal.854b7154.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs_normal.png"
+    },
+    {
+      "bytes": 4021132,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_farn_alphas.80d9aa90.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_farn_alphas.png"
+    },
+    {
+      "bytes": 2429701,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_grass_bush_atlas_alpha.0098e20d.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_grass_bush_atlas_alpha.png"
+    },
+    {
+      "bytes": 347509,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_leafs_cherry_laurel_greyMaps.3c135905.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_leafs_cherry_laurel_greyMaps.png"
+    },
+    {
+      "bytes": 534,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00-2__rgb_XVector_a_XExtentDividedby2048reaches2048_UV_3.f2a0db53.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00-2__rgb_XVector_a_XExtentDividedby2048reaches2048_UV_3.png"
+    },
+    {
+      "bytes": 845,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00_rgb_XVector_a_XExtentDividedby2048reaches2048_UV_2.8d30e2ab.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00_rgb_XVector_a_XExtentDividedby2048reaches2048_UV_2.png"
+    },
+    {
+      "bytes": 45946583,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_medium-rocks_height_ao_curvaturel_TGA.c2d39e38.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_medium-rocks_height_ao_curvaturel_TGA.png"
+    },
+    {
+      "bytes": 18708392,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_new_farn_masks.f16c7acb.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_new_farn_masks.png"
+    },
+    {
+      "bytes": 1730283,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_tree_pine_Leafs_opacity_maps.5b1f89e0.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_tree_pine_Leafs_opacity_maps.png"
+    },
+    {
+      "bytes": 1709745,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_diffuse.3b35f999.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_diffuse.png"
+    },
+    {
+      "bytes": 1590836,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_normal.e43a4b55.png",
+      "producer": "",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_normal.png"
+    },
+    {
+      "bytes": 710461408,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/Materials/UnrealMaterialLibrary.885be90b.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/Materials/UnrealMaterialLibrary.glb"
+    },
+    {
+      "bytes": 76275,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/import-report.3774a1bf.json",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/import-report.json"
+    },
+    {
+      "bytes": 7123726,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_BaseColor.a28da610.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_BaseColor.png"
+    },
+    {
+      "bytes": 8668681,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Nml.f240c813.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Nml.png"
+    },
+    {
+      "bytes": 11087578,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_OcclusionRoughnessMetallic.277c89a7.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_OcclusionRoughnessMetallic.png"
+    },
+    {
+      "bytes": 259,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Specular.529223c0.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Specular.png"
+    },
+    {
+      "bytes": 28208419,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_BaseColor.b488af1b.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_BaseColor.png"
+    },
+    {
+      "bytes": 21930228,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_Nml.1f2e0b73.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_Nml.png"
+    },
+    {
+      "bytes": 30981971,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeerDoe_OcclusionRoughnessMetallic.872e2188.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeerDoe_OcclusionRoughnessMetallic.png"
+    },
+    {
+      "bytes": 34481932,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_BaseColor.5033852d.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_BaseColor.png"
+    },
+    {
+      "bytes": 32123936,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Nml.c72c52ae.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Nml.png"
+    },
+    {
+      "bytes": 35550367,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_OcclusionRoughnessMetllic.defc8f53.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_OcclusionRoughnessMetllic.png"
+    },
+    {
+      "bytes": 255,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Specular.cde4219f.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Specular.png"
+    },
+    {
+      "bytes": 9824066,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_BaseColor.e73d57e0.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_BaseColor.png"
+    },
+    {
+      "bytes": 8970165,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Nml.58ddd412.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Nml.png"
+    },
+    {
+      "bytes": 9112030,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_OcclusionRoughnessMetallic.9bd104d8.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_OcclusionRoughnessMetallic.png"
+    },
+    {
+      "bytes": 121,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Specular.2cd01d28.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Specular.png"
+    },
+    {
+      "bytes": 33983533,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_BaseColor.0d77b5e0.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_BaseColor.png"
+    },
+    {
+      "bytes": 34961163,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_Nml.d3cfcb2a.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_Nml.png"
+    },
+    {
+      "bytes": 32368842,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_OcclusionRoughnessMetallic.fe2c768d.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_OcclusionRoughnessMetallic.png"
+    },
+    {
+      "bytes": 30953769,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_BaseColor.87abc329.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_BaseColor.png"
+    },
+    {
+      "bytes": 26756580,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Nml.dc09c091.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Nml.png"
+    },
+    {
+      "bytes": 36800119,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_OcclusionRoughnessMetallic.773bbc7a.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_OcclusionRoughnessMetallic.png"
+    },
+    {
+      "bytes": 186,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Specular.a29fb11a.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Specular.png"
+    },
+    {
+      "bytes": 34122098,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfArctic_BaseColorAlpha.c9704a03.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfArctic_BaseColorAlpha.png"
+    },
+    {
+      "bytes": 31763996,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_BaseColorAlpha.499c52e7.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_BaseColorAlpha.png"
+    },
+    {
+      "bytes": 236895,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_Illum.2a81873f.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_Illum.png"
+    },
+    {
+      "bytes": 34674977,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_BaseColorAlpha.e5ed0440.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_BaseColorAlpha.png"
+    },
+    {
+      "bytes": 28146039,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Nml.6c57d884.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Nml.png"
+    },
+    {
+      "bytes": 32397309,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_OcclusionRoughnessMetallic.47e02a90.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_OcclusionRoughnessMetallic.png"
+    },
+    {
+      "bytes": 121,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Specular.2cd01d28.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Specular.png"
+    },
+    {
+      "bytes": 296944,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/doe.79c73504.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/doe.glb"
+    },
+    {
+      "bytes": 314484,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/fox.36417a70.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/fox.glb"
+    },
+    {
+      "bytes": 332272,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/husky.fa1e3ead.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/husky.glb"
+    },
+    {
+      "bytes": 283328,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/stag.2ee540ca.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/stag.glb"
+    },
+    {
+      "bytes": 522540,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Crow.524360df.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Crow.glb"
+    },
+    {
+      "bytes": 3448564,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerDoe.83db21f0.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerDoe.glb"
+    },
+    {
+      "bytes": 4157912,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerStag.7f2a888e.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerStag.glb"
+    },
+    {
+      "bytes": 4506768,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Fox.572cca26.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Fox.glb"
+    },
+    {
+      "bytes": 3397048,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Pig.9ff1546e.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Pig.glb"
+    },
+    {
+      "bytes": 573156,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Wolf.93413fda.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Wolf.glb"
+    },
+    {
+      "bytes": 18801,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/import-report.2dcd71c3.json",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/import-report.json"
+    },
+    {
+      "bytes": 30981971,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_DeerDoe_OcclusionRoughnessMetallic.872e2188.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_DeerDoe_OcclusionRoughnessMetallic.png"
+    },
+    {
+      "bytes": 9112030,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Fox_OcclusionRoughnessMetallic.9bd104d8.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Fox_OcclusionRoughnessMetallic.png"
+    },
+    {
+      "bytes": 36800119,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Pig_OcclusionRoughnessMetallic.773bbc7a.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Pig_OcclusionRoughnessMetallic.png"
+    },
+    {
+      "bytes": 35550367,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Stag_OcclusionRoughnessMetllic.defc8f53.png",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Stag_OcclusionRoughnessMetllic.png"
+    },
+    {
+      "bytes": 316220,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/wolf.fb33b8ed.glb",
+      "producer": "",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/wolf.glb"
+    },
+    {
+      "bytes": 5451493,
+      "path": "hdri/kloofendal_48d_2k.23d73b43.hdr",
+      "producer": "",
+      "source": "hdri/kloofendal_48d_2k.hdr"
+    },
+    {
       "bytes": 242282,
       "path": "landscape/cliffrock01_moss_diffuse.d8cca7ba.jpg",
       "producer": "",
