@@ -137,41 +137,48 @@ prefix. `SK_DeerDoe.glb` has no `ANIM_DeerStag_*`; `SK_Wolf.glb` has no `ANIM_Fo
 `Animal.audit()` reports this per clip and **nothing was calling it**. The dev harness now prints
 `TN_ANIMALS_AUDIT` every run: 10 MISSING → 30/30 bound.
 
-## 3. OPEN, ENGINE — the rig's root bone is mirrored in Z between bind pose and clips
+## 3. STILL OPEN — the deformation. My mirror hypothesis was WRONG.
 
-This is the folded spine, the backwards head, the abomination stag.
-
-Comparing each bone's bind transform against the clip's frame 0, on `SK_DeerStag.glb`:
+I measured that the rig's root bone differs between bind pose and clip frame 0:
 
 ```
-T STAG_  bind=[0.000, 0.999, -0.504]        clip0=[0.000, 0.999, +0.504]
-R STAG_  bind=[-0.497, 0.503, 0.497, -0.503]
-         mirror-Z(bind) = [0.497, -0.503, 0.497, -0.503]
-         clip0          = [0.502, -0.498, 0.502, -0.498]    ← agrees to 0.006
+T STAG_  bind  = [0.000,  0.999, -0.504]        clip0 = [0.000,  0.999, +0.504]
+R STAG_  bind  = [-0.497, 0.503,  0.497, -0.503] clip0 = [0.502, -0.498, 0.502, -0.498]
 ```
 
-Mirror-Z is `(x, y, z, w) → (−x, −y, z, w)`. Only the **root** bone shows it; `STAG_-Neck` and
-below differ only by genuine pose. `ANIM_DeerStag_IdleBreathe` shows the identical relation, and
-an idle-breathe frame 0 should sit on the bind pose — so this is systematic, not a pose difference.
+and concluded the Unreal importer had left a Z mirror between the two paths.
 
-So the mesh/bind path and the animation path leave the Unreal→glTF conversion in different
-handedness. The moment any clip plays, the root bone snaps to the other convention and the whole
-chain below it disagrees.
+**That conclusion does not survive its own test.** I implemented the exact measured correction —
+`(x,y,z) -> (x,y,-z)` on the root's position tracks, `(x,y,z,w) -> (-x,-y,z,w)` on its quaternion
+tracks, applied to all 218 root tracks across the six rigs — and the render was unchanged. Reverted.
 
-**Evidence it is the root bone and not the clips:** the clips are healthy — animation accessors are
-byte-identical source-vs-bake and all 803 quaternions are unit length. And dropping every
-root-bone track at runtime makes *every* animal fold instead of some, which is the same
-disagreement seen from the other side.
+The reason it is wrong: `(x,y,z,w) -> (-x,-y,z,w)` is conjugation by a 180-degree rotation about Z.
+It is a plain yaw, not a reflection, and a clip whose root faces the other way from the bind pose
+is an ordinary authoring choice, not corruption. Frame 0 of a clip is under no obligation to equal
+the bind pose. I read a normal difference as a defect.
 
-**Layer: the Unreal importer** — `packages/raw-unreal` / `packages/ueformat`. Those packages took
-commits at 13:24, 14:15, 14:32, 14:41 and 17:00 on 2026-09-01, straddling the good→bad boundary in
-the original report. The fix is to apply one conversion to both paths, with a red test that loads a
-quantized Unreal-exported rig and asserts `mirrorZ(bindTransform) ≠ clipFrame0` for the root bone.
+**What is actually established:**
+- The clips are healthy: animation accessors are byte-identical source-vs-bake, all 803
+  quaternions unit length, and after the fix in section 2 all 30 clips bind 30/30.
+- `stripJunkTriangles` is not the cause — disabling it changes nothing.
+- The geometry is not the cause — the loader-side quantisation fix is unrelated and the bind pose
+  renders correctly (an animal with no clip bound stands correctly shaped).
+- So: healthy clip + healthy rig + correct binding -> deformed pose. The defect is in how the pose
+  is *applied*, and I have not isolated it.
 
-**Do not** try to patch this in `Animal.ts`. Both halves are wrong relative to each other; only the
-importer knows which one is canonical.
+**Do not trust any of my visual "looks correct" verdicts on this.** I called an idle capture green
+that the user could see was deformed. The harness makes that easy to get wrong: its camera sits at
+the origin while `PRODUCTION_PLACEMENTS` spawns animals 28-54 m away, and they roam another 30-55 m
+on top of that, so every animal is a few dozen pixels at the frame edge.
 
-**Fallback if the importer fix is slow:** the pack also ships `stag.glb` / `doe.glb` / `fox.glb` /
-`wolf.glb` at its root, from a different export path (`AnimalArmature|Walk`-style clip names, 24-26
-clips). Not a drop-in — it needs its own clip map — but it is a second opinion on whether the rigs
-themselves are sound.
+**Next instruments, in order:**
+
+1. **Make the harness able to judge one animal.** It needs `?only=<id>` and a camera that frames
+   that animal, plus `roam=0`. Without that, no screenshot of this is evidence. The harness already
+   has a `corruptAnimalForward` parameter — a deliberate negative control — so wire the new view up
+   against that first and confirm it can *see* a known-broken pose before trusting a green.
+2. **Use the number, not the picture.** `clipPoseError`, `clipBoneCoverage` and `boneContact` are
+   already exported from `@threenative/core` for exactly this (PRD-314, "a broken retarget is a
+   number, not a screenshot"). Score every clip on every rig and rank by error; that names the bone
+   and the frame instead of asking someone to squint.
+3. Only then decide the layer.
