@@ -23,12 +23,13 @@ import {
   PlaneGeometry,
   Scene,
   SphereGeometry,
+  type Object3D,
   Vector3,
 } from "three";
 import { WebGPURenderer } from "three/webgpu";
 
 const params = new URLSearchParams(location.search);
-const OBSERVATION_VERSION = 1;
+const OBSERVATION_VERSION = 2;
 const OBSERVATION_SEED = 90210;
 const FIXED_STEP_SECONDS = 1 / 60;
 const SIMULATION_SECONDS = 180;
@@ -118,6 +119,24 @@ for (const animal of animals.animals) {
   });
 }
 
+const rigYawCorruptionRadians: Record<string, number> = {};
+const corruptAnimalForward = params.get("corruptAnimalForward");
+if (corruptAnimalForward !== null) {
+  if (corruptAnimalForward !== "fox") {
+    throw new Error(
+      `animal forward corruption only supports fox; got ${corruptAnimalForward}`,
+    );
+  }
+  const foxes = animals.animals.filter((animal) => animal.spec.id === "fox");
+  if (foxes.length !== 1) {
+    throw new Error(
+      `fox rig-yaw corruption requires exactly one fox; got ${String(foxes.length)}`,
+    );
+  }
+  requiredAnimalRig(foxes[0]!).rotateY(Math.PI);
+  rigYawCorruptionRadians.fox = Math.PI;
+}
+
 const observation = measureProductionSubjects(animals.animals);
 assertJsonSafe(observation);
 if (!params.has("omitAnimalObservation")) {
@@ -149,21 +168,27 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
     );
   }
   const samples = new Map(
-    subjects.map((animal) => [
-      animal.spec.id,
-      {
-        start: animal.object.position.clone(),
-        previous: animal.object.position.clone(),
-        distanceTravelled: 0,
-        dots: [] as number[],
-        lakeSamples: 0,
-        pondSamples: 0,
-        totalSamples: 0,
-      },
-    ]),
+    subjects.map((animal) => {
+      const landmarks = requiredForwardLandmarks(animal);
+      return [
+        animal.spec.id,
+        {
+          start: animal.object.position.clone(),
+          previous: animal.object.position.clone(),
+          distanceTravelled: 0,
+          dots: [] as number[],
+          lakeSamples: 0,
+          pondSamples: 0,
+          totalSamples: 0,
+          ...landmarks,
+        },
+      ];
+    }),
   );
   const movement = new Vector3();
   const renderedForward = new Vector3();
+  const headWorld = new Vector3();
+  const pelvisWorld = new Vector3();
 
   const recordWater = (animal: Animal) => {
     const sample = samples.get(animal.spec.id);
@@ -188,20 +213,40 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
       if (sample === undefined)
         throw new Error(`animal observation sample missing: ${animal.spec.id}`);
       movement.subVectors(animal.object.position, sample.previous).setY(0);
+      if (!isFiniteVector(movement)) {
+        throw new Error(
+          `animal observation movement is non-finite: ${animal.spec.id}`,
+        );
+      }
       const distance = movement.length();
       if (distance > 1e-8) {
         sample.distanceTravelled += distance;
-        const rig = animal.object.children[0];
-        if (rig === undefined)
-          throw new Error(`animal observation rig missing: ${animal.spec.id}`);
         animal.object.updateWorldMatrix(true, true);
-        rig.getWorldDirection(renderedForward).setY(0);
-        if (renderedForward.lengthSq() <= 1e-12) {
+        sample.head.getWorldPosition(headWorld);
+        sample.pelvis.getWorldPosition(pelvisWorld);
+        if (!isFiniteVector(headWorld) || !isFiniteVector(pelvisWorld)) {
           throw new Error(
-            `animal observation model-forward is zero: ${animal.spec.id}`,
+            `animal observation anatomical landmark is non-finite: ${animal.spec.id}`,
           );
         }
-        sample.dots.push(movement.normalize().dot(renderedForward.normalize()));
+        renderedForward.subVectors(headWorld, pelvisWorld).setY(0);
+        if (!isFiniteVector(renderedForward)) {
+          throw new Error(
+            `animal observation model-forward is non-finite: ${animal.spec.id}`,
+          );
+        }
+        if (renderedForward.lengthSq() <= 1e-12) {
+          throw new Error(
+            `animal observation head-minus-pelvis model-forward is zero: ${animal.spec.id}`,
+          );
+        }
+        const dot = movement.normalize().dot(renderedForward.normalize());
+        if (!Number.isFinite(dot)) {
+          throw new Error(
+            `animal observation model-forward dot is non-finite: ${animal.spec.id}`,
+          );
+        }
+        sample.dots.push(dot);
       }
       sample.previous.copy(animal.object.position);
       recordWater(animal);
@@ -230,6 +275,11 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
       displacementMeters: rounded(displacement),
       distanceTravelledMeters: rounded(sample.distanceTravelled),
       movingSamples: sample.dots.length,
+      modelForwardReference: {
+        kind: "head-minus-pelvis" as const,
+        head: sample.head.name,
+        pelvis: sample.pelvis.name,
+      },
       modelForwardDot: {
         minimum: rounded(Math.min(...sample.dots)),
         mean: rounded(dotMean),
@@ -260,6 +310,7 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
       lake: { x: LAKE.x, z: LAKE.z, radius: LAKE.radius },
       pond: { x: POND.x, z: POND.z, radius: POND_WATER_RADIUS },
     },
+    controls: { rigYawCorruptionRadians },
     subjects: rows,
     checks: {
       allSix: rows.length === 6,
@@ -272,6 +323,40 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
         .map((row) => row.id),
     },
   };
+}
+
+function requiredAnimalRig(animal: Animal): Object3D {
+  const rig = animal.object.children[0];
+  if (rig === undefined) {
+    throw new Error(`animal observation rig missing: ${animal.spec.id}`);
+  }
+  return rig;
+}
+
+function requiredForwardLandmarks(animal: Animal): {
+  head: Object3D;
+  pelvis: Object3D;
+} {
+  const heads: Object3D[] = [];
+  const pelvises: Object3D[] = [];
+  requiredAnimalRig(animal).traverse((object) => {
+    if (object.name.endsWith("_-Head")) heads.push(object);
+    if (object.name.endsWith("_-Pelvis")) pelvises.push(object);
+  });
+  if (heads.length !== 1 || pelvises.length !== 1) {
+    throw new Error(
+      `animal observation requires one _-Head and one _-Pelvis landmark for ${animal.spec.id}; got head=${String(heads.length)} pelvis=${String(pelvises.length)}`,
+    );
+  }
+  return { head: heads[0]!, pelvis: pelvises[0]! };
+}
+
+function isFiniteVector(value: Vector3): boolean {
+  return (
+    Number.isFinite(value.x) &&
+    Number.isFinite(value.y) &&
+    Number.isFinite(value.z)
+  );
 }
 
 function rounded(value: number): number {

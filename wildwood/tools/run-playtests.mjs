@@ -92,9 +92,9 @@ function finiteNumber(value) {
 }
 
 function validateAnimalObservation(observation) {
-  if (observation?.version !== 1 || observation.status !== "ready") {
+  if (observation?.version !== 2 || observation.status !== "ready") {
     throw new Error(
-      "required browser animal observation is missing its version-1 ready marker",
+      "required browser animal observation is missing its version-2 ready marker",
     );
   }
   if (
@@ -115,6 +115,11 @@ function validateAnimalObservation(observation) {
       subject.movingSamples <= 0 ||
       !finiteNumber(subject.modelForwardDot?.minimum) ||
       !finiteNumber(subject.modelForwardDot?.mean) ||
+      !finiteNumber(subject.modelForwardDot?.maximum) ||
+      !finiteNumber(subject.modelForwardDot?.negativeSamples) ||
+      subject.modelForwardReference?.kind !== "head-minus-pelvis" ||
+      !subject.modelForwardReference?.head?.endsWith("_-Head") ||
+      !subject.modelForwardReference?.pelvis?.endsWith("_-Pelvis") ||
       !finiteNumber(subject.waterOverlap?.lakeSamples) ||
       !finiteNumber(subject.waterOverlap?.pondSamples)
     ) {
@@ -175,6 +180,42 @@ async function captureAnimals() {
       () => globalThis.__TN_ANIMALS_OBSERVATION__,
     );
     validateAnimalObservation(observation);
+    if (cliArgs.includes("--require-forward")) {
+      const backwards = observation.subjects
+        .filter((subject) => subject.modelForwardDot.mean < 0)
+        .map((subject) => subject.id);
+      if (backwards.length > 0) {
+        throw new Error(
+          `TN_ANIMAL_BACKWARDS: ${backwards.join(",")} have negative head-minus-pelvis movement dots`,
+        );
+      }
+    }
+    const expectedCorruption = option("expect-forward-corruption", undefined);
+    if (expectedCorruption !== undefined) {
+      const corruption =
+        observation.controls?.rigYawCorruptionRadians?.[expectedCorruption];
+      if (corruption !== Math.PI) {
+        throw new Error(
+          `required ${expectedCorruption} rig-yaw corruption marker is missing`,
+        );
+      }
+      const subject = observation.subjects.find(
+        (candidate) => candidate.id === expectedCorruption,
+      );
+      if (subject === undefined) {
+        throw new Error(
+          `required forward-corruption subject is missing: ${expectedCorruption}`,
+        );
+      }
+      if (subject.modelForwardDot.mean <= 0) {
+        throw new Error(
+          `required ${expectedCorruption} π rig-yaw corruption to flip forward; mean=${String(subject.modelForwardDot.mean)}`,
+        );
+      }
+      console.log(
+        `TN_ANIMAL_FORWARD_CORRUPTION:${expectedCorruption} mean=${String(subject.modelForwardDot.mean)}`,
+      );
+    }
     await page.waitForTimeout(1_000);
     const adapter = await page.evaluate(async () => {
       const gpu = await navigator.gpu?.requestAdapter();
