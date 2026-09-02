@@ -61,18 +61,31 @@ export async function spawnWildwoodAnimals(options: ISpawnAnimalsOptions): Promi
   const models = new Map<string, IAnimalModel>();
   const animals: Animal[] = [];
 
+  // Every distinct GLB in flight at once: six sequential awaits were six round trips on the
+  // critical path, and nothing about one animal's bytes depends on another's.
+  const specs = placements
+    .map((placement) => ANIMAL_SPECS.find((candidate) => candidate.id === placement.id))
+    .filter((spec): spec is AnimalSpec => spec !== undefined);
+  const sources = await Promise.allSettled(
+    [...new Set(specs)].map(async (spec) => {
+      const model = await options.load(`${spec.glb}.glb`);
+      models.set(spec.id, model);
+      log(`[animals] loaded ${spec.glb}.glb with ${model.animations.length} clips`);
+    }),
+  );
+  const rejected = sources.find(
+    (source): source is PromiseRejectedResult => source.status === "rejected",
+  );
+  if (rejected !== undefined) throw rejected.reason;
+
   for (const placement of placements) {
     const spec = ANIMAL_SPECS.find((candidate) => candidate.id === placement.id);
     if (spec === undefined) {
       log(`[animals] no spec named '${placement.id}'; skipping`);
       continue;
     }
-    let model = models.get(spec.id);
-    if (model === undefined) {
-      model = await options.load(`${spec.glb}.glb`);
-      models.set(spec.id, model);
-      log(`[animals] loaded ${spec.glb}.glb with ${model.animations.length} clips`);
-    }
+    const model = models.get(spec.id);
+    if (model === undefined) throw new Error(`[animals] ${spec.glb}.glb did not load`);
     const animal = new Animal(spec, model, {
       ground: options.ground,
       spawn: new Vector3(placement.x, 0, placement.z),
@@ -81,6 +94,9 @@ export async function spawnWildwoodAnimals(options: ISpawnAnimalsOptions): Promi
     for (const line of animal.audit()) log(`[animals] ${line}`);
     animals.push(animal);
     group.add(animal.object);
+    // Cloning and auditing six skinned rigs in one browser task produced a 229 ms post-entry
+    // stall. All unique sources have resolved above; yield only between placement clones.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
 
   options.parent.add(group);

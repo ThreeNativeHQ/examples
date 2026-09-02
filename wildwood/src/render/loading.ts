@@ -2,43 +2,45 @@ import {
   type Camera,
   CanvasTexture,
   ClampToEdgeWrapping,
+  DataTexture,
+  LinearFilter,
   Mesh,
   MeshBasicMaterial,
   type OrthographicCamera,
   PlaneGeometry,
+  RGBAFormat,
   type Scene,
   type Texture,
+  UnsignedByteType,
 } from "three";
-import { palette } from "./palette.js";
 
 /* BEGIN THREENATIVE LOADING APPEARANCE */
 /** Edit these source constants for the starter's loading look. */
 export const loading = {
-  backgroundColor: palette.skyLow,
+  backgroundColor: 0x08110c,
   backgroundImage: undefined as string | undefined,
   enabled: true,
   fillImage: undefined as string | undefined,
   logoImage: undefined as string | undefined,
-  progressColor: palette.accent,
-  showStatus: false,
-  trackColor: palette.skyHigh,
-  bar: { anchorX: 0.5, anchorY: 0.72, height: 12, maxWidth: 520, minWidth: 1, width: 0.62 },
+  progressColor: 0xd89847,
+  showStatus: true,
+  trackColor: 0x1b3023,
+  bar: { anchorX: 0.5, anchorY: 0.78, height: 8, maxWidth: 440, minWidth: 1, width: 0.54 },
 } as const;
 /* END THREENATIVE LOADING APPEARANCE */
 
 interface ILoadingHost {
   readonly assets?: { texture(path: string): Promise<Texture> };
-  readonly camera: Camera;
   readonly canvasLayer: {
     readonly camera: OrthographicCamera;
     readonly scene: Scene;
     opaque: boolean;
   };
-  readonly renderer: { compileAsync(scene: Scene, camera: Camera): Promise<void> };
-  readonly scene: Scene;
+  readonly renderer: { renderOverlay(scene: Scene, camera: Camera): void };
   readonly startup: { readonly progress: number; whenReady(): Promise<void> };
   readonly viewport?: {
     readonly safeArea: { height: number; width: number; x: number; y: number };
+    resize?(): void;
   };
 }
 
@@ -77,6 +79,114 @@ function configureTexture(texture: Texture): void {
   texture.needsUpdate = true;
 }
 
+/** Native-safe pixel fallback for the same forest field and warm trail. */
+function forestPixelTexture(): DataTexture {
+  const width = 320;
+  const height = 180;
+  const pixels = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const depth = y / height;
+      const treeLine = 104 - ((x * 37) % 29);
+      const forest = y > treeLine;
+      const trailCentre = width / 2 + Math.sin((height - y) * 0.055) * (height - y) * 0.18;
+      const trail = y > 108 && Math.abs(x - trailCentre) < 2 + depth * 3;
+      // A stable hash gives the native-safe field the same lichen mottling as the canvas path.
+      const lichen = ((x * 73_856_093) ^ (y * 19_349_663)) >>> 28;
+      pixels[offset] = trail ? 216 : forest ? 8 + lichen / 4 : Math.round(19 - depth * 11 + lichen / 3);
+      pixels[offset + 1] = trail ? 152 : forest ? 22 + lichen : Math.round(39 - depth * 24 + lichen);
+      pixels[offset + 2] = trail ? 71 : forest ? 15 + lichen / 2 : Math.round(28 - depth * 18 + lichen / 2);
+      pixels[offset + 3] = 255;
+    }
+  }
+  const texture = new DataTexture(pixels, width, height, RGBAFormat, UnsignedByteType);
+  texture.minFilter = LinearFilter;
+  texture.magFilter = LinearFilter;
+  configureTexture(texture);
+  return texture;
+}
+
+/** Game-owned forest art, generated synchronously so it adds no critical network request. */
+function forestBackdropTexture(): Texture {
+  if (typeof document === "undefined") return forestPixelTexture();
+  const canvas = document.createElement("canvas");
+  canvas.width = 960;
+  canvas.height = 540;
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("The loading illustration needs a 2D canvas context.");
+
+  const sky = context.createLinearGradient(0, 0, 0, canvas.height);
+  sky.addColorStop(0, "#13271c");
+  sky.addColorStop(0.58, "#0a1710");
+  sky.addColorStop(1, "#050b08");
+  context.fillStyle = sky;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Subtle deterministic lichen colonies keep the field organic without a network texture.
+  for (let index = 0; index < 180; index += 1) {
+    const roll = ((index * 7_919 + 31 * 104_729) % 10_007) / 10_007;
+    const rollY = ((index * 13_163 + 47 * 65_537) % 10_009) / 10_009;
+    context.fillStyle = `rgba(93, 128, 75, ${String(0.025 + roll * 0.055)})`;
+    context.beginPath();
+    context.ellipse(
+      roll * canvas.width,
+      rollY * canvas.height,
+      10 + rollY * 42,
+      4 + roll * 17,
+      roll * Math.PI,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
+
+  // Three silhouette bands make a real valley rather than a flat colour field.
+  const forestBand = (baseline: number, color: string, count: number, seed: number): void => {
+    context.fillStyle = color;
+    for (let index = 0; index < count; index += 1) {
+      const roll = ((index * 7_919 + seed * 104_729) % 10_007) / 10_007;
+      const x = (index / Math.max(1, count - 1)) * canvas.width + (roll - 0.5) * 30;
+      const height = 55 + roll * 145;
+      const width = 18 + roll * 28;
+      context.beginPath();
+      context.moveTo(x, baseline - height);
+      context.lineTo(x - width, baseline);
+      context.lineTo(x + width, baseline);
+      context.closePath();
+      context.fill();
+      context.fillRect(x - 3, baseline - height * 0.55, 6, height * 0.7);
+    }
+  };
+  forestBand(330, "#1b3525", 23, 5);
+  forestBand(400, "#10251a", 29, 11);
+  forestBand(475, "#09160f", 34, 17);
+
+  // The only warm mark: a trail curling from the player into the dark tree line.
+  context.strokeStyle = "#d89847";
+  context.lineCap = "round";
+  context.lineWidth = 14;
+  context.beginPath();
+  context.moveTo(495, 560);
+  context.bezierCurveTo(535, 470, 390, 430, 487, 340);
+  context.stroke();
+  context.strokeStyle = "#f0b75f";
+  context.lineWidth = 3;
+  context.stroke();
+
+  context.fillStyle = "#e6d9b7";
+  context.font = "600 42px ui-monospace, monospace";
+  context.textAlign = "center";
+  context.fillText("WILDWOOD", canvas.width / 2, 116);
+  context.fillStyle = "#91a68f";
+  context.font = "500 16px ui-monospace, monospace";
+  context.fillText("THE VALLEY IS WAKING", canvas.width / 2, 146);
+
+  const texture = new CanvasTexture(canvas);
+  configureTexture(texture);
+  return texture;
+}
+
 function setFillUv(geometry: PlaneGeometry, progress: number, base: readonly number[]): void {
   const uv = geometry.getAttribute("uv");
   for (let index = 0; index < uv.count; index += 1) uv.setX(index, (base[index] ?? 0) * progress);
@@ -112,8 +222,8 @@ function statusMesh(
   | undefined {
   if (!loading.showStatus || typeof document === "undefined") return undefined;
   const canvas = document.createElement("canvas");
-  canvas.width = 180;
-  canvas.height = 48;
+  canvas.width = 440;
+  canvas.height = 64;
   const context = canvas.getContext("2d");
   if (context === null) return undefined;
   const texture = new CanvasTexture(canvas);
@@ -124,11 +234,15 @@ function statusMesh(
   );
   const update = (value: number): void => {
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#ffffff";
-    context.font = "700 20px monospace";
+    context.fillStyle = "#c9d2bd";
+    context.font = "600 17px ui-monospace, monospace";
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText(`${Math.round(value * 100)}%`, canvas.width / 2, canvas.height / 2);
+    context.fillText(
+      `PREPARING TERRAIN · ${String(Math.round(value * 100)).padStart(2, "0")}%`,
+      canvas.width / 2,
+      canvas.height / 2,
+    );
     texture.needsUpdate = true;
   };
   update(0);
@@ -138,10 +252,17 @@ function statusMesh(
 export function createLoadingScreen(host: ILoadingHost): ILoadingController {
   const layer = host.canvasLayer;
   if (!loading.enabled) return noOp(layer);
+  host.viewport?.resize?.();
   const camera = layer.camera;
+  const authoredBackdrop = forestBackdropTexture();
   const backdrop = meshFor(
     layer,
-    new MeshBasicMaterial({ color: loading.backgroundColor, depthTest: false, depthWrite: false }),
+    new MeshBasicMaterial({
+      color: 0xffffff,
+      depthTest: false,
+      depthWrite: false,
+      map: authoredBackdrop,
+    }),
     0,
   );
   const track = meshFor(
@@ -181,7 +302,10 @@ export function createLoadingScreen(host: ILoadingHost): ILoadingController {
     ...(logo === undefined ? [] : [logo]),
     ...(status === undefined ? [] : [status.mesh]),
   ];
-  const ownedTextures = new Set<Texture>(status === undefined ? [] : [status.texture]);
+  const ownedTextures = new Set<Texture>([
+    authoredBackdrop,
+    ...(status === undefined ? [] : [status.texture]),
+  ]);
   let width = 1;
   let height = 1;
   let barWidth = 1;
@@ -190,7 +314,8 @@ export function createLoadingScreen(host: ILoadingHost): ILoadingController {
   let barY = 0;
   let progress = 0;
   let done = false;
-  let backdropTexture: Texture | undefined;
+  let backdropTexture: Texture | undefined = authoredBackdrop;
+  let layoutTimer: ReturnType<typeof setTimeout> | undefined;
 
   const layout = (): void => {
     width = Math.max(1, camera.right - camera.left);
@@ -276,10 +401,36 @@ export function createLoadingScreen(host: ILoadingHost): ILoadingController {
   layer.opaque = true;
   layout();
   updateProgress(0);
+  host.renderer.renderOverlay(layer.scene, layer.camera);
+
+  // The CanvasLayer camera receives its real viewport after Scene.load() starts. Keep the authored
+  // mesh fitted during that async window; enter() cannot call controller.update() until critical
+  // assets resolve. The cancelled timer works in the native host as well as the browser.
+  const maintainLayout = (): void => {
+    if (done) return;
+    updateProgress(host.startup.progress);
+    host.renderer.renderOverlay(layer.scene, layer.camera);
+    layoutTimer = setTimeout(maintainLayout, 16);
+  };
+  layoutTimer = setTimeout(maintainLayout, 0);
+  const announcePresentedView = (): void => {
+    if (done) return;
+    updateProgress(host.startup.progress);
+    host.renderer.renderOverlay(layer.scene, layer.camera);
+    console.info(
+      `TN_LOADING_VIEW_READY viewport=${String(camera.right - camera.left)}x${String(camera.top - camera.bottom)} theme=wildwood-lichen-forest source=${typeof document === "undefined" ? "pixels" : "canvas"}`,
+    );
+  };
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => requestAnimationFrame(announcePresentedView));
+  } else {
+    setTimeout(announcePresentedView, 32);
+  }
 
   const finish = (): void => {
     if (done) return;
     done = true;
+    if (layoutTimer !== undefined) clearTimeout(layoutTimer);
     for (const mesh of parts) {
       mesh.removeFromParent();
       mesh.geometry.dispose();
@@ -292,23 +443,16 @@ export function createLoadingScreen(host: ILoadingHost): ILoadingController {
   void (async () => {
     await host.startup.whenReady();
     if (done) return;
-    // Prewarm the world's shaders, but do not wait for them here. `whenReady()` already means the
-    // world is safe to show, and compiling a lit, post-processed scene takes far longer than the
-    // launch window: hold the screen for it and a playtest — which advances a fixed step as fast
-    // as the machine allows — runs an entire scenario behind the launch screen, so every capture
-    // photographs the loading bar instead of the game. The prewarm still happens; it no longer
-    // decides when the player sees the world.
-    try {
-      void host.renderer.compileAsync(host.scene, host.camera).catch(() => undefined);
-    } catch {
-      // A renderer without compileAsync is not a reason to keep the world hidden.
-    }
     finish();
   })();
 
   return {
     finish,
     update(): void {
+      if (layoutTimer !== undefined) {
+        clearTimeout(layoutTimer);
+        layoutTimer = undefined;
+      }
       if (!done) updateProgress(host.startup.progress);
     },
   };

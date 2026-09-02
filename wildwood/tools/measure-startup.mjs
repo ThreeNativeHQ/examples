@@ -36,6 +36,12 @@ const QUERY = opt("query", "");
 const PORT = Number(opt("port", "5279"));
 const READY_TIMEOUT_MS = Number(opt("timeout", "60000"));
 const VALIDATE = opt("validate", "");
+const PROFILE = opt("profile", "phase0");
+const SERVER = opt("server", "dev");
+const DETAIL_TIMEOUT_MS = Number(opt("detail-timeout", "8000"));
+const EXPECT_DETAIL_REJECTION = opt("expect-detail-rejection", "");
+const EXPECT_VENDOR = opt("adapter-vendor", "");
+const EXPECT_ARCHITECTURE = opt("adapter-architecture", "");
 const BASE = `http://127.0.0.1:${PORT}/${QUERY}`;
 
 if (!Number.isInteger(RUNS) || RUNS < 1)
@@ -44,6 +50,17 @@ if (!Number.isFinite(READY_TIMEOUT_MS) || READY_TIMEOUT_MS < 1) {
 	throw new Error(
 		`--timeout must be a positive millisecond value, got ${READY_TIMEOUT_MS}`,
 	);
+}
+if (!Number.isFinite(DETAIL_TIMEOUT_MS) || DETAIL_TIMEOUT_MS < 1) {
+	throw new Error(
+		`--detail-timeout must be a positive millisecond value, got ${DETAIL_TIMEOUT_MS}`,
+	);
+}
+if (PROFILE !== "phase0" && PROFILE !== "phase2") {
+	throw new Error(`--profile must be phase0 or phase2, got ${PROFILE}`);
+}
+if (SERVER !== "dev" && SERVER !== "preview") {
+	throw new Error(`--server must be dev or preview, got ${SERVER}`);
 }
 
 const WEBGPU_ARGS = [
@@ -59,7 +76,7 @@ function startVite() {
 		"npx",
 		[
 			"vite",
-			"dev",
+			SERVER,
 			"--host",
 			"127.0.0.1",
 			"--port",
@@ -136,12 +153,116 @@ function validateRun(run) {
 			"required startup observation missing: WebGPU adapter info",
 		);
 	}
+	if (PROFILE !== "phase2") return;
+	if (
+		!run.markers.some((marker) =>
+			marker.text.startsWith("TN_LOADING_VIEW_READY"),
+		)
+	) {
+		throw new Error(
+			"required startup observation missing: TN_LOADING_VIEW_READY marker",
+		);
+	}
+	if (run.firstFrame.whiteRatio >= 0.9) {
+		throw new Error(
+			`TN_STARTUP_WHITE_FRAME: first captured frame white ratio ${String(run.firstFrame.whiteRatio)}`,
+		);
+	}
+	if (!Number.isFinite(run.criticalMb) || run.criticalMb < 0) {
+		throw new Error("required startup observation missing: critical transfer bytes");
+	}
+	if (!Number.isFinite(run.totalMb) || run.totalMb <= 0) {
+		throw new Error("required startup observation missing: total transfer bytes");
+	}
+	if (!Array.isArray(run.resourceCensus) || run.resourceCensus.length === 0) {
+		throw new Error("required startup observation missing: complete resource census");
+	}
+	if (run.pendingResourceCount !== 0) {
+		throw new Error(
+			`TN_STARTUP_CENSUS_INCOMPLETE: ${String(run.pendingResourceCount)} responses did not finish`,
+		);
+	}
+	if (!Number.isFinite(run.detailStartMs) || run.detailStartMs < 0) {
+		throw new Error("required startup observation missing: detail start marker");
+	}
+	if (!Number.isFinite(run.detailTerminalMs) || run.detailTerminalMs < 0) {
+		throw new Error("required startup observation missing: detail terminal marker");
+	}
+	if (!Number.isFinite(run.detailDurationMs) || run.detailDurationMs < 0) {
+		throw new Error("required startup observation missing: detail duration");
+	}
+	if (!Array.isArray(run.postEntryLongTasks)) {
+		throw new Error("required startup observation missing: post-entry long tasks");
+	}
+	const longest = run.postEntryLongTasks.reduce(
+		(maximum, task) => Math.max(maximum, task.duration),
+		0,
+	);
+	if (longest > 100) {
+		throw new Error(
+			`TN_STARTUP_LONG_TASK: ${String(longest)} ms after valley entry exceeds 100 ms`,
+		);
+	}
+	if (run.criticalMb > 25) {
+		throw new Error(
+			`TN_STARTUP_CRITICAL_BYTES: ${String(run.criticalMb)} MB exceeds 25 MB`,
+		);
+	}
+	if (run.detailDurationMs > DETAIL_TIMEOUT_MS) {
+		throw new Error(
+			`TN_STARTUP_DETAIL_TIMEOUT: ${String(run.detailDurationMs)} ms exceeds ${String(DETAIL_TIMEOUT_MS)} ms`,
+		);
+	}
+	if (
+		EXPECT_VENDOR !== "" &&
+		run.adapterInfo.vendor.toLowerCase() !== EXPECT_VENDOR.toLowerCase()
+	) {
+		throw new Error(
+			`TN_STARTUP_ADAPTER: expected vendor ${EXPECT_VENDOR}, got ${run.adapterInfo.vendor}`,
+		);
+	}
+	if (
+		EXPECT_ARCHITECTURE !== "" &&
+		run.adapterInfo.architecture.toLowerCase() !==
+			EXPECT_ARCHITECTURE.toLowerCase()
+	) {
+		throw new Error(
+			`TN_STARTUP_ADAPTER: expected architecture ${EXPECT_ARCHITECTURE}, got ${run.adapterInfo.architecture}`,
+		);
+	}
+	const detailTerminal = run.markers.find(
+		(marker) =>
+			marker.text.startsWith("TN_VALLEY_DETAIL_DONE") ||
+			marker.text.startsWith("TN_VALLEY_DETAIL_REJECTED"),
+	)?.text;
+	requireObservation("detail terminal text", detailTerminal);
+	if (
+		EXPECT_DETAIL_REJECTION !== "" &&
+		!detailTerminal.includes(`asset=${EXPECT_DETAIL_REJECTION}`)
+	) {
+		throw new Error(
+			`TN_STARTUP_DETAIL_REJECTION: expected named asset ${EXPECT_DETAIL_REJECTION}, got ${detailTerminal}`,
+		);
+	}
+	if (
+		EXPECT_DETAIL_REJECTION === "" &&
+		!detailTerminal.startsWith("TN_VALLEY_DETAIL_DONE")
+	) {
+		throw new Error(
+			`TN_STARTUP_DETAIL_REJECTION: unexpected detail rejection ${detailTerminal}`,
+		);
+	}
 }
 
 function validationFixture() {
 	return {
-		markers: [{ text: "TN_VALLEY_BUILT" }],
-		firstFrame: { t: 1, mean: [255, 255, 255], whiteRatio: 1 },
+		markers: [
+			{ t: 1, text: "TN_LOADING_VIEW_READY" },
+			{ t: 100, text: "TN_VALLEY_BUILT" },
+			{ t: 101, text: "TN_VALLEY_DETAIL_START" },
+			{ t: 500, text: "TN_VALLEY_DETAIL_DONE" },
+		],
+		firstFrame: { t: 1, mean: [8, 18, 12], whiteRatio: 0 },
 		firstFramePath: "artifacts/startup/fixture-run-1-first-frame.png",
 		adapterInfo: {
 			vendor: "test",
@@ -149,6 +270,14 @@ function validationFixture() {
 			device: "test",
 			description: "test",
 		},
+		criticalMb: 10,
+		totalMb: 20,
+		resourceCensus: [{ url: "/fixture", bytes: 20_000_000, doneAt: 500 }],
+		pendingResourceCount: 0,
+		detailStartMs: 101,
+		detailTerminalMs: 500,
+		detailDurationMs: 399,
+		postEntryLongTasks: [],
 	};
 }
 
@@ -209,11 +338,42 @@ async function runValidationControl(kind) {
 		case "missing-adapter":
 			run.adapterInfo = undefined;
 			break;
+		case "missing-bytes":
+			run.resourceCensus = [];
+			run.totalMb = undefined;
+			break;
+		case "missing-detail":
+			run.markers = run.markers.filter(
+				(marker) => !marker.text.startsWith("TN_VALLEY_DETAIL_"),
+			);
+			run.detailStartMs = undefined;
+			run.detailTerminalMs = undefined;
+			run.detailDurationMs = undefined;
+			break;
+		case "missing-long-tasks":
+			run.postEntryLongTasks = undefined;
+			break;
+		case "white-frame":
+			run.firstFrame = { t: 1, mean: [255, 255, 255], whiteRatio: 1 };
+			break;
+		case "over-long-task":
+			run.postEntryLongTasks = [{ duration: 101, startTime: 200 }];
+			break;
 		default:
 			throw new Error(`unknown --validate control: ${kind}`);
 	}
 	validateRun(run);
 	console.log(`startup validation ${kind}: passed`);
+}
+
+async function waitForMarker(markers, predicate, timeoutMs, description) {
+	const until = Date.now() + timeoutMs;
+	while (Date.now() < until) {
+		const marker = markers.find(predicate);
+		if (marker !== undefined) return marker;
+		await sleep(25);
+	}
+	throw new Error(`required startup observation missing: ${description}`);
 }
 
 async function oneRun(browser, index) {
@@ -224,6 +384,23 @@ async function oneRun(browser, index) {
 	let sampler;
 	try {
 		const page = await context.newPage();
+		await page.addInitScript(() => {
+			globalThis.__TN_STARTUP_LONG_TASKS__ = [];
+			if (typeof PerformanceObserver === "undefined") return;
+			try {
+				const observer = new PerformanceObserver((list) => {
+					for (const entry of list.getEntries()) {
+						globalThis.__TN_STARTUP_LONG_TASKS__.push({
+							duration: entry.duration,
+							startTime: entry.startTime,
+						});
+					}
+				});
+				observer.observe({ entryTypes: ["longtask"] });
+			} catch {
+				globalThis.__TN_STARTUP_LONG_TASKS__ = undefined;
+			}
+		});
 		// Cold: no cache between runs, and the dev server's module graph is already warm, so what is
 		// measured is the bytes and the work, not Vite's first transform.
 		await context.route("**/*", (route) => route.continue());
@@ -293,27 +470,60 @@ async function oneRun(browser, index) {
 		});
 
 		const frames = [];
-		sampling = true;
 		let firstFramePng;
 		const firstFramePath = `artifacts/startup/${LABEL}-run-${index + 1}-first-frame.png`;
-		sampler = (async () => {
+		const startSampler = () => {
+			sampling = true;
+			sampler = (async () => {
 			while (sampling) {
 				try {
 					const shot = await page.screenshot({ type: "png", scale: "css" });
 					if (firstFramePng === undefined) firstFramePng = shot;
 					frames.push({ t: Date.now() - t0, ...classify(shot) });
+					// Phase 2 needs the first presented frame, not a continuous pixel workload. Repeated
+					// WebGPU screenshots stall the page being measured and manufacture post-entry tasks.
+					if (PROFILE === "phase2") sampling = false;
 				} catch {
 					/* page navigating */
 				}
 				await sleep(200);
 			}
-		})();
+			})();
+		};
 
 		await page.goto(BASE, {
-			waitUntil: "domcontentloaded",
+			waitUntil: "commit",
 			timeout: READY_TIMEOUT_MS,
 		});
+		await waitForMarker(
+			markers,
+			(marker) => marker.text.startsWith("TN_LOADING_VIEW_READY"),
+			READY_TIMEOUT_MS,
+			"TN_LOADING_VIEW_READY marker",
+		);
+		startSampler();
+		await page.waitForLoadState("domcontentloaded", { timeout: READY_TIMEOUT_MS });
 		const dcl = Date.now() - t0;
+		const valleyMarker = await waitForMarker(
+			markers,
+			(marker) => marker.text.startsWith("TN_VALLEY_BUILT"),
+			READY_TIMEOUT_MS,
+			"TN_VALLEY_BUILT marker",
+		);
+		const detailStartMarker = await waitForMarker(
+			markers,
+			(marker) => marker.text.startsWith("TN_VALLEY_DETAIL_START"),
+			READY_TIMEOUT_MS,
+			"TN_VALLEY_DETAIL_START marker",
+		);
+		const detailTerminalMarker = await waitForMarker(
+			markers,
+			(marker) =>
+				marker.text.startsWith("TN_VALLEY_DETAIL_DONE") ||
+				marker.text.startsWith("TN_VALLEY_DETAIL_REJECTED"),
+			DETAIL_TIMEOUT_MS,
+			"detail done or named rejection marker",
+		);
 		await page.waitForFunction(
 			() => window.__TN_STARTUP_READY__ === true,
 			undefined,
@@ -323,8 +533,9 @@ async function oneRun(browser, index) {
 			},
 		);
 		const readyAt = Date.now() - t0;
-		// Let late detail land so the total transfer is honest.
-		await sleep(4000);
+		// The detail terminal marker means all required sources resolved or the named rejection was
+		// handled. One quiet half-second lets Network.loadingFinished close the complete byte census.
+		await sleep(500);
 		sampling = false;
 		await sampler;
 
@@ -349,12 +560,29 @@ async function oneRun(browser, index) {
 		const adapter = formatAdapter(adapterInfo);
 
 		const valley =
-			markers.find((m) => m.text.startsWith("TN_VALLEY_BUILT"))?.t ?? -1;
+			valleyMarker.t;
 		const firstNonWhite = frames.find((f) => f.whiteRatio < 0.9)?.t ?? -1;
 		const firstFrame = frames[0];
 		const criticalBytes = [...resources.values()]
 			.filter((r) => r.done !== undefined && valley >= 0 && r.done <= valley)
 			.reduce((s, r) => s + r.size, 0);
+		const resourceCensus = [...resources.values()]
+			.filter((resource) => resource.done !== undefined)
+			.map((resource) => ({
+				bytes: resource.size,
+				doneAt: resource.done,
+				url: resource.url.replace(/^https?:\/\/[^/]+/, ""),
+			}))
+			.sort((a, b) => a.doneAt - b.doneAt || a.url.localeCompare(b.url));
+		const pendingResourceCount = [...resources.values()].filter(
+			(resource) => resource.done === undefined,
+		).length;
+		const observedLongTasks = await page.evaluate(
+			() => globalThis.__TN_STARTUP_LONG_TASKS__,
+		);
+		const postEntryLongTasks = Array.isArray(observedLongTasks)
+			? observedLongTasks.filter((task) => task.startTime >= valley)
+			: undefined;
 		const largest = [...resources.values()]
 			.sort((a, b) => b.size - a.size)
 			.slice(0, 10)
@@ -376,12 +604,27 @@ async function oneRun(browser, index) {
 			firstFramePath,
 			totalMb: Number((bytes / 1e6).toFixed(2)),
 			criticalMb: Number((criticalBytes / 1e6).toFixed(2)),
+			resourceCensus,
+			pendingResourceCount,
+			detailStartMs: detailStartMarker.t,
+			detailTerminalMs: detailTerminalMarker.t,
+			detailDurationMs: detailTerminalMarker.t - detailStartMarker.t,
+			postEntryLongTasks,
 			markers,
 			diagnostics,
 			frames: frames.slice(0, 60),
 			largest,
 		};
-		validateRun(run);
+		try {
+			validateRun(run);
+		} catch (error) {
+			await mkdir("artifacts/startup", { recursive: true });
+			await writeFile(
+				`artifacts/startup/${LABEL}-failed-run-${index + 1}.json`,
+				JSON.stringify(run, null, 2),
+			);
+			throw error;
+		}
 		return run;
 	} finally {
 		sampling = false;
@@ -433,7 +676,23 @@ if (VALIDATE) {
 			},
 			totalMb: med(runs.map((r) => r.totalMb)),
 			criticalMb: med(runs.map((r) => r.criticalMb)),
+			maxCriticalMb: Math.max(...runs.map((r) => r.criticalMb)),
+			detailDurationMs: {
+				median: med(runs.map((r) => r.detailDurationMs)),
+				p95: p95(runs.map((r) => r.detailDurationMs)),
+			},
+			maxPostEntryLongTaskMs: Math.max(
+				0,
+				...runs.flatMap((r) =>
+					r.postEntryLongTasks.map((task) => task.duration),
+				),
+			),
 		};
+		if (PROFILE === "phase2" && summary.valleyBuiltMs.p95 > 2500) {
+			throw new Error(
+				`TN_STARTUP_CRITICAL_TIME: p95 ${String(summary.valleyBuiltMs.p95)} ms exceeds 2500 ms`,
+			);
+		}
 		await mkdir("artifacts/startup", { recursive: true });
 		await writeFile(
 			`artifacts/startup/${LABEL}.json`,
@@ -441,16 +700,16 @@ if (VALIDATE) {
 		);
 		console.log(`\n## startup ${LABEL} — ${summary.adapter}\n`);
 		console.log(
-			"| run | DCL | valley built | startup ready | first non-white frame | total MB | critical MB |",
+			"| run | DCL | valley built | startup ready | detail | first non-white frame | total MB | critical MB | max long task |",
 		);
-		console.log("|---|---:|---:|---:|---:|---:|---:|");
+		console.log("|---|---:|---:|---:|---:|---:|---:|---:|---:|");
 		for (const r of runs) {
 			console.log(
-				`| ${r.index + 1} | ${r.dclMs} | ${r.valleyBuiltMs} | ${r.startupReadyMs} | ${r.firstNonWhiteFrameMs} | ${r.totalMb} | ${r.criticalMb} |`,
+				`| ${r.index + 1} | ${r.dclMs} | ${r.valleyBuiltMs} | ${r.startupReadyMs} | ${r.detailDurationMs} | ${r.firstNonWhiteFrameMs} | ${r.totalMb} | ${r.criticalMb} | ${Math.max(0, ...r.postEntryLongTasks.map((task) => task.duration)).toFixed(1)} |`,
 			);
 		}
 		console.log(
-			`| **p95** | | ${summary.valleyBuiltMs.p95} | ${summary.startupReadyMs.p95} | | | |`,
+			`| **p95** | | ${summary.valleyBuiltMs.p95} | ${summary.startupReadyMs.p95} | ${summary.detailDurationMs.p95} | | | | ${summary.maxPostEntryLongTaskMs.toFixed(1)} |`,
 		);
 		console.log("\nmarkers (run 1):");
 		for (const m of runs[0].markers)

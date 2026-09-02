@@ -1,0 +1,33 @@
+{
+  "name": "wildwood-pond",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "settle-on-the-south-bank",
+      "waitTicks": 90,
+      "release": true,
+      "screenshot": "pond-still"
+    },
+    {
+      "kind": "wait",
+      "label": "let-the-ripples-travel",
+      "waitTicks": 120,
+      "release": true,
+      "screenshot": "pond-moved"
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    }
+  }
+}

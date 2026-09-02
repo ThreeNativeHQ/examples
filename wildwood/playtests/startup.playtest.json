@@ -1,0 +1,21 @@
+{
+  "name": "wildwood-startup",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 0,
+  "steps": [
+    { "kind": "wait", "label": "first-seconds", "waitTicks": 120, "release": true },
+    { "kind": "input", "label": "walk-at-once", "press": "KeyW", "holdTicks": 120, "release": true },
+    { "kind": "wait", "label": "settle", "waitTicks": 60, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
+    "startup": { "maxEnteredMs": 2500, "maxReadyMs": 8000 },
+    "resources": [
+      { "id": "state", "path": "valleyReady", "equals": true, "allowTrivial": "True from the first snapshot on purpose: the valley must be built before the first observation, which is the whole point of the critical tier; the startup ceilings above measure how soon." },
+      { "id": "state", "path": "odometer", "gte": 3, "changed": true }
+    ],
+    "movement": { "entity": "walker", "minDistance": 2 }
+  }
+}

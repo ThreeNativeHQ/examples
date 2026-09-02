@@ -3,11 +3,11 @@
     "threenative-assets": {
       "command": "node",
       "args": [
-        "/home/joao/projects/threenative/sandbox/.mcp-tools/node_modules/threenative-asset-mcp/dist/index.js"
+        "./node_modules/@threenative/core/mcp/assets.mjs"
       ],
       "env": {
-        "ASSET_DOWNLOAD_DIR": "/home/joao/projects/threenative/sandbox/wildwood/assets",
-        "AUDIO_DOWNLOAD_DIR": "/home/joao/projects/threenative/sandbox/wildwood/public/audio"
+        "ASSET_DOWNLOAD_DIR": "./public/assets",
+        "AUDIO_DOWNLOAD_DIR": "./public/audio"
       }
     },
     "threenative-sculpt": {
