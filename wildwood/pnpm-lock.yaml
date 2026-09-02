@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@threenative/core': file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.0-water-cc509d1e8f25.tgz
-  '@threenative/assets': file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-5031fdae365d.tgz
+  '@threenative/assets': file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz
   '@threenative/physics': file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.3.0-7e419324f826.tgz
   '@threenative/playtest': file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-223cf664a7aa.tgz
   '@threenative/runtime-native': file:/home/joao/projects/threenative/sandbox/.packages/threenative-runtime-native-0.3.0-edd1bc2aa63b.tgz
@@ -52,8 +52,8 @@ importers:
         specifier: 4.3.3
         version: 4.3.3(vite@8.2.0(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0))
       '@threenative/assets':
-        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-5031fdae365d.tgz
-        version: file:../.packages/threenative-assets-0.3.0-5031fdae365d.tgz(@types/node@26.4.0)
+        specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz
+        version: file:../.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz(@types/node@26.4.0)
       '@threenative/playtest':
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-223cf664a7aa.tgz
         version: file:../.packages/threenative-playtest-0.3.0-223cf664a7aa.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=baf077414020ff2399cac6cf7bf0e4079aef27f79b16ffed5eeec31d58906043))
@@ -71,7 +71,7 @@ importers:
         version: 6.0.5(vite@8.2.0(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0))
       create-threenative:
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.3-1454e91de391.tgz
-        version: file:../.packages/create-threenative-0.2.3-1454e91de391.tgz(@threenative/assets@file:../.packages/threenative-assets-0.3.0-5031fdae365d.tgz(@types/node@26.4.0))(@types/node@26.4.0)
+        version: file:../.packages/create-threenative-0.2.3-1454e91de391.tgz(@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz(@types/node@26.4.0))(@types/node@26.4.0)
       esbuild:
         specifier: 0.27.0
         version: 0.27.0
@@ -967,8 +967,8 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-5031fdae365d.tgz':
-    resolution: {integrity: sha512-mTEqerDSUSF7G8xnHLs9F3rtuJru2BP4gpz+bk0rh8hkKQ6GB4tm72G9ya+SOLr3BOXJHdTVmBMrZq2GZtXg9A==, tarball: file:../.packages/threenative-assets-0.3.0-5031fdae365d.tgz}
+  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz':
+    resolution: {integrity: sha512-8tK3GQxOeWRPk9zZhi8WAbgX2DJAELj/6yRNVtcE++pjYBWOKL7W8te3FIYUTT8xDl3quJoKgVD/ggXt3WVxFg==, tarball: file:../.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz}
     version: 0.3.0
 
   '@threenative/core@file:../.packages/threenative-core-0.3.0-water-cc509d1e8f25.tgz':
@@ -3039,7 +3039,7 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.2.0(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)
 
-  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-5031fdae365d.tgz(@types/node@26.4.0)':
+  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz(@types/node@26.4.0)':
     dependencies:
       '@gltf-transform/core': 4.4.2
       '@gltf-transform/extensions': 4.4.2
@@ -3331,12 +3331,12 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  create-threenative@file:../.packages/create-threenative-0.2.3-1454e91de391.tgz(@threenative/assets@file:../.packages/threenative-assets-0.3.0-5031fdae365d.tgz(@types/node@26.4.0))(@types/node@26.4.0):
+  create-threenative@file:../.packages/create-threenative-0.2.3-1454e91de391.tgz(@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz(@types/node@26.4.0))(@types/node@26.4.0):
     dependencies:
       '@gltf-transform/core': 4.4.2
       '@gltf-transform/extensions': 4.4.2
       '@gltf-transform/functions': 4.4.2(@types/node@26.4.0)
-      '@threenative/assets': file:../.packages/threenative-assets-0.3.0-5031fdae365d.tgz(@types/node@26.4.0)
+      '@threenative/assets': file:../.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz(@types/node@26.4.0)
       draco3dgltf: 1.5.7
       ktx-parse: 1.1.0
       ktx2-encoder: 0.6.0

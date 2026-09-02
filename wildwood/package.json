@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
-    "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-5031fdae365d.tgz",
+    "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz",
     "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-223cf664a7aa.tgz",
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
@@ -55,7 +55,7 @@
     },
     "overrides": {
       "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.0-water-cc509d1e8f25.tgz",
-      "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-5031fdae365d.tgz",
+      "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz",
       "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.3.0-7e419324f826.tgz",
       "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-223cf664a7aa.tgz",
       "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-runtime-native-0.3.0-edd1bc2aa63b.tgz",
