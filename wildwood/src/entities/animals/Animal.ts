@@ -1,4 +1,10 @@
-import { AnimationPlayer, clipTrackBindings, normaliseToMetres } from "@threenative/core";
+import {
+  AnimationPlayer,
+  boneLengths,
+  clipTrackBindings,
+  normaliseToMetres,
+  type IBoneLengthSnapshot,
+} from "@threenative/core";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import {
   BufferGeometry,
@@ -65,6 +71,14 @@ export class Animal {
   #homeRadius: number;
   #clips: AnimalLookup;
 
+  /**
+   * Parent→child bone distances at bind, captured after normalisation and before the first clip
+   * plays. The baseline the bone-length invariance check (`boneLengthDeviations`) compares every
+   * later pose against: a rigid skeleton preserves these distances under any pose, so a
+   * deviation names the bone the pose broke.
+   */
+  readonly bindBoneLengths: IBoneLengthSnapshot;
+
   constructor(
     spec: AnimalSpec,
     model: IAnimalModel,
@@ -114,6 +128,10 @@ export class Animal {
     // vertices actually land — skin included. It was installed the whole time.
     const scale = normaliseToMetres(this.object, { axis: "longest", metres: spec.length });
     console.info(`TN_ANIMALS_SCALE:${spec.id} scale=${scale.toFixed(4)}`);
+
+    // Capture the invariance baseline under the same ancestor transform every later comparison
+    // reads, and before any clip can write a pose onto the rig.
+    this.bindBoneLengths = boneLengths(clone);
 
     this.#home = this.object.position.clone().setY(0);
     this.#heading = this.#rng() * Math.PI * 2;

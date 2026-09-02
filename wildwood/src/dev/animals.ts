@@ -8,7 +8,7 @@
  */
 import type { Animal, AnimalState } from "../entities/animals/Animal.js";
 import { spawnWildwoodAnimals } from "../entities/animals/spawnWildwoodAnimals.js";
-import { createAssetLoader, createRandom } from "@threenative/core";
+import { boneLengthDeviations, createAssetLoader, createRandom } from "@threenative/core";
 import { assertJsonSafe } from "@threenative/playtest";
 import { LAKE, POND, heightAt } from "../render/terrain.js";
 import {
@@ -29,6 +29,15 @@ import {
 import { WebGPURenderer } from "three/webgpu";
 
 const params = new URLSearchParams(location.search);
+/**
+ * `?only=<id>` spawns exactly one animal at the origin and frames the camera on it — the view a
+ * pose verdict can be made against. Every animal in the full-roster view is a few dozen pixels
+ * at the edge of frame, which is how two "looks correct" calls in the deformed-animals
+ * investigation were wrong.
+ */
+const onlyId = params.get("only");
+/** `?roam=0` pins the roster in place: the state machine keeps playing, the body never leaves. */
+const roamPinned = params.get("roam") === "0";
 const OBSERVATION_VERSION = 2;
 const OBSERVATION_SEED = 90210;
 const FIXED_STEP_SECONDS = 1 / 60;
@@ -52,8 +61,9 @@ const forcedState: AnimalState | null = STATE_NAMES.includes(
 )
   ? (params.get("state") as AnimalState)
   : null;
-/** Radius a circling threat walks at; 0 disables the threat entirely. */
-const threatRadius = Number(params.get("threat") ?? 14);
+/** Radius a circling threat walks at; 0 disables the threat entirely. Single-animal view defaults to 0. */
+const threatRadius =
+  params.get("threat") !== null ? Number(params.get("threat")) : onlyId !== null ? 0 : 14;
 /** A static threat pinned at "x,z" — the flee lane's way of promising a bolt on frame one. */
 const staticThreat = params.get("threatAt");
 
@@ -72,6 +82,9 @@ scene.fog = new Fog(0xc7dcea, 26, 62);
 const camera = new PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
 camera.position.set(0, 2.4, 11);
 camera.lookAt(0, 0.8, 0);
+
+/** The single animal the `?only` view frames, for the per-frame camera hold below. */
+let framedAnimal: Animal | null = null;
 
 const sun = new DirectionalLight(0xfff1d6, 2.6);
 sun.position.set(9, 13, 7);
@@ -104,6 +117,18 @@ scene.add(threatMarker);
 await renderer.init();
 const assets = createAssetLoader({ basePath: "/", renderer });
 const rng = createRandom(OBSERVATION_SEED);
+/** `?only` spawns one animal at the origin; the roster view keeps the production placements. */
+const placements = onlyId !== null
+  ? (() => {
+      const match = PRODUCTION_PLACEMENTS.find((placement) => placement.id === onlyId);
+      if (match === undefined) {
+        throw new Error(
+          `?only must name a production animal (${PRODUCTION_PLACEMENTS.map((p) => p.id).join(", ")}); got ${onlyId}`,
+        );
+      }
+      return [{ id: match.id, x: 0, z: 0 }];
+    })()
+  : PRODUCTION_PLACEMENTS;
 const animals = await spawnWildwoodAnimals({
   // The installed loader resolves the same logical manifest entries Valley passes to ctx.assets.
   load: (path) => assets.model(`fab/${ANIMAL_LISTING}/ue/Models/${path}`),
@@ -111,7 +136,7 @@ const animals = await spawnWildwoodAnimals({
   // `heightAt` floats the whole roster ~5 m above the plane they are supposed to stand on.
   ground: () => 0,
   parent: scene,
-  placements: PRODUCTION_PLACEMENTS,
+  placements,
   rng,
   log: (line) => console.log(line),
 });
@@ -139,27 +164,41 @@ if (corruptAnimalForward !== null) {
   rigYawCorruptionRadians.fox = Math.PI;
 }
 
-const observation = measureProductionSubjects(animals.animals);
-assertJsonSafe(observation);
-if (!params.has("omitAnimalObservation")) {
-  (
-    globalThis as typeof globalThis & {
-      __TN_ANIMALS_OBSERVATION__?: typeof observation;
-    }
-  ).__TN_ANIMALS_OBSERVATION__ = observation;
-  console.log(
-    `TN_ANIMALS_OBSERVATION_READY:${String(observation.subjects.length)}`,
-  );
+if (onlyId !== null) {
+  framedAnimal = animals.animals[0] ?? null;
+  if (framedAnimal === null) throw new Error("?only spawned no animal");
+  // Frame the one animal: a three-quarter view sized off its measured metre length.
+  const span = framedAnimal.spec.length;
+  camera.position.set(span * 1.35, span * 0.62, span * 1.85);
+  camera.lookAt(0, span * 0.42, 0);
+}
+
+const observation = onlyId === null ? measureProductionSubjects(animals.animals) : null;
+if (observation !== null) {
+  assertJsonSafe(observation);
+  if (!params.has("omitAnimalObservation")) {
+    (
+      globalThis as typeof globalThis & {
+        __TN_ANIMALS_OBSERVATION__?: typeof observation;
+      }
+    ).__TN_ANIMALS_OBSERVATION__ = observation;
+    console.log(
+      `TN_ANIMALS_OBSERVATION_READY:${String(observation.subjects.length)}`,
+    );
+  }
 }
 
 // The observation uses production placements. Once frozen, restore the visual roster's close
 // lineup so its headed WebGPU screenshot still shows the six measured subjects at useful scale.
-for (const [index, animal] of animals.animals.entries()) {
-  animal.object.position.set(
-    (index - (animals.animals.length - 1) / 2) * 3.2,
-    0,
-    0,
-  );
+// The single-animal view keeps its origin spawn and its framed camera.
+if (onlyId === null) {
+  for (const [index, animal] of animals.animals.entries()) {
+    animal.object.position.set(
+      (index - (animals.animals.length - 1) / 2) * 3.2,
+      0,
+      0,
+    );
+  }
 }
 // The per-clip binding audit exists on every Animal and nothing was calling it. That is why the
 // doe and the wolf shipped bound to another animal's clip names, standing in bind pose, with no
@@ -168,6 +207,53 @@ for (const line of animals.animals.flatMap((animal) => animal.audit())) {
   console.info(`TN_ANIMALS_AUDIT ${line}`);
 }
 console.log("TN_ANIMALS_READY");
+
+/**
+ * The bone-length invariance report for one animal, as posed right now.
+ *
+ * A rigid skeleton preserves every parent→child distance under any pose; the report names any
+ * bone whose distance to its parent changed since the bind-pose baseline. This is the number a
+ * pose verdict is made from — no screenshot is graded.
+ */
+function boneReport(animal: Animal) {
+  const rig = requiredAnimalRig(animal);
+  const report = boneLengthDeviations(rig, animal.bindBoneLengths);
+  const deviations = report.deviations.slice(0, 8).map((deviation) => ({
+    bone: deviation.bone,
+    bindLength: rounded(deviation.bindLength),
+    posedLength: rounded(deviation.posedLength),
+    delta: rounded(deviation.delta),
+    // Zero-length bind bones cannot move by ratio; a -1 says "read delta instead".
+    ratio: Number.isFinite(deviation.ratio) ? rounded(deviation.ratio) : -1,
+  }));
+  return {
+    id: animal.spec.id,
+    state: animal.state,
+    clip: animal.clip ?? null,
+    compared: report.compared,
+    rigid: report.rigid,
+    maxDeviation: rounded(report.maxDeviation),
+    worst: deviations[0] ?? null,
+    deviations,
+  };
+}
+
+/** Anatomical forward (head−pelvis, horizontal) dotted with the body's facing axis. */
+function forwardProbe(animal: Animal) {
+  const { head, pelvis } = requiredForwardLandmarks(animal);
+  animal.object.updateWorldMatrix(true, true);
+  const headWorld = head.getWorldPosition(new Vector3());
+  const pelvisWorld = pelvis.getWorldPosition(new Vector3());
+  const forward = headWorld.sub(pelvisWorld).setY(0);
+  const length = forward.length();
+  if (length <= 1e-9) return { id: animal.spec.id, forwardZ: 0, degenerate: true };
+  const yaw = animal.object.rotation.y;
+  const forwardZ = (forward.x * Math.sin(yaw) + forward.z * Math.cos(yaw)) / length;
+  return { id: animal.spec.id, forwardZ: rounded(forwardZ), degenerate: false };
+}
+
+let boneReportPrinted = false;
+let lastBoneSample = -1;
 
 function measureProductionSubjects(subjects: readonly Animal[]) {
   if (subjects.length !== PRODUCTION_PLACEMENTS.length) {
@@ -379,9 +465,19 @@ function vector(value: Vector3): readonly [number, number, number] {
 
 let clock = 0;
 let forcedSlot = -1;
+/** Where each animal stood before this frame when `?roam=0` pins the roster in place. */
+const pinnedPositions = new Map<Animal, Vector3>();
 
 renderer.setAnimationLoop(() => {
   clock += 1 / 60;
+
+  if (roamPinned) {
+    for (const animal of animals.animals) {
+      pinnedPositions.set(animal, animal.object.position.clone());
+      // Re-assert every frame: the state machine keeps its clip, the body never leaves home.
+      animal.forceState(forcedState ?? "wander", 1);
+    }
+  }
 
   // A slow ghost circles the pen; anything inside its bolt radius reacts as it would to you.
   // threatAt pins it so the flee lane can shoot a guaranteed simultaneous bolt.
@@ -411,8 +507,41 @@ renderer.setAnimationLoop(() => {
   }
   animals.update(1 / 60, threat);
 
-  camera.position.x = Math.sin(clock * 0.12) * 1.6;
-  camera.lookAt(0, 0.8, 0);
+  if (roamPinned) {
+    for (const [animal, pinned] of pinnedPositions) {
+      animal.object.position.copy(pinned);
+    }
+  }
+
+  // The framed view holds its camera; only the roster view drifts.
+  if (framedAnimal === null) {
+    camera.position.x = Math.sin(clock * 0.12) * 1.6;
+    camera.lookAt(0, 0.8, 0);
+  }
+
+  // Bone-length invariance and anatomical forward, sampled at 4 Hz. The first sample lands
+  // once at ~0.75 s on the console as TN_BONE_REPORT; the live state sits on
+  // window.__TN_BONE_LENGTHS__ for playtests to read.
+  const slot = Math.floor(clock * 4);
+  if (slot !== lastBoneSample && clock > 0.5) {
+    lastBoneSample = slot;
+    const reports = animals.animals.map((animal) => boneReport(animal));
+    const forwards = animals.animals.map((animal) => forwardProbe(animal));
+    (
+      globalThis as typeof globalThis & {
+        __TN_BONE_LENGTHS__?: { seconds: number; animals: typeof reports; forwards: typeof forwards };
+      }
+    ).__TN_BONE_LENGTHS__ = { seconds: rounded(clock), animals: reports, forwards };
+    if (!boneReportPrinted) {
+      boneReportPrinted = true;
+      for (const report of reports) {
+        console.log(`TN_BONE_REPORT ${JSON.stringify(report)}`);
+      }
+      for (const probe of forwards) {
+        console.log(`TN_FORWARD_PROBE ${JSON.stringify(probe)}`);
+      }
+    }
+  }
 
   if (Math.floor(clock * 5) !== Math.floor((clock - 1 / 60) * 5)) {
     hud.textContent =

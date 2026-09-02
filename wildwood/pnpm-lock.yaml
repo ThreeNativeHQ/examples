@@ -972,7 +972,7 @@ packages:
     version: 0.3.0
 
   '@threenative/core@file:../.packages/threenative-core-0.3.0-e26a8af27221.tgz':
-    resolution: {integrity: sha512-8cGPn24npePmhbV7025v7v3dTiL2jv9I73EqWgv62rn3kTd9uZEZsKPH27eqxewUZrWrEGkQKvVNzr6v6jOmhA==, tarball: file:../.packages/threenative-core-0.3.0-e26a8af27221.tgz}
+    resolution: {integrity: sha512-MuBXlAzTCHHTXD+7A/Qb56oo/5VFK9LOQjXvoAb0lkkU4JrqeHDOHtQFp9VblDzJRTPS7/7mckDa7i7/qZvf6A==, tarball: file:../.packages/threenative-core-0.3.0-e26a8af27221.tgz}
     version: 0.3.0
     peerDependencies:
       '@threenative/playtest': '>=0.3.0 <0.4.0'
