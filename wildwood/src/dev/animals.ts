@@ -3,8 +3,8 @@
  *
  * This is a dev entry (`/dev-animals.html`), not the game — it exists so a screenshot can
  * prove the animals render, animate, and bind their clips, without booting the valley. The
- * GLB paths are the same ones the valley loads; the loader here is a plain GLTFLoader with
- * the meshopt decoder wired, standing in for `ctx.assets.model`.
+ * GLB paths are the same ones the valley loads; the installed `createAssetLoader` resolves the
+ * same compiled manifest and compressed-texture support as `ctx.assets.model`.
  */
 import type { Animal, AnimalState } from "../entities/animals/Animal.js";
 import { spawnWildwoodAnimals } from "../entities/animals/spawnWildwoodAnimals.js";
