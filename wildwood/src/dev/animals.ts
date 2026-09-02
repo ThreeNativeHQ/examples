@@ -161,6 +161,12 @@ for (const [index, animal] of animals.animals.entries()) {
     0,
   );
 }
+// The per-clip binding audit exists on every Animal and nothing was calling it. That is why the
+// doe and the wolf shipped bound to another animal's clip names, standing in bind pose, with no
+// error anywhere: a track that binds nothing plays the bind pose and says so to no one.
+for (const line of animals.animals.flatMap((animal) => animal.audit())) {
+  console.info(`TN_ANIMALS_AUDIT ${line}`);
+}
 console.log("TN_ANIMALS_READY");
 
 function measureProductionSubjects(subjects: readonly Animal[]) {

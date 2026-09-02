@@ -48,9 +48,21 @@ const FOX_CLIPS: AnimalClipMap = {
   jump: "ANIM_Fox_JumpBite",
 };
 
+/**
+ * The wolf is the fox's rig family, but the clips live in the wolf's OWN pack and carry its own
+ * prefix. Spreading `FOX_CLIPS` and overriding three names left seven `ANIM_Fox_*` names that
+ * `SK_Wolf.glb` does not contain, so the wolf bound one clip out of ten and stood in bind pose.
+ * Same for the doe below. The audit reports it (`MISSING`); nothing was calling the audit.
+ */
 const WOLF_CLIPS: AnimalClipMap = {
-  ...FOX_CLIPS,
+  idle: "ANIM_Wolf_IdleBreathe",
+  idleAlt: "ANIM_Wolf_IdleLookAround",
+  alert: "ANIM_Wolf_IdleAggressive",
   graze: "ANIM_Wolf_Howl",
+  walk: "ANIM_Wolf_Walk",
+  run: "ANIM_Wolf_Run",
+  attack: "ANIM_Wolf_Bite",
+  die: "ANIM_Wolf_Death",
   hitReact: "ANIM_Wolf_GetHitLeft",
   jump: "ANIM_Wolf_JumpBite",
 };
@@ -69,8 +81,15 @@ const STAG_CLIPS: AnimalClipMap = {
 };
 
 const DOE_CLIPS: AnimalClipMap = {
-  ...STAG_CLIPS,
+  idle: "ANIM_DeerDoe_IdleBreathe",
+  idleAlt: "ANIM_DeerDoe_IdleLookAround",
+  alert: "ANIM_DeerDoe_IdleLookAround",
+  graze: "ANIM_DeerDoe_IdleGraze",
+  walk: "ANIM_DeerDoe_Walk",
+  run: "ANIM_DeerDoe_Run",
   attack: "ANIM_DeerDoe_GrazeOnce",
+  die: "ANIM_DeerDoe_Death",
+  hitReact: "ANIM_DeerDoe_GetHit",
   jump: "ANIM_DeerDoe_WalkGraze",
 };
 
