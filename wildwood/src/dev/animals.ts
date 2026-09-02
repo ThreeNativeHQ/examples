@@ -107,7 +107,9 @@ const rng = createRandom(OBSERVATION_SEED);
 const animals = await spawnWildwoodAnimals({
   // The installed loader resolves the same logical manifest entries Valley passes to ctx.assets.
   load: (path) => assets.model(`fab/${ANIMAL_LISTING}/ue/Models/${path}`),
-  ground: heightAt,
+  // The harness's ground is a flat plane at y = 0, not the valley's terrain — placing on
+  // `heightAt` floats the whole roster ~5 m above the plane they are supposed to stand on.
+  ground: () => 0,
   parent: scene,
   placements: PRODUCTION_PLACEMENTS,
   rng,

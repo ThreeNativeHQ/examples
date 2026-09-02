@@ -1,4 +1,4 @@
-import { AnimationPlayer, clipTrackBindings } from "@threenative/core";
+import { AnimationPlayer, clipTrackBindings, normaliseToMetres } from "@threenative/core";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import {
   BufferGeometry,
@@ -85,40 +85,35 @@ export class Animal {
     const clone = cloneSkeleton(model.scene);
     clone.name = `${spec.id}-rig`;
 
-    // Normalise scale from the source's bind-pose bounds — the source, never the clone: a
-    // SkeletonUtils clone measured before its first frame reports as a single point.
-    //
-    // The span is a **percentile** spread, not a plain `Box3`: the pack's GLBs carry stray
-    // junk vertices (the fox measures ±100 units down Z while its body occupies the middle
-    // fifth), and a plain box divides the body length by the junk — a 0.7 m fox rendered as a
-    // 13 cm rat. Sampling positions and taking the 1st-99th percentile per axis reads the
-    // animal, not its outliers.
-    //
-    // The span is measured in **world space**: the raw POSITION accessor values are whatever
-    // units the exporter felt like, with the real size living in the node transforms — the
-    // FBX2glTF exports hang a 100x unit scale off the armature and the mesh node both, and the
-    // meshopt rebuilds fold a quantisation dequantise matrix in there too. Measured raw, the
-    // fox's vertices span 0.06, the "normaliser" obligingly scales the group by 12x, and the
-    // fox stands on the valley 73 m long — the colossal panels over the spawn.
-    const span = percentileSpan(model.scene);
-    const scale = spec.length / Math.max(span, 1e-4);
-    console.info(`TN_ANIMALS_SCALE:${spec.id} span=${span.toFixed(2)} scale=${scale.toFixed(4)}`);
-
-    // The junk vertices are not just a measurement problem — they render. Skinned triangles
-    // whose vertices sit outside the animal's real bounds draw as colossal translucent slabs
-    // across the valley, because nothing in the skin weights pulls them onto the body. Strip
-    // every triangle that lives entirely outside the percentile box, once, at load.
+    // The junk vertices render: skinned triangles outside the animal's real bounds draw as
+    // colossal translucent slabs across the valley, because nothing in the skin weights pulls
+    // them onto the body. Strip them once, at load — and before measuring, so the measurement
+    // sees the animal.
     stripJunkTriangles(clone);
 
     this.object = new Group();
     this.object.name = `animal-${spec.id}`;
-    this.object.scale.setScalar(scale);
+    this.object.add(clone);
     this.object.position.set(
       options.spawn.x,
       options.ground(options.spawn.x, options.spawn.z),
       options.spawn.z,
     );
-    this.object.add(clone);
+
+    // Normalise to the spec's real-world length with the engine's own measurement.
+    //
+    // This used to be a hand-rolled walker that computed `matrixWorld * POSITION`. That is the
+    // right formula for a rigid mesh and the WRONG one for a skinned rig: a skinned vertex
+    // renders at `sum(w * bone.matrixWorld * boneInverse) * position`, a different space
+    // entirely once the rig carries scale — which every quantized import does, because the
+    // dequantisation lands in the inverse bind matrices. The walker read every animal as ~1.96
+    // units (the width of the quantisation cube) while the fox's skeleton spans 0.33, so the
+    // fox was normalised to a third of its size and rendered as an ant.
+    //
+    // `normaliseToMetres` measures through `Box3.setFromObject`, which asks each mesh where its
+    // vertices actually land — skin included. It was installed the whole time.
+    const scale = normaliseToMetres(this.object, { axis: "longest", metres: spec.length });
+    console.info(`TN_ANIMALS_SCALE:${spec.id} scale=${scale.toFixed(4)}`);
 
     this.#home = this.object.position.clone().setY(0);
     this.#heading = this.#rng() * Math.PI * 2;
@@ -332,56 +327,16 @@ class AnimalLookup {
 }
 
 /**
- * The animal's real span: the widest 1st-99th-percentile axis spread across every mesh,
- * **in world space** — every sampled vertex goes through its mesh's `matrixWorld` first.
- *
- * `Box3` measures outliers; this measures the animal. The pack's GLBs each carry a handful of
- * junk vertices far outside the body (the fox spans ±100 on Z while its body fills the middle
- * fifth), which once shrank a 0.7 m fox to the size of a rat. And the raw accessor values are
- * not the animal's size either — exporters park unit scales on the armature node (the FBX2glTF
- * exports carry 100x on the armature and the mesh node both), so raw space measures tenths of
- * a unit and the normaliser then inflates the animal into a 70 m giant. World space is the
- * space the animal actually renders in; it is the only space with an honest answer.
- */
-function percentileSpan(root: Object3D): number {
-  const samples: number[][] = [];
-  root.updateMatrixWorld(true);
-  root.traverse((object) => {
-    if (!(object instanceof Mesh)) return;
-    const geometry: BufferGeometry = object.geometry;
-    const position = geometry.getAttribute("position");
-    const matrix = object.matrixWorld.elements;
-    for (let index = 0; index < position.count; index += 1) {
-      const x = position.getX(index);
-      const y = position.getY(index);
-      const z = position.getZ(index);
-      samples.push([
-        matrix[0]! * x + matrix[4]! * y + matrix[8]! * z + matrix[12]!,
-        matrix[1]! * x + matrix[5]! * y + matrix[9]! * z + matrix[13]!,
-        matrix[2]! * x + matrix[6]! * y + matrix[10]! * z + matrix[14]!,
-      ]);
-    }
-  });
-  if (samples.length === 0) return 1;
-  let best = 1e-4;
-  for (let axis = 0; axis < 3; axis += 1) {
-    const values = samples.map((sample) => sample[axis] ?? 0).sort((a, b) => (a ?? 0) - (b ?? 0));
-    const low = values[Math.floor(values.length * 0.01)] ?? 0;
-    const high = values[Math.floor(values.length * 0.99)] ?? 0;
-    best = Math.max(best, high - low);
-  }
-  return best;
-}
-
-/**
  * Remove every triangle with fewer than two vertices inside the 1st-99th-percentile box,
- * measured **in world space** for the same reason `percentileSpan` is.
+ * measured **in bind space**, which is the space this filter is self-consistent in: the box
+ * and the vertices tested against it are built the same way, so outliers fall out regardless of
+ * where the skin ultimately renders. Sizing is `normaliseToMetres`'s job, not this one's.
  *
  * The Quaternius GLBs carry a handful of junk triangles far outside the body (the fox reaches
  * ±100 units on Z while the animal occupies the middle fifth). Skinned, their weights point at
  * bones that never influence them, so they render as enormous translucent slabs hanging over
  * whichever clearing the animal spawns in — the geometry equivalent of the outlier that also
- * broke `percentileSpan`. A triangle with even one vertex inside the box survives: junk that
+ * once broke the sizing too. A triangle with even one vertex inside the box survives: junk that
  * close to the body is body.
  */
 function stripJunkTriangles(root: Object3D): void {
