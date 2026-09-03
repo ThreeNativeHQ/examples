@@ -206,3 +206,34 @@ nothing else — a completely reasonable thing to configure — walks straight i
 Fixed here by adding `(godraysEnabled && denoiseEnabled)` to that condition. Worth fixing in the
 template, since the whole point of that file is that a silent no-op is never mistaken for a
 setting.
+
+## 9. The node-material cache-key cost is real, small, and not graph-driven — measured, then dropped
+
+Two Chrome traces of live sessions agreed that `getMaterialCacheKey`, `_getNodeChildren`,
+`getCacheKey` and `getRenderCacheKey` were the largest identifiable block of game-attributable
+CPU — 7.2% of sampled CPU in the first trace, 4.1% in the second. Three.js re-deriving node-material
+cache keys by walking TSL graphs, across 73 instanced meshes that each carry a wind shader. The
+obvious inference is that the graphs are too big, and the obvious fix is to shrink them.
+
+**That inference is wrong, and the experiment says so.** Removing `applyWind` entirely — the whole
+~33-node wind subgraph, from all 73 materials — moved the node-key share of busy CPU from **6.59%
+to 6.74%**. No change. What it did move was total busy CPU, 5156 ms to 4445 ms over an identical
+18 s window: the graph costs about 14% of the game's CPU to *evaluate*, and nothing measurable to
+*walk*.
+
+So the cost scales with the number of objects and materials being walked, not with the size of
+each graph. Shrinking shaders would have bought nothing, and it was worth an hour to find that out
+before spending a day on it.
+
+Two reasons it was then dropped rather than pursued:
+
+1. **It is smaller than it first reads.** The 7.2% was a share of sampled CPU *including idle*, and
+   the main thread is 47% idle. Against busy CPU it is 6.6%, and against wall clock about 1.9%.
+2. **The lever that would move it is not in game space.** Fewer distinct materials means atlasing
+   the pack's per-species maps so sections can share a material with a per-instance UV offset —
+   an asset-pipeline change — or three caching keys it currently recomputes. Neither is a foliage
+   edit.
+
+Recorded so the next session reads the ablation instead of repeating the inference. Measured with
+`tools/trace.mjs` on the private virtual display: a CPU-share A/B is valid there, an fps number is
+not.
