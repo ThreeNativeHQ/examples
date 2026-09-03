@@ -87,12 +87,43 @@ const high: IWorldEnvironmentOptions = {
   // The two full-resolution denoise passes over the AO and GI terms: ~1.9 ms. Only worth running
   // when SSGI is on — its noise is what they clean up.
   denoiseEnabled: true,
+  // Shafts through the canopy, which is the lighting event this scene is actually about: a 48°
+  // sun over a closed canopy is the condition that produces them, and a wood without them is a
+  // wood in an overcast. Raymarched against the sun's shadow map, so `postprocessing.ts` holds
+  // the chain back until that map exists — see the note there.
+  godraysEnabled: true,
+  // Density is how much air there is to light. `floor` is the number that makes this a shaft
+  // renderer rather than a whole-frame brightener: the pass returns something for nearly every
+  // pixel, that something is tiny in linear space and enormous after the tone curve, and
+  // subtracting a floor discards the ambient lift while leaving the beams. `maxDensity` is the
+  // single strongest control over how bright the *entire* frame is, for the same reason — it is
+  // deliberately low here and the intensity above the floor does the visible work.
+  godraysDensity: 0.5,
+  godraysFloor: 0.05,
+  godraysIntensity: 1.6,
+  godraysMaxDensity: 0.3,
+  // Every step is a shadow-map sample, so this multiplies straight into the cost of the pass.
+  // `GodraysNode` defaults to 60; the jittered sampling means fewer trades a slightly noisier
+  // shaft edge for proportionally less work, and the denoiser downstream absorbs most of that.
+  // 32 rather than 60 because this frame is already at ~70 ms and the shafts are the last thing
+  // that should be what pushes it over.
+  godraysSteps: 32,
   gtaoEnabled: true,
   // Contact scale, in metres: the gap between a foot and the floor, a stem and the soil, a
   // boulder and the grass around it. Not room scale — SSGI's own occlusion term already gathers
   // over `ssgiRadius`, which is metres, and the two are deliberately different questions.
-  gtaoRadius: 0.5,
-  gtaoScale: 1.2,
+  //
+  // **0.18 m, not the 0.5 m this was first set to, and the difference is a fern.** Half a metre
+  // sounds like contact scale until you look at what is within half a metre of any pixel in a
+  // wood: in a fern understory every frond is inside that radius of every other, so the gather
+  // returns "heavily occluded" for most of the frame and the occlusion stops describing contact
+  // and starts describing density. Measured on the spawn view, 0.5 m put 25% of the frame below
+  // 5/255 — crushed, not moody, with the detail gone. 0.18 m is the scale of the things this is
+  // supposed to be drawing: the dark line where a stem enters the soil.
+  gtaoRadius: 0.18,
+  // Exponent on the occlusion term, so it compounds with the radius above. Back to under 1 for
+  // the same reason: two multipliers each set a little dark is how a scene ends up black.
+  gtaoScale: 0.9,
   gtaoSamples: 16,
   // Half resolution. Occlusion at contact scale is low-frequency by construction and the sharpen
   // stage downstream puts the edge back; the ablation this file's numbers come from never
@@ -140,9 +171,30 @@ const medium: IWorldEnvironmentOptions = {
   bloomStrength: 0.45,
   bloomThreshold: 1.05,
   exposure: 0.94,
+  // Shafts through the canopy, which is the lighting event this scene is actually about: a 48°
+  // sun over a closed canopy is the condition that produces them, and a wood without them is a
+  // wood in an overcast. Raymarched against the sun's shadow map, so `postprocessing.ts` holds
+  // the chain back until that map exists — see the note there.
+  godraysEnabled: true,
+  // Density is how much air there is to light. `floor` is the number that makes this a shaft
+  // renderer rather than a whole-frame brightener: the pass returns something for nearly every
+  // pixel, that something is tiny in linear space and enormous after the tone curve, and
+  // subtracting a floor discards the ambient lift while leaving the beams. `maxDensity` is the
+  // single strongest control over how bright the *entire* frame is, for the same reason — it is
+  // deliberately low here and the intensity above the floor does the visible work.
+  godraysDensity: 0.5,
+  godraysFloor: 0.05,
+  godraysIntensity: 1.6,
+  godraysMaxDensity: 0.3,
+  // Every step is a shadow-map sample, so this multiplies straight into the cost of the pass.
+  // `GodraysNode` defaults to 60; the jittered sampling means fewer trades a slightly noisier
+  // shaft edge for proportionally less work, and the denoiser downstream absorbs most of that.
+  // 32 rather than 60 because this frame is already at ~70 ms and the shafts are the last thing
+  // that should be what pushes it over.
+  godraysSteps: 24,
   gtaoEnabled: true,
-  gtaoRadius: 0.5,
-  gtaoScale: 1.2,
+  gtaoRadius: 0.18,
+  gtaoScale: 0.9,
   gtaoSamples: 8,
   gtaoResolutionScale: 0.5,
   // Screen-space reflections: ~4.1 ms.
@@ -183,8 +235,8 @@ const low: IWorldEnvironmentOptions = {
   bloomThreshold: 1.05,
   exposure: 0.94,
   gtaoEnabled: true,
-  gtaoRadius: 0.5,
-  gtaoScale: 1.2,
+  gtaoRadius: 0.18,
+  gtaoScale: 0.9,
   gtaoSamples: 8,
   gtaoResolutionScale: 0.5,
   // RCAS sharpen: unmeasured — never ablated on its own here. It puts back the micro-detail the

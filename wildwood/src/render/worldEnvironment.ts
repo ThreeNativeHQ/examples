@@ -361,7 +361,17 @@ export class WorldEnvironment {
     // from depth alone, but the derived normal is flat across a triangle, which shows up as
     // faceted bounce on exactly the smooth surfaces GI is bought for. Metalness and
     // roughness ride along so SSR knows which pixels are supposed to reflect.
-    if (options.ssgiEnabled || options.ssrEnabled || options.gtaoEnabled) {
+    // Godrays are in this list because the denoiser they run through asks for `normal`, and a
+    // `getTextureNode("normal")` against a pass with no MRT is the trap this whole file is
+    // written around: WebGPU refuses the pipeline, the frame goes black, and the chain still
+    // reports every stage as applied. A godrays-only tier — a phone with shafts and nothing else
+    // — would have hit it exactly.
+    if (
+      options.ssgiEnabled ||
+      options.ssrEnabled ||
+      options.gtaoEnabled ||
+      (options.godraysEnabled && options.denoiseEnabled)
+    ) {
       scenePass.setMRT(mrt({ output, normal: normalView, metalness, roughness }));
     }
     const depth = scenePass.getTextureNode("depth");
