@@ -53,7 +53,10 @@ export function setupForestLighting(scene: Scene, renderer: ShadowRenderer): Dir
   // The sky is an image of a sky, so it is already the right colour and comes from the right
   // directions; what it must not also be is bright enough to fill the shadows the sun casts.
   // How bright it is as a light is `SKY_ENVIRONMENT_INTENSITY`, owned there and not restated
-  // here — a fifth of the key, which is the clear-day ratio this whole rig is balanced on.
+  // here. It is the largest single number in this rig now, and deliberately: under a continuous
+  // canopy the floor sees no sun, so the sky is the only thing lighting half the game. The
+  // clear-day contrast this file is built on survives it because the sky lifts only what the key
+  // never reached — measured, at the sweep in `sky.ts`.
   setupSky(scene);
 
   const key = new DirectionalLight(SUN_COLOUR, 3.4);

@@ -108,20 +108,41 @@ export const AERIAL_COLOUR = palette.fog;
  * this renderer has. Measured on the spawn view: 8.5% of the frame crushed to black and the
  * ground's shadowed quartile fell to 0.004 — the wood went from flat to unlit.
  *
- * Doubled to 0.7, which is one stop and an empirical number rather than a derived one. The stop
- * of range the rig gained is kept (4.55 → 6.3 between the 5th and 95th percentiles) because what
- * is being lifted is the part of the frame the sun never reached; the sunlit floor is still
- * dominated by the key and does not move with it.
+ * Doubled to 0.7, then to 1.8, and the second time with a sweep rather than a guess. Both moves
+ * rest on the same observation: what this lifts is the part of the frame the sun never reached,
+ * and the sunlit floor is dominated by the key and barely moves with it.
+ *
+ * The reason it had to move twice is that the wood closed over it. When 0.7 was chosen the valley
+ * carried 12,630 plants; it now carries 46,190, the canopy is continuous, and under a continuous
+ * canopy the floor sees no sun at all — so the term that had been trimming the shadows became the
+ * only thing lighting half the game. Measured at the spawn, four values, three cameras
+ * (`tools/luminance.mjs`, forest interior / deeper interior / open lake):
+ *
+ *   0.7   nearBlack 40.7% / 52.8% / 13.8%   interior p50 0.0081   open 6.17 stops
+ *   1.4   nearBlack 22.8% / 27.8% / 12.8%   interior p50 0.0230   open 6.61 stops
+ *   1.8   nearBlack 17.0% / 20.0% / 10.2%   interior p50 0.0346   open 5.87 stops
+ *   2.4   nearBlack 10.4% / 13.3% /  8.3%   interior p50 0.0582   open 5.53 stops
+ *
+ * 1.8 is the knee: the interior's median brightness rises 4.3× and its dead shadow more than
+ * halves, while the open view — the one that was already right — gives up 0.3 of a stop. 2.4 buys
+ * six more points of near-black for another third of a stop everywhere and starts to read milky.
+ *
+ * Two things were ruled out first, one variable at a time, because "the wood is too dark" has
+ * three plausible causes and eyeballing this file has picked the wrong one before. Nearly
+ * quadrupling the overhead canopy light (0.28 → 1.1) moved the interior's near-black 40.7% →
+ * 38.9%; tripling the floor bounce (0.4 → 1.2) moved it to 35.6%. Neither is the lever. The sky
+ * is, because it is the only source here that reaches every surface orientation.
  *
  * Nothing calibrates three's light intensities against the `.hdr`'s radiances anyway — both
  * scales are arbitrary — so the ratio between them was only ever a starting guess, and a capture
- * outranks it.
+ * outranks it. In particular the "a fifth of the key" arithmetic this once carried was comparing
+ * a multiplier on an image to a directional light's intensity, which are not the same units.
  *
  * It lives here, and `lighting.ts` does not touch it, because two files writing one property is
  * how the value that is actually in effect stops being the value anyone reads.
  * `sky-hdri.ts` matches its own intensity to this one so the handover is not a change in weather.
  */
-export const SKY_ENVIRONMENT_INTENSITY = 0.7;
+export const SKY_ENVIRONMENT_INTENSITY = 1.8;
 
 /**
  * Haze density. `FogExp2` attenuates by `1 - exp(-(density·distance)²)`, so this puts the far
