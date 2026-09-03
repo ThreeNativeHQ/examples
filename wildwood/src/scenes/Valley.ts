@@ -363,13 +363,20 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       this.#settleDetail = resolve;
     });
 
+    // The detail tier joins the framework's own readiness gate, so `ctx.startup.whenReady()` now
+    // means what a loading screen always assumed it meant: the world is on screen. Before this
+    // seam existed the curtain had to be held past readiness by hand, which fixed the picture and
+    // left `startup.progress`, `startup.phase`, `timeline.readyMs` and the playtest bridge's
+    // `assert.startup` all describing a moment nobody experienced — 1.5 s reported on a valley
+    // that took 8.8 s to appear.
+    //
+    // 45 s is the budget: long enough for a cold cache on this valley's ~70 GLBs, short enough
+    // that a tier which never settles costs seconds rather than a game that never starts. When it
+    // expires the player gets the critical world — thinner, and playable.
+    ctx.startup.hold("wildwood:detail-tier", this.#detailSettled, 45_000);
+
     // This synchronous game-owned view exists before the first `ctx.assets` request below.
     this.#loading = createLoadingScreen(ctx, {
-      until: this.#detailSettled,
-      // Long enough for a cold cache on this valley's ~70 GLBs, short enough that a detail tier
-      // which never settles costs seconds rather than a game that never starts. When it expires
-      // the player gets the critical world — thinner, and playable.
-      holdBudgetMs: 45_000,
       holdProgress: () => this.#detailProgress,
       onReveal: () => {
         // Sampled once, on the frame the curtain lifts. This is the whole world the player is
@@ -588,7 +595,16 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       valleyReady: true,
     });
     ctx.state.flush();
-    void ctx.startup.whenReady().then(() => {
+    // `whenFrameworkReady`, NOT `whenReady`. The detail tier is registered with the readiness gate
+    // above, so `whenReady()` waits for it — and starting it from `whenReady()` is therefore a
+    // cycle: the gate waits for the tier, the tier waits for the gate. Nothing errors. It presents
+    // as a very slow load, because the only thing that breaks it is the hold's 45 s budget
+    // expiring, and then the curtain lifts on the critical tier: measured here as a 45.5 s stall
+    // ending in `TN_VALLEY_REVEAL trees=1`.
+    //
+    // Framework readiness fires before the holds, which is exactly the boundary this wanted all
+    // along: first-use compilation has stopped competing for the main thread.
+    void ctx.startup.whenFrameworkReady().then(() => {
       if (this.#generation !== generation || !generation.live) return;
       // The engine holds input updates through first-use compilation. This is the first moment the
       // entered valley is actually controllable, so it is the critical-ready marker and the detail

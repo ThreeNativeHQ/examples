@@ -45,27 +45,24 @@ interface ILoadingHost {
 }
 
 /**
- * What the game asks the curtain to wait for, past the framework's own readiness.
+ * This screen waits on `host.startup.whenReady()` and nothing else, which is the whole point.
  *
- * `host.startup.whenReady()` resolves when *the framework's* work is done: first-use compilation
- * has settled and a frame window held. It knows nothing about a second asset tier the game streams
- * afterwards, and it has no seam for the game to add its own work to that gate. So a game that
- * streams a detail tier lifts the curtain on a half-built world and the player watches a forest
- * grow around them — measured here as a bald valley with one tree and a black sky for the first
- * seconds, then everything at once. Recorded in FRICTION.md as a framework gap.
+ * It used to carry its own second gate: an `until` promise, a budget, and a two-phase progress bar
+ * that mapped the framework's readiness into the first 72% so the fill would not sit full while
+ * the game's own asset tier landed. All of that existed because the framework's readiness covered
+ * the framework's work and had no seam for a game's own, so a game streaming a detail tier had to
+ * hold the curtain past `whenReady()` by hand — and every framework-owned observation of startup
+ * then described a moment the player never reached.
+ *
+ * `ctx.startup.hold()` closed that gap, so the scene registers its tier with the gate
+ * (`Valley.ts`) and this file went back to being a loading screen: 45 lines of curtain-holding
+ * deleted, and `host.startup.progress` spans the whole wait on its own again.
  */
 interface ILoadingOptions {
   /**
-   * Extra work to hold the curtain for. Awaited after framework readiness and never trusted to
-   * settle: a rejection is treated as done, and `holdBudgetMs` bounds the wait, because a hung
-   * asset must cost a thinner world and never a player trapped behind a loading screen.
-   */
-  readonly until?: Promise<unknown>;
-  /** Hard ceiling on the `until` wait, in milliseconds past framework readiness. */
-  readonly holdBudgetMs?: number;
-  /**
    * Called once, on the frame the curtain lifts **to show the world**. This is the only moment at
-   * which "what the player first saw" can be sampled.
+   * which "what the player first saw" can be sampled, and it stays the game's business — the
+   * framework knows when it is ready, not what the game put on screen.
    *
    * Not called when the curtain comes down because the scene is being torn down. `finish()` is the
    * public teardown and `exit()` calls it, so a callback wired to it fires on every scene exit and
@@ -74,11 +71,7 @@ interface ILoadingOptions {
    * disprove.
    */
   readonly onReveal?: () => void;
-  /**
-   * Progress across the held window, 0 to 1. `host.startup.progress` is pinned at 1 for the whole
-   * hold, so without this the bar freezes full and the game reads as hung — the exact failure the
-   * framework's own sliced warm-up exists to avoid.
-   */
+  /** Progress across the game's own held window, when the game can report it more finely. */
   readonly holdProgress?: () => number;
 }
 
@@ -472,15 +465,15 @@ export function createLoadingScreen(
     setTimeout(announcePresentedView, 32);
   }
 
-  // The bar is one bar over two phases of work. The framework's own readiness carries it to
-  // FRAMEWORK_SHARE and the game's held tier carries the rest, so the fill never stalls full while
-  // the world is still being built and never jumps backwards when the second phase takes over.
-  const FRAMEWORK_SHARE = 0.72;
-  let holding = false;
-  const currentProgress = (): number =>
-    holding
-      ? FRAMEWORK_SHARE + (1 - FRAMEWORK_SHARE) * (options.holdProgress?.() ?? 0)
-      : FRAMEWORK_SHARE * host.startup.progress;
+  // One source for the fill. `host.startup.progress` now spans the game's held tier as well as the
+  // framework's own work, so the only thing left for the game to add is a finer reading of its own
+  // window than "one hold, settled or not" — which is what `holdProgress` is, and it is optional.
+  const currentProgress = (): number => {
+    const framework = host.startup.progress;
+    const finer = options.holdProgress?.();
+    if (finer === undefined || framework < 0.9) return framework;
+    return Math.max(framework, 0.9 + 0.1 * Math.min(1, Math.max(0, finer)));
+  };
 
   const teardown = (revealed: boolean): void => {
     if (done) return;
@@ -497,26 +490,8 @@ export function createLoadingScreen(
   };
 
   void (async () => {
+    // The gate the scene registered its detail tier with. Nothing else to wait for.
     await host.startup.whenReady();
-    if (done) return;
-    const until = options.until;
-    if (until !== undefined) {
-      holding = true;
-      updateProgress(currentProgress());
-      // `race`, and a rejection swallowed: the curtain's job is to hide an unfinished world, not
-      // to become the thing that traps the player behind it. A detail tier that throws or hangs
-      // costs a thinner valley, and the budget is the ceiling on how long that costs a black
-      // screen instead.
-      await Promise.race([
-        Promise.resolve(until).then(
-          () => undefined,
-          () => undefined,
-        ),
-        new Promise<void>((resolve) => {
-          setTimeout(resolve, options.holdBudgetMs ?? 30_000);
-        }),
-      ]);
-    }
     if (done) return;
     teardown(true);
   })();
@@ -529,14 +504,10 @@ export function createLoadingScreen(
     update(): void {
       if (done) return;
       updateProgress(currentProgress());
-      // While the game holds the curtain the frame loop is already running, and the layout timer
-      // that drew the overlay before readiness has been cancelled. Nothing else would present the
-      // layer, so the held window would show a frozen or absent curtain over the half-built world
-      // it exists to hide. Keep drawing it here, from the loop, for exactly as long as it is up.
-      if (holding) {
-        host.renderer.renderOverlay(layer.scene, layer.camera);
-        return;
-      }
+      // The frame loop runs before readiness — that is how the framework measures its own stable
+      // frame window — so this both advances the fill and keeps the curtain presented for as long
+      // as the gate is still closed, which is now the game's asset tier as well.
+      host.renderer.renderOverlay(layer.scene, layer.camera);
       if (layoutTimer !== undefined) {
         clearTimeout(layoutTimer);
         layoutTimer = undefined;

@@ -19,6 +19,13 @@
       "label": "settle-past-the-detail-tier",
       "waitTicks": 600,
       "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-the-moment-it-opens",
+      "press": "KeyW",
+      "holdTicks": 180,
+      "release": true
     }
   ],
   "assert": {
@@ -43,8 +50,19 @@
       {
         "id": "state",
         "path": "treeCount",
-        "gte": 100
+        "gte": 100,
+        "allowTrivial": "Trivially satisfied before the first observation, and that is the fix working: the loading curtain holds until the detail tier has landed, so by the time a scenario can read state the wood is already standing. It used to be 1 here. The non-trivial assertions are revealTreeCount and revealFernCount above, which are sampled at the instant the curtain lifts and cannot drift green as the run goes on."
+      },
+      {
+        "id": "state",
+        "path": "odometer",
+        "gte": 3,
+        "changed": true
       }
-    ]
+    ],
+    "movement": {
+      "entity": "walker",
+      "minDistance": 2
+    }
   }
 }
