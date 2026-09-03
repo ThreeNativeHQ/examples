@@ -87,11 +87,32 @@ const high: IWorldEnvironmentOptions = {
   // The two full-resolution denoise passes over the AO and GI terms: ~1.9 ms. Only worth running
   // when SSGI is on — its noise is what they clean up.
   denoiseEnabled: true,
-  // Shafts through the canopy, which is the lighting event this scene is actually about: a 48°
-  // sun over a closed canopy is the condition that produces them, and a wood without them is a
-  // wood in an overcast. Raymarched against the sun's shadow map, so `postprocessing.ts` holds
-  // the chain back until that map exists — see the note there.
-  godraysEnabled: true,
+  // **Shafts: switched on, measured, and switched back off.** Kept here with its numbers rather
+  // than deleted, because "we should add godrays" is the obvious next idea for a forest and the
+  // useful thing to leave behind is the evidence, not the flag.
+  //
+  // The stage works. `postprocessing.ts` defers the chain until the sun has a shadow map, which
+  // is what made it reachable at all (`TN_POST_DEFERRED frames=5 shadowMap=true`, and the chain
+  // reporting `godRays applied`), and looking into the canopy toward the sun it produces a
+  // genuinely good contre-jour frame — a luminous burst through a gap with the trunks in
+  // silhouette.
+  //
+  // It also ruins every open view, and the same pond frame with and without it says so. HDRI
+  // loaded, same camera, nothing else changed:
+  //
+  //                      without      with
+  //     p05 (shadows)     0.0046     0.0126     the shadow floor lifted 2.7x
+  //     mean              0.1214     0.1987
+  //     p05..p95           5.82       5.15      *contrast lost*, which is what this pass was
+  //                                             bought to avoid
+  //     blue sky px       13.72%      3.05%     the sky washing out to white
+  //
+  // That is the failure `godraysMaxDensity` documents on itself: the pass adds its accumulated
+  // illumination to every pixel, not only to pixels inside a visible beam. Raising the floor and
+  // dropping the ceiling recovered about a third of the wash and did not close the gap. One good
+  // frame against a whole-frame contrast loss is a bad trade, so it is off — and it is off by
+  // measurement rather than by taste, which is why the numbers are here.
+  godraysEnabled: false,
   // Density is how much air there is to light. `floor` is the number that makes this a shaft
   // renderer rather than a whole-frame brightener: the pass returns something for nearly every
   // pixel, that something is tiny in linear space and enormous after the tone curve, and
@@ -178,11 +199,32 @@ const medium: IWorldEnvironmentOptions = {
   bloomStrength: 0.45,
   bloomThreshold: 1.05,
   exposure: 0.94,
-  // Shafts through the canopy, which is the lighting event this scene is actually about: a 48°
-  // sun over a closed canopy is the condition that produces them, and a wood without them is a
-  // wood in an overcast. Raymarched against the sun's shadow map, so `postprocessing.ts` holds
-  // the chain back until that map exists — see the note there.
-  godraysEnabled: true,
+  // **Shafts: switched on, measured, and switched back off.** Kept here with its numbers rather
+  // than deleted, because "we should add godrays" is the obvious next idea for a forest and the
+  // useful thing to leave behind is the evidence, not the flag.
+  //
+  // The stage works. `postprocessing.ts` defers the chain until the sun has a shadow map, which
+  // is what made it reachable at all (`TN_POST_DEFERRED frames=5 shadowMap=true`, and the chain
+  // reporting `godRays applied`), and looking into the canopy toward the sun it produces a
+  // genuinely good contre-jour frame — a luminous burst through a gap with the trunks in
+  // silhouette.
+  //
+  // It also ruins every open view, and the same pond frame with and without it says so. HDRI
+  // loaded, same camera, nothing else changed:
+  //
+  //                      without      with
+  //     p05 (shadows)     0.0046     0.0126     the shadow floor lifted 2.7x
+  //     mean              0.1214     0.1987
+  //     p05..p95           5.82       5.15      *contrast lost*, which is what this pass was
+  //                                             bought to avoid
+  //     blue sky px       13.72%      3.05%     the sky washing out to white
+  //
+  // That is the failure `godraysMaxDensity` documents on itself: the pass adds its accumulated
+  // illumination to every pixel, not only to pixels inside a visible beam. Raising the floor and
+  // dropping the ceiling recovered about a third of the wash and did not close the gap. One good
+  // frame against a whole-frame contrast loss is a bad trade, so it is off — and it is off by
+  // measurement rather than by taste, which is why the numbers are here.
+  godraysEnabled: false,
   // Density is how much air there is to light. `floor` is the number that makes this a shaft
   // renderer rather than a whole-frame brightener: the pass returns something for nearly every
   // pixel, that something is tiny in linear space and enormous after the tone curve, and
