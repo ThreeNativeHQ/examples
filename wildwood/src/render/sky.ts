@@ -99,18 +99,29 @@ export const AERIAL_COLOUR = palette.fog;
 /**
  * How bright the sky is *as a light*, as opposed to as a picture.
  *
- * The clear-day ratio, and the number the whole rig is balanced on: outdoors under a cloudless
- * sky the sun delivers roughly six times the irradiance the sky does, and `lighting.ts` spends
- * its key light on that basis. π · 0.45 · 0.35 against a key of 3.4 is about a fifth, which is
- * that ratio. Raise it and the shadows fill in and the image goes flat — that is precisely what
- * the rig before this one did, with a hemisphere light and an ambient on top of an environment
- * map, each defensible alone.
+ * **0.35 was the clear-day ratio and it was wrong, and the capture is why.** The argument for it
+ * was sound: outdoors under a cloudless sky the sun delivers about six times the irradiance the
+ * sky does, so a fifth of the key light is the physical fill. What that argument leaves out is
+ * that this scene is not outdoors — it is *under a closed canopy*, where the sun reaches almost
+ * nothing the camera can see, and every visible leaf underside is lit by skylight and by light
+ * transmitted through the leaves above it. Removing the fill removed the only one of those two
+ * this renderer has. Measured on the spawn view: 8.5% of the frame crushed to black and the
+ * ground's shadowed quartile fell to 0.004 — the wood went from flat to unlit.
+ *
+ * Doubled to 0.7, which is one stop and an empirical number rather than a derived one. The stop
+ * of range the rig gained is kept (4.55 → 6.3 between the 5th and 95th percentiles) because what
+ * is being lifted is the part of the frame the sun never reached; the sunlit floor is still
+ * dominated by the key and does not move with it.
+ *
+ * Nothing calibrates three's light intensities against the `.hdr`'s radiances anyway — both
+ * scales are arbitrary — so the ratio between them was only ever a starting guess, and a capture
+ * outranks it.
  *
  * It lives here, and `lighting.ts` does not touch it, because two files writing one property is
  * how the value that is actually in effect stops being the value anyone reads.
  * `sky-hdri.ts` matches its own intensity to this one so the handover is not a change in weather.
  */
-export const SKY_ENVIRONMENT_INTENSITY = 0.35;
+export const SKY_ENVIRONMENT_INTENSITY = 0.7;
 
 /**
  * Haze density. `FogExp2` attenuates by `1 - exp(-(density·distance)²)`, so this puts the far

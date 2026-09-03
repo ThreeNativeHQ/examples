@@ -70,11 +70,19 @@ export function resolveQualityTier(
  * with its denoiser is ~9.2 ms of that.
  */
 const high: IWorldEnvironmentOptions = {
-  // Strength, radius and threshold are a look decision already tuned to this scene's palette.
   // Bloom: ~4.6 ms — the second most expensive stage in the chain, and the one nobody expects
   // to be.
+  //
+  // **The threshold is the change that stopped this scene being milky.** `WorldEnvironment`
+  // defaults it to 0.2, and no tier here used to set it, so every pixel brighter than a fifth of
+  // scene white bloomed — which in a lit wood is most of the ground and all of the canopy. A
+  // whole-frame lift added to a whole frame is not glow, it is fog on the lens, and it was
+  // flattening the image before the tone curve ever saw it. At 1.05 only things that are
+  // genuinely brighter than a lit diffuse surface bloom: the sky through the canopy, the sun's
+  // glint off water, the hot edge of a leaf. That is what bloom is for.
   bloomEnabled: true,
-  bloomStrength: 0.5,
+  bloomStrength: 0.45,
+  bloomThreshold: 1.05,
   exposure: 0.94,
   // The two full-resolution denoise passes over the AO and GI terms: ~1.9 ms. Only worth running
   // when SSGI is on — its noise is what they clean up.
@@ -82,6 +90,17 @@ const high: IWorldEnvironmentOptions = {
   // SSGI, the screen-space indirect-light gather: ~7.3 ms alone, ~9.2 ms with the two denoise
   // passes it feeds. The largest stage in the chain by a factor of two, of a 14.7 ms frame.
   // Dropping this pair is what `medium` is.
+  gtaoEnabled: true,
+  // Contact scale, in metres: the gap between a foot and the floor, a stem and the soil, a
+  // boulder and the grass around it. Not room scale — SSGI's own occlusion term already gathers
+  // over `ssgiRadius`, which is metres, and the two are deliberately different questions.
+  gtaoRadius: 0.5,
+  gtaoScale: 1.2,
+  gtaoSamples: 16,
+  // Half resolution. Occlusion at contact scale is low-frequency by construction and the sharpen
+  // stage downstream puts the edge back; the ablation this file's numbers come from never
+  // measured this stage, so treat its cost as unknown until `TN_FRAME_BUDGET` says otherwise.
+  gtaoResolutionScale: 0.5,
   ssgiEnabled: true,
   ssgiQuality: "medium",
   // Screen-space reflections: ~4.1 ms.
@@ -95,6 +114,9 @@ const high: IWorldEnvironmentOptions = {
   sharpenEnabled: true,
   // **0 is maximum sharpening and 2 is none** — it is a radius, not a gain.
   sharpenStrength: 0.28,
+  // A sixth of a stop off the extreme corner. Not a mood: every real lens does this, and its
+  // absence is one of the things that reads as "rendered" rather than "photographed".
+  vignetteAmount: 0.18,
   tonemapMode: "aces",
 };
 
@@ -104,12 +126,25 @@ const high: IWorldEnvironmentOptions = {
  * bloom and the sharpener stay, so it is recognisably the same look.
  */
 const medium: IWorldEnvironmentOptions = {
-  // Strength, radius and threshold are a look decision already tuned to this scene's palette.
   // Bloom: ~4.6 ms — the second most expensive stage in the chain, and the one nobody expects
   // to be.
+  //
+  // **The threshold is the change that stopped this scene being milky.** `WorldEnvironment`
+  // defaults it to 0.2, and no tier here used to set it, so every pixel brighter than a fifth of
+  // scene white bloomed — which in a lit wood is most of the ground and all of the canopy. A
+  // whole-frame lift added to a whole frame is not glow, it is fog on the lens, and it was
+  // flattening the image before the tone curve ever saw it. At 1.05 only things that are
+  // genuinely brighter than a lit diffuse surface bloom: the sky through the canopy, the sun's
+  // glint off water, the hot edge of a leaf. That is what bloom is for.
   bloomEnabled: true,
-  bloomStrength: 0.5,
+  bloomStrength: 0.45,
+  bloomThreshold: 1.05,
   exposure: 0.94,
+  gtaoEnabled: true,
+  gtaoRadius: 0.5,
+  gtaoScale: 1.2,
+  gtaoSamples: 8,
+  gtaoResolutionScale: 0.5,
   // Screen-space reflections: ~4.1 ms.
   ssrEnabled: true,
   // A reflection carries almost no high-frequency detail, so half resolution costs a quarter of
@@ -121,6 +156,9 @@ const medium: IWorldEnvironmentOptions = {
   sharpenEnabled: true,
   // **0 is maximum sharpening and 2 is none** — it is a radius, not a gain.
   sharpenStrength: 0.28,
+  // A sixth of a stop off the extreme corner. Not a mood: every real lens does this, and its
+  // absence is one of the things that reads as "rendered" rather than "photographed".
+  vignetteAmount: 0.18,
   tonemapMode: "aces",
 };
 
@@ -130,18 +168,34 @@ const medium: IWorldEnvironmentOptions = {
  * and its cost here is unmeasured.
  */
 const low: IWorldEnvironmentOptions = {
-  // Strength, radius and threshold are a look decision already tuned to this scene's palette.
   // Bloom: ~4.6 ms — the second most expensive stage in the chain, and the one nobody expects
   // to be.
+  //
+  // **The threshold is the change that stopped this scene being milky.** `WorldEnvironment`
+  // defaults it to 0.2, and no tier here used to set it, so every pixel brighter than a fifth of
+  // scene white bloomed — which in a lit wood is most of the ground and all of the canopy. A
+  // whole-frame lift added to a whole frame is not glow, it is fog on the lens, and it was
+  // flattening the image before the tone curve ever saw it. At 1.05 only things that are
+  // genuinely brighter than a lit diffuse surface bloom: the sky through the canopy, the sun's
+  // glint off water, the hot edge of a leaf. That is what bloom is for.
   bloomEnabled: true,
-  bloomStrength: 0.5,
+  bloomStrength: 0.45,
+  bloomThreshold: 1.05,
   exposure: 0.94,
+  gtaoEnabled: true,
+  gtaoRadius: 0.5,
+  gtaoScale: 1.2,
+  gtaoSamples: 8,
+  gtaoResolutionScale: 0.5,
   // RCAS sharpen: unmeasured — never ablated on its own here. It puts back the micro-detail the
   // denoiser and the half-resolution reflection take out, so it earns its cost only on a tier
   // that runs one of them.
   sharpenEnabled: true,
   // **0 is maximum sharpening and 2 is none** — it is a radius, not a gain.
   sharpenStrength: 0.28,
+  // A sixth of a stop off the extreme corner. Not a mood: every real lens does this, and its
+  // absence is one of the things that reads as "rendered" rather than "photographed".
+  vignetteAmount: 0.18,
   tonemapMode: "aces",
 };
 

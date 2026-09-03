@@ -25,30 +25,30 @@
 import { Color, EquirectangularReflectionMapping, FogExp2, type Scene } from "three";
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { SKY_ROTATION } from "./light/sun.js";
-import { AERIAL_COLOUR, AERIAL_DENSITY } from "./sky.js";
+import { AERIAL_COLOUR, AERIAL_DENSITY, SKY_ENVIRONMENT_INTENSITY } from "./sky.js";
 
 /**
  * Ambient strength of the HDRI as scene lighting, and the one number that has to be *derived*
  * rather than liked.
  *
- * Two constraints meet here. The first is the clear-day ratio the whole rig is built on: the sun
- * delivers roughly six times the irradiance the sky does, and `lighting.ts` spends its key light
- * on that basis, so an environment bright enough to fill the shadows undoes the rig. The second is
- * the handover — the analytic sky runs at 0.35, and a step in ambient when the photograph attaches
- * would read as the weather changing.
+ * It is derived from `SKY_ENVIRONMENT_INTENSITY`, not chosen next to it: the two skies have to
+ * deliver the same irradiance or the wood visibly changes weather a minute after the player
+ * starts walking, and a second hand-tuned constant is a second thing to forget.
  *
- * Both land on the same number, which is the check. The photograph's mean radiance is 0.812 blue,
- * but **half of its total energy is the sun disc**, so its diffuse sky is dimmer than its mean
- * suggests, while the analytic sky's disc is deliberately negligible. Matching irradiance rather
- * than mean radiance — π · 0.45 · 0.35 for the analytic sky — puts the photograph at 0.22.
+ * The conversion is 0.629, and it is not 1 because the two skies are differently shaped. The
+ * photograph's mean radiance is higher, but **half of its total energy is the sun disc** — so its
+ * *diffuse* sky is dimmer than its mean suggests, while the analytic sky's disc is deliberately
+ * negligible against the key light. Matching what actually lands on a surface rather than what
+ * the file averages to is what this factor is.
  */
-const DEFAULT_ENVIRONMENT_INTENSITY = 0.22;
+const ANALYTIC_TO_PHOTOGRAPH = 0.629;
+const DEFAULT_ENVIRONMENT_INTENSITY = SKY_ENVIRONMENT_INTENSITY * ANALYTIC_TO_PHOTOGRAPH;
 
 /** The sky renders at full strength: what the photograph shows is what you see. */
 const DEFAULT_BACKGROUND_INTENSITY = 1;
 
 export type SkyHdriOptions = {
-  /** Ambient strength of the HDRI as scene lighting. Default 0.22 — see the note above. */
+  /** Ambient strength of the HDRI as scene lighting. Defaults to match `sky.ts` — see above. */
   readonly environmentIntensity?: number;
   /** Brightness of the HDRI as the visible background. Default 1. */
   readonly backgroundIntensity?: number;
