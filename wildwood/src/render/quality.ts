@@ -87,9 +87,6 @@ const high: IWorldEnvironmentOptions = {
   // The two full-resolution denoise passes over the AO and GI terms: ~1.9 ms. Only worth running
   // when SSGI is on — its noise is what they clean up.
   denoiseEnabled: true,
-  // SSGI, the screen-space indirect-light gather: ~7.3 ms alone, ~9.2 ms with the two denoise
-  // passes it feeds. The largest stage in the chain by a factor of two, of a 14.7 ms frame.
-  // Dropping this pair is what `medium` is.
   gtaoEnabled: true,
   // Contact scale, in metres: the gap between a foot and the floor, a stem and the soil, a
   // boulder and the grass around it. Not room scale — SSGI's own occlusion term already gathers
@@ -101,6 +98,9 @@ const high: IWorldEnvironmentOptions = {
   // stage downstream puts the edge back; the ablation this file's numbers come from never
   // measured this stage, so treat its cost as unknown until `TN_FRAME_BUDGET` says otherwise.
   gtaoResolutionScale: 0.5,
+  // SSGI, the screen-space indirect-light gather: ~7.3 ms alone, ~9.2 ms with the two denoise
+  // passes it feeds. The largest stage in the chain by a factor of two, of a 14.7 ms frame.
+  // Dropping this pair is what `medium` is.
   ssgiEnabled: true,
   ssgiQuality: "medium",
   // Screen-space reflections: ~4.1 ms.
