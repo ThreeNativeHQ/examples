@@ -350,12 +350,27 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   // ridge above it agree about what colour the air is — plus the wood, because a ray leaving a
   // pond at two degrees does not reach the sky at all. It reaches the far bank.
   const bounced = reflect(view.negate(), normal);
-  const treeline = linear(palette.canopy, 0.34).add(linear(palette.bark, 0.16));
+  // The far bank, and it has to be as bright as the far bank actually is.
+  //
+  // At 0.34/0.16 this summed to a linear luminance of 0.048 while the sunlit conifers it stands in
+  // for measure 0.0989 across the lake (`tools/luminance.mjs --crop 0,0.28,1,0.45`) — half as
+  // bright as the thing being reflected, against a horizon band of 0.469. Grazing fragments have
+  // fresnel at 1, so they showed all of it, and the surface broke out in hard black amoebae that
+  // read as holes in the lake rather than as ripples. Identified by setting this one term to
+  // magenta and capturing: every blob turned magenta, over about a third of the visible water.
+  const treeline = linear(palette.canopy, 0.72).add(linear(palette.bark, 0.34));
   const horizon = vec3(SKY_RADIANCE.horizon[0], SKY_RADIANCE.horizon[1], SKY_RADIANCE.horizon[2]);
   const zenith = vec3(SKY_RADIANCE.zenith[0], SKY_RADIANCE.zenith[1], SKY_RADIANCE.zenith[2]);
   const sunward = vec3(SKY_RADIANCE.sunward[0], SKY_RADIANCE.sunward[1], SKY_RADIANCE.sunward[2]);
+  // The lower edge is at -0.28, not 0.01, and that is the other half of the same bug. `SLOPE_GAIN`
+  // exaggerates the normal's horizontal by 7.5x — deliberately, because an honest one-degree wave
+  // slope moves the reflection by nothing the eye can find — and the cost is that a large fraction
+  // of fragments reflect *below* horizontal. Snapping all of them to one colour across a band
+  // 0.1 wide turns a smooth ripple field into hard-edged shapes. A ray leaving a wave face
+  // downward really does hit the next wave and then the bank, so the answer is still the treeline;
+  // it just has to arrive as a gradient over the range the normals actually span.
   const skyward = mix(
-    mix(treeline, horizon, smoothstep(float(0.01), float(0.11), bounced.y)),
+    mix(treeline, horizon, smoothstep(float(-0.28), float(0.16), bounced.y)),
     zenith,
     smoothstep(float(0.08), float(0.62), bounced.y),
   );

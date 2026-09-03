@@ -77,14 +77,24 @@ const toLinear = (v) => {
   return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
 };
 
-for (const file of process.argv.slice(2)) {
+// `--crop x0,y0,x1,y1` in fractions of the image, for measuring one band of a frame — the far
+// bank, the water, the sky — rather than the whole thing. A whole-frame median cannot answer
+// "is the treeline the right brightness".
+const cropIndex = process.argv.indexOf("--crop");
+const crop =
+  cropIndex > 0 ? process.argv[cropIndex + 1].split(",").map(Number) : [0, 0.04, 1, 0.91];
+const files = process.argv.slice(2).filter((a) => a !== "--crop" && !/^[\d.,]+$/.test(a));
+
+for (const file of files) {
   const { channels, data, height, width } = decodePng(readFileSync(file));
   const luminance = [];
   // Skip the bottom 9% (the control strip) and the top 4% (the compass readout).
-  const top = Math.floor(height * 0.04);
-  const bottom = Math.floor(height * 0.91);
+  const top = Math.floor(height * crop[1]);
+  const bottom = Math.floor(height * crop[3]);
+  const left = Math.floor(width * crop[0]);
+  const right = Math.floor(width * crop[2]);
   for (let y = top; y < bottom; y += 1) {
-    for (let x = 0; x < width; x += 1) {
+    for (let x = left; x < right; x += 1) {
       const i = (y * width + x) * channels;
       luminance.push(
         0.2126 * toLinear(data[i]) + 0.7152 * toLinear(data[i + 1]) + 0.0722 * toLinear(data[i + 2]),
