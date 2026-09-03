@@ -1,0 +1,173 @@
+[
+  {
+    "name": "forest-bed",
+    "source": "forest-bed",
+    "bytes": 220693,
+    "seconds": 21.4,
+    "channels": 2,
+    "loop": true,
+    "highpassHz": 0.0
+  },
+  {
+    "name": "forest-birds",
+    "source": "forest-birds",
+    "bytes": 93352,
+    "seconds": 14.1,
+    "channels": 1,
+    "loop": true,
+    "highpassHz": 110.0
+  },
+  {
+    "name": "lake-shore",
+    "source": "lake-shore",
+    "bytes": 76719,
+    "seconds": 11.6,
+    "channels": 1,
+    "loop": true,
+    "highpassHz": 0.0
+  },
+  {
+    "name": "landmark-found",
+    "source": "chime-c",
+    "bytes": 22238,
+    "seconds": 3.0,
+    "channels": 2,
+    "loop": false,
+    "highpassHz": 120.0
+  },
+  {
+    "name": "step-grass-1",
+    "source": "step-grass-1",
+    "bytes": 6415,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-grass-2",
+    "source": "step-grass-2",
+    "bytes": 6541,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-grass-3",
+    "source": "step-grass-3",
+    "bytes": 6740,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-dirt-1",
+    "source": "step-dirt-1",
+    "bytes": 6648,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-dirt-2",
+    "source": "step-dirt-2",
+    "bytes": 6651,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-dirt-3",
+    "source": "step-dirt-3",
+    "bytes": 6013,
+    "seconds": 0.382,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-rock-1",
+    "source": "step-rock-1",
+    "bytes": 6618,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-rock-2",
+    "source": "step-rock-2",
+    "bytes": 6771,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-rock-3",
+    "source": "step-rock-3",
+    "bytes": 6504,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-leaf-1",
+    "source": "step-leaf-1",
+    "bytes": 6687,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-leaf-2",
+    "source": "step-leaf-2",
+    "bytes": 5930,
+    "seconds": 0.362,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-leaf-3",
+    "source": "step-leaf-3",
+    "bytes": 6119,
+    "seconds": 0.406,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-water-1",
+    "source": "step-water-1",
+    "bytes": 6686,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-water-2",
+    "source": "step-water-2",
+    "bytes": 6989,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "step-water-3",
+    "source": "step-water-3",
+    "bytes": 6550,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  }
+]

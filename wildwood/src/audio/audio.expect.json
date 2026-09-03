@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "clips": [
+    {
+      "path": "public/audio/forest-bed.ogg",
+      "loop": true,
+      "bands": { "sub": { "max": 3 }, "high": { "min": 20 }, "air": { "min": 20 } }
+    },
+    {
+      "path": "public/audio/forest-birds.ogg",
+      "loop": true,
+      "bands": { "sub": { "max": 4 }, "high": { "min": 20 } }
+    },
+    {
+      "path": "public/audio/lake-shore.ogg",
+      "loop": true,
+      "bands": { "sub": { "max": 3 }, "mid": { "min": 10 }, "high": { "min": 30 } }
+    },
+    {
+      "path": "public/audio/landmark-found.ogg",
+      "loop": false,
+      "bands": {
+        "sub": { "max": 3 },
+        "low": { "max": 25 },
+        "mid": { "min": 10 },
+        "high": { "min": 25 }
+      }
+    },
+    {
+      "path": "public/audio/step-grass-1.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-grass-2.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-grass-3.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-dirt-1.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-dirt-2.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-dirt-3.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-rock-1.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-rock-2.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-rock-3.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-leaf-1.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-leaf-2.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-leaf-3.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-water-1.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-water-2.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    },
+    {
+      "path": "public/audio/step-water-3.ogg",
+      "loop": false,
+      "bands": { "sub": { "max": 6 }, "high": { "min": 15 } }
+    }
+  ]
+}
