@@ -32,6 +32,8 @@ export interface ILandmarkProps {
   readonly boughs: readonly ITreeSpecies[];
   /** Whole dead trees from the pack — the fallen giant is one of these, lying down. */
   readonly snags: readonly ITreeSpecies[];
+  /** The pack's dead stump, which is what the camp sits on. */
+  readonly stumps: readonly ITreeSpecies[];
   /** Boulders — the cairn, the fire ring, the shore stones, the rubble. */
   readonly rocks: readonly ITreeSpecies[];
 }
@@ -189,11 +191,22 @@ function charcoalRing(materials: Materials, props: ILandmarkProps): Group {
     group.add(ember);
   }
   // Three stumps, spaced like seats round a fire. Deliberately not four: an odd number reads as
-  // people having sat down, an even one as furniture. Dead bark now, not painted tube colour.
+  // people having sat down, an even one as furniture.
+  //
+  // Real pack meshes, for the same reason the fallen giant is one: these were nine-segment tubes,
+  // and a nine-segment tube at arm's length is a faceted drum. `SM_tree_dead` is excluded from the
+  // flora scatter precisely because it decodes to a 1.1 m stump instead of a tree, which is
+  // exactly what a seat beside a fire is.
+  const stumpSpecies = props.stumps[0];
   for (let index = 0; index < 3; index += 1) {
     const angle = (index / 3) * Math.PI * 2 + 0.7;
-    const stump = tube(0.42, 0.5, 0.75, materials.deadwood, { segments: 9 });
-    stump.position.set(Math.cos(angle) * 2.9, 0.38, Math.sin(angle) * 2.9);
+    const stump =
+      stumpSpecies === undefined
+        ? tube(0.42, 0.5, 0.75, materials.deadwood, { segments: 9 })
+        : stone(stumpSpecies, 0.95, SNAG_GAIN);
+    stump.position.set(Math.cos(angle) * 2.9, 0.02, Math.sin(angle) * 2.9);
+    // Each turned differently, so three copies of one mesh do not read as three copies of one mesh.
+    stump.rotation.y = index * 2.1 + hash2(index, 21, 733) * 1.4;
     group.add(stump);
   }
   return group;

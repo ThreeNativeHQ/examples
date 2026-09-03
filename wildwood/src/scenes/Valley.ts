@@ -37,6 +37,7 @@ import { type ILandmarkProps, createLandmark, createTrailhead } from "../render/
 import { createPond } from "../render/pond.js";
 import { setupForestLighting } from "../render/lighting.js";
 import { createLoadingScreen } from "../render/loading.js";
+import { createMotes } from "../render/motes.js";
 import { type ILandmarkMaps, createBannerMaterial, createMaterials } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { setupSkyHdri } from "../render/sky-hdri.js";
@@ -93,6 +94,9 @@ const LANDMARK_STONE = {
   // The fallen giant is the first of these laid on its side, and the second stood on end as its
   // root plate. Drawn from the flora that is already loaded, so this costs no extra request.
   snags: ["SM_dead-tree03", "SM_dead-tree05"],
+  // The camp's seats. `SM_tree_dead` is excluded from the flora scatter because it decodes to a
+  // 1.1 m stump rather than a tree — which is exactly what a stump beside a fire ring is.
+  stumps: ["SM_tree_dead"],
   rocks: ["SM_rock01_lod000", "SM_rock02_lod000", "SM_rock03_lod000", "SM_rock04_lod000", "SM_RockGroup01", "SM_RockGroup02"],
 } as const;
 
@@ -739,7 +743,18 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const skipSky = isWeb() && new URLSearchParams(window.location.search).has("nosky");
 
     const floraPromise = loadFlora(generation.detail, controls);
-    const boughPromise = loadLandmarkBoughs(generation.detail, controls);
+    const boughPromise = loadLandmarkSpecies(
+      generation.detail,
+      controls,
+      LANDMARK_STONE.boughs,
+      "bough",
+    );
+    const stumpPromise = loadLandmarkSpecies(
+      generation.detail,
+      controls,
+      LANDMARK_STONE.stumps,
+      "stump",
+    );
     const mapsPromise = loadStoneMaps(generation.detail, controls);
     const animalsPromise =
       controls.animalsCritical || skipAnimals
@@ -751,7 +766,14 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     // The bar's second half, driven by the milestones this method actually reaches rather than by
     // a timer. Five sources settle independently, so each one that lands moves the fill.
     this.#detailProgress = 0.04;
-    const sources = [floraPromise, boughPromise, mapsPromise, animalsPromise, hdriPromise] as const;
+    const sources = [
+      floraPromise,
+      boughPromise,
+      mapsPromise,
+      animalsPromise,
+      hdriPromise,
+      stumpPromise,
+    ] as const;
     let landed = 0;
     for (const source of sources) {
       // Typed as `unknown` on purpose: this loop only counts, and widening the five differently
@@ -773,6 +795,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       mapsPromise,
       animalsPromise,
       hdriPromise,
+      stumpPromise,
     ]);
     const stagedAnimals =
       staged[3]?.status === "fulfilled"
@@ -804,11 +827,13 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const boughResult = staged[1];
     const mapsResult = staged[2];
     const animalsResult = staged[3];
+    const stumpResult = staged[5];
     if (
       floraResult.status !== "fulfilled" ||
       boughResult.status !== "fulfilled" ||
       mapsResult.status !== "fulfilled" ||
-      animalsResult.status !== "fulfilled"
+      animalsResult.status !== "fulfilled" ||
+      stumpResult.status !== "fulfilled"
     ) {
       throw new Error("Settled detail results changed after rejection handling.");
     }
@@ -816,6 +841,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const boughs = boughResult.value;
     const stoneMaps = mapsResult.value;
     const animals = animalsResult.value;
+    const stumps = stumpResult.value;
     this.#detailProgress = Math.max(this.#detailProgress, 0.62);
     console.info(`TN_VALLEY_DETAIL_STAGED ${generationLabel}`);
     if (controls.detailHoldMs > 0) {
@@ -849,6 +875,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
         snags: LANDMARK_STONE.snags.map((name) =>
           requiredSpecies(dressedFlora.broadleaves, name),
         ),
+        stumps,
         cliffs: LANDMARK_STONE.cliffs.map((name) => requiredSpecies(dressedFlora.cliffs, name)),
         rocks: LANDMARK_STONE.rocks.map((name) => requiredSpecies(dressedFlora.rocks, name)),
       };
@@ -882,6 +909,9 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       console.info(`TN_TRUNK_COLLIDERS:${String(standing)}`);
       ctx.state.set({ trunkColliders: standing });
       const detailObjects: Object3D[] = [...foliage.meshes];
+      // The air. Attached with the rest of detail so it is behind the curtain like everything else,
+      // and through `#addDetail` so `ctx.add` sees a compute-driven object and wires its dispatch.
+      detailObjects.push(createMotes());
 
       const materials = createMaterials(stoneMaps);
       const pond = createPond(materials, props.rocks, dressedFlora.ferns, dressedFlora.shrubs);
@@ -1118,14 +1148,16 @@ async function loadFlora(
   return loaded;
 }
 
-/** Only boughs are unique landmark models; cliff and rock variants reuse the full flora stage. */
-async function loadLandmarkBoughs(
+/** The landmark-only models: cliff and rock variants reuse the full flora stage, these do not. */
+async function loadLandmarkSpecies(
   assets: AssetLease,
   controls: IStartupControls,
+  names: readonly string[],
+  kind: string,
 ): Promise<readonly ITreeSpecies[]> {
-  const boughs = await Promise.all(
-    LANDMARK_STONE.boughs.map(async (name) => {
-      const logical = `landmark-bough:${name}`;
+  const loaded = await Promise.all(
+    names.map(async (name) => {
+      const logical = `landmark-${kind}:${name}`;
       rejectDetailControl(controls, logical);
       try {
         const model = await assets.model<{ scene: Group }>(`${FAB}/${name}.glb`);
@@ -1136,8 +1168,8 @@ async function loadLandmarkBoughs(
       }
     }),
   );
-  console.info(`TN_LANDMARK_BOUGHS_LOADED:${String(boughs.length)}species`);
-  return boughs;
+  console.info(`TN_LANDMARK_${kind.toUpperCase()}S_LOADED:${String(loaded.length)}species`);
+  return loaded;
 }
 
 /** The two pack maps the landmark *procedural* pieces still wear: dead bark, and cliff rock. */
