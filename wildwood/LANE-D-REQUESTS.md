@@ -45,3 +45,16 @@ is the wrong colour and no compiler complains.
 they were. `setupSkyHdri()` keeps its three positional arguments; only its *defaults* changed
 (environment intensity, rotation, and fog now match the sky that is already on screen), so
 `stageHdri()` needs no edit.
+
+## 3. A missing-texture marker is visible in the wood (lane B)
+
+**Owner: lane B (`foliage.ts` / `public/fab/**`).** Not a lighting issue, but it is in a frame so
+it should be written down rather than left for someone to find later.
+
+`/tmp/lane-d-shots/sunward/view-1.png`, spawn `0,0,-2.168` looking SE at the sun: a magenta and
+cyan chevron — the standard "texture failed to load" checker — occupies the top-left of the frame,
+about 300x150 px, in the canopy. The camera in that shot is also standing inside a trunk, which is
+a spawn-point artifact of that hand-picked position and not a defect; the checker is not.
+
+Lane D did not investigate further: every material in that part of the frame is foliage, and the
+lighting rig has no path to produce a two-colour checker.
