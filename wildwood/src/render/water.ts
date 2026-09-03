@@ -798,9 +798,19 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   // mirrored sample, where it moves something.
   const below = mix(mirror, windowSky, window).add(linear(SUN_COLOUR, 0.65).mul(sunDisc));
 
-  // One step, on the camera's own height. It is uniform across the draw, so both sides costing a
-  // multiply is the whole price of not writing two materials.
-  const eyeIsAbove = step(float(WATER_LEVEL + 0.02), cameraPosition.y);
+  // Which of the two the camera is looking at, on its own height. Uniform across the draw, so both
+  // sides costing a multiply is the whole price of not writing two materials.
+  //
+  // A ten-centimetre blend rather than a step, because the walker crosses this line on foot and a
+  // hard flip from `above` to `below` is a one-frame pop in the middle of walking into a lake. Ten
+  // centimetres of eye height is about half a metre of walking on this bank, a third of a second
+  // at wade speed — and it is also the honest answer: an eye level with the surface really does
+  // see some of both.
+  const eyeIsAbove = smoothstep(
+    float(WATER_LEVEL - 0.05),
+    float(WATER_LEVEL + 0.05),
+    cameraPosition.y,
+  );
   material.colorNode = mix(below, above, eyeIsAbove);
 
   // The shoreline, and the end of the hard edge.
