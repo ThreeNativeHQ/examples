@@ -161,9 +161,16 @@ const high: IWorldEnvironmentOptions = {
   // passes it feeds. The largest stage in the chain by a factor of two, of a 14.7 ms frame.
   // Dropping this pair is what `medium` is.
   ssgiEnabled: true,
-  ssgiQuality: "medium",
+  ssgiQuality: "low",
   // Screen-space reflections: ~4.1 ms.
-  ssrEnabled: true,
+  // **Off, and measured off.** SSR cost 8.2 ms of a 39.7 ms frame (perf ablation, 1600x900,
+  // turing/nvidia). In a forest the only thing it was ever really reflecting is the lake — and the
+  // lake now computes its own reflection in closed form: it intersects the reflected ray with a
+  // ring of bank whose radius is measured by bisecting `heightAt` on 32 bearings at build time,
+  // walks the ray to the crossing and reads the already-drawn frame there. See `water.ts`. So this
+  // stage is paying eight milliseconds a frame to duplicate, worse, something the water does for
+  // almost nothing.
+  ssrEnabled: false,
   // A reflection carries almost no high-frequency detail, so half resolution costs a quarter of
   // the rays and is very hard to see in the result.
   ssrResolutionScale: 0.5,
@@ -254,7 +261,14 @@ const medium: IWorldEnvironmentOptions = {
   gtaoSamples: 8,
   gtaoResolutionScale: 0.5,
   // Screen-space reflections: ~4.1 ms.
-  ssrEnabled: true,
+  // **Off, and measured off.** SSR cost 8.2 ms of a 39.7 ms frame (perf ablation, 1600x900,
+  // turing/nvidia). In a forest the only thing it was ever really reflecting is the lake — and the
+  // lake now computes its own reflection in closed form: it intersects the reflected ray with a
+  // ring of bank whose radius is measured by bisecting `heightAt` on 32 bearings at build time,
+  // walks the ray to the crossing and reads the already-drawn frame there. See `water.ts`. So this
+  // stage is paying eight milliseconds a frame to duplicate, worse, something the water does for
+  // almost nothing.
+  ssrEnabled: false,
   // A reflection carries almost no high-frequency detail, so half resolution costs a quarter of
   // the rays and is very hard to see in the result.
   ssrResolutionScale: 0.5,
