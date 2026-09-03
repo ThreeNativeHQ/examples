@@ -125,3 +125,38 @@ this. Until then the game ships Quaternius CC0 animals (fox, wolf, husky, stag, 
 Also recorded: Fab's own `isFree` flag is false for sponsored free listings whose every
 license priceTier prices 0 — the tiers are the truth, and both the normaliser and the
 free-download gate now read them.
+
+## 8. Three owned Fab vegetation packs are un-importable: UE4 object versions 413–516
+
+Lane B went to Fab for new species — the valley's whole plant list is one pack, and eight of its
+fifty-nine meshes carry the entire undergrowth. Three owned, on-theme packs refused at the import
+step, all with the same shape of failure:
+
+```
+fab_import_asset b778bd8f-524c-42b6-b60c-4caac59029c1  (Temperate Vegetation: Fern Collection)
+  UNREAL_SOURCE_UNSUPPORTED: 37 uncooked static-mesh packages use UE4 object version 516.
+  The engine-free MeshDescription path is verified for versions 517-522.
+
+fab_import_asset d3a29766-c848-40c5-ad3d-d609b80d224b  (Procedural Nature Pack Vol.1)
+  UNREAL_SOURCE_UNSUPPORTED: 48 uncooked static-mesh packages use UE4 object version 413, 451, 498.
+```
+
+**Passing a later `--engine` does not help, and this is worth writing down twice**: the Fern
+Collection lists UE_4.19 through UE_5.4, and `UE_4.27` and `UE_5.4` both download the same
+artifact and both report version **516** — one version short of the supported floor. Fab's engine
+compatibility list is metadata about what the pack *runs* in, not a set of separately cooked
+artifacts. CREDITS.md already records this for Landscape Pro; it is a property of Fab, not of one
+listing, and the importer's error should probably say so rather than inviting the retry.
+
+516 in particular is a one-off gap: it is UE 4.25-era source, one increment below a range the
+importer already handles. Whatever verification the 517–522 range rests on is worth re-running at
+516 before writing a new reader — the odds that the MeshDescription layout moved in that
+increment are not obviously high.
+
+**What this cost, and what it did not.** No new species reached the valley. The density work went
+ahead entirely inside the pack already imported, by treating a niche as a *layer* rather than a
+species list — the same three `SM_pine-small` meshes now grow at three sizes as canopy
+mid-storey, saplings, and (with the dead-tree meshes tipped over) deadfall. That is a real
+technique and the wood is far better for it, but it is a technique for getting more out of one
+pack, and it does not substitute for species variety: every conifer in the valley is still one of
+five silhouettes.
