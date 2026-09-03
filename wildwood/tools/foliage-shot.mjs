@@ -81,7 +81,9 @@ const shoot = async (name, at) => {
   while (detailDone === "" && Date.now() < deadline) await page.waitForTimeout(500);
   if (detailDone === "") console.log("WARN TN_VALLEY_DETAIL_DONE never arrived — shooting anyway");
   await page.waitForTimeout(settleMs);
-  const fps = await measureFps(measureMs);
+  // A dev-server HMR reload lands mid-measurement as "Execution context was destroyed"; that is a
+  // navigation, not a failed capture, so lose the number rather than the whole run.
+  const fps = await measureFps(measureMs).catch(() => -1);
   await page.screenshot({ path: `${out}/${name}.png` });
   console.log(`shot ${name} fps=${String(fps)} ${detailDone}`);
 };

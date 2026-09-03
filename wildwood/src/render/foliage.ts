@@ -504,7 +504,7 @@ function weightOf(name: string, mix: ILayer["mix"]): number {
 /**
  * The wood, layer by layer, from the crowns down to the litter.
  *
- * Counts are for the whole 182 m valley. They are the density dial: `pine0[1-5]` at 500 is a
+ * Counts are for the whole 182 m valley. They are the density dial: `pine0[1-5]` at 540 is a
  * canopy you cannot see the sky through from under it, and at 200 it is the parkland this valley
  * used to be.
  */
@@ -673,7 +673,7 @@ const LAYERS: readonly ILayer[] = [
     ],
     heightTo: 0.62,
     name: "fern",
-    rule: { clearing: 5, clump: 0.72, count: 7_000, maxHeight: 18, maxSlope: 0.8, minHeight: 0.4, patch: 16, seed: 15_527 },
+    rule: { clearing: 3, clump: 0.7, count: 7_600, maxHeight: 18, maxSlope: 0.8, minHeight: 0.4, patch: 16, seed: 15_527 },
     sink: 0.08,
     size: [0.65, 0.8],
     stance: "upright",
@@ -693,7 +693,7 @@ const LAYERS: readonly ILayer[] = [
       [/GrassGroup03/, 0.5],
     ],
     name: "grass",
-    rule: { clearing: 0, clump: 0.45, count: 13_000, maxHeight: 20, maxSlope: 0.95, minHeight: 0.15, patch: 11, seed: 27_449 },
+    rule: { clearing: 0, clump: 0.3, count: 15_000, maxHeight: 20, maxSlope: 0.95, minHeight: 0.15, patch: 11, seed: 27_449 },
     sink: 0.1,
     size: [0.6, 0.8],
     stance: "upright",
@@ -708,7 +708,7 @@ const LAYERS: readonly ILayer[] = [
     from: (sets) => pick(sets.grasses, /clover/),
     gain: LEAF_GAIN,
     name: "litter",
-    rule: { clearing: 0, clump: 0.6, count: 11_000, maxHeight: 21, maxSlope: 1.0, minHeight: 0.15, patch: 12, seed: 31_337 },
+    rule: { clearing: 0, clump: 0.26, count: 16_000, maxHeight: 21, maxSlope: 1.0, minHeight: 0.15, patch: 12, seed: 31_337 },
     sink: 0,
     sizeTo: 1.45,
     size: [0.55, 0.95],

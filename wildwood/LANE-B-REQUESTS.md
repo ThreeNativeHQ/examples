@@ -31,7 +31,37 @@ import { FLORA, FLORA_ROOT } from "../render/foliage.js";
 No behaviour change, no signature change to `loadFlora`, and `createFoliage`'s contract is
 untouched.
 
-## 2. Nothing else
+## 2. `src/scenes/Valley.ts` (lane A) — landmark clearings mow the grass too
+
+**This is now the single largest bare patch in the game.** `hideFoliageNearLandmarks`
+(Valley.ts:1138) teleports every foliage instance within 9 m of a landmark to y = -400 — and
+"every" includes the grass, the leaf litter, the flowers and the ferns. Around each of the five
+landmarks that leaves a 18 m circle of bare terrain texture with nothing on it at all, which in a
+wood this dense now reads as a mown lawn rather than as a clearing. It is the near half of
+`/tmp/lane-b-shots/r2/view-1.png`.
+
+The clearing is right for anything you would walk into — trees, snags, thickets, boulders. It is
+wrong for anything you walk over.
+
+**Requested:** skip the ground layers. Every foliage mesh lane B builds is named
+`<layer>-<species>-<section>`, so this is a name test and needs no new plumbing:
+
+```ts
+/** Ground cover is walked over, not walked into: a landmark clearing should not mow it. */
+const WALKED_OVER = /^(grass|litter|margin|fern|sapling)-/;
+
+function hideFoliageNearLandmarks(meshes: readonly InstancedMesh[]): void {
+  const matrix = new Matrix4();
+  for (const mesh of meshes) {
+    if (WALKED_OVER.test(mesh.name)) continue;   // <- the whole change
+    ...
+```
+
+The layer names are stable and are the `name` field of each entry in `LAYERS` in `foliage.ts`:
+`canopy`, `broadleaf`, `snag`, `midstorey`, `sapling`, `deadfall`, `thicket`, `margin`, `fern`,
+`grass`, `litter`, `rocks`, `stones`.
+
+## 3. Nothing else
 
 Lane B made no other change outside its own paths. Density, species selection, scatter rules,
 counts and the four reported totals are all inside `foliage.ts`; `createFoliage(extent, clearing,
