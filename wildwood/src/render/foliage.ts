@@ -461,9 +461,27 @@ const BARK_GAIN = [3.9, 3.4, 2.7] as const;
 const LEAF_GAIN = [3.3, 3.6, 2.8] as const;
 const STONE_GAIN = [3.0, 2.9, 2.7] as const;
 
-/** Take the species of a niche whose pack names match any of these patterns. */
+/**
+ * Take the species of a niche whose pack names match any of these patterns.
+ *
+ * By NAME, deliberately, not by index. `loadFlora` fetches the 52 species concurrently and writes
+ * each into its declared slot, so the arrays keep `FLORA` order however the network reorders the
+ * responses — but nothing in this file should depend on that, because a layer that means "the five
+ * full pines" should go on meaning that when somebody adds a sixth to the list.
+ *
+ * The `!= null` guard is for the same concurrency: a slot-write leaves a hole rather than a short
+ * array if a species is ever dropped instead of thrown on, and `pattern.test(undefined.name)` would
+ * take the whole wood down with a TypeError at load time.
+ */
 function pick(species: readonly ITreeSpecies[], ...patterns: readonly RegExp[]): ITreeSpecies[] {
-  return species.filter((one) => patterns.some((pattern) => pattern.test(one.name)));
+  return species.filter(
+    (one) => one != null && patterns.some((pattern) => pattern.test(one.name)),
+  );
+}
+
+/** Every species of a niche, with the same hole guard `pick` applies. */
+function all(species: readonly ITreeSpecies[]): ITreeSpecies[] {
+  return species.filter((one) => one != null);
 }
 
 /**
@@ -664,7 +682,7 @@ const LAYERS: readonly ILayer[] = [
     // Ferns, in drifts. `clump` is high here on purpose: an evenly sown fern floor is the "pins in
     // a map" look, and a fern floor with drifts and bare ground between them is a wood.
     castShadows: false,
-    from: (sets) => sets.ferns,
+    from: (sets) => all(sets.ferns),
     gain: LEAF_GAIN,
     lean: 0.16,
     mix: [
@@ -722,7 +740,7 @@ const LAYERS: readonly ILayer[] = [
     // one toward the two 220–288 triangle rock groups over the four 7,200 triangle scans, which
     // is why there can be half again as many of them for half the triangles.
     castShadows: true,
-    from: (sets) => sets.rocks,
+    from: (sets) => all(sets.rocks),
     gain: STONE_GAIN,
     mix: [
       [/RockGroup/, 3.2],

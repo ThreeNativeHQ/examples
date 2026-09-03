@@ -68,15 +68,20 @@ const shoot = async (name, at) => {
   detailDone = "";
   const target = at === undefined ? url : `${url}${url.includes("?") ? "&" : "?"}spawn=${at}`;
   await page.goto(target, { waitUntil: "networkidle", timeout: 180_000 });
-  const ready = await page
-    .waitForFunction(() => globalThis.__TN_STARTUP_READY__ === true, undefined, {
+  // `__TN_WORLD_REVEALED__`, NOT `__TN_STARTUP_READY__`. The framework flag means the framework is
+  // ready; the loading curtain now holds past it until the whole detail tier has landed, so a
+  // harness gated on the framework flag photographs a title card at 86% that reads exactly like a
+  // scene which failed to build. This flag is the game's own, set as the curtain lifts.
+  const revealed = await page
+    .waitForFunction(() => globalThis.__TN_WORLD_REVEALED__ === true, undefined, {
       timeout: 180_000,
       polling: 500,
     })
     .then(() => true, () => false);
-  if (!ready) console.log("WARN __TN_STARTUP_READY__ never flipped");
-  // The detail tier attaches one mesh family per presented frame after readiness. Poll the marker
-  // the scene prints when the last of them is in; only then is there a wood to photograph.
+  if (!revealed) console.log("WARN __TN_WORLD_REVEALED__ never flipped; the curtain is probably up");
+  // Belt and braces: the reveal and the last mesh family landing are the same moment today, but
+  // they are set by two different code paths, and a frame rate measured over a half-attached wood
+  // is not the frame rate of the wood.
   const deadline = Date.now() + 240_000;
   while (detailDone === "" && Date.now() < deadline) await page.waitForTimeout(500);
   if (detailDone === "") console.log("WARN TN_VALLEY_DETAIL_DONE never arrived — shooting anyway");
