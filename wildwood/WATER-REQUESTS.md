@@ -63,3 +63,31 @@ and all three read those buffers. The water lane's fix from its own side is to m
 write depth, so the buffers hold the smooth water plane instead. If the lines outlive that, they
 belong to whichever of those three stages is reading a grazing-angle depth derivative without a
 guard, and the water is only where it shows.
+
+## 3. The WebGL2 fallback loses one post pass to a GLSL type error — not the water
+
+**Owner: whoever owns `postprocessing.ts` / `quality.ts`, or upstream.** Found while checking the
+water lane's own requirement that the surface must not white-screen on
+`WebGPURenderer({ forceWebGL: true })`. It does not: the game renders, the lake is there, and the
+reflection works (headless WebGL2 capture, `?spawn=-46,4.3,-3.1416`). But one fragment program in
+the chain fails to compile:
+
+```
+THREE.WebGLProgram: Shader Error 0 - VALIDATE_STATUS false
+ERROR: 0:225: 'max' : no matching overloaded function found
+ERROR: 0:225: 'assign' : cannot convert from 'const mediump float' to 'highp int'
+
+> 225: nodeVar25 = max( int( trunc( ( max( abs(nodeVar23), abs(nodeVar24) )
+                    * clamp( nodeUniform10, 0.0, 1.0 ) ) ) ), 1.0 );
+```
+
+`max(int, 1.0)` has no GLSL ES 3.0 overload; WGSL is happy with it, so the WebGPU path never sees
+it. The surrounding lines project a world point through a matrix, divide by `w`, map to `0..1`,
+flip y and scale by a resolution uniform to get a pixel delta and a **ray-march step count** — that
+is a screen-space reflection pass, not a surface material. `TN_WORLD_ENVIRONMENT` on the WebGL2
+path reports `ssr` applied.
+
+To reproduce without the capture lock (it is headless, and WebGL2 under SwiftShader is enough to
+compile a shader): launch Chromium with `headless: true` and **no** `--enable-unsafe-webgpu`, wait
+on `__TN_WORLD_REVEALED__`, and log console lines matching `/Shader Error|ERROR: 0:/`. three prints
+the offending source with line numbers, which is what identified the pass.
