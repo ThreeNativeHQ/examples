@@ -3,9 +3,15 @@
  *
  * ## The budget
  *
- * 512 KiB shipped, everything included. That is the number this catalogue was cut to, and the
- * delivered total is 497.9 KiB. For scale, the foliage pack alone is tens of megabytes: audio that
- * cost more than a single tree model would have been the wrong trade however good it sounded.
+ * 512 KiB shipped, everything included. That is the number this catalogue was cut to; the delivered
+ * total is 498.9 KiB on the wire and 13.71 MiB once decoded, and the second is the one that
+ * matters. For scale, the foliage pack alone is tens of megabytes: audio that cost more than a
+ * single tree model would have been the wrong trade however good it sounded.
+ *
+ * The authoritative byte and band figures live in `CREDITS-AUDIO.md`, measured off the files, and
+ * what enforces them is `audio.expect.json` through `threenative-playtest audio`. They are
+ * deliberately not constants here — a hand-copied byte count is a number that drifts silently, and
+ * this one already had.
  *
  * Two decisions follow from it.
  *
@@ -29,20 +35,19 @@
 /** Everything positional is mono: a panner collapses it anyway, and stereo would pay twice. */
 export interface IClip {
   readonly path: string;
-  readonly bytes: number;
 }
 
-const clip = (name: string, bytes: number): IClip => ({ path: `audio/${name}.ogg`, bytes });
+const clip = (name: string): IClip => ({ path: `audio/${name}.ogg` });
 
 /** Wind in high conifer branches. Stereo, 21.4 s, the layer that is always there. */
-export const FOREST_BED = clip("forest-bed", 220_693);
+export const FOREST_BED = clip("forest-bed");
 /** Sparse birds and trunk creak. Mono, 14.1 s, high-passed at 110 Hz, quieter, and the reason
  * the bed does not loop audibly. */
-export const FOREST_BIRDS = clip("forest-birds", 93_352);
+export const FOREST_BIRDS = clip("forest-birds");
 /** Ripples on a stony shore. Mono, 11.6 s, positional, one voice per body of water. */
-export const LAKE_SHORE = clip("lake-shore", 76_719);
+export const LAKE_SHORE = clip("lake-shore");
 /** The discovery acknowledgement. Stereo, 3 s, a struck bell, the only cue a player waits for. */
-export const LANDMARK_FOUND = clip("landmark-found", 22_238);
+export const LANDMARK_FOUND = clip("landmark-found");
 
 /** Underfoot. Three takes of each so a walk does not machine-gun one sample. */
 export const SURFACES = ["grass", "leaf", "rock", "dirt", "water"] as const;
@@ -66,11 +71,6 @@ export const ALL_STEP_CLIPS: readonly string[] = SURFACES.flatMap((surface) =>
 );
 
 /**
- * 499.2 KiB against a 512 KiB budget, measured on `public/audio/`.
- *
- * `src/audio/tools/` holds the three scripts that produced it — the prompts, the loop
- * cross-fade, and the measurement that proves the seams — so a re-generation is a re-run rather
- * than a re-invention.
+ * `src/audio/tools/` holds the three scripts that produced the set — the prompts, the loop
+ * cross-fade, and the measurement — so a regeneration is a re-run rather than a re-invention.
  */
-export const SHIPPED_BYTES = 511_187;
-export const BUDGET_BYTES = 512 * 1024;
