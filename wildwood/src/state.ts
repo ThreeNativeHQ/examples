@@ -57,6 +57,17 @@ export type GameState = {
    */
   revealTreeCount: number;
   revealFernCount: number;
+  /** How many standing trunks the wood put into physics. Zero means the forest is a painting. */
+  trunkColliders: number;
+  /**
+   * Frames on which the walker's centre was inside a trunk's radius.
+   *
+   * The direct measure of "can you walk through a tree". Position alone cannot express it: a walk
+   * that ends somewhere reasonable proves nothing about what it passed through on the way, and a
+   * walk that is blocked looks identical to a walk that had nothing in front of it. Read together
+   * with `odometer`, which proves the walk happened at all.
+   */
+  insideTrunkTicks: number;
   /** Set from the UI's pause and resume intents, and read back by the menu. */
   paused: boolean;
   /** True once the UI layer has rendered and published its interactive rectangles. */

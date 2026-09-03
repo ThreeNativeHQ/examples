@@ -1,0 +1,36 @@
+{
+  "name": "wildwood-solid-wood",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 0,
+  "steps": [
+    { "kind": "wait", "label": "let-the-curtain-lift", "waitTicks": 900, "release": true },
+    { "kind": "input", "label": "walk-into-the-wood", "press": "KeyW", "holdTicks": 900, "release": true },
+    { "kind": "wait", "label": "settle", "waitTicks": 60, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
+    "resources": [
+      {
+        "id": "state",
+        "path": "trunkColliders",
+        "gte": 500,
+        "allowTrivial": "Written once when the detail tier attaches, and the count is the wood's own. Zero, or the field missing, is the defect: the terrain heightfield used to be the only collider in the game."
+      },
+      {
+        "id": "state",
+        "path": "odometer",
+        "gte": 12,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "insideTrunkTicks",
+        "lte": 0,
+        "allowTrivial": "Trivially zero is exactly the pass condition, which is why it is asserted together with the odometer above: the walker has to cover at least twelve metres of dense wood for the zero to mean anything. Removing the trunk colliders takes this to the hundreds on the same walk, which is how it was proven to bite."
+      }
+    ],
+    "movement": { "entity": "walker", "minDistance": 8 }
+  }
+}

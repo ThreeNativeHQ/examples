@@ -22,6 +22,7 @@ import {
   Scene as ThreeScene,
   type Texture,
   Vector2,
+  Vector3,
 } from "three";
 import { Wanderer, capturePointerOnClick } from "../entities/Wanderer.js";
 import {
@@ -98,6 +99,20 @@ const CLEARING = 9;
 const LANDMARK_CLEARING = 9;
 /** Fall below this and you have left the world; the walk resets to the trailhead. */
 const KILL_PLANE = -40;
+
+/**
+ * A standing trunk, as physics sees it.
+ *
+ * Until this existed the terrain heightfield was the *only* collider in the game, so the wood was
+ * a painting: the walker strolled through pines, snags and the standing stone without touching
+ * one. The radius is deliberately under the visible bark — a collider wider than the trunk stops
+ * you in open air, which reads as a bug in a way that clipping a few centimetres of bark does not.
+ * The capsule's rounded caps are also what let the character controller slide along a trunk
+ * instead of sticking to it.
+ */
+const TRUNK_RADIUS = 0.34;
+/** Total capsule height is `2 * (halfHeight + radius)`: 6.7 m, taller than the walker can climb. */
+const TRUNK_HALF_HEIGHT = 3;
 
 type AssetKind = "model" | "texture";
 
@@ -195,6 +210,15 @@ interface IValleyGeneration {
   criticalWaters: IWater[];
   detail: AssetLease;
   detailObjects: Object3D[];
+  /**
+   * Every physics body this generation put into the world, so restart can take them out again.
+   *
+   * `RigidBody3D` is not owned by the scene graph — removing a mesh leaves its collider standing —
+   * and the physics context outlives the scene. Before trunks that was one leaked heightfield per
+   * restart, invisible because a second heightfield describes the same surface. It is now one
+   * heightfield plus ~900 capsules, which a player would feel on the second restart.
+   */
+  bodies: RigidBody3D[];
   detailAnimals?: IWildwoodAnimals;
   detailWaters: IWater[];
   hdri?: Texture;
@@ -267,6 +291,14 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
    * done, rejected, or stale, because a curtain that only lifts on success is a hang — and
    * `#detailProgress` drives the second half of the bar.
    */
+  /**
+   * Where the standing trunks are, for the per-frame "am I inside a tree" measurement.
+   *
+   * The colliders make the wood solid; this list is how the game can *prove* it, because a proof
+   * that only watches the player's position cannot tell being blocked by a trunk from having
+   * walked somewhere there was no trunk to begin with.
+   */
+  #trunks: readonly Vector3[] = [];
   #detailSettled: Promise<void> | undefined;
   #settleDetail: (() => void) | undefined;
   #detailProgress = 0;
@@ -287,8 +319,10 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     objectiveComplete: false,
     odometer: 0,
     paused: false,
+    insideTrunkTicks: 0,
     revealFernCount: -1,
     revealTreeCount: -1,
+    trunkColliders: 0,
     terrainTriangles: 0,
     treeCount: 0,
     uiReady: false,
@@ -305,6 +339,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const generation = {} as IValleyGeneration;
     generation.id = id;
     generation.live = true;
+    generation.bodies = [];
     generation.criticalWaters = [];
     generation.detailObjects = [];
     generation.detailWaters = [];
@@ -439,6 +474,49 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     // with the rest of detail and cannot attach until its generation is still current.
     sceneNoSky(ctx.scene);
     this.#scene = ctx.scene;
+    // The scene, for the capture harness and the geometry probes in tools/. Nothing in the game
+    // reads it; it is the same kind of hook as `sceneNoSky` above, and it is what lets a probe ask
+    // "which instanced mesh is that" instead of a person guessing from a screenshot.
+    (globalThis as { __TN_SCENE__?: ThreeScene }).__TN_SCENE__ = ctx.scene;
+    // Ask the picture what it is looking at. A probe that walks the graph can only rank objects by
+    // how odd their numbers look, and this valley has 46,000 instances whose numbers all look odd
+    // in isolation; a ray through the pixel names the thing on screen and ends the guessing.
+    (
+      globalThis as {
+        __TN_PICK__?: (
+          x: number,
+          y: number,
+        ) => { dims: number[]; distance: number; name: string; tris: number }[];
+      }
+    ).__TN_PICK__ = (x, y) =>
+      ctx
+        .raycastAll({ screen: new Vector2(x, y) })
+        .slice(0, 8)
+        .map((hit) => {
+          const trail: string[] = [];
+          for (let node: Object3D | null = hit.object; node !== null; node = node.parent) {
+            trail.unshift(node.name === "" ? node.type : node.name);
+          }
+          const geometry = (hit.object as Mesh).geometry;
+          geometry.computeBoundingBox();
+          const box = geometry.boundingBox;
+          const scale = new Vector3();
+          hit.object.getWorldScale(scale);
+          const position = geometry.getAttribute("position");
+          return {
+            dims:
+              box === null
+                ? []
+                : [
+                    Number(((box.max.x - box.min.x) * scale.x).toFixed(3)),
+                    Number(((box.max.y - box.min.y) * scale.y).toFixed(3)),
+                    Number(((box.max.z - box.min.z) * scale.z).toFixed(3)),
+                  ],
+            distance: Number(hit.distance.toFixed(2)),
+            name: trail.join("/"),
+            tris: Math.round((geometry.index?.count ?? position.count) / 3),
+          };
+        });
     const sun = setupForestLighting(
       ctx.scene,
       ctx.renderer.raw as Parameters<typeof setupForestLighting>[1],
@@ -461,16 +539,18 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     // triangles for Rapier to broadphase against; as a heightfield it is a grid lookup, and the
     // surface it describes is the same function the mesh was built from. `scale` is the world
     // extent of the whole field with y left at 1, because `heights` is already in metres.
-    new RigidBody3D({
-      physics: ctx.physics,
-      position: { x: 0, y: 0, z: 0 },
-      shape: CollisionShape3D.heightfield(terrain.rows, terrain.columns, terrain.heights, {
-        x: terrain.size,
-        y: 1,
-        z: terrain.size,
+    generation.bodies.push(
+      new RigidBody3D({
+        physics: ctx.physics,
+        position: { x: 0, y: 0, z: 0 },
+        shape: CollisionShape3D.heightfield(terrain.rows, terrain.columns, terrain.heights, {
+          x: terrain.size,
+          y: 1,
+          z: terrain.size,
+        }),
+        type: "fixed",
       }),
-      type: "fixed",
-    });
+    );
 
     const water = createWater(new Vector2(LAKE.x, LAKE.z), LAKE.radius);
     generation.criticalWaters.push(water);
@@ -514,6 +594,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const found = new Set<string>();
     const journal: string[] = [];
     const frameState: Partial<GameState> = {};
+    let insideTrunkTicks = 0;
 
     return (frameCtx, dt) => {
       loading.update();
@@ -534,6 +615,18 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       if (walker.object.position.y < KILL_PLANE) walker.respawn(TRAILHEAD.x, TRAILHEAD.z);
 
       const { x, z } = walker.object.position;
+      // Inside a trunk, measured against the trunk axis rather than the collider. A few hundred
+      // squared distances per frame against 2,340 trunks is nothing next to the wood it checks,
+      // and it stops at the first hit.
+      for (const trunk of this.#trunks) {
+        const dx = x - trunk.x;
+        const dz = z - trunk.z;
+        if (dx * dx + dz * dz < TRUNK_RADIUS * TRUNK_RADIUS) {
+          insideTrunkTicks += 1;
+          break;
+        }
+      }
+      frameState.insideTrunkTicks = insideTrunkTicks;
       const reachable = withinReach(x, z, found);
       if (reachable !== undefined && frameCtx.input.justPressed("inspect")) {
         found.add(reachable.id);
@@ -565,6 +658,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
 
       const current = frameCtx.state.getState();
       const changed =
+        frameState.insideTrunkTicks !== current.insideTrunkTicks ||
         frameState.canInspect !== current.canInspect ||
         frameState.groundGap !== current.groundGap ||
         frameState.heading !== current.heading ||
@@ -730,6 +824,33 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       };
       const foliage = createFoliage(TERRAIN_SIZE / 2 - 4, CLEARING, dressedFlora);
       hideFoliageNearLandmarks(foliage.meshes);
+      // The wood becomes solid here. `foliage.trunks` has been recorded by the scatter since it was
+      // written and nothing had ever read it.
+      this.#trunks = foliage.trunks;
+      let standing = 0;
+      for (const trunk of foliage.trunks) {
+        standing += 1;
+        generation.bodies.push(
+          new RigidBody3D({
+            physics: ctx.physics,
+            // The capsule is centred on its body, so the body sits half a capsule up from the
+            // trunk's base or the collider's bottom cap floats above the ground.
+            position: {
+              x: trunk.x,
+              y: trunk.y + TRUNK_HALF_HEIGHT + TRUNK_RADIUS,
+              z: trunk.z,
+            },
+            shape: CollisionShape3D.capsule(TRUNK_HALF_HEIGHT, TRUNK_RADIUS),
+            type: "fixed",
+          }),
+        );
+      }
+      // Counted from the bodies actually built, not from the list they were built out of. A count
+      // taken off the source list still reads 880 when the loop that consumes it does nothing,
+      // which is exactly the state a negative control puts the game in — the number would agree
+      // that the wood is solid while the player walks through it.
+      console.info(`TN_TRUNK_COLLIDERS:${String(standing)}`);
+      ctx.state.set({ trunkColliders: standing });
       const detailObjects: Object3D[] = [...foliage.meshes];
 
       const materials = createMaterials(stoneMaps);
@@ -809,6 +930,8 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
 
   #clearGenerationDetail(generation: IValleyGeneration, reason: string): void {
     for (const object of generation.detailObjects.splice(0)) object.removeFromParent();
+    for (const body of generation.bodies.splice(0)) body.dispose();
+    this.#trunks = [];
     generation.detailAnimals?.dispose();
     generation.detailAnimals = undefined;
     for (const water of generation.detailWaters.splice(0)) water.dispose();
@@ -1168,7 +1291,15 @@ function round(value: number): number {
 }
 
 /**
- * Sink every instance standing inside a landmark's clearing.
+ * Sink the instances that would *hide* a landmark, and only those.
+ *
+ * The clearing exists so no landmark is found by walking into a tree standing in front of it. A
+ * trunk, a snag, a thicket or a boulder can do that; grass cannot, and neither can leaf litter, a
+ * fern or a flower at the margin. The original pass did not distinguish, which was invisible while
+ * the wood was sparse and became the largest bare patch in the game once it was not: five 18 m
+ * discs of bare terrain texture reading as mown lawn.
+ *
+ * Layer names come from `foliage.ts`, which names every mesh `<layer>-<species>-<section>`.
  *
  * `InstancedMesh` has no way to remove one instance, and rebuilding the buffer to drop a few dozen
  * of eleven thousand is not worth the code. Scaling to zero would work but leaves a degenerate
@@ -1176,9 +1307,14 @@ function round(value: number): number {
  * terrain, out of the frustum the player is ever in, and costs one matrix write each at build
  * time.
  */
+const WALKED_OVER = /^(grass|litter|margin|fern|sapling)-/;
+
 function hideFoliageNearLandmarks(meshes: readonly InstancedMesh[]): void {
   const matrix = new Matrix4();
   for (const mesh of meshes) {
+    // Knee-height and below: it never stands between the player and a landmark, so mowing it buys
+    // nothing and costs the floor the wood just grew.
+    if (WALKED_OVER.test(mesh.name)) continue;
     let moved = 0;
     for (let index = 0; index < mesh.count; index += 1) {
       mesh.getMatrixAt(index, matrix);
