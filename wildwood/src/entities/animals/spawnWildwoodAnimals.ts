@@ -1,6 +1,7 @@
 import { Group, Vector3, type Object3D } from "three";
 import { Animal, type AnimalGround, type IAnimalModel } from "./Animal.js";
 import { ANIMAL_SPECS, type AnimalSpec } from "./animalSpecs.js";
+import { waterFromGround, type WaterTest } from "./shore.js";
 
 /** Where one animal starts. Omitted animals from the roster simply do not spawn. */
 export interface IAnimalPlacement {
@@ -27,6 +28,17 @@ export interface ISpawnAnimalsOptions {
   readonly load: (path: string) => Promise<IAnimalModel>;
   /** Ground height under a point, in metres. The valley passes `heightAt`. */
   readonly ground: AnimalGround;
+  /**
+   * Where the standing water is. Defaults to *ground below `waterLevel`*, which is the valley's
+   * own definition and the one `createWater` builds its mesh from — so a scene that already
+   * passes `heightAt` gets water-avoiding animals without being asked a second question.
+   *
+   * Pass it explicitly when the ground function is a fiction: the animals harness stands its
+   * roster on a flat plane at y = 0 for the screenshot, and a flat plane has no lake in it.
+   */
+  readonly water?: WaterTest;
+  /** Where the waterline sits, in metres. Only used to derive `water`. Defaults to 0. */
+  readonly waterLevel?: number;
   /** What the animals are added to and updated under. */
   readonly parent: Object3D;
   /** One placement per animal. Defaults to a loose line of the full roster through the origin. */
@@ -54,6 +66,26 @@ export async function spawnWildwoodAnimals(options: ISpawnAnimalsOptions): Promi
       x: (index - (ANIMAL_SPECS.length - 1) / 2) * 3.2,
       z: 0,
     }));
+
+  /**
+   * `?noWaterAvoidance` — the negative control, in the game rather than only in the harness.
+   *
+   * A scenario that asserts "no animal entered the water" has to be able to fail, or it is a row
+   * that says nothing. This switch hands the roster a world with no water in it while the audit
+   * below keeps reading the real shoreline, which reproduces the original defect on any later
+   * build without editing a line. It is a browser-query switch like the scene's own `?noanimals`
+   * and `?lowtier`, and it exists for `playtests/animals-dry.playtest.json` to point at.
+   */
+  const disabled =
+    typeof location !== "undefined" &&
+    new URLSearchParams(location.search).has("noWaterAvoidance");
+  if (disabled) log("[animals] TN_ANIMALS_WATER_AVOIDANCE:off (?noWaterAvoidance)");
+  /** What the animals are told to avoid. The control above can empty it; the audit's cannot. */
+  const water =
+    options.water ??
+    (disabled ? () => false : waterFromGround(options.ground, options.waterLevel ?? 0));
+  /** What the audit measures against: always the real shoreline, whatever the animals were told. */
+  const realWater = options.water ?? waterFromGround(options.ground, options.waterLevel ?? 0);
 
   const group = new Group();
   group.name = "animals";
@@ -90,6 +122,7 @@ export async function spawnWildwoodAnimals(options: ISpawnAnimalsOptions): Promi
       ground: options.ground,
       spawn: new Vector3(placement.x, 0, placement.z),
       rng: options.rng,
+      water,
     });
     for (const line of animal.audit()) log(`[animals] ${line}`);
     animals.push(animal);
@@ -101,11 +134,35 @@ export async function spawnWildwoodAnimals(options: ISpawnAnimalsOptions): Promi
 
   options.parent.add(group);
 
+  /**
+   * The invariant, checked in the running game rather than only in the harness.
+   *
+   * Six terrain samples a frame, and one console error the first time any animal's feet go under
+   * the waterline. It is here because the harness proves the state machine on a flat plane with a
+   * seeded clock, and the game runs it against the real heightfield with `Math.random` — the two
+   * can disagree, and if they ever do, this is the line that says so instead of a player noticing
+   * a deer standing in the lake. `noConsoleErrors` in `playtests/animals-dry.playtest.json` is
+   * what turns it into a failure.
+   */
+  const reported = new Set<string>();
+  const auditWater = (): void => {
+    for (const animal of animals) {
+      if (reported.has(animal.spec.id)) continue;
+      const { x, z } = animal.object.position;
+      if (!realWater(x, z)) continue;
+      reported.add(animal.spec.id);
+      console.error(
+        `TN_ANIMAL_IN_WATER:${animal.spec.id} at=${x.toFixed(2)},${z.toFixed(2)} state=${animal.state}`,
+      );
+    }
+  };
+
   return {
     group,
     animals,
     update(dt, threat) {
       for (const animal of animals) animal.update(dt, threat);
+      auditWater();
     },
     dispose() {
       for (const animal of animals) animal.dispose();

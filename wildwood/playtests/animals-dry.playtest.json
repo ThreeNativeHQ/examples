@@ -1,0 +1,65 @@
+{
+  "name": "wildwood-animals-dry",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "settle-on-the-pond-bank",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "let-the-wood-live-a-while",
+      "waitTicks": 600,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "walk-at-them-so-something-bolts",
+      "press": "KeyW",
+      "holdTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "let-the-bolt-run-itself-out",
+      "waitTicks": 420,
+      "release": true,
+      "screenshot": "animals-dry"
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "valleyReady",
+        "equals": true,
+        "allowTrivial": "Not the subject — the guard. `noConsoleErrors` above is what carries this scenario, and a run whose valley never built has no animals in it, so it would pass that assertion by having nothing to report. This is the row that fails instead."
+      },
+      {
+        "id": "state",
+        "path": "treeCount",
+        "gte": 100,
+        "allowTrivial": "Same guard, second half: the animals are on the detail tier with the trees. A critical-tier-only run reports one tree and six animals that never loaded, and would report no water violations because there is nobody in the wood to violate anything."
+      },
+      {
+        "id": "state",
+        "path": "odometer",
+        "gte": 2,
+        "changed": true
+      }
+    ]
+  }
+}

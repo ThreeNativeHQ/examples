@@ -17,6 +17,7 @@ import {
   Group,
 } from "three";
 import type { AnimalClipMap, AnimalSpec } from "./animalSpecs.js";
+import { Shore, type WaterTest } from "./shore.js";
 
 export type AnimalState = "idle" | "graze" | "wander" | "flee";
 
@@ -30,6 +31,17 @@ const FLEE_CALM_FACTOR = 1.6;
 const TURN_RATE = 3.2;
 /** Semantics the state machine loops; everything else plays through once at its authored rate. */
 const LOOPED: ReadonlySet<string> = new Set(["idle", "idleAlt", "alert", "graze", "walk", "run"]);
+/**
+ * Seconds between shoreline steering decisions.
+ *
+ * The whiskers are the expensive part — up to thirteen probed paths, each five terrain samples —
+ * and a walking animal covers two centimetres in this long, which the shore margin swallows
+ * whole. The hard gate below still runs every frame at five samples, so the cadence loosens the
+ * search, never the guarantee.
+ */
+const STEER_INTERVAL = 1 / 12;
+/** Wander targets tried before an animal gives up and just walks somewhere dry. */
+const TARGET_TRIES = 12;
 
 /** The clips behind one loaded animal GLB, exactly as the loader handed them over. */
 export interface IAnimalModel {
@@ -70,6 +82,10 @@ export class Animal {
   #speed = 0;
   #homeRadius: number;
   #clips: AnimalLookup;
+  /** The shoreline this animal will not cross. */
+  #shore: Shore;
+  /** Seconds until the next whisker sweep. Staggered per animal so six do not sweep on one frame. */
+  #steerIn: number;
 
   /**
    * Parent→child bone distances at bind, captured after normalisation and before the first clip
@@ -88,6 +104,11 @@ export class Animal {
       readonly rng?: () => number;
       /** Radius the animal roams around its spawn, in metres. */
       readonly homeRadius?: number;
+      /**
+       * Where the water is. Omit and the animal treats the whole world as walkable, which is what
+       * it did before there was a lake in it.
+       */
+      readonly water?: WaterTest;
     },
   ) {
     this.spec = spec;
@@ -95,6 +116,15 @@ export class Animal {
     this.#rng = options.rng ?? Math.random;
     this.#homeRadius = options.homeRadius ?? 9;
     this.#clips = new AnimalLookup(model.animations);
+    // Half the body length of clearance, and whiskers that reach a second and a half ahead at the
+    // gallop — long enough that a stag at twelve metres a second turns while the shore is still
+    // several body lengths off. A crow gets the floor, not a hand's breadth.
+    this.#shore = new Shore(options.water ?? (() => false), {
+      handedness: this.#rng() < 0.5 ? -1 : 1,
+      lookahead: Math.max(2.2, spec.runSpeed * 0.45),
+      margin: Math.min(1.6, Math.max(0.6, spec.length * 0.5)),
+    });
+    this.#steerIn = this.#rng() * STEER_INTERVAL;
 
     const clone = cloneSkeleton(model.scene);
     clone.name = `${spec.id}-rig`;
@@ -105,14 +135,22 @@ export class Animal {
     // sees the animal.
     stripJunkTriangles(clone);
 
+    // A placement is two numbers typed into a scene file; the waterline is where the terrain
+    // noise happened to cross zero. When those two disagree the animal starts in the lake, and an
+    // animal that starts in the lake has nothing to steer away from — every whisker is wet and it
+    // stands there for the rest of the game. Move it to the bank first, and say so.
+    const stand = this.#shore.nearestDry(options.spawn.x, options.spawn.z);
+    if (stand.x !== options.spawn.x || stand.z !== options.spawn.z) {
+      console.info(
+        `TN_ANIMALS_SPAWN_MOVED:${spec.id} from=${options.spawn.x.toFixed(1)},${options.spawn.z.toFixed(1)}` +
+          ` to=${stand.x.toFixed(1)},${stand.z.toFixed(1)} reason=water`,
+      );
+    }
+
     this.object = new Group();
     this.object.name = `animal-${spec.id}`;
     this.object.add(clone);
-    this.object.position.set(
-      options.spawn.x,
-      options.ground(options.spawn.x, options.spawn.z),
-      options.spawn.z,
-    );
+    this.object.position.set(stand.x, options.ground(stand.x, stand.z), stand.z);
 
     // Normalise to the spec's real-world length with the engine's own measurement.
     //
@@ -222,12 +260,38 @@ export class Animal {
       }
     }
 
+    // Layer 2: steer around the water. Runs on its own cadence rather than every frame — the
+    // whiskers are the expensive part and the shore margin is metres wide — and it overrides
+    // whatever the state machine just decided, because a target on the far bank is still a target
+    // and a bolt away from the player is still a bolt.
+    const step = this.#speed * dt;
+    this.#steerIn -= dt;
+    if (step > 0 && this.#steerIn <= 0) {
+      this.#steerIn = STEER_INTERVAL;
+      this.#heading = this.#shore.steer(
+        position.x,
+        position.z,
+        this.#heading,
+        Math.max(this.#shore.lookahead, this.#speed * 0.9),
+      );
+    }
+
     // Ground, then move along the heading. Heading lives on the group; the model's own +Z (or
     // its spec's yawOffset correction) is where the nose points.
-    const step = this.#speed * dt;
+    //
+    // Layer 3: the destination is tested before the body is moved there. With the two layers above
+    // working this never fires; it is here so that the frame where they do not still cannot put a
+    // hoof in the lake. The animal keeps its animation and turns on the spot — a step refused is
+    // not a step frozen.
     if (step > 0) {
-      position.x += Math.sin(this.#heading) * step;
-      position.z += Math.cos(this.#heading) * step;
+      const nextX = position.x + Math.sin(this.#heading) * step;
+      const nextZ = position.z + Math.cos(this.#heading) * step;
+      if (this.#shore.blocked(nextX, nextZ)) {
+        this.#heading += TURN_RATE * dt * this.#shore.handedness;
+      } else {
+        position.x = nextX;
+        position.z = nextZ;
+      }
     }
     position.y = this.#ground(position.x, position.z);
     this.object.rotation.y = this.#heading + this.spec.yawOffset;
@@ -285,21 +349,7 @@ export class Animal {
         break;
       case "wander": {
         this.#timer = seconds(4, 9);
-        const angle = this.#rng() * Math.PI * 2;
-        const radius = Math.sqrt(this.#rng()) * this.#homeRadius;
-        // Reel the target back inside the home square so a flee that left home is followed by a
-        // stroll home rather than an animal that never comes back.
-        const x = MathUtils.clamp(
-          this.#home.x + Math.sin(angle) * radius,
-          this.#home.x - this.#homeRadius,
-          this.#home.x + this.#homeRadius,
-        );
-        const z = MathUtils.clamp(
-          this.#home.z + Math.cos(angle) * radius,
-          this.#home.z - this.#homeRadius,
-          this.#home.z + this.#homeRadius,
-        );
-        this.#target = new Vector3(x, 0, z);
+        this.#target = this.#walkableTarget();
         this.#play("walk");
         break;
       }
@@ -308,6 +358,39 @@ export class Animal {
         this.#play("run");
         break;
     }
+  }
+
+  /**
+   * Somewhere inside the home range worth walking to — dry, and reachable over dry ground.
+   *
+   * Layer 1 of the shoreline rules. Rejecting only the *destination* is not enough: an animal
+   * whose home straddles the pond would keep choosing the far bank, and then spend the entire
+   * walk pressed against the water with the whiskers turning it aside every frame. The straight
+   * line has to be walkable too, which for a wander this short is the same thing as a path.
+   *
+   * When nothing is found — an animal boxed onto a spit — it wanders with no target at all, which
+   * the update loop already handles: it keeps its heading and the whiskers keep it dry.
+   */
+  #walkableTarget(): Vector3 | null {
+    const position = this.object.position;
+    for (let attempt = 0; attempt < TARGET_TRIES; attempt += 1) {
+      const angle = this.#rng() * Math.PI * 2;
+      const radius = Math.sqrt(this.#rng()) * this.#homeRadius;
+      // Reel the target back inside the home square so a flee that left home is followed by a
+      // stroll home rather than an animal that never comes back.
+      const x = MathUtils.clamp(
+        this.#home.x + Math.sin(angle) * radius,
+        this.#home.x - this.#homeRadius,
+        this.#home.x + this.#homeRadius,
+      );
+      const z = MathUtils.clamp(
+        this.#home.z + Math.cos(angle) * radius,
+        this.#home.z - this.#homeRadius,
+        this.#home.z + this.#homeRadius,
+      );
+      if (this.#shore.clearBetween(position.x, position.z, x, z)) return new Vector3(x, 0, z);
+    }
+    return null;
   }
 
   #play(semantic: keyof AnimalClipMap): void {

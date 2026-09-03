@@ -10,7 +10,7 @@ import type { Animal, AnimalState } from "../entities/animals/Animal.js";
 import { spawnWildwoodAnimals } from "../entities/animals/spawnWildwoodAnimals.js";
 import { boneLengthDeviations, createAssetLoader, createRandom } from "@threenative/core";
 import { assertJsonSafe } from "@threenative/playtest";
-import { LAKE, POND, heightAt } from "../render/terrain.js";
+import { LAKE, POND, WATER_LEVEL, heightAt } from "../render/terrain.js";
 import {
   Color,
   DirectionalLight,
@@ -43,9 +43,45 @@ const OBSERVATION_SEED = 90210;
 const FIXED_STEP_SECONDS = 1 / 60;
 const SIMULATION_SECONDS = 180;
 const SIMULATION_STEPS = SIMULATION_SECONDS / FIXED_STEP_SECONDS;
+/**
+ * Seconds of the second phase, in which every animal is deliberately driven at the water.
+ *
+ * The wander phase measures where an animal chooses to go. This one measures where it goes when
+ * it is not choosing: a bolt is the one state whose heading comes from the threat rather than
+ * from any target, at up to twelve metres a second, and it is the state a player actually causes
+ * — you walk toward a deer, it runs, and if the lake is behind it the lake is where it runs.
+ * The threat below is placed on the far side of each animal from the water on purpose, so "away"
+ * points straight in.
+ */
+const BOLT_SECONDS = 45;
+const BOLT_STEPS = BOLT_SECONDS / FIXED_STEP_SECONDS;
+/**
+ * `?noWaterAvoidance` hands the animals a world with no water in it while the measurement keeps
+ * reading the real shoreline — the negative control for every green below.
+ *
+ * A proof that only ever passes proves nothing about what it is measuring. This switch reproduces
+ * the original defect on demand, on any later build, without editing a line: the animals get the
+ * pre-fix behaviour, the observation reports `water-violation`, and the runner goes red.
+ */
+const waterAvoidance = !params.has("noWaterAvoidance");
 const ANIMAL_LISTING = "2dd7964c-a601-4264-a53d-465dcae1644c";
 // createPond() passes this exact radius to createWater(); POND.radius is only the terrain basin.
 const POND_WATER_RADIUS = POND.radius * 1.7;
+
+/**
+ * Standing water, as the valley actually draws it: the ground under a point is below the
+ * waterline.
+ *
+ * The disc footprints below are kept because the observation reports them, but they are not the
+ * test and never were. `LAKE.radius` is the radius of the *basin term* in `heightAt`, and the
+ * noise that basin is subtracted from moves the real waterline in and out by several metres —
+ * inward around the lake, and outward past `POND.radius` at the pond, whose shore shelves for
+ * twice its nominal radius. A disc is therefore wrong in both directions at once: it calls dry
+ * bank wet, and it calls a wet inlet dry. `heightAt < WATER_LEVEL` is the same predicate
+ * `createWater` uses to decide which grid cells get triangles, so it is the shoreline the player
+ * sees.
+ */
+const isStandingWater = (x: number, z: number): boolean => heightAt(x, z) < WATER_LEVEL;
 const PRODUCTION_PLACEMENTS = [
   { id: "fox", x: 28, z: 8 },
   { id: "stag", x: 28, z: 2 },
@@ -135,6 +171,11 @@ const animals = await spawnWildwoodAnimals({
   // The harness's ground is a flat plane at y = 0, not the valley's terrain — placing on
   // `heightAt` floats the whole roster ~5 m above the plane they are supposed to stand on.
   ground: () => 0,
+  // …but the water is the valley's, because the flat plane has no lake in it and the whole
+  // point of this observation is where the animals walk in the world they actually live in.
+  // Height decides how they stand; the shoreline decides where they go, and only the second
+  // one is being measured here.
+  water: waterAvoidance ? isStandingWater : () => false,
   parent: scene,
   placements,
   rng,
@@ -274,6 +315,12 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
           lakeSamples: 0,
           pondSamples: 0,
           totalSamples: 0,
+          /** Samples where the animal's own feet were under the drawn waterline. */
+          wetSamples: 0,
+          /** The deepest water it stood in, in metres. Zero when it never got wet. */
+          deepestMetres: 0,
+          /** Where it was standing when it was deepest, for a report that names a place. */
+          deepestAt: [0, 0] as [number, number],
           ...landmarks,
         },
       ];
@@ -294,6 +341,14 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
       sample.lakeSamples += 1;
     if (Math.hypot(x - POND.x, z - POND.z) <= POND_WATER_RADIUS)
       sample.pondSamples += 1;
+    if (isStandingWater(x, z)) {
+      sample.wetSamples += 1;
+      const depth = WATER_LEVEL - heightAt(x, z);
+      if (depth > sample.deepestMetres) {
+        sample.deepestMetres = depth;
+        sample.deepestAt = [x, z];
+      }
+    }
   };
   for (const animal of subjects) recordWater(animal);
 
@@ -347,6 +402,35 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
     }
   }
 
+  // Phase two: drive every animal at the water.
+  //
+  // The threat is re-placed each step directly opposite the nearest water body, just inside the
+  // animal's bolt radius, so the escape heading the flee state computes points at the middle of
+  // the lake. This is the state that has no target to filter and no time to think — whatever
+  // keeps a bolting stag out of the water has to do it at twelve metres a second.
+  const bolt = new Vector3();
+  const threat = new Vector3();
+  for (let step = 0; step < BOLT_STEPS; step += 1) {
+    for (const animal of subjects) {
+      const sample = samples.get(animal.spec.id);
+      if (sample === undefined)
+        throw new Error(`animal observation sample missing: ${animal.spec.id}`);
+      const { x, z } = animal.object.position;
+      const centre =
+        Math.hypot(x - LAKE.x, z - LAKE.z) < Math.hypot(x - POND.x, z - POND.z)
+          ? { x: LAKE.x, z: LAKE.z }
+          : { x: POND.x, z: POND.z };
+      bolt.set(x - centre.x, 0, z - centre.z);
+      if (bolt.lengthSq() <= 1e-9) bolt.set(1, 0, 0);
+      bolt.normalize().multiplyScalar(animal.spec.fleeRadius * 0.55);
+      threat.set(x + bolt.x, 0, z + bolt.z);
+      if (step % 240 === 0) animal.forceState("flee", 4.2);
+      animal.update(FIXED_STEP_SECONDS, threat);
+      sample.previous.copy(animal.object.position);
+      recordWater(animal);
+    }
+  }
+
   const rows = subjects.map((animal) => {
     const sample = samples.get(animal.spec.id);
     if (sample === undefined || sample.dots.length === 0) {
@@ -385,6 +469,10 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
         pondSamples: sample.pondSamples,
         totalSamples: sample.totalSamples,
         intersects: sample.lakeSamples + sample.pondSamples > 0,
+        /** The verdict. Disc overlap is a neighbourhood; this is feet under the waterline. */
+        wetSamples: sample.wetSamples,
+        deepestMetres: rounded(sample.deepestMetres),
+        deepestAt: [rounded(sample.deepestAt[0]), rounded(sample.deepestAt[1])],
       },
     };
   });
@@ -393,13 +481,30 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
       "animal observation requires measured displacement for every production subject",
     );
   }
+
+  // Fail closed on the walked-into-water defect.
+  //
+  // The observation is still published in full — a run that reports nothing is a run nobody can
+  // debug — but its `status` is no longer `ready`, and `ready` is what the runner requires. So a
+  // wet animal turns `node tools/run-playtests.mjs --capture-animals` red without any assertion
+  // living outside this file, and the line below names which animal, where, and how deep.
+  const wet = rows.filter((row) => row.waterOverlap.wetSamples > 0);
+  for (const row of wet) {
+    console.error(
+      `TN_ANIMALS_WATER_VIOLATION:${row.id} wetSamples=${String(row.waterOverlap.wetSamples)}/${String(row.waterOverlap.totalSamples)}` +
+        ` deepest=${row.waterOverlap.deepestMetres.toFixed(2)}m at=${row.waterOverlap.deepestAt.join(",")}`,
+    );
+  }
   return {
     version: OBSERVATION_VERSION,
-    status: "ready" as const,
+    status: wet.length === 0 ? ("ready" as const) : ("water-violation" as const),
     seed: OBSERVATION_SEED,
     fixedStepSeconds: FIXED_STEP_SECONDS,
     simulationSeconds: SIMULATION_SECONDS,
     simulationSteps: SIMULATION_STEPS,
+    boltSeconds: BOLT_SECONDS,
+    boltSteps: BOLT_STEPS,
+    waterAvoidance,
     waterFootprints: {
       lake: { x: LAKE.x, z: LAKE.z, radius: LAKE.radius },
       pond: { x: POND.x, z: POND.z, radius: POND_WATER_RADIUS },
@@ -415,6 +520,8 @@ function measureProductionSubjects(subjects: readonly Animal[]) {
       waterIntersections: rows
         .filter((row) => row.waterOverlap.intersects)
         .map((row) => row.id),
+      /** Animals that stood in the water. Empty is the only acceptable value. */
+      inWater: wet.map((row) => row.id),
     },
   };
 }
