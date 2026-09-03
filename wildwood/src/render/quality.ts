@@ -98,10 +98,10 @@ const high: IWorldEnvironmentOptions = {
   // subtracting a floor discards the ambient lift while leaving the beams. `maxDensity` is the
   // single strongest control over how bright the *entire* frame is, for the same reason — it is
   // deliberately low here and the intensity above the floor does the visible work.
-  godraysDensity: 0.5,
-  godraysFloor: 0.05,
-  godraysIntensity: 1.6,
-  godraysMaxDensity: 0.3,
+  godraysDensity: 0.65,
+  godraysFloor: 0.035,
+  godraysIntensity: 2.4,
+  godraysMaxDensity: 0.6,
   // Every step is a shadow-map sample, so this multiplies straight into the cost of the pass.
   // `GodraysNode` defaults to 60; the jittered sampling means fewer trades a slightly noisier
   // shaft edge for proportionally less work, and the denoiser downstream absorbs most of that.
@@ -182,10 +182,10 @@ const medium: IWorldEnvironmentOptions = {
   // subtracting a floor discards the ambient lift while leaving the beams. `maxDensity` is the
   // single strongest control over how bright the *entire* frame is, for the same reason — it is
   // deliberately low here and the intensity above the floor does the visible work.
-  godraysDensity: 0.5,
-  godraysFloor: 0.05,
-  godraysIntensity: 1.6,
-  godraysMaxDensity: 0.3,
+  godraysDensity: 0.65,
+  godraysFloor: 0.035,
+  godraysIntensity: 2.4,
+  godraysMaxDensity: 0.6,
   // Every step is a shadow-map sample, so this multiplies straight into the cost of the pass.
   // `GodraysNode` defaults to 60; the jittered sampling means fewer trades a slightly noisier
   // shaft edge for proportionally less work, and the denoiser downstream absorbs most of that.
