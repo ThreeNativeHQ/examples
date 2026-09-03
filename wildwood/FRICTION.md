@@ -160,3 +160,49 @@ mid-storey, saplings, and (with the dead-tree meshes tipped over) deadfall. That
 technique and the wood is far better for it, but it is a technique for getting more out of one
 pack, and it does not substitute for species variety: every conifer in the valley is still one of
 five silhouettes.
+
+---
+
+## The godrays stage cannot be enabled from where the template calls `setupPost` (lighting pass, 2026-09-03)
+
+`WorldEnvironment`'s `godRays` stage is raymarched against the sun's shadow map, and
+`GodraysNode` reads `light.shadow.map.depthTexture` **while the TSL graph is being built**. The
+stage's own availability check knows this and refuses by name with a good message:
+
+```
+light 'sun' has no shadow map yet: set renderer.shadowMap.enabled on the raw renderer
+(ctx.renderer.raw), and build the chain after the first frame has rendered
+```
+
+The trouble is the second half of that instruction and where the generated scene puts the call.
+`castShadow = true` is a request, not a result — three allocates the shadow map on the first
+render that needs it — and the scaffolded `Valley.enter()` calls `setupForestLighting()` and
+`setupPost()` on consecutive lines, before a single frame has been drawn. So on a freshly
+generated project the stage is *structurally* unreachable: every run reports godrays as
+unavailable, on a build where nothing is wrong and the light is correctly configured.
+
+Worked around inside `setupPost`, whose signature the scene owns and whose body it does not: when
+the resolved tier asks for godrays, the chain is not installed in that call but on the first frame
+where `sun.shadow.map` is non-null, bounded at 240 frames, and it prints `TN_POST_DEFERRED
+frames=N shadowMap=true|false` either way. Running out of budget is not an error — the chain goes
+in without godrays and `TN_WORLD_ENVIRONMENT` still says why.
+
+This is the right fix for this game but it is the kind of thing every game will have to rediscover
+by reading a refusal reason and working out that "after the first frame" means restructuring the
+call. Two things would remove it: `setupPost` in the shipped template could carry this deferral
+already, or `GodraysNode` could take the light and resolve its shadow map lazily at execute time
+rather than at build time.
+
+### And a live trap next to it: the MRT list does not know about godrays
+
+In generated `worldEnvironment.ts` the multi-render-target attachments are set for
+`ssgi || ssr || gtao`. But the godrays stage runs its result through the same bilateral denoiser
+as the GI gather, and that denoiser asks the pass for `normal` — so a tier that enables godrays
+and denoising *without* any of those three asks a non-MRT pass for `getTextureNode("normal")`,
+which is the exact failure this file's own comments warn about: WebGPU refuses the pipeline, the
+frame goes black, and the chain still reports every stage as applied. A phone tier with shafts and
+nothing else — a completely reasonable thing to configure — walks straight into it.
+
+Fixed here by adding `(godraysEnabled && denoiseEnabled)` to that condition. Worth fixing in the
+template, since the whole point of that file is that a silent no-op is never mistaken for a
+setting.
