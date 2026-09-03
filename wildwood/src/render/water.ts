@@ -11,7 +11,7 @@
 // three-band sky gradient by fresnel, so the water under a hundred metres of sunlit conifer was
 // the same flat blue-grey it would have been under an empty sky.
 //
-// Four things changed, and they are the whole of the difference:
+// Six things changed, and they are the whole of the difference:
 //
 // 1. **The reflection is a real sample of the frame**, taken by projecting the reflected ray to
 //    the point it meets the bank and reading the screen there. No mirrored pass, no second draw of
@@ -31,6 +31,18 @@
 //    dark bed everywhere except inside Snell's window, the 48.6° cone the whole sky is squeezed
 //    into. Before this it was the above-water composite evaluated at angles it has no meaning at,
 //    which photographed as black-and-white static filling the top half of the frame.
+//
+// 5. **Every palette colour was being converted to linear twice.** `new Color(hex)` already does
+//    that conversion — three enables `ColorManagement` by default — so the `convertSRGBToLinear()`
+//    the helper called on top of it took every palette-derived colour in this file down by a
+//    factor between three and thirteen, worse on the darker channels. The water had no colour of
+//    its own, the treeline fallback was five times darker than the bank it stood in for, and the
+//    file carried two colour systems disagreeing by an order of magnitude, because `SKY_RADIANCE`
+//    is measured numbers that never went through the helper. See `linear()`.
+// 6. **The surface writes depth.** Faint dotted horizontal rules crossed the mid-water in every
+//    capture. They were not the refraction sample — a three-strip probe found them on a strip
+//    painted a flat constant colour — they were the passes that run after this one reading the
+//    lake bed's grazing-angle depth through a surface that wrote none. See the material below.
 //
 // What is unchanged is where the ripple comes from. Stamping a normal map over the surface, or
 // adding `sin(worldZ * k)` highlight bands, puts a period into the picture, and the eye finds a
