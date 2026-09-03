@@ -104,9 +104,13 @@ for (const file of files) {
   luminance.sort((a, b) => a - b);
   const q = (p) => luminance[Math.min(luminance.length - 1, Math.floor(luminance.length * p))];
   const nearBlack = (luminance.filter((v) => v < 0.005).length / luminance.length) * 100;
+  // The other end, and the one a shadow-lift is most likely to break without saying so: linear
+  // 0.9 is where an sRGB display has about a tenth of a stop left before clipping, so anything
+  // above it has effectively stopped carrying detail.
+  const blown = (luminance.filter((v) => v > 0.9).length / luminance.length) * 100;
   const stops = Math.log2(Math.max(q(0.9), 1e-6) / Math.max(q(0.1), 1e-6));
   const mean = luminance.reduce((s, v) => s + v, 0) / luminance.length;
   console.log(
-    `${file}\n  p10=${q(0.1).toFixed(4)} p50=${q(0.5).toFixed(4)} p90=${q(0.9).toFixed(4)} mean=${mean.toFixed(4)} nearBlack=${nearBlack.toFixed(2)}% p10->p90=${stops.toFixed(2)} stops`,
+    `${file}\n  p10=${q(0.1).toFixed(4)} p50=${q(0.5).toFixed(4)} p90=${q(0.9).toFixed(4)} mean=${mean.toFixed(4)} nearBlack=${nearBlack.toFixed(2)}% blown=${blown.toFixed(2)}% p10->p90=${stops.toFixed(2)} stops`,
   );
 }

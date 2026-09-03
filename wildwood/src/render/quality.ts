@@ -82,7 +82,7 @@ const high: IWorldEnvironmentOptions = {
   // glint off water, the hot edge of a leaf. That is what bloom is for.
   bloomEnabled: true,
   bloomStrength: 0.45,
-  bloomThreshold: 1.05,
+  bloomThreshold: 1.7,
   exposure: 0.94,
   // The two full-resolution denoise passes over the AO and GI terms: ~1.9 ms. Only worth running
   // when SSGI is on — its noise is what they clean up.
@@ -197,7 +197,7 @@ const medium: IWorldEnvironmentOptions = {
   // glint off water, the hot edge of a leaf. That is what bloom is for.
   bloomEnabled: true,
   bloomStrength: 0.45,
-  bloomThreshold: 1.05,
+  bloomThreshold: 1.7,
   exposure: 0.94,
   // **Shafts: switched on, measured, and switched back off.** Kept here with its numbers rather
   // than deleted, because "we should add godrays" is the obvious next idea for a forest and the
@@ -288,7 +288,7 @@ const low: IWorldEnvironmentOptions = {
   // glint off water, the hot edge of a leaf. That is what bloom is for.
   bloomEnabled: true,
   bloomStrength: 0.45,
-  bloomThreshold: 1.05,
+  bloomThreshold: 1.7,
   exposure: 0.94,
   gtaoEnabled: true,
   gtaoRadius: 0.18,
