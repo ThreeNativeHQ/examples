@@ -257,6 +257,19 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
   #loading: ReturnType<typeof createLoadingScreen> | undefined;
   #generation: IValleyGeneration | undefined;
   #scene: ThreeScene | undefined;
+  /**
+   * The curtain's second phase, owned here because the framework's readiness cannot express it.
+   *
+   * `ctx.startup.whenReady()` covers the framework's own work and nothing after it, so a game that
+   * streams a detail tier reveals a bald valley and lets the player watch the wood grow. These
+   * three fields let the loading screen wait for `#loadDetail` instead: `#detailSettled` is the
+   * promise it holds on, `#settleDetail` is called once from every exit path of that method —
+   * done, rejected, or stale, because a curtain that only lifts on success is a hang — and
+   * `#detailProgress` drives the second half of the bar.
+   */
+  #detailSettled: Promise<void> | undefined;
+  #settleDetail: (() => void) | undefined;
+  #detailProgress = 0;
 
   static override readonly initialState: GameState = {
     canInspect: false,
@@ -274,6 +287,8 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     objectiveComplete: false,
     odometer: 0,
     paused: false,
+    revealFernCount: -1,
+    revealTreeCount: -1,
     terrainTriangles: 0,
     treeCount: 0,
     uiReady: false,
@@ -308,8 +323,33 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     this.#generation = generation;
     const controls = startupControls();
 
+    this.#detailProgress = 0;
+    this.#detailSettled = new Promise<void>((resolve) => {
+      this.#settleDetail = resolve;
+    });
+
     // This synchronous game-owned view exists before the first `ctx.assets` request below.
-    this.#loading = createLoadingScreen(ctx);
+    this.#loading = createLoadingScreen(ctx, {
+      until: this.#detailSettled,
+      // Long enough for a cold cache on this valley's ~70 GLBs, short enough that a detail tier
+      // which never settles costs seconds rather than a game that never starts. When it expires
+      // the player gets the critical world — thinner, and playable.
+      holdBudgetMs: 45_000,
+      holdProgress: () => this.#detailProgress,
+      onReveal: () => {
+        // Sampled once, on the frame the curtain lifts. This is the whole world the player is
+        // first shown, and the only number that can prove they were not shown a bald valley.
+        const seen = ctx.state.getState();
+        ctx.state.set({
+          revealFernCount: seen.fernCount,
+          revealTreeCount: seen.treeCount,
+        });
+        ctx.state.flush();
+        console.info(
+          `TN_VALLEY_REVEAL generation=${String(id)} trees=${String(seen.treeCount)} ferns=${String(seen.fernCount)}`,
+        );
+      },
+    });
     console.info(`TN_VALLEY_CRITICAL_START generation=${String(id)}`);
     const groundPromise = (async (): Promise<ITerrainMaps> => {
       if (controls.criticalDelayMs > 0) {
@@ -536,8 +576,30 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     };
   }
 
-  /** Stage every optional result off-scene, then attach only while this generation is current. */
+  /**
+   * Lift the curtain exactly once, however the detail tier ends.
+   *
+   * `#loadDetailInner` has eight exit paths — done, five stale checks, a rejection, and a throw
+   * that escapes the try — and the loading screen is waiting on all of them. A settle placed at
+   * the happy path alone is a game that hangs on a black screen the first time an asset 404s, so
+   * the settle lives in a `finally` where no future path can miss it. Rethrows, so the caller's
+   * error behaviour is unchanged.
+   */
   async #loadDetail(
+    ctx: GameCtx,
+    generation: IValleyGeneration,
+    controls: IStartupControls,
+  ): Promise<void> {
+    try {
+      await this.#loadDetailInner(ctx, generation, controls);
+    } finally {
+      this.#detailProgress = 1;
+      this.#settleDetail?.();
+    }
+  }
+
+  /** Stage every optional result off-scene, then attach only while this generation is current. */
+  async #loadDetailInner(
     ctx: GameCtx,
     generation: IValleyGeneration,
     controls: IStartupControls,
@@ -561,6 +623,25 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const hdriPromise = skipSky
       ? Promise.resolve(undefined)
       : stageHdri(ctx, hdriStage, controls);
+    // The bar's second half, driven by the milestones this method actually reaches rather than by
+    // a timer. Five sources settle independently, so each one that lands moves the fill.
+    this.#detailProgress = 0.04;
+    const sources = [floraPromise, boughPromise, mapsPromise, animalsPromise, hdriPromise] as const;
+    let landed = 0;
+    for (const source of sources) {
+      // Typed as `unknown` on purpose: this loop only counts, and widening the five differently
+      // typed sources into one array is what cost `allSettled` its positional result types below.
+      void (source as Promise<unknown>).then(
+        () => {
+          landed += 1;
+          this.#detailProgress = Math.max(
+            this.#detailProgress,
+            0.04 + (landed / sources.length) * 0.56,
+          );
+        },
+        () => undefined,
+      );
+    }
     const staged = await Promise.allSettled([
       floraPromise,
       boughPromise,
@@ -610,6 +691,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     const boughs = boughResult.value;
     const stoneMaps = mapsResult.value;
     const animals = animalsResult.value;
+    this.#detailProgress = Math.max(this.#detailProgress, 0.62);
     console.info(`TN_VALLEY_DETAIL_STAGED ${generationLabel}`);
     if (controls.detailHoldMs > 0) {
       console.info(
@@ -672,9 +754,14 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       // Install the environment before the first sliced attachment. Adding it last invalidates
       // every newly compiled lit material at once and turns detail completion into a long frame.
       generation.hdri = installStagedHdri(ctx.scene, hdriStage);
+      let attached = 0;
       for (const object of detailObjects) {
         if (!live()) throw new StaleGenerationError(generation.id);
         this.#addDetail(ctx, generation, object);
+        attached += 1;
+        // The sliced attachment is the longest visible stretch of the hold — one family per
+        // presented frame — so it owns the last third of the bar rather than a frozen 0.62.
+        this.#detailProgress = 0.66 + (attached / detailObjects.length) * 0.34;
         // Let the renderer compile one newly visible family per presented frame instead of one
         // multi-second first-detail frame. All sources settled before the first attachment.
         await delay(16);

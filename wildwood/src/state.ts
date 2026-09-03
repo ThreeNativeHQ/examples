@@ -47,6 +47,16 @@ export type GameState = {
   terrainTriangles: number;
   /** True once the valley has finished building. */
   valleyReady: boolean;
+  /**
+   * What was standing at the instant the loading curtain lifted — the first world the player saw.
+   *
+   * `treeCount` alone cannot express the defect this measures: by the end of any run the detail
+   * tier has landed and the count is high, whether the player watched it pop in or not. These two
+   * are sampled once, at the reveal, and never move again, so a proof can assert on the frame the
+   * player was actually shown. `-1` means the curtain has not lifted yet.
+   */
+  revealTreeCount: number;
+  revealFernCount: number;
   /** Set from the UI's pause and resume intents, and read back by the menu. */
   paused: boolean;
   /** True once the UI layer has rendered and published its interactive rectangles. */

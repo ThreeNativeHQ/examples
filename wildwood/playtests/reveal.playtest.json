@@ -1,0 +1,29 @@
+{
+  "name": "wildwood-reveal",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 0,
+  "steps": [
+    { "kind": "wait", "label": "let-the-curtain-lift", "waitTicks": 240, "release": true },
+    { "kind": "wait", "label": "settle-past-the-detail-tier", "waitTicks": 240, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
+    "resources": [
+      {
+        "id": "state",
+        "path": "revealTreeCount",
+        "gte": 100,
+        "allowTrivial": "Sampled once, on the frame the loading curtain lifts, and never written again — so it cannot drift green as the run goes on. -1 means the curtain never lifted, 1 means it lifted on the critical tier's single authored pine and the player watched the wood grow around them."
+      },
+      {
+        "id": "state",
+        "path": "revealFernCount",
+        "gte": 1,
+        "allowTrivial": "The same instant. Ferns are the detail tier's undergrowth: zero here means the floor was bare when the player was let in."
+      },
+      { "id": "state", "path": "treeCount", "gte": 100 }
+    ]
+  }
+}

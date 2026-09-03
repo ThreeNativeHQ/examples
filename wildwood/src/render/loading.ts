@@ -44,13 +44,49 @@ interface ILoadingHost {
   };
 }
 
+/**
+ * What the game asks the curtain to wait for, past the framework's own readiness.
+ *
+ * `host.startup.whenReady()` resolves when *the framework's* work is done: first-use compilation
+ * has settled and a frame window held. It knows nothing about a second asset tier the game streams
+ * afterwards, and it has no seam for the game to add its own work to that gate. So a game that
+ * streams a detail tier lifts the curtain on a half-built world and the player watches a forest
+ * grow around them — measured here as a bald valley with one tree and a black sky for the first
+ * seconds, then everything at once. Recorded in FRICTION.md as a framework gap.
+ */
+interface ILoadingOptions {
+  /**
+   * Extra work to hold the curtain for. Awaited after framework readiness and never trusted to
+   * settle: a rejection is treated as done, and `holdBudgetMs` bounds the wait, because a hung
+   * asset must cost a thinner world and never a player trapped behind a loading screen.
+   */
+  readonly until?: Promise<unknown>;
+  /** Hard ceiling on the `until` wait, in milliseconds past framework readiness. */
+  readonly holdBudgetMs?: number;
+  /**
+   * Called once, on the frame the curtain lifts, before the layer is torn down. This is the only
+   * moment at which "what the player first saw" can be sampled.
+   */
+  readonly onReveal?: () => void;
+  /**
+   * Progress across the held window, 0 to 1. `host.startup.progress` is pinned at 1 for the whole
+   * hold, so without this the bar freezes full and the game reads as hung — the exact failure the
+   * framework's own sliced warm-up exists to avoid.
+   */
+  readonly holdProgress?: () => number;
+}
+
 interface ILoadingController {
   update(): void;
   finish(): void;
 }
 
-function noOp(layer: ILoadingHost["canvasLayer"]): ILoadingController {
+function noOp(
+  layer: ILoadingHost["canvasLayer"],
+  options: ILoadingOptions,
+): ILoadingController {
   layer.opaque = false;
+  options.onReveal?.();
   return { finish: () => undefined, update: () => undefined };
 }
 
@@ -249,9 +285,12 @@ function statusMesh(
   return { mesh, texture, update };
 }
 
-export function createLoadingScreen(host: ILoadingHost): ILoadingController {
+export function createLoadingScreen(
+  host: ILoadingHost,
+  options: ILoadingOptions = {},
+): ILoadingController {
   const layer = host.canvasLayer;
-  if (!loading.enabled) return noOp(layer);
+  if (!loading.enabled) return noOp(layer, options);
   host.viewport?.resize?.();
   const camera = layer.camera;
   const authoredBackdrop = forestBackdropTexture();
@@ -408,14 +447,14 @@ export function createLoadingScreen(host: ILoadingHost): ILoadingController {
   // assets resolve. The cancelled timer works in the native host as well as the browser.
   const maintainLayout = (): void => {
     if (done) return;
-    updateProgress(host.startup.progress);
+    updateProgress(currentProgress());
     host.renderer.renderOverlay(layer.scene, layer.camera);
     layoutTimer = setTimeout(maintainLayout, 16);
   };
   layoutTimer = setTimeout(maintainLayout, 0);
   const announcePresentedView = (): void => {
     if (done) return;
-    updateProgress(host.startup.progress);
+    updateProgress(currentProgress());
     host.renderer.renderOverlay(layer.scene, layer.camera);
     console.info(
       `TN_LOADING_VIEW_READY viewport=${String(camera.right - camera.left)}x${String(camera.top - camera.bottom)} theme=wildwood-lichen-forest source=${typeof document === "undefined" ? "pixels" : "canvas"}`,
@@ -427,9 +466,20 @@ export function createLoadingScreen(host: ILoadingHost): ILoadingController {
     setTimeout(announcePresentedView, 32);
   }
 
+  // The bar is one bar over two phases of work. The framework's own readiness carries it to
+  // FRAMEWORK_SHARE and the game's held tier carries the rest, so the fill never stalls full while
+  // the world is still being built and never jumps backwards when the second phase takes over.
+  const FRAMEWORK_SHARE = 0.72;
+  let holding = false;
+  const currentProgress = (): number =>
+    holding
+      ? FRAMEWORK_SHARE + (1 - FRAMEWORK_SHARE) * (options.holdProgress?.() ?? 0)
+      : FRAMEWORK_SHARE * host.startup.progress;
+
   const finish = (): void => {
     if (done) return;
     done = true;
+    options.onReveal?.();
     if (layoutTimer !== undefined) clearTimeout(layoutTimer);
     for (const mesh of parts) {
       mesh.removeFromParent();
@@ -443,17 +493,45 @@ export function createLoadingScreen(host: ILoadingHost): ILoadingController {
   void (async () => {
     await host.startup.whenReady();
     if (done) return;
+    const until = options.until;
+    if (until !== undefined) {
+      holding = true;
+      updateProgress(currentProgress());
+      // `race`, and a rejection swallowed: the curtain's job is to hide an unfinished world, not
+      // to become the thing that traps the player behind it. A detail tier that throws or hangs
+      // costs a thinner valley, and the budget is the ceiling on how long that costs a black
+      // screen instead.
+      await Promise.race([
+        Promise.resolve(until).then(
+          () => undefined,
+          () => undefined,
+        ),
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, options.holdBudgetMs ?? 30_000);
+        }),
+      ]);
+    }
+    if (done) return;
     finish();
   })();
 
   return {
     finish,
     update(): void {
+      if (done) return;
+      updateProgress(currentProgress());
+      // While the game holds the curtain the frame loop is already running, and the layout timer
+      // that drew the overlay before readiness has been cancelled. Nothing else would present the
+      // layer, so the held window would show a frozen or absent curtain over the half-built world
+      // it exists to hide. Keep drawing it here, from the loop, for exactly as long as it is up.
+      if (holding) {
+        host.renderer.renderOverlay(layer.scene, layer.camera);
+        return;
+      }
       if (layoutTimer !== undefined) {
         clearTimeout(layoutTimer);
         layoutTimer = undefined;
       }
-      if (!done) updateProgress(host.startup.progress);
     },
   };
 }
