@@ -90,6 +90,9 @@ const ANIMAL_LISTING = "2dd7964c-a601-4264-a53d-465dcae1644c";
 const LANDMARK_STONE = {
   cliffs: ["SM_cliffrock01_lod00", "SM_cliffrock02_lod00"],
   boughs: ["SM_BoughGroup01", "SM_BoughGroup02", "SM_BoughGroup03"],
+  // The fallen giant is the first of these laid on its side, and the second stood on end as its
+  // root plate. Drawn from the flora that is already loaded, so this costs no extra request.
+  snags: ["SM_dead-tree03", "SM_dead-tree05"],
   rocks: ["SM_rock01_lod000", "SM_rock02_lod000", "SM_rock03_lod000", "SM_rock04_lod000", "SM_RockGroup01", "SM_RockGroup02"],
 } as const;
 
@@ -843,6 +846,9 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       };
       const props: ILandmarkProps = {
         boughs,
+        snags: LANDMARK_STONE.snags.map((name) =>
+          requiredSpecies(dressedFlora.broadleaves, name),
+        ),
         cliffs: LANDMARK_STONE.cliffs.map((name) => requiredSpecies(dressedFlora.cliffs, name)),
         rocks: LANDMARK_STONE.rocks.map((name) => requiredSpecies(dressedFlora.rocks, name)),
       };

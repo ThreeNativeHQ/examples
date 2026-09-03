@@ -6,7 +6,16 @@
 // because a landmark that blends in is not a landmark.
 import { Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial, RepeatWrapping, type Texture } from "three";
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from "three/webgpu";
-import { float, positionLocal, texture, uv, vec2 } from "three/tsl";
+import {
+  abs,
+  float,
+  normalLocal,
+  positionLocal,
+  texture,
+  uv,
+  vec2,
+  vec3,
+} from "three/tsl";
 import { palette } from "./palette.js";
 
 /** The pack maps the landmark materials are lifted with. All optional; each falls back flat. */
@@ -52,13 +61,48 @@ export function createMaterials(maps: ILandmarkMaps = {}) {
   };
 }
 
-/** Dead bark on the cylinders of the fallen giant, camp seats, and trail posts. */
+/**
+ * Dead bark on the fallen giant, the camp seats, and the trail posts.
+ *
+ * **Projected from position, not read from `uv()`.** The rounded-box shapes in `shapes.ts` carry
+ * no UV attribute, so `uv()` returns zero across every one of them and the map collapses to a
+ * single texel: the fallen giant's 5.2 m root plate rendered as one flat olive slab, which is the
+ * loudest thing in the frame once the wood around it is 46,000 scanned plants. Raising the
+ * geometry's segment counts does nothing for that — the facets were never the problem, the missing
+ * UVs were.
+ *
+ * A triplanar projection fixes every prop built from these shapes at once and needs no geometry
+ * change: sample the bark three times, along each axis, and blend by the surface normal so each
+ * face takes the projection that faces it most. The seams a box projection normally shows are
+ * hidden by the blend, and the grain runs along the trunk because the trunk's long axis is X.
+ */
 function deadwoodMaterial(maps: ILandmarkMaps): MeshStandardMaterial | MeshStandardNodeMaterial {
   if (maps.deadBark === undefined) {
     return new MeshStandardMaterial({ color: new Color(palette.bark).multiplyScalar(1.25), roughness: 0.95, metalness: 0 });
   }
   const material = new MeshStandardNodeMaterial({ metalness: 0, roughness: 0.95 });
-  material.colorNode = texture(maps.deadBark, uv()).rgb.mul(float(3.1));
+  // Half a metre per tile. Bark at this pack's authored scale reads as noise any finer and as
+  // plywood any coarser.
+  const scale = float(2);
+  const point = positionLocal.mul(scale);
+  const sampled = (a: ReturnType<typeof vec2>) => texture(maps.deadBark as Texture, a).rgb;
+  const alongX = sampled(vec2(point.z, point.y));
+  const alongY = sampled(vec2(point.x, point.z));
+  const alongZ = sampled(vec2(point.x, point.y));
+  // Cubed, so the dominant axis wins decisively; a linear blend greys out every rounded corner.
+  const weight = abs(normalLocal).pow(float(3));
+  const sum = weight.x.add(weight.y).add(weight.z).max(float(0.0001));
+  const blended = alongX
+    .mul(weight.x)
+    .add(alongY.mul(weight.y))
+    .add(alongZ.mul(weight.z))
+    .div(sum);
+  // The cylinders DO have real UVs, and the trunk's grain along its own length is worth keeping,
+  // so they take the authored mapping and only the UV-less shapes fall back to the projection.
+  // `uv()` is exactly zero on those, which is what makes this test reliable rather than a guess.
+  const authored = texture(maps.deadBark, uv()).rgb;
+  const hasUv = uv().x.add(uv().y).greaterThan(float(0.00001));
+  material.colorNode = vec3(hasUv.select(authored, blended)).mul(float(3.1));
   if (maps.deadBarkNormal !== undefined) material.normalMap = maps.deadBarkNormal;
   return material;
 }

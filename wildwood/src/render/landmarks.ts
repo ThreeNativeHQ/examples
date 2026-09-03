@@ -30,11 +30,22 @@ export interface ILandmarkProps {
   readonly cliffs: readonly ITreeSpecies[];
   /** Broken branches, for the debris around the fallen giant. */
   readonly boughs: readonly ITreeSpecies[];
+  /** Whole dead trees from the pack — the fallen giant is one of these, lying down. */
+  readonly snags: readonly ITreeSpecies[];
   /** Boulders — the cairn, the fire ring, the shore stones, the rubble. */
   readonly rocks: readonly ITreeSpecies[];
 }
 
 const ROCK_GAIN = [3.0, 2.9, 2.7] as const;
+/**
+ * The same lift for a snag, and much smaller.
+ *
+ * `ROCK_GAIN` exists because the pack's rock diffuse is authored for Unreal's exposure and lands
+ * near-black here. Bark is not: it is already a mid-tone, and putting 3x through it renders the
+ * fallen giant as a white skeleton — brighter than the sky behind it, which is the one thing a
+ * dead tree in shade can never be.
+ */
+const SNAG_GAIN = [1.35, 1.3, 1.2] as const;
 const STILL_WIND = { speed: 0, stiffness: 1, strength: 0 } as const;
 
 /**
@@ -43,10 +54,14 @@ const STILL_WIND = { speed: 0, stiffness: 1, strength: 0 } as const;
  * Landmark stones are one-off placements, not an instanced field, so each is its own small Group
  * sharing a material per section.
  */
-function stone(species: ITreeSpecies, target: number): Group {
+function stone(
+  species: ITreeSpecies,
+  target: number,
+  gain: readonly [number, number, number] | typeof ROCK_GAIN = ROCK_GAIN,
+): Group {
   const group = new Group();
   for (const section of species.sections) {
-    const mesh = new Mesh(section.geometry, packSectionMaterial(section, STILL_WIND, ROCK_GAIN));
+    const mesh = new Mesh(section.geometry, packSectionMaterial(section, STILL_WIND, gain));
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
@@ -88,36 +103,36 @@ function standingStone(materials: Materials, props: ILandmarkProps): Group {
 /** The fallen giant: a felled trunk on two root balls, lying across the gully, branch pile beside it. */
 function fallenGiant(materials: Materials, props: ILandmarkProps): Group {
   const group = new Group();
-  const trunk = new Mesh(new CylinderGeometry(0.95, 1.25, 17, 9), materials.deadwood);
+  // A real tree from the pack, lying down — not a cylinder pretending to be one.
+  //
+  // This was `CylinderGeometry(0.95, 1.25, 17, 9)` with a rounded box for the root plate and
+  // cylinders for the roots. Nine radial segments is a faceted tube, and the box carried no UVs so
+  // its bark map collapsed to a single texel: a flat olive slab five metres across. That was
+  // survivable when the whole valley was procedural; standing in a wood of 46,000 scanned plants it
+  // was the first thing the eye went to, and the owner's word for it was "total cap".
+  //
+  // `standingStone` above had already shown the answer: take a pack mesh and use it for something
+  // it was not authored for. A dead tree rotated onto its side is a windthrown giant, with real
+  // bark, real broken branches and a real silhouette, for the cost of one more species load.
+  const snag = props.snags[0];
+  if (snag === undefined) throw new Error("No snag species loaded for the fallen giant.");
+  const trunk = stone(snag, 17, SNAG_GAIN);
+  // Z-rotation lays it down; the small X-roll keeps it off a perfectly flat lie, which is the tell
+  // of a prop placed by a script rather than a tree dropped by a storm.
   trunk.rotation.z = Math.PI / 2;
+  trunk.rotation.x = 0.16;
   trunk.rotation.y = 0.34;
-  trunk.position.y = 1.35;
-  trunk.castShadow = true;
-  trunk.receiveShadow = true;
+  trunk.position.set(0.6, 1.15, 0);
   group.add(trunk);
-  // The root plate: the wall of earth and roots a windthrown tree pulls up with it. This is the
-  // silhouette that says "fallen" rather than "cut and left".
-  const plate = block(0.7, 5.2, 5.2, materials.deadwood, { radius: 0.5 });
-  plate.position.set(-8.4, 1.9, 1.5);
+  // The root plate: the wall of earth and roots a windthrown tree pulls up with it, and the
+  // silhouette that says "fallen" rather than "cut and left". A second dead tree, sunk to its
+  // waist and stood on end, gives that wall real roots instead of a slab with sticks around it.
+  const plateSpecies = props.snags[1] ?? snag;
+  const plate = stone(plateSpecies, 6.4, SNAG_GAIN);
   plate.rotation.z = 0.22;
+  plate.rotation.y = 1.9;
+  plate.position.set(-8.4, 0.4, 1.5);
   group.add(plate);
-  for (let index = 0; index < 9; index += 1) {
-    const root = new Mesh(new CylinderGeometry(0.11, 0.2, 2.2 + hash2(index, 1, 613) * 1.8, 5), materials.deadwood);
-    const angle = (index / 9) * Math.PI * 2;
-    root.position.set(-8.9, 1.9 + Math.sin(angle) * 1.9, 1.5 + Math.cos(angle) * 1.9);
-    root.rotation.z = Math.PI / 2 + (hash2(index, 2, 617) - 0.5) * 0.9;
-    root.rotation.y = (hash2(index, 4, 619) - 0.5) * 1.2;
-    root.castShadow = true;
-    group.add(root);
-  }
-  // Broken stubs along the trunk, so the eye reads a tree and not a pipe.
-  for (let index = 0; index < 6; index += 1) {
-    const stub = spike(0.24, 1.3, materials.deadwood, { segments: 6 });
-    stub.position.set(-6 + index * 2.4, 2.1, (hash2(index, 6, 631) - 0.5) * 1.6);
-    stub.rotation.z = (hash2(index, 7, 641) - 0.5) * 1.4;
-    stub.rotation.x = (hash2(index, 8, 643) - 0.5) * 1.4;
-    group.add(stub);
-  }
   // The crown came off when the tree fell: a pile of the pack's broken branches by the root plate.
   props.boughs.forEach((bough, index) => {
     const pile = stone(bough, 2.4 + hash2(index, 9, 647) * 1.2);
