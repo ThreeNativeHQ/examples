@@ -206,6 +206,11 @@ export function setupSky(scene: Scene): DataTexture {
   scene.environment = texture;
   scene.environmentIntensity = 1;
   scene.backgroundIntensity = 1;
+  // Explicitly square, not left alone. This texture is generated already facing the right way,
+  // so any rotation at all is wrong for it — and a rotation is exactly the kind of state that
+  // survives a scene re-enter after `sky-hdri.ts` has set one.
+  scene.backgroundRotation.set(0, 0, 0);
+  scene.environmentRotation.set(0, 0, 0);
   scene.fog = new FogExp2(new Color(AERIAL_COLOUR), AERIAL_DENSITY);
   console.info(
     `TN_SKY_ANALYTIC:${JSON.stringify({

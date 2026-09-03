@@ -34,20 +34,37 @@ import { palette } from "../palette.js";
 export const SUN_ELEVATION = MathUtils.degToRad(47.87);
 
 /**
- * Azimuth of the photographed sun, radians, as `atan2(z, x)` — the same convention three's
- * `equirectUV` samples an environment map with (`u = atan2(z, x) / 2π + 0.5`).
+ * Azimuth of the sun *in the photograph*, radians, as `atan2(z, x)` — the same convention three's
+ * `equirectUV` samples an environment map with (`u = atan2(z, x) / 2π + 0.5`). A fixed property of
+ * the file, not a setting.
  */
-export const SUN_AZIMUTH = MathUtils.degToRad(34.24);
+const HDRI_SUN_AZIMUTH = MathUtils.degToRad(34.24);
 
 /**
- * What `sky-hdri.ts` turns `scene.environmentRotation.y` and `backgroundRotation.y` to.
+ * Azimuth of the sun *in the valley* — the composition dial, and the only line in this file
+ * anyone should want to turn.
  *
- * Zero, deliberately. The world sun is placed at the photograph's own azimuth, so the sky needs
- * no rotation to agree with the ground and there is no sign convention to get backwards. Turning
- * this dial moves the photographed sun and the key light together — they both read `SUN_AZIMUTH`
- * — only if you turn `SUN_AZIMUTH` too, which is the point of them living in one file.
+ * It is set to the photograph's own azimuth, which is why the sky needs no rotation to agree with
+ * the ground. Move it and everything follows: the key light is built from it, the analytic sky is
+ * generated from it, and `SKY_ROTATION` below turns the photograph to match.
  */
-export const SKY_ROTATION = 0;
+export const SUN_AZIMUTH = HDRI_SUN_AZIMUTH;
+
+/**
+ * What `sky-hdri.ts` turns `scene.environmentRotation.y` and `backgroundRotation.y` to: however
+ * far the world's sun has been moved from the photograph's.
+ *
+ * Derived rather than typed, so that moving `SUN_AZIMUTH` cannot leave the visible sun behind
+ * where the ground is no longer lit from. **The sign is unverified** — it evaluates to zero as
+ * this ships, so no capture has ever had to distinguish `+` from `-` here. Whoever first moves
+ * `SUN_AZIMUTH` should check a frame with the sun in it and flip this if the sky went the wrong
+ * way; it is one character, and it is the kind of thing that is obvious in a screenshot and
+ * invisible in review.
+ *
+ * `sky.ts` does not read this. The analytic sky is *generated* facing the right way, so it is
+ * always installed at rotation 0.
+ */
+export const SKY_ROTATION = SUN_AZIMUTH - HDRI_SUN_AZIMUTH;
 
 /** How far up the sun is placed. Only the shadow camera's near/far care; the direction is what matters. */
 export const SUN_DISTANCE = 220;
