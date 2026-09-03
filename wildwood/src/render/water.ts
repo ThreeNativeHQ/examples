@@ -210,6 +210,14 @@ const RIPPLE_DEPTH = 0.55;
 const SHORE_FADE = 0.32;
 
 /**
+ * How far the mirrored bed smears under the surface, in fractions of the screen.
+ *
+ * Smaller than the sky reflection's blur because the thing being mirrored is a metre or two away
+ * rather than sixty, so one ripple covers far less of it.
+ */
+const UNDER_BLUR = 0.004;
+
+/**
  * The cosine band the Snell's-window edge is blended over, seen from underwater.
  *
  * Water's critical angle is 48.6° from vertical, cos 0.661: look up more steeply than that and
@@ -703,33 +711,92 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   //
   // Seen from below, the surface is two things separated by the critical angle. Look up steeply
   // and the whole sky refracts into a cone 97° wide: Snell's window, bright, and the only thing
-  // down here that is not dark. Look up shallowly and the surface is a total mirror of the lake
-  // bottom. The ripple moves the boundary about, which is why a real window has a ragged edge, and
-  // that comes out of the same perturbed normal for free.
+  // down here that is not dark. Look up shallowly and the surface is a **total** mirror — not a
+  // partial one, a hundred per cent — and what it mirrors is the lake bed a metre or two below.
+  // The ripple moves the boundary about, which is why a real window has a ragged edge, and that
+  // comes out of the same perturbed normal for free.
+  //
+  // **This is the wading case, and the wading case is the one that matters.** Walking into this
+  // lake from the bank, the eye passes under the surface at z=29 and the bed then plateaus: across
+  // the whole wadeable margin the eye sits between 2 cm and 64 cm under, with the bed 1.5-2.3 m
+  // below it. You have to walk to the middle of the lake to get deeper than a metre. So the view
+  // the player actually gets is a surface an arm's length overhead, mirroring a bed they can
+  // almost touch — and a constant colour cannot be that, however well the constant is chosen. It
+  // photographs as a flat slab with a razor edge against the bed: not broken any more, but a
+  // ceiling in a room rather than water overhead.
   const upward = normalize(positionWorld.sub(cameraPosition));
   const throughSurface = clamp(dot(upward, normal), float(0), float(1));
   const window = smoothstep(float(SNELL_INNER), float(SNELL_OUTER), throughSurface);
+
+  // The mirrored bed, sampled from the frame — the same closed-form trick the sky reflection uses
+  // above, aimed down at a plane instead of out at a ring, and simpler for it. The bed's height
+  // under this fragment is not estimated: `depthM` is baked from the same `heightAt` the collider
+  // walks on, so the plane to intersect is exactly `WATER_LEVEL - depthM` and the intersection is
+  // one divide.
+  const mirrored = reflect(upward, normal);
+  // How steeply the mirrored ray dives. Floored, because a ray that leaves the surface almost
+  // horizontally would ask for a kilometre of bed and land somewhere meaningless.
+  const dive = max(mirrored.y.negate(), float(0.06));
+  const toBed = min(depthM.div(dive), float(90));
+  const bedHit = positionWorld.add(mirrored.mul(toBed));
+  const bedClip = cameraProjectionMatrix.mul(
+    cameraViewMatrix.mul(vec4(bedHit.x, bedHit.y, bedHit.z, 1)),
+  );
+  const bedNdc = bedClip.xy.div(max(bedClip.w, float(0.0001)));
+  // Same sign convention as `hitUv` above, and for the same reason.
+  const bedUv = vec2(bedNdc.x.mul(0.5).add(0.5), bedNdc.y.mul(-0.5).add(0.5));
+  const bedInFrame = smoothstep(float(0), float(0.02), bedUv.x)
+    .mul(smoothstep(float(1), float(0.98), bedUv.x))
+    .mul(smoothstep(float(0), float(0.02), bedUv.y))
+    .mul(smoothstep(float(1), float(0.98), bedUv.y))
+    .mul(step(float(0.001), bedClip.w));
+  const underTap = (dx: number, dy: number) =>
+    viewportSharedTexture(
+      vec2(
+        clamp(bedUv.x.add(float(dx * UNDER_BLUR)), float(0.002), float(0.998)),
+        clamp(bedUv.y.add(float(dy * UNDER_BLUR)), float(0.002), float(0.998)),
+      ),
+    ).rgb;
+  const mirroredBed = underTap(0, 0)
+    .mul(float(0.5))
+    .add(underTap(0.9, 0.5).mul(float(0.25)))
+    .add(underTap(-0.9, -0.5).mul(float(0.25)));
+
+  // Both legs of that path are under water, so Beer-Lambert applies to the whole of it: down to
+  // the bed, and back to the eye. This is what turns the ceiling from a slab into something with
+  // depth in it — the mirror is bright and warm directly overhead where the water is thin, and
+  // has gone to the water's own colour by the time it reaches the far side of the frame. Same
+  // coefficients as the view from above, because it is the same water.
+  const underPath = min(toBed.add(positionWorld.sub(cameraPosition).length()), float(40));
+  const underTint = exp(vec3(-EXTINCTION[0], -EXTINCTION[1], -EXTINCTION[2]).mul(underPath));
+  // What the water body itself sends back once the mirror has been absorbed away. Also the
+  // fallback wherever the mirrored ray leaves the frame, which is why it is close in colour to
+  // what the mirror fades to rather than to black.
+  //
+  // Graded on how steeply the fragment is being looked at, because that is how much water the
+  // daylight crossed to get there: straight up is one depth of water and the horizon is many, and
+  // a ceiling drawn at one value for both is the flat slab this is trying not to be.
+  const ceiling = linear(palette.water, 0.35)
+    .add(linear(palette.silt, 0.22))
+    .mul(mix(float(0.5), float(1.4), throughSurface));
+  const mirror = mirroredBed
+    .mul(bedInFrame)
+    .mul(underTint)
+    .add(ceiling.mul(float(1).sub(underTint.mul(bedInFrame))));
+
   // The sky as it arrives after a metre or two of water: the measured horizon band, drained of
   // red the way everything under water is.
   const windowSky = vec3(horizon.x.mul(0.55), horizon.y.mul(0.92), horizon.z).mul(float(1.35));
   const sunDisc = pow(clamp(dot(upward, sunNode), float(0), float(1)), 90)
     .mul(window)
     .mul(float(2.2));
-  // Outside the window the surface is a total mirror, and what it mirrors is the bed — pale silt
-  // in this basin, not blackness. Rendered dark (0.11 of `palette.water`, luminance 0.01) the
-  // ceiling photographed as a flat black slab across the top of every wading frame, which reads as
-  // a hole in the world rather than as water overhead. This is the bed's own colours taken down by
-  // the metres of water the mirrored ray crosses twice.
-  //
-  // It is a constant and not a second projected sample. Reflecting the bed properly means running
-  // the whole ray-to-screen machinery again pointing downward, for a view the player is in for a
-  // few seconds at a time; a dim warm teal is the honest cheap answer and this comment is the
-  // record that it is one.
-  const ceiling = linear(palette.water, 0.35).add(linear(palette.silt, 0.22));
-  // The dapple: brighter where the underside of a wave happens to face the sun, which is the
-  // moving net of light every photograph taken from under a lake has in it.
-  const dapple = mix(float(0.68), float(1.5), pow(clamp(dot(normal, sunNode), float(0), float(1)), 16));
-  const below = mix(ceiling.mul(dapple), windowSky, window).add(linear(SUN_COLOUR, 0.65).mul(sunDisc));
+  // No dapple term. There was one — `mix(0.68, 1.5, pow(dot(normal, sun), 16))` — and it was a
+  // term that resolved to a constant: the surface normal is within a few degrees of straight up
+  // everywhere, the sun sits at 48°, so `dot` is 0.74 across the whole lake and 0.74^16 is 0.008.
+  // It multiplied the ceiling by 0.687 and never by anything else, which is exactly why the
+  // ceiling photographed as one flat value. The ripple now reaches the picture through the
+  // mirrored sample, where it moves something.
+  const below = mix(mirror, windowSky, window).add(linear(SUN_COLOUR, 0.65).mul(sunDisc));
 
   // One step, on the camera's own height. It is uniform across the draw, so both sides costing a
   // multiply is the whole price of not writing two materials.
