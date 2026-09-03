@@ -33,6 +33,17 @@ page.on("pageerror", (e) => errors.push(((e && e.stack) || (e && e.message) || S
 page.on("console", (m) => {
   const t = m.text();
   if (/TN_|error|Error|WARN|fail/i.test(t)) logs.push(t.slice(0, 400));
+  const reveal = /TN_VALLEY_REVEAL .*\btrees=(\d+)/.exec(t);
+  if (reveal !== null) {
+    revealedTrees = Number(reveal[1]);
+    // Pushed back into the page so `waitForFunction` can gate on it; a console listener cannot be
+    // awaited from inside the page and a Node-side promise cannot see a navigation reset it.
+    void page
+      .evaluate((n) => {
+        globalThis.__TN_SHOT_REVEAL_TREES__ = n;
+      }, revealedTrees)
+      .catch(() => undefined);
+  }
 });
 
 // The engine holds the world render behind its startup-readiness gate: the whole scene goes
@@ -41,6 +52,8 @@ page.on("console", (m) => {
 // errors. Every fixed wait short of ~20 s screenshots that frozen loader. The engine publishes
 // the one signal that means "the world is on screen": game.ts sets `__TN_STARTUP_READY__` when
 // readiness resolves, and the native screenshot path waits on the same flag. Wait for it.
+// Edge-triggered, and count-gated. Set by the page listener installed below.
+let revealedTrees = -1;
 const waitReady = async () => {
   // `__TN_STARTUP_READY__` is the FRAMEWORK's flag and it is no longer the right one to wait on.
   // The loading curtain now holds past it until the detail tier has landed, so a harness gated on
@@ -48,17 +61,35 @@ const waitReady = async () => {
   // like a scene that failed to build. `__TN_WORLD_REVEALED__` is the game's own flag, set in the
   // one callback that fires as the curtain lifts, and it is what "the world is on screen" means
   // here now.
-  const revealed = await page
-    .waitForFunction(() => globalThis.__TN_WORLD_REVEALED__ === true, undefined, {
-      timeout: 180_000,
-      polling: 500,
-    })
-    .then(
-      () => true,
-      () => false,
-    );
+  // Two gates, because each one has been caught lying on its own. The flag is a level and a level
+  // can be stale — it survived a scene re-enter until the scene learned to clear it, and a harness
+  // polling a latched flag returns on its first tick against whatever curtain is up. The console
+  // line is an edge, so staleness cannot fool it, and it carries the tree count, so a reveal fired
+  // on the bald critical valley cannot pass either. They are set by different code paths.
+  const revealed = await Promise.all([
+    page
+      .waitForFunction(() => globalThis.__TN_WORLD_REVEALED__ === true, undefined, {
+        timeout: 180_000,
+        polling: 500,
+      })
+      .then(
+        () => true,
+        () => false,
+      ),
+    page
+      .waitForFunction(() => globalThis.__TN_SHOT_REVEAL_TREES__ >= 100, undefined, {
+        timeout: 180_000,
+        polling: 500,
+      })
+      .then(
+        () => true,
+        () => false,
+      ),
+  ]).then((both) => both.every(Boolean));
   if (!revealed) {
-    console.log("WARN __TN_WORLD_REVEALED__ never flipped; the curtain is probably still up");
+    console.log(
+      `WARN the world never reported a complete reveal (trees=${String(revealedTrees)}); the curtain is probably still up`,
+    );
   }
   // First frames after the reveal still land pipelines the timed-out warm-up skipped.
   await page.waitForTimeout(3000);
@@ -68,6 +99,7 @@ const shoot = async (name, at) => {
   const target = at === undefined ? url : `${url}${url.includes("?") ? "&" : "?"}spawn=${at}`;
   // networkidle, not a clock: the valley loads ~70 GLBs through the dev server, and every fixed
   // wait this game ever tried screenshotted a half-loaded scene whose console still said loading.
+  revealedTrees = -1;
   await page.goto(target, { waitUntil: "networkidle", timeout: 180_000 });
   await waitReady();
   await page.screenshot({ path: `${out}/${name}.png` });

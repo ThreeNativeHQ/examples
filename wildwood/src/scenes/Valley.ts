@@ -389,6 +389,14 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
         (globalThis as { __TN_WORLD_REVEALED__?: boolean }).__TN_WORLD_REVEALED__ = true;
       },
     });
+    // Cleared here, at the start of every generation, not just set at the end of one.
+    //
+    // A latched flag with no reset is worse than no flag: it survives a scene re-enter, so after an
+    // HMR reload, the restart key, or any second generation it is *already* true when a harness
+    // starts polling, `waitForFunction` returns on its first tick, and the capture is whatever
+    // curtain happens to be up. Lane D caught this as a screenshot of "BUILDING TERRAIN 65%" taken
+    // by a wait that had been told the world was already on screen.
+    (globalThis as { __TN_WORLD_REVEALED__?: boolean }).__TN_WORLD_REVEALED__ = false;
     console.info(`TN_VALLEY_CRITICAL_START generation=${String(id)}`);
     const groundPromise = (async (): Promise<ITerrainMaps> => {
       if (controls.criticalDelayMs > 0) {

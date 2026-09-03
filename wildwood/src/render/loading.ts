@@ -64,8 +64,14 @@ interface ILoadingOptions {
   /** Hard ceiling on the `until` wait, in milliseconds past framework readiness. */
   readonly holdBudgetMs?: number;
   /**
-   * Called once, on the frame the curtain lifts, before the layer is torn down. This is the only
-   * moment at which "what the player first saw" can be sampled.
+   * Called once, on the frame the curtain lifts **to show the world**. This is the only moment at
+   * which "what the player first saw" can be sampled.
+   *
+   * Not called when the curtain comes down because the scene is being torn down. `finish()` is the
+   * public teardown and `exit()` calls it, so a callback wired to it fires on every scene exit and
+   * HMR reload with whatever half-built state happens to exist — observed as
+   * `TN_VALLEY_REVEAL trees=1 ferns=0`, which is precisely the reading this callback exists to
+   * disprove.
    */
   readonly onReveal?: () => void;
   /**
@@ -476,10 +482,10 @@ export function createLoadingScreen(
       ? FRAMEWORK_SHARE + (1 - FRAMEWORK_SHARE) * (options.holdProgress?.() ?? 0)
       : FRAMEWORK_SHARE * host.startup.progress;
 
-  const finish = (): void => {
+  const teardown = (revealed: boolean): void => {
     if (done) return;
     done = true;
-    options.onReveal?.();
+    if (revealed) options.onReveal?.();
     if (layoutTimer !== undefined) clearTimeout(layoutTimer);
     for (const mesh of parts) {
       mesh.removeFromParent();
@@ -512,11 +518,14 @@ export function createLoadingScreen(
       ]);
     }
     if (done) return;
-    finish();
+    teardown(true);
   })();
 
   return {
-    finish,
+    // The public `finish` is teardown, and it never reports a reveal.
+    finish: () => {
+      teardown(false);
+    },
     update(): void {
       if (done) return;
       updateProgress(currentProgress());
