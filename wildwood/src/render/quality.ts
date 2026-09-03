@@ -160,6 +160,29 @@ const high: IWorldEnvironmentOptions = {
   // SSGI, the screen-space indirect-light gather: ~7.3 ms alone, ~9.2 ms with the two denoise
   // passes it feeds. The largest stage in the chain by a factor of two, of a 14.7 ms frame.
   // Dropping this pair is what `medium` is.
+  // **Off, and it is the most expensive decision in this file, so here is the whole argument.**
+  //
+  // SSGI cost 14.4 ms of a 39.7 ms frame — the largest single item in the chain. Measured on the
+  // real display at 1600x900, turing/nvidia, with SSR already off and the scaler left on auto so
+  // the engine's own verdict is part of the result:
+  //
+  //                    fps standing/walking   scale the engine settled on   interior p50   nearBlack
+  //   ssgi medium           38.0 / 47.2            0.44  (704x396)             0.0299        19.19%
+  //   ssgi off              60.0 / 60.0            0.61  (976x549)             0.0987         4.54%
+  //
+  // The pictures say SSGI has the better *mood*: deeper shadow, more air between the trunks. If
+  // that were the whole comparison it would stay on.
+  //
+  // It is not, because **the mood is paid for in resolution.** Holding the 60 fps budget with SSGI
+  // on drives the scaler to 0.44 — a quarter of the pixels, upscaled — and the owner's actual
+  // complaint about this game was that it went soft and stayed soft. Choosing SSGI is choosing
+  // that blur. Off, the same budget is met at 0.61 with frames to spare.
+  //
+  // Two things make the loss smaller than it looks. `gtaoEnabled` stays on at 0.3 ms and carries
+  // the contact occlusion, which is most of what SSGI visibly contributed here. And
+  // `SKY_ENVIRONMENT_INTENSITY` was raised 0.7 -> 1.8 off its own sweep, so the ambient lift SSGI
+  // was providing now comes from the sky — which is why the interior is *brighter* with SSGI off,
+  // and its dead shadow four times smaller, rather than the reverse.
   ssgiEnabled: true,
   ssgiQuality: "low",
   // Screen-space reflections: ~4.1 ms.
