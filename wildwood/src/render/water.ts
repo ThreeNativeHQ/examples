@@ -1,47 +1,56 @@
 // Generated for you. This is ordinary Three.js — edit or delete it freely.
 // ThreeNative does not read this file.
 //
-// The lake and the pond, and the one thing that decides whether water reads as water.
+// The lake and the pond.
 //
-// Water is four readings composited: what the sky puts *on* the surface, what the bed sends *up*
-// through it, how much water stands between the two, and what the water itself scatters back.
-// Every colour below is this file's; the engine chooses none of them.
+// **The one thing that makes still water read as water is that it contains the far bank.** Not a
+// gradient standing in for the far bank — the bank itself, upside down, recognisable as trees.
+// Everything else here (absorption, caustics, scatter, glint, the shoreline) is dressing on that
+// one fact, and a surface that gets the dressing right and the reflection wrong photographs as a
+// sheet of rippled plastic. That is what the version this replaces was: it composited a measured
+// three-band sky gradient by fresnel, so the water under a hundred metres of sunlit conifer was
+// the same flat blue-grey it would have been under an empty sky.
 //
-// **What was wrong with the version this replaces**, read off two captures rather than guessed at.
-// Standing on the pond bank, the surface was a flat slate-grey band with a razor-straight edge
-// against the sand. Standing a metre out in the shallows, the frame was one uniform near-black.
-// Both are the same defect seen from two angles, and it was not the ripples: it was the *ends* of
-// the composite. Grazing fragments mixed almost entirely to `sky`, which was a single constant
-// colour — so far water was one flat grey no matter which way you faced. Fragments seen from
-// above mixed almost entirely to the bed, with a Beer-Lambert term whose thickness came from the
-// screen-space depth read, so shallow water showed the mud unaltered and the pond looked drained.
-// And the mesh was opaque to its last triangle, so the shoreline was wherever the triangles ran
-// out — a cut, not a shore.
+// Four things changed, and they are the whole of the difference:
 //
-// So three things changed, and they are the whole of the difference:
+// 1. **The reflection is a real sample of the frame**, taken by projecting the reflected ray to
+//    the point it meets the bank and reading the screen there. No mirrored pass, no second draw of
+//    the wood: the bank is already on screen this frame, and the geometry says exactly where its
+//    reflection lands. `hitUv` below.
+// 2. **The surface is a mirror at distance and choppy near you.** Beyond about forty metres one
+//    pixel covers many ripples, so what a real photograph shows there is the *average* — a smooth
+//    reflection, not a per-pixel scramble. The old constant `SLOPE_GAIN = 7.5` swung the reflected
+//    ray by more than the whole range the sky gradient spanned, which is why the far half of the
+//    lake broke into hard black-and-white noise. The gain is now graded with distance.
+// 3. **The wind touches part of the lake at a time.** A uniform ripple everywhere is the single
+//    most reliable tell that water was drawn rather than photographed. A slow drifting noise field
+//    gates the short waves, so most of the surface is glass and a few patches are ruffled —
+//    and the calm patches take the sharp reflection while the ruffled ones smear it.
+// 4. **The underside is drawn.** The lake is eight metres deep and the walker wades into it, so
+//    the camera goes under. Seen from below the surface is not water at all: it is a mirror of the
+//    dark bed everywhere except inside Snell's window, the 48.6° cone the whole sky is squeezed
+//    into. Before this it was the above-water composite evaluated at angles it has no meaning at,
+//    which photographed as black-and-white static filling the top half of the frame.
 //
-// 1. **The sky is a gradient sampled by the reflected ray, not a constant.** `light/sun.ts`
-//    measured the radiances of the photograph that lights this valley — zenith, horizon, the
-//    forward-scattered haze around the sun — and the same numbers are what the water reflects.
-//    Near-grazing rays leave along the horizon and pick up the dark treeline; steeper ones climb
-//    into the blue. That single change is what turns a grey sheet into a surface with a far bank
-//    in it.
-// 2. **Depth comes off the mesh, not off the screen.** The pond does not move and neither does
-//    the ground under it, so every vertex is baked with the metres of water standing on it,
-//    straight out of the same `heightAt` the terrain and the collider use. It is exact, it is
-//    free, it survives the WebGL2 fallback where a depth read may not, and it is the number that
-//    grades the colour from silt at the margin to `palette.water` in the middle.
-// 3. **The shoreline is an alpha ramp over the last handspan of water.** Opacity fades to nothing
-//    as the baked depth goes to zero, so the surface dissolves into the wet sand instead of
-//    ending at a triangle edge.
-//
-// What is unchanged is the ripple, and the ripple is where water usually goes wrong. Stamping a
-// normal map over the surface, or adding `sin(worldZ * k)` highlight bands, puts a period into
-// the picture, and the eye finds a period in about a second: the surface stops being water and
-// becomes wallpaper. There is not one such term in this file. The normal comes from
+// What is unchanged is where the ripple comes from. Stamping a normal map over the surface, or
+// adding `sin(worldZ * k)` highlight bands, puts a period into the picture, and the eye finds a
+// period in about a second. There is not one such term in this file. The normal is
 // `WaveField.normalNode` — the analytic derivative of a sum of eight waves whose wavelengths share
 // no common multiple — so the pattern repeats only where all eight line up again, which within
 // this valley is nowhere.
+//
+// Also unchanged, and worth knowing before touching it: **depth comes off the mesh, not off the
+// screen.** Neither basin moves and neither does the ground under it, so every vertex is baked
+// with the metres of water standing on it out of the same `heightAt` the terrain and the collider
+// use. Exact, free, and it survives the WebGL2 fallback where a depth read may not.
+//
+// ---------------------------------------------------------------------------------------------
+// If this is ever lifted into a package: the seam runs between LOOK and MECHANISM below. Every
+// number in LOOK is a decision about *this* lake in *this* wood and would have to be re-chosen.
+// Everything under MECHANISM — the wave field, the baked depth, the rim measurement, the
+// reflected-ray projection, the Beer-Lambert integration, the Snell's-window split — is maths
+// that any still fresh water needs and no game should have to write twice.
+// ---------------------------------------------------------------------------------------------
 import {
   BufferAttribute,
   BufferGeometry,
@@ -56,6 +65,8 @@ import { MeshBasicNodeMaterial } from "three/webgpu";
 import {
   attribute,
   cameraPosition,
+  cameraProjectionMatrix,
+  cameraViewMatrix,
   clamp,
   dot,
   exp,
@@ -63,25 +74,126 @@ import {
   max,
   min,
   mix,
+  mx_noise_float,
   normalize,
   positionLocal,
   positionWorld,
   pow,
   reflect,
   smoothstep,
+  sqrt,
+  step,
   time,
   vec2,
   vec3,
+  vec4,
+  viewportSharedTexture,
 } from "three/tsl";
 import { palette } from "./palette.js";
 import { SKY_RADIANCE, SUN_COLOUR, sunDirection } from "./light/sun.js";
 import { WATER_LEVEL, heightAt } from "./terrain.js";
 
+// =============================================================================================
+// LOOK — what this lake is like. Every number here is a choice, and the reason is on the line.
+// =============================================================================================
+
+/**
+ * Extinction per metre, per channel, in the renderer's linear space.
+ *
+ * Red dies first and blue survives, which is why deep fresh water is blue-green. These are
+ * roughly two and a half times the coefficients of distilled water because this basin sits in a
+ * wood and carries the wood in it — leaf tannin and suspended silt — and because a lake you can
+ * see four metres into reads as a swimming pool. At the 0.7 m margin the bed still shows; by
+ * three metres it is gone.
+ */
+const EXTINCTION: readonly [number, number, number] = [0.74, 0.42, 0.3];
+
 /** How deep the water has to be before the bed stops contributing, in metres. */
 const OPAQUE_DEPTH = 2.6;
 
-/** Deepest reading the baked attribute carries. The lake bottoms out around 7.6 m. */
+/** Deepest reading the baked attribute carries. The lake bottoms out around 8.6 m. */
 const MAX_BAKED_DEPTH = 9;
+
+/**
+ * Peak ripple slope multiplier close to the camera, and far from it.
+ *
+ * The wave field's honest peak slope is about 5°, which is right for a sheltered lake and far too
+ * small to see once it is the only thing bending a reflection — the version this replaces used a
+ * flat 7.5 (≈37°, a gale) and paid for it in per-pixel noise across the far half of the water.
+ * The physical argument for grading it is that one distant pixel covers many ripples and shows
+ * their average, so the *visible* slope really does fall off with distance. Near water gets chop
+ * you can see; water past seventy metres is a mirror.
+ */
+const SLOPE_GAIN_NEAR = 2.6;
+const SLOPE_GAIN_FAR = 0.75;
+/** Metres over which the gain above falls from near to far. */
+const SLOPE_FADE_NEAR = 10;
+const SLOPE_FADE_FAR = 72;
+
+/** Where the detail waves start and finish fading, in metres from the camera. */
+const DETAIL_NEAR = 16;
+const DETAIL_FAR = 58;
+
+/**
+ * The wind patches: how big they are, how fast they cross the lake, and how calm the calm is.
+ *
+ * Wind does not arrive everywhere at once. On a sheltered lake most of the surface is glass and a
+ * few slowly-travelling patches are ruffled — the cat's paws — and that contrast between mirror
+ * and texture is the strongest single cue that the water is real. `PATCH_METRES` is the size of
+ * one patch; `PATCH_DRIFT` is how fast it travels, in metres a second; `PATCH_CALM` is how much of
+ * the long swell survives in the flattest places (0 would be a dead mirror, which reads as ice).
+ */
+const PATCH_METRES = 26;
+const PATCH_DRIFT = 0.55;
+const PATCH_CALM = 0.45;
+/** Which way the patches travel. Roughly across the lake, and not aligned with any wave. */
+const PATCH_WIND: readonly [number, number] = [0.62, -0.78];
+
+/**
+ * How far the reflection smears, in fractions of the screen, at the near and far ends.
+ *
+ * A reflection in rippled water is blurred *vertically*, because the surface tilts about a
+ * horizontal axis far more often than it tilts toward you — that anisotropy is why a lakeside
+ * photograph's reflection looks stretched downward rather than fogged. The blur grows with
+ * distance for the same reason the slope gain shrinks: more ripples per pixel.
+ */
+const REFLECT_BLUR_NEAR = 0.0016;
+const REFLECT_BLUR_FAR = 0.0075;
+/** How much narrower the smear is across the screen than down it. */
+const REFLECT_BLUR_ASPECT = 0.35;
+
+/**
+ * How far outside the waterline the bank the water reflects actually stands, in metres.
+ *
+ * The reflected ray is aimed at a ring, and the ring wants to be where the trees are rather than
+ * where the sand is. Six metres is roughly one tree back from the shore, measured off this
+ * valley's own scatter.
+ */
+const REFLECT_RIM_MARGIN = 6;
+
+/** The floor under Schlick: still water seen straight down is not perfectly clear. */
+const SKY_FLOOR = 0.045;
+
+/** Where the ripple is allowed to start, in metres of depth. Water at the sand is glass. */
+const RIPPLE_DEPTH = 0.55;
+
+/** The wet band at the margin, in metres of depth: the surface fades out across it. */
+const SHORE_FADE = 0.32;
+
+/**
+ * The cosine band the Snell's-window edge is blended over, seen from underwater.
+ *
+ * Water's critical angle is 48.6° from vertical, cos 0.661: look up more steeply than that and
+ * the sky refracts in, look up shallower and the surface is a mirror of the dark bed. A real
+ * window's edge is ragged because the ripple moves it, and the perturbed normal below does that
+ * on its own; this band only keeps the transition from aliasing into a hard circle.
+ */
+const SNELL_INNER = 0.6;
+const SNELL_OUTER = 0.79;
+
+// =============================================================================================
+// MECHANISM — the maths. Nothing below picks a colour.
+// =============================================================================================
 
 /**
  * The sun, taken from the one place it exists rather than typed again.
@@ -100,11 +212,13 @@ const SUN = sunDirection(new Vector3());
  * 8/4/2/1 relines up every eight metres and draws visible corduroy. Directions are spread the same
  * way, at angles that are not multiples of each other.
  *
- * The four shortest are marked `detail`: past about forty metres one of their wavelengths is
- * narrower than the pixel drawing it, and what an unresolvable wave produces is not detail but a
- * crawling moire — which reads, again, as a repeat. They are faded out with distance below.
+ * The four shortest are marked `detail`, and the `fade` handed to the graph does double duty on
+ * them. Past about forty metres one of their wavelengths is narrower than the pixel drawing it,
+ * and what an unresolvable wave produces is not detail but a crawling moire. They are *also* the
+ * waves the wind makes, so the same fade carries the patch mask: the long swell runs everywhere
+ * and the chop only where the breeze is touching down.
  *
- * Amplitudes are tiny because this is a sheltered pond in a wood. They set the *normal*, which is
+ * Amplitudes are tiny because this is sheltered water in a wood. They set the *normal*, which is
  * what the light reads; the surface only has to move a couple of centimetres to look alive.
  */
 const RIPPLE = new WaveField({
@@ -125,27 +239,6 @@ const RIPPLE = new WaveField({
     { direction: [0.8, 0.6], displacement: [0.55, -0.38], wavelength: 23, speed: 0.13, phase: 0.6 },
   ],
 });
-
-/** Where the detail waves start and finish fading, in metres from the camera. */
-const DETAIL_NEAR = 18;
-const DETAIL_FAR = 62;
-
-/**
- * How much the analytic normal is tilted away from straight up before the light reads it.
- *
- * A two-centimetre wave over eleven metres is a slope of about one degree, and one degree of
- * fresnel variation across a whole lake is invisible — which is why the old surface, with a
- * correct non-repeating normal on it, still photographed as a flat sheet. This exaggerates the
- * horizontal part of the normal so a ripple bends the reflection by something the eye can find,
- * while the geometry keeps its honest two centimetres.
- */
-const SLOPE_GAIN = 7.5;
-
-/** Where the ripple is allowed to start, in metres of depth. Water at the sand is glass. */
-const RIPPLE_DEPTH = 0.55;
-
-/** The wet band at the margin, in metres of depth: the surface fades out across it. */
-const SHORE_FADE = 0.32;
 
 export interface IWater {
   readonly mesh: Mesh;
@@ -169,6 +262,36 @@ function linear(hex: number, gain = 1) {
 }
 
 /**
+ * The mean radius of the actual waterline, measured rather than assumed.
+ *
+ * The reflected ray has to be aimed at something, and for a basin in a bowl the thing it hits is
+ * the ring of bank around it. That ring is *not* the nominal radius the basin was drawn with: the
+ * noise `heightAt` adds pushes the real waterline in and out by several metres, and it lands
+ * eleven per cent inside the nominal figure for the lake while landing seventeen per cent outside
+ * it for the pond. Bisecting `heightAt` along thirty-two bearings costs a few hundred evaluations
+ * once, at build time, and removes a constant nobody could have guessed right for both.
+ */
+function waterlineRadius(centre: Vector2, radius: number): number {
+  if (heightAt(centre.x, centre.y) >= WATER_LEVEL) return radius;
+  const bearings = 32;
+  let sum = 0;
+  for (let index = 0; index < bearings; index += 1) {
+    const angle = (index / bearings) * Math.PI * 2;
+    let wet = 0.05;
+    let dry = radius * 1.6;
+    // Twenty-four halvings is under a millimetre at this scale.
+    for (let halving = 0; halving < 24; halving += 1) {
+      const mid = (wet + dry) / 2;
+      const ground = heightAt(centre.x + Math.cos(angle) * mid, centre.y + Math.sin(angle) * mid);
+      if (ground < WATER_LEVEL) wet = mid;
+      else dry = mid;
+    }
+    sum += (wet + dry) / 2;
+  }
+  return sum / bearings;
+}
+
+/**
  * Build a water surface over a circular patch of the valley.
  *
  * The grid is generous around the nominal radius because the shoreline is where `heightAt` happens
@@ -178,7 +301,7 @@ function linear(hex: number, gain = 1) {
  */
 export function createWater(centre: Vector2, radius: number, samples = 128): IWater {
   const span = radius * 2.4;
-  const step = span / (samples - 1);
+  const spacing = span / (samples - 1);
   const half = span / 2;
   const vertexCount = samples * samples;
 
@@ -192,8 +315,8 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   for (let ix = 0; ix < samples; ix += 1) {
     for (let iz = 0; iz < samples; iz += 1) {
       const index = ix * samples + iz;
-      const x = centre.x - half + ix * step;
-      const z = centre.y - half + iz * step;
+      const x = centre.x - half + ix * spacing;
+      const z = centre.y - half + iz * spacing;
       const depth = Math.max(0, WATER_LEVEL - heightAt(x, z));
       positions[index * 3] = x;
       positions[index * 3 + 1] = WATER_LEVEL;
@@ -239,17 +362,22 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   //
   //   Destroyed texture [Texture (unlabeled 1359x965 px, RGBA16Float)] used in a submit
   //
-  // repeated until the device gives up warning. The sky in this pond therefore comes from the
-  // measured gradient below — colours this file picks, out of the same photograph that lights the
-  // valley — rather than from a second draw of the wood.
+  // repeated until the device gives up warning. The reflection below therefore comes out of the
+  // frame this surface is being drawn into, which costs one framebuffer copy and no second draw
+  // of the wood at all. `surface` is still here for `refractionAt`, which is the same read taken
+  // downward.
   const surface = new WaterSurface3D({ level: WATER_LEVEL, maxThickness: OPAQUE_DEPTH });
+
+  // Where the bank the water reflects actually stands. Measured, then pushed back one tree.
+  const rim = waterlineRadius(centre, radius) + REFLECT_RIM_MARGIN;
 
   // Basic, not Standard: every photon on this surface is composited by hand below, out of the
   // sky and the bed. Handing the same fragment to a lit material as well would light water
   // that is already carrying the light it reflected.
   const material = new MeshBasicNodeMaterial({
     depthWrite: false,
-    // Both sides: the surface is thin, and standing in the shallows puts the camera under it.
+    // Both sides: the lake is eight metres deep and the walker wades in, so the camera goes under
+    // this surface and has to find something drawn there. See the Snell's window branch below.
     side: DoubleSide,
     // Transparent so the wood is already drawn when this surface reads the frame beneath it, and
     // so the shoreline can fade rather than end.
@@ -262,10 +390,48 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   const depthM = attribute<"float">("metres", "float");
   const here = vec2(positionWorld.x, positionWorld.z);
   const eyeDistance = here.sub(vec2(cameraPosition.x, cameraPosition.z)).length();
-  const detailFade = float(1).sub(smoothstep(float(DETAIL_NEAR), float(DETAIL_FAR), eyeDistance));
+
+  // ---- the wind on the water ---------------------------------------------------------------
+  //
+  // Two octaves of gradient noise in world metres, translated downwind and evolving slowly in
+  // place. Noise rather than another wave sum, because a *sum of sines used as a mask* has the
+  // same corduroy problem the waves themselves would: the mask has to be lumpy, not periodic.
+  const drift = time.mul(float(PATCH_DRIFT / PATCH_METRES));
+  const patchUv = here
+    .mul(float(1 / PATCH_METRES))
+    .sub(vec2(PATCH_WIND[0], PATCH_WIND[1]).mul(drift));
+  const patchCoarse = mx_noise_float(vec3(patchUv.x, patchUv.y, time.mul(float(0.021))));
+  const patchFine = mx_noise_float(
+    vec3(patchUv.x.mul(2.7).add(11.3), patchUv.y.mul(2.7).sub(4.1), time.mul(float(0.048))),
+  );
+  /** 0 where the lake is glass, 1 where the breeze is on it. */
+  const patch = smoothstep(float(-0.12), float(0.34), patchCoarse.add(patchFine.mul(float(0.34))));
+
+  // ---- the surface normal ------------------------------------------------------------------
+  //
+  // One evaluation of the field per fragment. No texture, no stripe term, no screen-space
+  // anything. Two modulations on top of it: the short waves are gated by both distance and the
+  // wind patch, and the whole horizontal part is scaled by a gain that falls off with distance,
+  // because a far pixel covers many ripples and shows their average.
+  const detailFade = float(1)
+    .sub(smoothstep(float(DETAIL_NEAR), float(DETAIL_FAR), eyeDistance))
+    .mul(patch);
+  const raw = RIPPLE.normalNode({ fade: detailFade, point: here, time });
+  const slopeGain = mix(
+    float(SLOPE_GAIN_NEAR),
+    float(SLOPE_GAIN_FAR),
+    smoothstep(float(SLOPE_FADE_NEAR), float(SLOPE_FADE_FAR), eyeDistance),
+  )
+    // The long swell survives in the calm patches; it is only damped, never switched off, because
+    // a dead-flat mirror reads as ice rather than as water.
+    .mul(mix(float(PATCH_CALM), float(1), patch))
+    // And nothing ripples in the last half metre before the sand: a shoreline that chops reads as
+    // a beach in a gale rather than as a pond in a wood.
+    .mul(smoothstep(float(0), float(RIPPLE_DEPTH), depthM));
+  const normal = normalize(vec3(raw.x.mul(slopeGain), raw.y, raw.z.mul(slopeGain)));
 
   // Vertices ride the four long waves only. The short ones are shorter than the grid this mesh is
-  // built on, so displacing by them would alias into a stair pattern the normal below already
+  // built on, so displacing by them would alias into a stair pattern the normal above already
   // draws correctly and for free.
   material.positionNode = vec3(
     positionLocal.x,
@@ -273,24 +439,13 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
     positionLocal.z,
   );
 
-  // The surface normal, evaluated per fragment from the same field. This is the whole ripple:
-  // no texture, no stripe term, no screen-space anything.
-  //
-  // Two modulations on top of the field. The horizontal part is exaggerated by `SLOPE_GAIN`,
-  // because a physically honest one-degree slope moves the reflection by nothing the eye can
-  // find; and the whole thing is damped to flat in the last half metre of water, because a
-  // shoreline that ripples reads as a beach in a gale rather than as a pond in a wood.
-  const raw = RIPPLE.normalNode({ fade: detailFade, point: here, time });
-  const ripple = smoothstep(float(0), float(RIPPLE_DEPTH), depthM).mul(float(SLOPE_GAIN));
-  const normal = normalize(vec3(raw.x.mul(ripple), raw.y, raw.z.mul(ripple)));
-
   const view = normalize(cameraPosition.sub(positionWorld));
   const facing = clamp(dot(normal, view), float(0), float(1));
   // Schlick, at water's 1.333 index — F0 is 0.02, which is why still water at your feet is nearly
   // clear and the same water at the far bank is a mirror.
   const fresnel = float(0.02).add(float(0.98).mul(pow(float(1).sub(facing), 5)));
 
-  // ---- what comes up through the surface -------------------------------------------------
+  // ---- what comes up through the surface ---------------------------------------------------
   //
   // The normal's horizontal part is the offset, in screen UV. Grazing fragments slide further,
   // because that is what a longer path through a tilted surface does — and the offset is taken to
@@ -307,17 +462,15 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   // from asking for a kilometre of water.
   const path = min(depthM.div(max(facing, float(0.12))), float(MAX_BAKED_DEPTH * 1.6));
 
-  // Beer-Lambert through this pond's own water: red goes first, then green, and what survives at
-  // depth is the blue-green in `palette.water`. Extinction per metre is this file's choice. It is
-  // stronger than clear water because this basin sits in a wood and carries the wood in it —
-  // leaf tannin and silt, which is also why the shallows read warm rather than blue.
-  const transmittance = exp(vec3(-0.46, -0.26, -0.19).mul(path));
+  // Beer-Lambert through this basin's own water; the coefficients and why are on `EXTINCTION`.
+  const transmittance = exp(vec3(-EXTINCTION[0], -EXTINCTION[1], -EXTINCTION[2]).mul(path));
 
   // Caustics. The same analytic normal that bends the reflection also focuses the sun onto the
   // bed, so the bright cells are where the surface happens to point at it. No texture, no second
   // wave set: this is a function of the field already computed above, which is why the caustic
-  // pattern drifts with the ripple that causes it instead of sliding under it. Killed with depth,
-  // because a caustic is a shallow-water phenomenon and the bed at three metres is in shade.
+  // pattern drifts with the ripple that causes it — and why it appears under the wind patches and
+  // not on the glassy parts, for free. Killed with depth, because a caustic is a shallow-water
+  // phenomenon and the bed at three metres is in shade.
   const sunNode = vec3(SUN.x, SUN.y, SUN.z);
   const focus = pow(clamp(dot(normal, sunNode), float(0), float(1)), 34);
   const caustic = focus
@@ -327,11 +480,14 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   // What the water body itself scatters back: silt and tannin at the margin, `palette.water` in
   // the middle. This is the depth-graded colour — the thing that makes a shallow edge read as
   // shallow rather than as the same sheet with less alpha on it.
-  const shallowBody = linear(palette.silt, 0.5).mul(vec3(1.06, 1, 0.82));
-  const deepBody = linear(palette.water, 0.34);
+  const shallowBody = linear(palette.silt, 0.42).mul(vec3(1.06, 1, 0.78));
+  const deepBody = linear(palette.water, 0.26);
   const body = mix(shallowBody, deepBody, smoothstep(float(0.1), float(2.4), depthM));
 
-  const submerged = bed.mul(transmittance).mul(float(1).add(caustic)).add(body.mul(float(1).sub(transmittance)));
+  const submerged = bed
+    .mul(transmittance)
+    .mul(float(1).add(caustic))
+    .add(body.mul(float(1).sub(transmittance)));
 
   // Subsurface scatter: the green-gold glow you get looking into shallow water with the sun
   // behind it, which is light that went in, bounced around in the silt and came back out rather
@@ -340,59 +496,154 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   const towardSun = clamp(dot(view.negate(), sunNode), float(0), float(1));
   const glow = pow(towardSun, 2.5)
     .mul(float(1).sub(smoothstep(float(0.2), float(1.8), depthM)))
-    .mul(float(0.5));
+    .mul(float(0.42));
   const underwater = submerged.add(linear(palette.moss, 0.9).mul(vec3(1.3, 1.15, 0.6)).mul(glow));
 
-  // ---- what sits on the surface ------------------------------------------------------------
+  // ---- what sits on the surface: the far bank, actually reflected ---------------------------
   //
-  // The sky, as the reflected ray sees it. Three measured bands out of `light/sun.ts` — the same
-  // radiances the analytic sky and the aerial perspective are built from, so the pond and the
-  // ridge above it agree about what colour the air is — plus the wood, because a ray leaving a
-  // pond at two degrees does not reach the sky at all. It reaches the far bank.
+  // The reflected ray leaves this fragment and hits *something*, and for a basin in a bowl that
+  // something is the ring of bank around it. `rim` is where that ring is, measured off `heightAt`
+  // at build time. So: intersect the reflected ray's horizontal part with a circle of that radius,
+  // walk the ray to the crossing, and project the point it reaches back into the frame that has
+  // already been drawn. Reading the screen there is reading the bank — the real trees, at the real
+  // brightness, with this frame's own haze already on them.
+  //
+  // This is one step of a screen-space reflection with the march replaced by a closed form, and it
+  // is exact for anything standing on the rim. It is wrong for anything between here and there, in
+  // the usual screen-space way. On open water there is nothing between here and there.
   const bounced = reflect(view.negate(), normal);
-  // The far bank, and it has to be as bright as the far bank actually is.
+  const flat = vec2(bounced.x, bounced.z);
+  const flatLength = max(flat.length(), float(0.02));
+  const fromCentre = here.sub(vec2(centre.x, centre.y));
+  const along = dot(fromCentre, flat.div(flatLength));
+  // The near root is behind the ray for any fragment inside the ring, so the far root is the one
+  // that matters. `max` on the discriminant keeps a fragment on the dry fringe outside the ring,
+  // whose ray misses it entirely, from producing a NaN that would poison the whole composite.
+  const discriminant = max(
+    along.mul(along).sub(dot(fromCentre, fromCentre).sub(float(rim * rim))),
+    float(0),
+  );
+  const toRim = max(sqrt(discriminant).sub(along), float(0));
+  const travel = min(toRim.div(flatLength), float(400));
+  const hit = positionWorld.add(bounced.mul(travel));
+
+  // Project the point the ray reached into this frame. `w` is the view-space distance in front of
+  // the camera, and it is also the whole "is this point behind me" test.
   //
-  // At 0.34/0.16 this summed to a linear luminance of 0.048 while the sunlit conifers it stands in
-  // for measure 0.0989 across the lake (`tools/luminance.mjs --crop 0,0.28,1,0.45`) — half as
-  // bright as the thing being reflected, against a horizon band of 0.469. Grazing fragments have
-  // fresnel at 1, so they showed all of it, and the surface broke out in hard black amoebae that
-  // read as holes in the lake rather than as ripples. Identified by setting this one term to
-  // magenta and capturing: every blob turned magenta, over about a third of the visible water.
+  // **The y is negated, and that is not a taste.** Clip space puts +1 at the top of the frame;
+  // `screenUV`, which is the space `viewportSharedTexture` samples in, puts 0 there —
+  // `NodeBuilder.isFlipY()` returns false on WGSL, so `screenCoordinate` is the raw fragment
+  // coordinate with its origin at the top left, and the GLSL backend flips its own bottom-left
+  // origin to match. The two conventions differ by exactly this sign on both backends. Written the
+  // obvious way (`* 0.5 + 0.5`) every reflection is mirrored about the middle of the screen, which
+  // for a lake means every fragment reads the *bed* instead of the bank and the whole surface
+  // photographs as marbled brown mud. It looks plausible enough to ship, which is the danger.
+  const hitClip = cameraProjectionMatrix.mul(cameraViewMatrix.mul(vec4(hit.x, hit.y, hit.z, 1)));
+  const hitNdc = hitClip.xy.div(max(hitClip.w, float(0.0001)));
+  const hitUv = vec2(hitNdc.x.mul(0.5).add(0.5), hitNdc.y.mul(-0.5).add(0.5));
+
+  // Whether that sample is worth believing, as a 0..1 weight rather than a branch, so the seam
+  // where it stops being worth believing is a fade and not an edge.
+  //
+  //   - off the top or the side of the frame: the bank's reflection is simply not on screen
+  //   - behind the camera: `w` at or below zero, and the projection is meaningless
+  //   - aimed downward: a ray leaving a wave face below horizontal never reaches the bank
+  //   - crossing the ring within a couple of metres: the fragment is out on the dry fringe and
+  //     the "reflection" would be the ground it is lying on
+  const inFrame = smoothstep(float(0), float(0.05), hitUv.x)
+    .mul(smoothstep(float(1), float(0.95), hitUv.x))
+    .mul(smoothstep(float(0), float(0.04), hitUv.y))
+    .mul(smoothstep(float(1), float(0.96), hitUv.y));
+  const believable = inFrame
+    .mul(step(float(0.001), hitClip.w))
+    .mul(smoothstep(float(-0.01), float(0.045), bounced.y))
+    .mul(smoothstep(float(1.5), float(5), toRim));
+
+  // Sampled with a vertical smear, because that is the shape a rippled reflection has. Five taps
+  // on an ellipse taller than it is wide; the radius grows with distance and shrinks where the
+  // lake is glass, so a calm patch takes a sharp reflection of the trees and a ruffled one
+  // dissolves them.
+  const blur = mix(
+    float(REFLECT_BLUR_NEAR),
+    float(REFLECT_BLUR_FAR),
+    smoothstep(float(8), float(60), eyeDistance),
+  ).mul(mix(float(0.25), float(1), patch));
+  const tap = (dx: number, dy: number) =>
+    viewportSharedTexture(
+      vec2(
+        clamp(hitUv.x.add(blur.mul(float(dx * REFLECT_BLUR_ASPECT))), float(0.002), float(0.998)),
+        clamp(hitUv.y.add(blur.mul(float(dy))), float(0.002), float(0.998)),
+      ),
+    ).rgb;
+  const sampled = tap(0, 0)
+    .mul(float(0.36))
+    .add(tap(0, 1).mul(float(0.16)))
+    .add(tap(0, -1).mul(float(0.16)))
+    .add(tap(1.3, 0.5).mul(float(0.16)))
+    .add(tap(-1.3, -0.5).mul(float(0.16)));
+
+  // The fallback, for every fragment whose reflection is off the frame. Three measured bands out
+  // of `light/sun.ts` — the same radiances the analytic sky and the aerial perspective are built
+  // from, so the water and the ridge above it agree about what colour the air is — plus the wood,
+  // because a ray leaving a lake at two degrees does not reach the sky at all.
   const treeline = linear(palette.canopy, 0.72).add(linear(palette.bark, 0.34));
   const horizon = vec3(SKY_RADIANCE.horizon[0], SKY_RADIANCE.horizon[1], SKY_RADIANCE.horizon[2]);
   const zenith = vec3(SKY_RADIANCE.zenith[0], SKY_RADIANCE.zenith[1], SKY_RADIANCE.zenith[2]);
   const sunward = vec3(SKY_RADIANCE.sunward[0], SKY_RADIANCE.sunward[1], SKY_RADIANCE.sunward[2]);
-  // The lower edge is at -0.28, not 0.01, and that is the other half of the same bug. `SLOPE_GAIN`
-  // exaggerates the normal's horizontal by 7.5x — deliberately, because an honest one-degree wave
-  // slope moves the reflection by nothing the eye can find — and the cost is that a large fraction
-  // of fragments reflect *below* horizontal. Snapping all of them to one colour across a band
-  // 0.1 wide turns a smooth ripple field into hard-edged shapes. A ray leaving a wave face
-  // downward really does hit the next wave and then the bank, so the answer is still the treeline;
-  // it just has to arrive as a gradient over the range the normals actually span.
   const skyward = mix(
     mix(treeline, horizon, smoothstep(float(-0.28), float(0.16), bounced.y)),
     zenith,
     smoothstep(float(0.08), float(0.62), bounced.y),
   );
+  const reflected = mix(skyward, sampled, believable);
+
   // The circumsolar haze, which is what makes the sun's half of a lake brighter than the other
   // half even where the disc itself is nowhere in the reflection.
-  const halo = pow(clamp(dot(bounced, sunNode), float(0), float(1)), 6).mul(float(0.55));
-  const reflected = mix(skyward, sunward, halo);
+  const halo = pow(clamp(dot(bounced, sunNode), float(0), float(1)), 6).mul(float(0.4));
+  const surfaceLight = mix(reflected, sunward, halo);
 
-  // A small floor under Schlick rather than Schlick alone. Two per cent is the honest number for a
-  // surface seen straight down, and it is also how water rendered from Schlick alone reads as tar:
-  // the two per cent is of a sky far brighter than anything under the surface. The floor is much
-  // smaller than it used to be, because what it now mixes toward is a gradient with a dark
-  // treeline in it — the old constant grey needed a large floor and paid for it by hiding the bed.
-  const skyWeight = min(float(0.05).add(fresnel.mul(float(0.95))), float(1));
-  const composited = mix(underwater, reflected, skyWeight);
+  const skyWeight = min(float(SKY_FLOOR).add(fresnel.mul(float(1 - SKY_FLOOR))), float(1));
+  const composited = mix(underwater, surfaceLight, skyWeight);
 
   // Sun glint off the same analytic normal. A specular lobe on a non-repeating normal breaks into
-  // separate sparks by itself; the old way — a `sin(worldZ)` band multiplied over a highlight —
-  // is what drew the ladder of horizontal stripes this replaced.
+  // separate sparks by itself, and multiplying by the patch mask puts those sparks where the wind
+  // is and nowhere else — which is what a glitter path on a real lake looks like from the bank.
   const halfway = normalize(view.add(sunNode));
-  const glint = pow(clamp(dot(normal, halfway), float(0), float(1)), 210);
-  material.colorNode = composited.add(linear(SUN_COLOUR, 0.85).mul(glint));
+  const glint = pow(clamp(dot(normal, halfway), float(0), float(1)), 170).mul(
+    mix(float(0.15), float(1), patch),
+  );
+  const above = composited.add(linear(SUN_COLOUR, 0.9).mul(glint));
+
+  // ---- and what the surface is from underneath ----------------------------------------------
+  //
+  // Nothing about the composite above survives being looked at from below: the fresnel is measured
+  // against a ray leaving the water, the refraction reads a bed that is now behind the camera, and
+  // the reflection aims at a bank the ray cannot reach. Drawn anyway — which is what it used to do
+  // — it photographs as black-and-white static filling the top of the frame.
+  //
+  // Seen from below, the surface is two things separated by the critical angle. Look up steeply
+  // and the whole sky refracts into a cone 97° wide: Snell's window, bright, and the only thing
+  // down here that is not dark. Look up shallowly and the surface is a total mirror of the lake
+  // bottom. The ripple moves the boundary about, which is why a real window has a ragged edge, and
+  // that comes out of the same perturbed normal for free.
+  const upward = normalize(positionWorld.sub(cameraPosition));
+  const throughSurface = clamp(dot(upward, normal), float(0), float(1));
+  const window = smoothstep(float(SNELL_INNER), float(SNELL_OUTER), throughSurface);
+  // The sky as it arrives after a metre or two of water: the measured horizon band, drained of
+  // red the way everything under water is.
+  const windowSky = vec3(horizon.x.mul(0.55), horizon.y.mul(0.92), horizon.z).mul(float(1.35));
+  const sunDisc = pow(clamp(dot(upward, sunNode), float(0), float(1)), 90)
+    .mul(window)
+    .mul(float(2.2));
+  // Outside the window the ceiling mirrors the bed, which at this depth is the deep body colour
+  // and the little light that reaches it.
+  const ceiling = linear(palette.water, 0.11).add(linear(palette.moss, 0.06));
+  const below = mix(ceiling, windowSky, window).add(linear(SUN_COLOUR, 0.8).mul(sunDisc));
+
+  // One step, on the camera's own height. It is uniform across the draw, so both sides costing a
+  // multiply is the whole price of not writing two materials.
+  const eyeIsAbove = step(float(WATER_LEVEL + 0.02), cameraPosition.y);
+  material.colorNode = mix(below, above, eyeIsAbove);
 
   // The shoreline, and the end of the hard edge.
   //
@@ -400,11 +651,13 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   // none, so it dissolves into the wet sand across the last third of a metre instead of stopping
   // at whichever triangle ran out. The `max` keeps a grazing view of the very margin from vanishing
   // entirely: even a film of water still catches a sheen at two degrees, and that sheen is what
-  // reads as *wet* ground rather than as no ground at all.
-  material.opacityNode = max(
+  // reads as *wet* ground rather than as no ground at all. From underneath there is no shore to
+  // dissolve into and the ceiling is opaque.
+  const shore = max(
     smoothstep(float(0), float(SHORE_FADE), depthM),
     fresnel.mul(smoothstep(float(0), float(0.06), depthM)),
   );
+  material.opacityNode = mix(float(1), shore, eyeIsAbove);
 
   const mesh = new Mesh(geometry, material);
   mesh.name = "water";
