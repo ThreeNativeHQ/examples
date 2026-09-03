@@ -56,3 +56,22 @@ Ground layer textures, every tree, shrub, plant, rock, cliff and branch mesh in
 `asset_import_unreal` and served locally. **The imported pack binaries are gitignored — the
 licence does not permit redistributing them through this public repository.** Rebuild them with
 `tools/import-landscape-pro.mjs` after downloading the pack from Fab into `.fab-source/`.
+
+## Vegetation packs attempted and not shipped
+
+The valley's whole plant list is one pack, so the forest-density pass went looking on Fab for a
+second. Five owned, on-theme listings were tried and none of them produced a single mesh, so **no
+new asset ships and no new attribution is owed**. Recorded here so nobody spends the afternoon
+finding out again — the errors and the diagnosis are in `FRICTION.md` entry 8.
+
+| Listing | Fab id | Why it did not ship |
+| --- | --- | --- |
+| Temperate Vegetation: Fern Collection | `b778bd8f-524c-42b6-b60c-4caac59029c1` | 37 static meshes at UE4 object version 516; importer covers 517–522 |
+| temperate Vegetation: optimized Grass Library | `8b68642e-35f4-438e-82b4-799fc2228303` | 110 meshes, version 516 |
+| Procedural Nature Pack Vol.1 | `d3a29766-c848-40c5-ad3d-d609b80d224b` | 48 meshes, versions 413/451/498 |
+| Paragon: Agora and Monolith Environment | `6f401fb5-88b5-41b4-bf1b-62321414e1f0` | 516 meshes, versions 434/516 |
+| Common Hazel | `81bc7ba6-4686-4f94-9d2b-83eb1fdc4079` | Downloads and decodes (39 textures, 66 materials); all 30 static meshes fail with "the modern UE5 mesh converter produced no GLB" |
+
+Selecting a later `--engine` does not change the artifact Fab serves — the Fern Collection reports
+version 516 at both `UE_4.27` and `UE_5.4`. The engine compatibility list is metadata about what
+the pack runs in, not a set of separately cooked downloads.
