@@ -85,6 +85,13 @@ const game = defineGame<GameState, IPhysicsContext>({
 	display: config.display,
 	render: config.renderer,
 	renderer: { antialias: true },
+	// PRD-327: this game predates the template loading layer (`src/render/loading.ts`, which sets
+	// the canvas layer opaque and hands the framework its readiness gate), so the default warm-up
+	// has nothing to hang off and 103 pipelines compile synchronously inside the first frame —
+	// 8,300 ms on the Pixel 8. `warmUp: true` is the documented opt-in for exactly this shape: the
+	// same compile moves off the main loop to before start() releases it, behind the game's own
+	// loading HUD.
+	warmUp: true,
 	scenes: { play: Play },
 	seed: 90210,
 	start: "play",
