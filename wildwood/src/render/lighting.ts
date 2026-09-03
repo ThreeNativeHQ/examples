@@ -50,11 +50,11 @@ export function setupForestLighting(scene: Scene, renderer: ShadowRenderer): Dir
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
 
-  setupSky(scene);
   // The sky is an image of a sky, so it is already the right colour and comes from the right
   // directions; what it must not also be is bright enough to fill the shadows the sun casts.
-  // A fifth of the key is the clear-day ratio. See the header.
-  scene.environmentIntensity = 0.35;
+  // How bright it is as a light is `SKY_ENVIRONMENT_INTENSITY`, owned there and not restated
+  // here — a fifth of the key, which is the clear-day ratio this whole rig is balanced on.
+  setupSky(scene);
 
   const key = new DirectionalLight(SUN_COLOUR, 3.4);
   key.name = "sun";

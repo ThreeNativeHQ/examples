@@ -97,6 +97,22 @@ const SCATTER = {
 export const AERIAL_COLOUR = palette.fog;
 
 /**
+ * How bright the sky is *as a light*, as opposed to as a picture.
+ *
+ * The clear-day ratio, and the number the whole rig is balanced on: outdoors under a cloudless
+ * sky the sun delivers roughly six times the irradiance the sky does, and `lighting.ts` spends
+ * its key light on that basis. π · 0.45 · 0.35 against a key of 3.4 is about a fifth, which is
+ * that ratio. Raise it and the shadows fill in and the image goes flat — that is precisely what
+ * the rig before this one did, with a hemisphere light and an ambient on top of an environment
+ * map, each defensible alone.
+ *
+ * It lives here, and `lighting.ts` does not touch it, because two files writing one property is
+ * how the value that is actually in effect stops being the value anyone reads.
+ * `sky-hdri.ts` matches its own intensity to this one so the handover is not a change in weather.
+ */
+export const SKY_ENVIRONMENT_INTENSITY = 0.35;
+
+/**
  * Haze density. `FogExp2` attenuates by `1 - exp(-(density·distance)²)`, so this puts the far
  * ridge at 120 m about 55% into the haze while the ground at the player's feet is under a tenth
  * of a percent — depth cueing that separates the wood without touching the thing being looked at.
@@ -204,7 +220,7 @@ export function setupSky(scene: Scene): DataTexture {
   const texture = createSkyTexture();
   scene.background = texture;
   scene.environment = texture;
-  scene.environmentIntensity = 1;
+  scene.environmentIntensity = SKY_ENVIRONMENT_INTENSITY;
   scene.backgroundIntensity = 1;
   // Explicitly square, not left alone. This texture is generated already facing the right way,
   // so any rotation at all is wrong for it — and a rotation is exactly the kind of state that
@@ -216,6 +232,7 @@ export function setupSky(scene: Scene): DataTexture {
     `TN_SKY_ANALYTIC:${JSON.stringify({
       aerialColour: `#${AERIAL_COLOUR.toString(16)}`,
       aerialDensity: AERIAL_DENSITY,
+      environmentIntensity: SKY_ENVIRONMENT_INTENSITY,
       resolution: [SKY_WIDTH, SKY_HEIGHT],
     })}`,
   );
