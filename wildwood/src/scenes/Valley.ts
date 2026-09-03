@@ -1329,7 +1329,12 @@ function round(value: number): number {
  * the wood was sparse and became the largest bare patch in the game once it was not: five 18 m
  * discs of bare terrain texture reading as mown lawn.
  *
- * Layer names come from `foliage.ts`, which names every mesh `<layer>-<species>-<section>`.
+ * Layer names come from `foliage.ts`, which names every mesh `<layer>-<species>-<section>`, and
+ * the test is the layer's authored height rather than a guess about what "undergrowth" means:
+ * `fern` is 0.62 m, `grass` 0.55 m and `litter` is flat on the ground, so none of them can stand
+ * between the player and a landmark. `margin` (1.35 m) and `sapling` (1.6 m) can — they are at and
+ * above the walker's eye line — so they are mowed with the trunks. Both were in this list on the
+ * first pass, on a report that saplings were knee height; the layer table says otherwise.
  *
  * `InstancedMesh` has no way to remove one instance, and rebuilding the buffer to drop a few dozen
  * of eleven thousand is not worth the code. Scaling to zero would work but leaves a degenerate
@@ -1337,7 +1342,7 @@ function round(value: number): number {
  * terrain, out of the frustum the player is ever in, and costs one matrix write each at build
  * time.
  */
-const WALKED_OVER = /^(grass|litter|margin|fern|sapling)-/;
+const WALKED_OVER = /^(grass|litter|fern)-/;
 
 function hideFoliageNearLandmarks(meshes: readonly InstancedMesh[]): void {
   const matrix = new Matrix4();
