@@ -348,6 +348,10 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
         console.info(
           `TN_VALLEY_REVEAL generation=${String(id)} trees=${String(seen.treeCount)} ferns=${String(seen.fernCount)}`,
         );
+        // The signal a capture harness actually wants. `__TN_STARTUP_READY__` is the framework's
+        // and it now flips several seconds before the curtain lifts, so anything waiting on it
+        // screenshots the loading screen and reads the result as a broken scene.
+        (globalThis as { __TN_WORLD_REVEALED__?: boolean }).__TN_WORLD_REVEALED__ = true;
       },
     });
     console.info(`TN_VALLEY_CRITICAL_START generation=${String(id)}`);

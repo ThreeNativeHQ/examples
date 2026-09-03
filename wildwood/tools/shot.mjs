@@ -42,17 +42,25 @@ page.on("console", (m) => {
 // the one signal that means "the world is on screen": game.ts sets `__TN_STARTUP_READY__` when
 // readiness resolves, and the native screenshot path waits on the same flag. Wait for it.
 const waitReady = async () => {
-  const ready = await page
-    .waitForFunction(() => globalThis.__TN_STARTUP_READY__ === true, undefined, {
-      timeout: 120_000,
+  // `__TN_STARTUP_READY__` is the FRAMEWORK's flag and it is no longer the right one to wait on.
+  // The loading curtain now holds past it until the detail tier has landed, so a harness gated on
+  // the framework flag screenshots the loading screen — a title card at 86% that reads exactly
+  // like a scene that failed to build. `__TN_WORLD_REVEALED__` is the game's own flag, set in the
+  // one callback that fires as the curtain lifts, and it is what "the world is on screen" means
+  // here now.
+  const revealed = await page
+    .waitForFunction(() => globalThis.__TN_WORLD_REVEALED__ === true, undefined, {
+      timeout: 180_000,
       polling: 500,
     })
     .then(
       () => true,
       () => false,
     );
-  if (!ready) console.log("WARN __TN_STARTUP_READY__ never flipped; shooting the loading layer");
-  // First frames after readiness still land pipelines the timed-out warm-up skipped.
+  if (!revealed) {
+    console.log("WARN __TN_WORLD_REVEALED__ never flipped; the curtain is probably still up");
+  }
+  // First frames after the reveal still land pipelines the timed-out warm-up skipped.
   await page.waitForTimeout(3000);
 };
 
