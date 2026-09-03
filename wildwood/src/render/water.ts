@@ -106,7 +106,7 @@ import { WATER_LEVEL, heightAt } from "./terrain.js";
  * see four metres into reads as a swimming pool. At the 0.7 m margin the bed still shows; by
  * three metres it is gone.
  */
-const EXTINCTION: readonly [number, number, number] = [0.74, 0.42, 0.3];
+const EXTINCTION: readonly [number, number, number] = [0.86, 0.5, 0.36];
 
 /** How deep the water has to be before the bed stops contributing, in metres. */
 const OPAQUE_DEPTH = 2.6;
@@ -124,11 +124,28 @@ const MAX_BAKED_DEPTH = 9;
  * their average, so the *visible* slope really does fall off with distance. Near water gets chop
  * you can see; water past seventy metres is a mirror.
  */
-const SLOPE_GAIN_NEAR = 2.6;
-const SLOPE_GAIN_FAR = 0.75;
+const SLOPE_GAIN_NEAR = 1.5;
+const SLOPE_GAIN_FAR = 0.45;
 /** Metres over which the gain above falls from near to far. */
 const SLOPE_FADE_NEAR = 10;
 const SLOPE_FADE_FAR = 72;
+
+/**
+ * How much of that slope the *reflection* is allowed to see, as a fraction of what the glint sees.
+ *
+ * These are two different readings of the same surface and they want different amounts of it. A
+ * glint is a peak-finder: it wants every steep facet, because one facet catching the sun is the
+ * whole spark. A reflection is an average over the pixel's footprint, and feeding it the same
+ * unfiltered slope shreds the treeline into crumpled foil — a texture that reads as an oil slick
+ * rather than as a mirror. Halving the slope halves how far each sample slides, which turns the
+ * crumple back into the long slow wobble a still lake actually has, while the sparks keep their
+ * bite.
+ *
+ * The honest version of this is a second evaluation of the wave field with the short waves
+ * dropped, which is a low-pass filter rather than a scale. This is the cheap version — same
+ * frequencies, less amplitude — and it costs nothing at all.
+ */
+const REFLECT_SLOPE_SHARE = 0.55;
 
 /** Where the detail waves start and finish fading, in metres from the camera. */
 const DETAIL_NEAR = 16;
@@ -157,10 +174,10 @@ const PATCH_WIND: readonly [number, number] = [0.62, -0.78];
  * photograph's reflection looks stretched downward rather than fogged. The blur grows with
  * distance for the same reason the slope gain shrinks: more ripples per pixel.
  */
-const REFLECT_BLUR_NEAR = 0.0016;
-const REFLECT_BLUR_FAR = 0.0075;
+const REFLECT_BLUR_NEAR = 0.003;
+const REFLECT_BLUR_FAR = 0.015;
 /** How much narrower the smear is across the screen than down it. */
-const REFLECT_BLUR_ASPECT = 0.35;
+const REFLECT_BLUR_ASPECT = 0.5;
 
 /**
  * How far outside the waterline the bank the water reflects actually stands, in metres.
@@ -255,9 +272,25 @@ export interface IWater {
  * The palette is authored in sRGB, which is what a person picks colours in; every number this
  * shader multiplies and exponentiates has to be linear or the absorption curve is being applied
  * to a gamma-encoded quantity and the shallows come out chalky.
+ *
+ * **`new Color(hex)` has already done that conversion.** three enables `ColorManagement` by
+ * default, and `Color.setHex` takes its argument as sRGB and stores linear-sRGB: `new
+ * Color(0x2b4a4a).r` is 0.0242, not 0.169. The version this replaces called
+ * `.convertSRGBToLinear()` on top of that, which converted a second time and took every
+ * palette-derived colour in this file down by a factor between three and thirteen — worse on the
+ * darker channels, so the colours came out desaturated and hue-shifted as well as dim. It is
+ * invisible in review and it does not look like a bug in a frame; it looks like a shader whose
+ * constants want turning up, and it got them turned up. What made it visible was arithmetic that
+ * did not match a capture: an underwater ceiling computed at 0.062 linear luminance photographed
+ * at 4/255, and running the ACES curve backwards from that measurement put the real value at
+ * 0.010, which is exactly one extra conversion.
+ *
+ * Everything downstream has been re-picked against the corrected values. `SKY_RADIANCE` was never
+ * affected — those are measured numbers, already linear, and the file had two colour systems in it
+ * disagreeing by an order of magnitude.
  */
 function linear(hex: number, gain = 1) {
-  const colour = new Color(hex).convertSRGBToLinear();
+  const colour = new Color(hex);
   return vec3(colour.r * gain, colour.g * gain, colour.b * gain);
 }
 
@@ -375,7 +408,18 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   // sky and the bed. Handing the same fragment to a lit material as well would light water
   // that is already carrying the light it reflected.
   const material = new MeshBasicNodeMaterial({
-    depthWrite: false,
+    // Writing depth, which for a transparent surface wants a reason.
+    //
+    // Faint dotted horizontal rules cross the mid-water in every capture, and a three-strip probe
+    // ruled out the refraction sample: they are there on a strip painted a flat constant colour
+    // with no frame read in it at all, along with a diagonal dither weave. What varies across a
+    // constant colour is not the material — it is the passes that run after it, and with
+    // `depthWrite: false` the depth and normal buffers under every water pixel hold the *lake bed*
+    // at a grazing angle, where its triangle rows are a few pixels apart and its depth derivative
+    // is enormous. Ambient occlusion and screen-space reflection both read those buffers. Writing
+    // depth puts the smooth water plane there instead, which is also the more honest thing for a
+    // surface you cannot see through.
+    depthWrite: true,
     // Both sides: the lake is eight metres deep and the walker wades in, so the camera goes under
     // this surface and has to find something drawn there. See the Snell's window branch below.
     side: DoubleSide,
@@ -429,6 +473,10 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
     // a beach in a gale rather than as a pond in a wood.
     .mul(smoothstep(float(0), float(RIPPLE_DEPTH), depthM));
   const normal = normalize(vec3(raw.x.mul(slopeGain), raw.y, raw.z.mul(slopeGain)));
+  // The same surface read with less of its slope, for the reflection alone. See
+  // `REFLECT_SLOPE_SHARE`; the glint, the caustics and the refraction offset keep the sharp one.
+  const reflectGain = slopeGain.mul(float(REFLECT_SLOPE_SHARE));
+  const reflectNormal = normalize(vec3(raw.x.mul(reflectGain), raw.y, raw.z.mul(reflectGain)));
 
   // Vertices ride the four long waves only. The short ones are shorter than the grid this mesh is
   // built on, so displacing by them would alias into a stair pattern the normal above already
@@ -474,14 +522,20 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   const sunNode = vec3(SUN.x, SUN.y, SUN.z);
   const focus = pow(clamp(dot(normal, sunNode), float(0), float(1)), 34);
   const caustic = focus
-    .mul(float(2.6))
+    .mul(float(1.7))
     .mul(float(1).sub(smoothstep(float(0.15), float(1.9), depthM)));
 
   // What the water body itself scatters back: silt and tannin at the margin, `palette.water` in
   // the middle. This is the depth-graded colour — the thing that makes a shallow edge read as
   // shallow rather than as the same sheet with less alpha on it.
-  const shallowBody = linear(palette.silt, 0.42).mul(vec3(1.06, 1, 0.78));
-  const deepBody = linear(palette.water, 0.26);
+  // Gains are small because these are radiances, not albedos: this is the light the water body
+  // itself sends back, and it is a fraction of what the bank returns. 0.15 of the silt puts the
+  // margin at about 0.020 linear luminance and 0.20 of `palette.water` puts the middle at 0.012 —
+  // dark, and the tint you see through the last metre of clear water rather than a paint layer.
+  // Under the doubled conversion above these two summed to 0.0013 and 0.0073, which is to say the
+  // water had no colour of its own at all and the shallows were bare sand seen through a pane.
+  const shallowBody = linear(palette.silt, 0.15).mul(vec3(1.06, 1, 0.74));
+  const deepBody = linear(palette.water, 0.2);
   const body = mix(shallowBody, deepBody, smoothstep(float(0.1), float(2.4), depthM));
 
   const submerged = bed
@@ -496,8 +550,8 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   const towardSun = clamp(dot(view.negate(), sunNode), float(0), float(1));
   const glow = pow(towardSun, 2.5)
     .mul(float(1).sub(smoothstep(float(0.2), float(1.8), depthM)))
-    .mul(float(0.42));
-  const underwater = submerged.add(linear(palette.moss, 0.9).mul(vec3(1.3, 1.15, 0.6)).mul(glow));
+    .mul(float(0.26));
+  const underwater = submerged.add(linear(palette.moss, 0.35).mul(vec3(1.3, 1.15, 0.6)).mul(glow));
 
   // ---- what sits on the surface: the far bank, actually reflected ---------------------------
   //
@@ -511,8 +565,14 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   // This is one step of a screen-space reflection with the march replaced by a closed form, and it
   // is exact for anything standing on the rim. It is wrong for anything between here and there, in
   // the usual screen-space way. On open water there is nothing between here and there.
-  const bounced = reflect(view.negate(), normal);
-  const flat = vec2(bounced.x, bounced.z);
+  const bounced = reflect(view.negate(), reflectNormal);
+  // Aimed at the bank even where a wave face tips the ray below horizontal. A ray leaving a crest
+  // downward does not escape the lake: it strikes the next wave a metre away and leaves again at
+  // very nearly the horizontal, so the thing it eventually shows is still the bank. Letting those
+  // fragments fall through to the analytic fallback instead put dark blue-grey blotches all over
+  // the near water — the same defect as the old black amoebae, arriving by a different route.
+  const aimed = normalize(vec3(bounced.x, max(bounced.y, float(0.006)), bounced.z));
+  const flat = vec2(aimed.x, aimed.z);
   const flatLength = max(flat.length(), float(0.02));
   const fromCentre = here.sub(vec2(centre.x, centre.y));
   const along = dot(fromCentre, flat.div(flatLength));
@@ -525,7 +585,7 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   );
   const toRim = max(sqrt(discriminant).sub(along), float(0));
   const travel = min(toRim.div(flatLength), float(400));
-  const hit = positionWorld.add(bounced.mul(travel));
+  const hit = positionWorld.add(aimed.mul(travel));
 
   // Project the point the ray reached into this frame. `w` is the view-space distance in front of
   // the camera, and it is also the whole "is this point behind me" test.
@@ -547,16 +607,20 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   //
   //   - off the top or the side of the frame: the bank's reflection is simply not on screen
   //   - behind the camera: `w` at or below zero, and the projection is meaningless
-  //   - aimed downward: a ray leaving a wave face below horizontal never reaches the bank
   //   - crossing the ring within a couple of metres: the fragment is out on the dry fringe and
   //     the "reflection" would be the ground it is lying on
-  const inFrame = smoothstep(float(0), float(0.05), hitUv.x)
-    .mul(smoothstep(float(1), float(0.95), hitUv.x))
+  //
+  // The horizontal fade is narrow and the vertical one is not, and the asymmetry is the point.
+  // Off the side of the frame is more of the same bank, so the clamped edge sample is very nearly
+  // right and a wide fade to the analytic fallback just draws a grey stripe down the edge of the
+  // lake — which it did, sixty pixels wide. Off the top is sky and off the bottom is the near
+  // water itself, and neither is anything like the bank.
+  const inFrame = smoothstep(float(0), float(0.012), hitUv.x)
+    .mul(smoothstep(float(1), float(0.988), hitUv.x))
     .mul(smoothstep(float(0), float(0.04), hitUv.y))
-    .mul(smoothstep(float(1), float(0.96), hitUv.y));
+    .mul(smoothstep(float(1), float(0.9), hitUv.y));
   const believable = inFrame
     .mul(step(float(0.001), hitClip.w))
-    .mul(smoothstep(float(-0.01), float(0.045), bounced.y))
     .mul(smoothstep(float(1.5), float(5), toRim));
 
   // Sampled with a vertical smear, because that is the shape a rippled reflection has. Five taps
@@ -586,7 +650,11 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   // of `light/sun.ts` — the same radiances the analytic sky and the aerial perspective are built
   // from, so the water and the ridge above it agree about what colour the air is — plus the wood,
   // because a ray leaving a lake at two degrees does not reach the sky at all.
-  const treeline = linear(palette.canopy, 0.72).add(linear(palette.bark, 0.34));
+  // Summing to about 0.069 linear luminance, which is what the sunlit conifers across this lake
+  // actually measure (`tools/luminance.mjs --crop 0,0.28,1,0.45` reads 0.065 from the south shore
+  // and 0.090 from the north-east). A fallback darker than the thing it stands in for is how the
+  // first version of this surface grew hard black blotches.
+  const treeline = linear(palette.canopy, 0.45).add(linear(palette.bark, 0.3));
   const horizon = vec3(SKY_RADIANCE.horizon[0], SKY_RADIANCE.horizon[1], SKY_RADIANCE.horizon[2]);
   const zenith = vec3(SKY_RADIANCE.zenith[0], SKY_RADIANCE.zenith[1], SKY_RADIANCE.zenith[2]);
   const sunward = vec3(SKY_RADIANCE.sunward[0], SKY_RADIANCE.sunward[1], SKY_RADIANCE.sunward[2]);
@@ -612,7 +680,7 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   const glint = pow(clamp(dot(normal, halfway), float(0), float(1)), 170).mul(
     mix(float(0.15), float(1), patch),
   );
-  const above = composited.add(linear(SUN_COLOUR, 0.9).mul(glint));
+  const above = composited.add(linear(SUN_COLOUR, 0.75).mul(glint));
 
   // ---- and what the surface is from underneath ----------------------------------------------
   //
@@ -635,10 +703,21 @@ export function createWater(centre: Vector2, radius: number, samples = 128): IWa
   const sunDisc = pow(clamp(dot(upward, sunNode), float(0), float(1)), 90)
     .mul(window)
     .mul(float(2.2));
-  // Outside the window the ceiling mirrors the bed, which at this depth is the deep body colour
-  // and the little light that reaches it.
-  const ceiling = linear(palette.water, 0.11).add(linear(palette.moss, 0.06));
-  const below = mix(ceiling, windowSky, window).add(linear(SUN_COLOUR, 0.8).mul(sunDisc));
+  // Outside the window the surface is a total mirror, and what it mirrors is the bed — pale silt
+  // in this basin, not blackness. Rendered dark (0.11 of `palette.water`, luminance 0.01) the
+  // ceiling photographed as a flat black slab across the top of every wading frame, which reads as
+  // a hole in the world rather than as water overhead. This is the bed's own colours taken down by
+  // the metres of water the mirrored ray crosses twice.
+  //
+  // It is a constant and not a second projected sample. Reflecting the bed properly means running
+  // the whole ray-to-screen machinery again pointing downward, for a view the player is in for a
+  // few seconds at a time; a dim warm teal is the honest cheap answer and this comment is the
+  // record that it is one.
+  const ceiling = linear(palette.water, 0.35).add(linear(palette.silt, 0.22));
+  // The dapple: brighter where the underside of a wave happens to face the sun, which is the
+  // moving net of light every photograph taken from under a lake has in it.
+  const dapple = mix(float(0.68), float(1.5), pow(clamp(dot(normal, sunNode), float(0), float(1)), 16));
+  const below = mix(ceiling.mul(dapple), windowSky, window).add(linear(SUN_COLOUR, 0.65).mul(sunDisc));
 
   // One step, on the camera's own height. It is uniform across the draw, so both sides costing a
   // multiply is the whole price of not writing two materials.
