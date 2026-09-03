@@ -96,12 +96,19 @@ const high: IWorldEnvironmentOptions = {
   // renderer rather than a whole-frame brightener: the pass returns something for nearly every
   // pixel, that something is tiny in linear space and enormous after the tone curve, and
   // subtracting a floor discards the ambient lift while leaving the beams. `maxDensity` is the
-  // single strongest control over how bright the *entire* frame is, for the same reason — it is
-  // deliberately low here and the intensity above the floor does the visible work.
-  godraysDensity: 0.65,
-  godraysFloor: 0.035,
-  godraysIntensity: 2.4,
-  godraysMaxDensity: 0.6,
+  // single strongest control over how bright the *entire* frame is, for the same reason.
+  //
+  // **Raise the floor, not the ceiling — this was learned the expensive way.** Trying to make
+  // faint shafts visible by lifting `maxDensity` 0.3 -> 0.6 did make them visible looking into
+  // the canopy toward the sun, and simultaneously turned the open pond view into a white-out:
+  // every pixel got the lift, and a view with a whole sky in it and no occlusion to break the
+  // beam is where that shows. The shape that works is a *high* floor with a high intensity above
+  // it: the ambient term is discarded before it is multiplied, so the beams get brighter and the
+  // frame does not.
+  godraysDensity: 0.6,
+  godraysFloor: 0.09,
+  godraysIntensity: 2.8,
+  godraysMaxDensity: 0.35,
   // Every step is a shadow-map sample, so this multiplies straight into the cost of the pass.
   // `GodraysNode` defaults to 60; the jittered sampling means fewer trades a slightly noisier
   // shaft edge for proportionally less work, and the denoiser downstream absorbs most of that.
@@ -180,12 +187,19 @@ const medium: IWorldEnvironmentOptions = {
   // renderer rather than a whole-frame brightener: the pass returns something for nearly every
   // pixel, that something is tiny in linear space and enormous after the tone curve, and
   // subtracting a floor discards the ambient lift while leaving the beams. `maxDensity` is the
-  // single strongest control over how bright the *entire* frame is, for the same reason — it is
-  // deliberately low here and the intensity above the floor does the visible work.
-  godraysDensity: 0.65,
-  godraysFloor: 0.035,
-  godraysIntensity: 2.4,
-  godraysMaxDensity: 0.6,
+  // single strongest control over how bright the *entire* frame is, for the same reason.
+  //
+  // **Raise the floor, not the ceiling — this was learned the expensive way.** Trying to make
+  // faint shafts visible by lifting `maxDensity` 0.3 -> 0.6 did make them visible looking into
+  // the canopy toward the sun, and simultaneously turned the open pond view into a white-out:
+  // every pixel got the lift, and a view with a whole sky in it and no occlusion to break the
+  // beam is where that shows. The shape that works is a *high* floor with a high intensity above
+  // it: the ambient term is discarded before it is multiplied, so the beams get brighter and the
+  // frame does not.
+  godraysDensity: 0.6,
+  godraysFloor: 0.09,
+  godraysIntensity: 2.8,
+  godraysMaxDensity: 0.35,
   // Every step is a shadow-map sample, so this multiplies straight into the cost of the pass.
   // `GodraysNode` defaults to 60; the jittered sampling means fewer trades a slightly noisier
   // shaft edge for proportionally less work, and the denoiser downstream absorbs most of that.
