@@ -1,0 +1,52 @@
+--- a/src/scenes/Valley.ts
++++ b/src/scenes/Valley.ts
+@@ -24,6 +24,7 @@
+   Vector2,
+   Vector3,
+ } from "three";
++import { Soundscape } from "../audio/Soundscape.js";
+ import { Wanderer, capturePointerOnClick } from "../entities/Wanderer.js";
+ import {
+   type IFoliageSets,
+@@ -592,6 +593,16 @@
+     // grabs the mouse for a scene that never asked for it.
+     this.#releasePointer = capturePointerOnClick();
+ 
++    // The wood, its water and the walker's own feet, on two buses of their own. Construction is
++    // synchronous and loading is not: the valley must appear when it is drawn, not when its
++    // ambience has finished downloading, so every path inside is a no-op until its buffer lands.
++    // Registered as an entity, so the same teardown that disposes the walker disposes the
++    // listener and every voice hanging off it.
++    const soundscape = ctx.entities.add(
++      "soundscape",
++      new Soundscape({ camera: ctx.camera, terrain: terrain.mesh }),
++    );
++
+     ctx.state.set({
+       boulderCount: 0,
+       fernCount: 0,
+@@ -637,6 +648,14 @@
+       }
+ 
+       walker.update(frameCtx, dt, frameCtx.camera as PerspectiveCamera);
++      // After the walk, because the footstep cadence is driven off the odometer and the water
++      // emitter rides the shore nearest wherever the walker now is.
++      soundscape.update(frameCtx, {
++        groundGap: walker.groundGap,
++        odometer: walker.odometer,
++        position: walker.object.position,
++        wading: walker.wading,
++      });
+       // The wood is inhabited: every animal runs its state machine each frame with the walker as
+       // the threat that flips grazing into fleeing.
+       (generation.detailAnimals ?? generation.criticalAnimals)?.update(
+@@ -672,6 +691,9 @@
+         });
+         frameCtx.state.flush();
+         console.info(`TN_LANDMARK_FOUND:${reachable.id}`);
++        // Ducks the wood under itself for a second and a half, then brings it back. This is the
++        // only moment in the game a player is waiting to hear.
++        soundscape.discovered(frameCtx);
+       }
+ 
+       const nearest = nearestUnfound(x, z, found);
