@@ -11,3 +11,5 @@ public/bake.receipt.json
 # see CREDITS.md and tools/import-landscape-pro.mjs.
 assets/fab/
 public/fab/
+# Spectrograms the audio gate writes on every run; the manifest is the durable artefact.
+artifacts/audio/

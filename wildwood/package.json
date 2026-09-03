@@ -13,8 +13,9 @@
     "build:ios": "threenative build --target ios",
     "test:native": "pnpm build:desktop && node node_modules/@threenative/runtime-native/scripts/verify-starter-desktop.mjs",
     "pretest": "playwright install chromium",
-    "test": "vite build && node tools/run-playtests.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "test": "pnpm test:audio && vite build && node tools/run-playtests.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:audio": "threenative-playtest audio --dir public/audio --expect audio.expect.json --text"
   },
   "dependencies": {
     "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.0-16f9e09c85f7.tgz",
@@ -28,7 +29,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
     "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz",
-    "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-main-da4bfbcf34e4.tgz",
+    "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-acf14db76bba.tgz",
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
     "@types/three": "0.185.3",
@@ -57,7 +58,7 @@
       "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.0-16f9e09c85f7.tgz",
       "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.0-prd315-3ae23b50fee7.tgz",
       "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.3.0-7e419324f826.tgz",
-      "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-main-da4bfbcf34e4.tgz",
+      "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.0-acf14db76bba.tgz",
       "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-runtime-native-0.3.0-edd1bc2aa63b.tgz",
       "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz",
       "threenative-engine-mcp": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-engine-mcp-0.2.0-fa2d3f69fd14.tgz",
