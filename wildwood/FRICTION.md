@@ -237,3 +237,50 @@ Two reasons it was then dropped rather than pursued:
 Recorded so the next session reads the ablation instead of repeating the inference. Measured with
 `tools/trace.mjs` on the private virtual display: a CPU-share A/B is valid there, an fps number is
 not.
+
+## 10. My audio inspector reported a defect that was itself — the correction
+
+Entry 9's neighbour in this session's record was a claim I made and then had to withdraw, so it is
+written here rather than left in a commit message where nobody re-reads it.
+
+I reported that `forest-birds.ogg` clicked at its loop point — seam step **0.1098**, against
+`forest-bed.ogg` at 0.0346 and `lake-shore.ogg` at 0.0025 — and used it as evidence that the
+hand-rolled conditioning script had silently failed on one clip. I briefed a second agent to build
+a throwing seam assertion in the asset pipeline on the strength of it.
+
+**The click was not real.** It was my own instrument. `tools/audio-look.py` decodes at 22,050 Hz,
+and a resampler is an FIR filter whose window runs off the end of the data and is zero-padded — so
+the first and last output samples are the only wrong ones in the file, and a seam test reads
+exactly those two. Measured at the file's native 44.1 kHz, and against the step distribution
+either side of the join rather than absolutely:
+
+```
+clip               bare wrap   99th-pct step within 50 ms of the join   ratio
+forest-bed.ogg      0.016142                 0.041870                   0.39x
+forest-birds.ogg    0.066752                 0.298793                   0.22x
+lake-shore.ogg      0.000648                 0.005415                   0.12x
+```
+
+`forest-birds` has the *second best* join in the set. The cross-fade had taken — the pre-encode PCM
+and the decoded Ogg agree to a rounding.
+
+Two things worth keeping from being wrong:
+
+1. **Absolute seam steps are not comparable between clips**, and a gate built on one fires on good
+   audio. The measure has to be the wrap step against its own neighbourhood, and the limit has to
+   be above 1.0, because a perfectly continuous loop measures exactly 1.0 against itself and a 1.0
+   limit fails it on float error.
+2. **Never resample before measuring.** The instrument has to read the file at the rate the file is
+   in. This is the second time today a measurement lane produced a confident wrong answer from a
+   convenience in the harness rather than a fault in the thing measured — the first was reading an
+   fps off a virtual display, where the present wait lands in the engine's `update` phase and
+   reads as game CPU.
+
+The hand pass *did* have a real gap, and naming it precisely matters more than the click I
+invented: **it measured nothing about content.** It never noticed the discovery chime was 83% in
+100-500 Hz where a bell should be bright, and never noticed fifteen footsteps carried up to 45.2%
+of their energy below 100 Hz. A seam check alone would have caught neither. That is what
+`audio.expect.json` and the pipeline pass exist to make impossible between them.
+
+`tools/audio-look.py` is superseded by `threenative-playtest audio`, which enforces both rules
+above. It stays only until nothing references it.
