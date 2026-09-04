@@ -37,7 +37,7 @@ const PORT = Number(opt("port", "5279"));
 const READY_TIMEOUT_MS = Number(opt("timeout", "60000"));
 const VALIDATE = opt("validate", "");
 const PROFILE = opt("profile", "phase0");
-const SERVER = opt("server", "dev");
+const SERVER = opt("server", "preview");
 const DETAIL_TIMEOUT_MS = Number(opt("detail-timeout", "8000"));
 const EXPECT_DETAIL_REJECTION = opt("expect-detail-rejection", "");
 const EXPECT_VENDOR = opt("adapter-vendor", "");
@@ -209,9 +209,21 @@ function validateRun(run) {
 		);
 	}
 	if (run.detailDurationMs > DETAIL_TIMEOUT_MS) {
-		throw new Error(
-			`TN_STARTUP_DETAIL_TIMEOUT: ${String(run.detailDurationMs)} ms exceeds ${String(DETAIL_TIMEOUT_MS)} ms`,
-		);
+		// Fatal against the built bundle, reported against a dev server. `vite dev` hands every
+		// GLB, OGG and HDR to the game one unbundled request at a time through a single
+		// middleware chain, so it queues thirty-five large binaries where the built bundle
+		// streams them: the same content measures 6.9 s on preview and past 25 s on dev. A
+		// budget enforced there is measuring vite, and the number it prints names nothing a
+		// game author can fix.
+		if (SERVER === "dev") {
+			process.stderr.write(
+				`TN_STARTUP_DETAIL_ADVISORY: ${String(run.detailDurationMs)} ms exceeds ${String(DETAIL_TIMEOUT_MS)} ms, not enforced because --server dev serves assets one request at a time; re-run with --server preview to enforce it\n`,
+			);
+		} else {
+			throw new Error(
+				`TN_STARTUP_DETAIL_TIMEOUT: ${String(run.detailDurationMs)} ms exceeds ${String(DETAIL_TIMEOUT_MS)} ms`,
+			);
+		}
 	}
 	if (
 		EXPECT_VENDOR !== "" &&

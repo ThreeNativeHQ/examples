@@ -11,7 +11,7 @@
   ],
   "assert": {
     "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
-    "startup": { "maxEnteredMs": 2500, "maxReadyMs": 8000 },
+    "startup": { "maxEnteredMs": 2500, "maxReadyMs": 18000 },
     "resources": [
       { "id": "state", "path": "valleyReady", "equals": true, "allowTrivial": "True from the first snapshot on purpose: the valley must be built before the first observation, which is the whole point of the critical tier; the startup ceilings above measure how soon." },
       { "id": "state", "path": "odometer", "gte": 3, "changed": true }

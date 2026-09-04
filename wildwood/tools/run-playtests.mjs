@@ -13,6 +13,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 const PORT = 5274;
 const BASE = `http://127.0.0.1:${String(PORT)}/`;
+// The debug pages (`dev-animals.html`, `dev-sky.html`) are not build inputs, so `dist` holds only
+// `index.html` and the preview server above cannot serve them — which is right: a player's
+// download should not carry a debug entry point. They get a dev server of their own, on its own
+// port, and pay its slower per-file serving happily: what they measure is placement and facing,
+// not how fast anything loaded.
+const DEV_PORT = 5275;
+const DEV_BASE = `http://127.0.0.1:${String(DEV_PORT)}/`;
 const STARTUP_ARTIFACT = "artifacts/startup/phase0-lowtier.json";
 const ANIMALS_ARTIFACT = "artifacts/animals/browser-observation.json";
 const ANIMALS_SCREENSHOT = "artifacts/animals/browser-observation.png";
@@ -132,7 +139,7 @@ function validateAnimalObservation(observation) {
 
 async function captureAnimals() {
   const { chromium } = await import("playwright");
-  const url = option("url", `${BASE}dev-animals.html`);
+  const url = option("url", `${DEV_BASE}dev-animals.html`);
   const timeout = Number(option("observation-timeout", "90000"));
   if (!Number.isFinite(timeout) || timeout < 1)
     throw new Error("--observation-timeout must be positive");
@@ -276,17 +283,26 @@ let failures =
       "?lowtier",
       "--timeout",
       "90000",
+      // Explicit, though it is also the default: this gate measures the artifact a player
+      // downloads. See the advisory branch in measure-startup.mjs for why a dev server cannot
+      // carry the detail budget.
+      "--server",
+      "preview",
     ],
     "cold-start",
   )) === 0
     ? 0
     : 1;
 
+// Preview, not dev, for the same reason the startup gate uses it: `vite dev` serves each of the
+// wood's GLB, OGG and HDR files as its own unbundled request, and the four scenarios below were
+// timing out in `page.goto` waiting for a module graph and an asset queue that the built bundle
+// delivers in a fraction of the time. `pnpm test` builds immediately before this runs.
 start(
   "npx",
   [
     "vite",
-    "dev",
+    "preview",
     "--host",
     "127.0.0.1",
     "--port",
@@ -302,6 +318,21 @@ for (const { name, url } of SCENARIOS) {
   failures += (await playtest(name, url)) === 0 ? 0 : 1;
 }
 
+start(
+  "npx",
+  [
+    "vite",
+    "dev",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(DEV_PORT),
+    "--strictPort",
+  ],
+  "vite-dev",
+);
+await sleep(5_000);
+
 process.stderr.write(`\n== proof: browser animals (${ANIMALS_ARTIFACT}) ==\n`);
 failures +=
   (await run(
@@ -311,7 +342,7 @@ failures +=
       "tools/run-playtests.mjs",
       "--capture-animals",
       "--url",
-      `${BASE}dev-animals.html`,
+      `${DEV_BASE}dev-animals.html`,
     ],
     "browser-animals",
   )) === 0

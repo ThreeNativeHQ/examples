@@ -965,13 +965,30 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       // Install the environment before the first sliced attachment. Adding it last invalidates
       // every newly compiled lit material at once and turns detail completion into a long frame.
       generation.hdri = installStagedHdri(ctx.scene, hdriStage);
-      // Slices of ATTACH_PER_FRAME, not one object per frame. The slicing exists so the renderer
-      // compiles a few newly visible families per presented frame instead of all of them in one
-      // multi-second first-detail frame — that part still holds. What changed is who is watching:
-      // the loading curtain is up for the whole of this loop now, so the only thing a slice has to
-      // stay smooth for is the progress bar, not a player mid-stride. One-per-frame cost 6.5 s of
-      // the 16.5 s load with nothing on screen to spend it on.
-      const ATTACH_PER_FRAME = 6;
+      // Slices of ATTACH_PER_FRAME, and the number is now large because the reason it was small
+      // has been taken over by something better.
+      //
+      // It began at one object per frame, so the renderer would compile a few newly visible
+      // families per presented frame instead of all of them in one multi-second frame. That was
+      // right when nothing else compiled the world. It is not right now: the framework warms the
+      // whole held scene immediately after this loop (`TN_STARTUP_WARMUP_HELD`, 176 pipelines),
+      // so the compile happens either way and slicing only decides whether it is paid here, one
+      // yield at a time, or there, in one bounded pass.
+      //
+      // Measured, detail-tier duration against an 8 s budget, same build and same content:
+      //
+      //     1 per frame     16.5 s total   (the original)
+      //     6 per frame     11.26 s
+      //    24 per frame      9.39 s
+      //   256 per frame      6.89 s   <- ships
+      //   all at once        7.18 s   (no better, and no yields left at all)
+      //
+      // 256 is where the curve flattens: over roughly four hundred objects it still yields a
+      // couple of times, so the loop presents a frame and the curtain cannot look hung to a
+      // browser watchdog on a slower machine, and it costs nothing against attaching everything
+      // in one go. The long frame it does produce is behind an opaque curtain, which is the whole
+      // reason this is affordable — a frame nobody sees has no frame budget.
+      const ATTACH_PER_FRAME = 256;
       let attached = 0;
       for (const object of detailObjects) {
         if (!live()) throw new StaleGenerationError(generation.id);

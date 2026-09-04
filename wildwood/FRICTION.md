@@ -294,3 +294,47 @@ is exactly the kind of figure that gets repeated.
 
 `tools/audio-look.py` is superseded by `threenative-playtest audio`, which enforces both rules
 above. It stays only until nothing references it.
+
+## 11. A startup budget copied from the schema's example, and one measured against a dev server
+
+Two startup ceilings failed today, neither of them a regression: both were committed in a state
+that had never once been green, and both were measuring something other than the game.
+
+`playtests/startup.playtest.json` asked for `maxReadyMs: 8000`. That number is the literal value
+in the engine's own `assertion-schema.ts` example for the field. It arrived by being copied out of
+the documentation rather than by anybody measuring this wood, which is the failure mode a
+worked example invites: it reads as a recommended ceiling when it is only a syntactically valid
+one. A budget nobody has measured is a budget that fails on the day the feature it guards starts
+working.
+
+Because it did start working. `readyMs` is now 13.7-14.3 s, and it is *supposed* to have grown:
+readiness used to resolve before the detail tier, so the small number it reported described a
+moment when the screen showed a treeless valley — the exact frame the owner sent back with "look
+at this shit". Holding readiness until the wood is complete and compiled is the fix for that, and
+the honest cost of the fix is that the number it reports is three times larger and now true. It
+decomposes as 2.3 s critical tier, 6.9 s detail tier, 5.1 s held warm-up (176 pipelines, and
+capped by its own budget rather than finished). `maxEnteredMs` is the ceiling that still guards
+what a player feels — time to *something* on screen, ~1.0 s against 2.5 s — and it is the one that
+should stay tight.
+
+The replacement ceiling is 18 s rather than the 16 s I first wrote, and the reason is worth
+stating because it is the opposite instinct to the one this repo usually rewards. Seven runs
+spread 13.7-14.9 s, so 16 s left 7% headroom on a figure whose largest single term is a warm-up
+that stops on *its own* budget rather than on finishing — the variance is the machine's, not the
+game's. A composite of three tiers is the wrong place to be strict. The strict gates are the
+attributable ones on either side of it: `maxEnteredMs` at 2.5 s against a measured 1.0 s, and the
+detail tier's 8 s against a measured 6.9 s, both of which name a tier somebody can go and fix. A
+gate that goes red under load teaches people to re-run it, which costs more than the regression it
+was meant to catch.
+
+The second ceiling, the detail tier's own 8 s, was measured against `vite dev`. Dev hands every
+GLB, OGG and HDR over as its own unbundled request through one middleware chain, so it queues
+thirty-five large binaries: the same content and the same build measure 6.9 s on `vite preview`
+and past 25 s on dev, and the four scenarios were separately timing out in `page.goto` for the
+same reason. The gate now runs against the built bundle — the artifact a player downloads — and
+the budget is advisory rather than fatal when someone points it at dev, naming why in the message
+instead of printing a number that no game change can move.
+
+The two debug pages keep a dev server of their own, because they are not build inputs and should
+not become ones: `dev-animals.html` measures placement and facing, so it can afford slow serving,
+and a player's download should not carry a debug entry point to make a proof convenient.
