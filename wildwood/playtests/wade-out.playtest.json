@@ -1,0 +1,35 @@
+{
+  "name": "wildwood-wade-out",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 0,
+  "steps": [
+    { "kind": "wait", "label": "stand-in-the-pond", "waitTicks": 90, "release": true },
+    { "kind": "input", "label": "wade-out-up-the-steep-bank", "press": "KeyW", "holdTicks": 1200, "release": true },
+    { "kind": "wait", "label": "settle-on-the-bank", "waitTicks": 60, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true },
+    "movement": {
+      "entity": "walker",
+      "minDistance": 14,
+      "pathLength": 16
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "odometer",
+        "gte": 16,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "walkerY",
+        "gte": -4,
+        "lte": 40,
+        "allowTrivial": "Containment, not the finding: the soles start below the waterline and must stay inside the valley's vertical range. A walker ejected by the bank or dropped through the pond floor lands outside these bounds; how far up the bank it actually got is the movement row above."
+      }
+    ]
+  }
+}

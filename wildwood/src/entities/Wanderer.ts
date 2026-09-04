@@ -25,6 +25,33 @@ const JUMP_SPEED = 5.2;
 const GRAVITY = -19.6;
 /** Anything steeper than this is a cliff, and the controller refuses to climb it. */
 const MAX_CLIMB = (50 * Math.PI) / 180;
+/**
+ * How steeply a grounded step is aimed downward — **a gradient**, metres down per metre forward,
+ * not a speed.
+ *
+ * The press exists to keep the soles on the ground over a convex break, and the temptation is to
+ * write it as a fixed downward velocity. It was `-2` m/s here, and that is the bug the owner found
+ * by walking into the pond: *"I touch the water and I get stuck."*
+ *
+ * `moveAndSlide` hands Rapier one desired translation per frame and Rapier slides the **whole** of
+ * it along the ground — the downward part included. On an upslope of angle θ, a step of h forward
+ * and v down leaves `cosθ · (h·cosθ − v·sinθ)` of forward progress, so the walk stops dead at
+ * `tanθ = h / v`. With a fixed press, `v` does not shrink when `h` does, and `h` is the smallest
+ * thing in the game while wading: at 1.5 m/s and 60 Hz the stall angle was **32.8°**, against a
+ * `MAX_CLIMB` of 50° the controller was still cheerfully advertising. 35% of the pond's waterline
+ * and 27% of the lake's is steeper than 32.8°, and none of either is steeper than 50° — so the
+ * walker waded in across ground it could climb, and stopped on ground it could also climb.
+ * Walking (3.4 m/s) stalled at 55.6° and sprinting higher still, which is why it only ever bit in
+ * water.
+ *
+ * Written as a gradient, `v/h` is this constant plus one frame of gravity and the stall angle
+ * stops depending on how fast you happen to be going. It is also the more honest model: the press
+ * is *aim*, and how far you overshoot a convex break scales with how fast you crossed it. At 0.25
+ * the walk stalls at 64.9° wading and 70.9° walking at 60 Hz, and still at 55.6° wading at 30 Hz —
+ * clear of `MAX_CLIMB` at every speed this game can move at, which is the invariant that was
+ * missing rather than a number that happened to work.
+ */
+const GROUND_PRESS = 0.25;
 /** Radians per unit of relative pointer motion. */
 const LOOK_SENSITIVITY = 0.0017;
 const PITCH_LIMIT = Math.PI / 2 - 0.04;
@@ -173,16 +200,20 @@ export class Wanderer {
 
     // Vertical motion is the body's, not this file's: `moveAndSlide` integrates `gravity` itself.
     // All that is decided here is what the vertical velocity should be *at* the moment the feet
-    // are on something — a jump, or a small constant push into the slope. Letting gravity keep
-    // accumulating while grounded builds a fall speed that makes walking downhill feel like
-    // sliding, and leaves `velocity.y` at terminal the instant the ground runs out.
+    // are on something — a jump, or a small press into the slope. Letting gravity keep accumulating
+    // while grounded builds a fall speed that makes walking downhill feel like sliding, and leaves
+    // `velocity.y` at terminal the instant the ground runs out.
     const grounded = this.body.grounded;
     if (grounded) {
       // A jump is the one escape a wader has when a bank turns out steeper than it looked, so it
       // stays available in water — at about three fifths power, because a full leap from a pond
       // reads as a dolphin show, not a climb.
       const jump = ctx.input.justPressed("jump") ? (wading ? JUMP_SPEED * 0.62 : JUMP_SPEED) : 0;
-      this.body.velocity.y = jump !== 0 ? jump : -2;
+      // The press is a *gradient*, not a speed — see GROUND_PRESS. Off the actual horizontal
+      // velocity rather than `speed`, so standing still presses with nothing and a walker parked
+      // on a hillside does not creep down it.
+      const horizontal = Math.hypot(this.body.velocity.x, this.body.velocity.z);
+      this.body.velocity.y = jump !== 0 ? jump : -horizontal * GROUND_PRESS;
     }
 
     // Measured from the last frame's end position, before this frame's step is queued — see the

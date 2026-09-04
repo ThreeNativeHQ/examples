@@ -27,6 +27,15 @@ const cliArgs = process.argv.slice(2);
 
 /** Four metres short of the standing stone at (34, -12), facing it. */
 const AT_THE_STONE = "31.2,-10.9,-1.232";
+/**
+ * On the pond floor, eight metres out, facing the steepest metre of its bank — 39 degrees, and the
+ * worst climb out of any water in the valley bar the lake's north face.
+ *
+ * Spawned already submerged on purpose: the owner's report was that the water is a trap, and a
+ * scenario that has to walk *in* first spends its evidence proving the walk in. This one asks the
+ * only question — can you get out — from the first tick.
+ */
+const IN_THE_POND = "40.75,29.31,2.723";
 
 const SCENARIOS = [
   { name: "playtests/startup.playtest.json", url: `${BASE}?lowtier` },
@@ -35,6 +44,10 @@ const SCENARIOS = [
   {
     name: "playtests/discover.playtest.json",
     url: `${BASE}?spawn=${AT_THE_STONE}`,
+  },
+  {
+    name: "playtests/wade-out.playtest.json",
+    url: `${BASE}?spawn=${IN_THE_POND}`,
   },
 ];
 
