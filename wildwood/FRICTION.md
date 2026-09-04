@@ -278,9 +278,19 @@ Two things worth keeping from being wrong:
 
 The hand pass *did* have a real gap, and naming it precisely matters more than the click I
 invented: **it measured nothing about content.** It never noticed the discovery chime was 83% in
-100-500 Hz where a bell should be bright, and never noticed fifteen footsteps carried up to 45.2%
-of their energy below 100 Hz. A seam check alone would have caught neither. That is what
+100-500 Hz where a bell should be bright, and never noticed that footsteps were carrying enough
+sub-bass to thump. A seam check alone would have caught neither. That is what
 `audio.expect.json` and the pipeline pass exist to make impossible between them.
+
+**A correction to the footstep figure, since it appeared here and in two commit messages before it
+was checked.** I wrote "fifteen footsteps carried up to 45.2% of their energy below 100 Hz". The
+`up to` was true of the worst clip; the `fifteen` was not. Measured independently by the asset
+pipeline lane against the same files, with the band arithmetic reconciled between both tools:
+**three** clips exceeded a 15% sub-bass bound — `step-rock-3` at 42.5%, `step-rock-1` at 24.3%,
+`step-rock-2` at 15.5%, with `step-grass-1` next at 12.8%. All fifteen were high-passed, because
+filtering the set is cheaper than filtering three and then arguing about the boundary, but only
+three were defective. The defect class was real and the count was not, and a count nobody checked
+is exactly the kind of figure that gets repeated.
 
 `tools/audio-look.py` is superseded by `threenative-playtest audio`, which enforces both rules
 above. It stays only until nothing references it.
