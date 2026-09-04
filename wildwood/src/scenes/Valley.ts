@@ -651,6 +651,10 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       // After the walk, because the footstep cadence is driven off the odometer and the water
       // emitter rides the shore nearest wherever the walker now is.
       soundscape.update(frameCtx, {
+        // `dt` drives the call and bite timers, so they stop when the game pauses rather than
+        // firing a backlog on resume — the same property the audio bus's own pause holds.
+        animals: (generation.detailAnimals ?? generation.criticalAnimals)?.animals,
+        dt,
         groundGap: walker.groundGap,
         odometer: walker.odometer,
         position: walker.object.position,
