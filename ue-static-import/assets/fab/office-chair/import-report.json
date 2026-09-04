@@ -1,0 +1,236 @@
+{
+  "importer": {
+    "name": "threenative-asset-mcp",
+    "version": 43
+  },
+  "source": {
+    "kind": "local-directory",
+    "path": "/home/joao/.cache/threenative-asset-mcp/fab-downloads/ce136033-3265-46d3-ac4d-fdbd5c9d0462/OfficePa6ac9eb68ce1fV7",
+    "fileCount": 185,
+    "totalBytes": 5249177728,
+    "sourceHash": "sha256:14cf361f1b47f2e2337f92ed2c77f592a478f4e9d81c9dc72d0709bc0f2650b0"
+  },
+  "entitlement": {
+    "provider": "local",
+    "authenticatedDownload": false,
+    "acquisition": "none"
+  },
+  "toolchain": {
+    "umodel": "Compiled Aug 31 2026 (build 1)",
+    "uncookedConverter": "4.27.2.0+threenative.6"
+  },
+  "cacheKey": "7a37c5f82d4cb96818db65d4daaf4841f253f86374c4a2cf74785c49eeaa9cad",
+  "reused": false,
+  "materials": "complete",
+  "counts": {
+    "packages": 1,
+    "exported": 1,
+    "textures": 0,
+    "cubemaps": 0,
+    "materialAssets": 0,
+    "audio": 0,
+    "dataAssets": 0,
+    "textureStacks": 0,
+    "fonts": 0,
+    "bitmapFonts": 0,
+    "sprites": 0,
+    "flipbooks": 0,
+    "scenes": 0,
+    "skipped": 0,
+    "failed": 0
+  },
+  "models": [
+    {
+      "name": "SM_Chair_1",
+      "package": "Content/Office_Pack_Vol_1/Models/SM_Chair_1.uasset",
+      "kind": "static",
+      "glb": "Models/SM_Chair_1.glb",
+      "bytes": 9563684,
+      "sha256": "0708be84750bacbf8c5494bbdbdff6fd7e69b0aa9a6d73840d365275b0bbd90a",
+      "vertices": 25152,
+      "primitives": 3,
+      "skins": 0,
+      "animations": 0,
+      "boundsMetres": [
+        0.7768663763999939,
+        1.3829224836081266,
+        0.7773586809635162
+      ],
+      "materials": [
+        {
+          "name": "M_Plastic_2",
+          "resolved": true,
+          "sidecarTextures": [],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Plastic006_4K_Color",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Plastic006_4K_Normal",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "metallicRoughness",
+              "texture": "T_Plastic006_4K_Roughness",
+              "source": "filename",
+              "confidence": "heuristic",
+              "transform": "redToRoughness"
+            }
+          ],
+          "unsupported": [],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "factors": {
+            "baseColor": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "emissive": [
+              0,
+              0,
+              0
+            ],
+            "metallic": 0,
+            "roughness": 1
+          },
+          "textured": true
+        },
+        {
+          "name": "M_Leather_1",
+          "resolved": true,
+          "sidecarTextures": [],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Leather032_4K_Color",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Leather032_4K_Normal",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "metallicRoughness",
+              "texture": "T_Leather032_4K_Roughness",
+              "source": "filename",
+              "confidence": "heuristic",
+              "transform": "redToRoughness"
+            }
+          ],
+          "unsupported": [],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "factors": {
+            "baseColor": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "emissive": [
+              0,
+              0,
+              0
+            ],
+            "metallic": 0,
+            "roughness": 1
+          },
+          "textured": true
+        },
+        {
+          "name": "M_Metal_3",
+          "resolved": true,
+          "sidecarTextures": [],
+          "bindings": [
+            {
+              "slot": "baseColor",
+              "texture": "T_Metal012_4K_Color",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "normal",
+              "texture": "T_Metal012_4K_Normal",
+              "source": "mat",
+              "confidence": "exact",
+              "transform": "none"
+            },
+            {
+              "slot": "metallicRoughness",
+              "texture": "T_Metal012_4K_Roughness",
+              "secondaryTexture": "T_Metal012_4K_Metalness",
+              "source": "filename",
+              "confidence": "heuristic",
+              "transform": "redRoughnessRedMetalness"
+            }
+          ],
+          "unsupported": [],
+          "alphaMode": "OPAQUE",
+          "doubleSided": false,
+          "factors": {
+            "baseColor": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "emissive": [
+              0,
+              0,
+              0
+            ],
+            "metallic": 0,
+            "roughness": 1
+          },
+          "textured": true
+        }
+      ]
+    }
+  ],
+  "textures": [],
+  "cubemaps": [],
+  "materialAssets": [],
+  "audio": [],
+  "dataAssets": [],
+  "textureStacks": [],
+  "fonts": [],
+  "bitmapFonts": [],
+  "sprites": [],
+  "flipbooks": [],
+  "scenes": [],
+  "skipped": [],
+  "failed": [],
+  "materialCoverage": {
+    "sections": 3,
+    "textured": 3,
+    "exact": 6,
+    "heuristic": 3,
+    "unsupported": 0,
+    "unresolved": 0
+  },
+  "transforms": {
+    "none": 6,
+    "redToRoughness": 2,
+    "redRoughnessRedMetalness": 1
+  },
+  "sidecarTextures": [],
+  "warnings": [
+    "Decoded 1 requested uncooked UE4 MeshDescription GLB without Unreal Engine; UE Viewer supplied their source textures and material metadata."
+  ],
+  "durationMs": 17290
+}

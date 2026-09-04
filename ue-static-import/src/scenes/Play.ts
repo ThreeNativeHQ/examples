@@ -1,0 +1,171 @@
+import {
+  Atmosphere,
+  type ICtx,
+  Scene,
+  type SceneFrame,
+  isMobile,
+  isTouchscreenAvailable,
+  solarPosition,
+} from "@threenative/core";
+import { Area3D, CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
+import { BoxGeometry, Mesh, type PerspectiveCamera, Vector3 } from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { Player } from "../entities/Player.js";
+import { UnrealProp } from "../entities/UnrealProp.js";
+import { setupCamera } from "../render/camera.js";
+import { createHud } from "../render/hud.js";
+import { setupLighting } from "../render/lighting.js";
+import { createLoadingScreen } from "../render/loading.js";
+import { defaultMaterial, floorMaterial } from "../render/materials.js";
+import { setupPost } from "../render/postprocessing.js";
+import { setupSky } from "../render/sky.js";
+import { TouchControls } from "../render/touch-controls.js";
+import type { GameState } from "../state.js";
+
+export type GameCtx = ICtx<GameState, IPhysicsContext>;
+
+export class Play extends Scene<GameState, IPhysicsContext> {
+  static override readonly initialState: GameState = {
+    playerX: -2,
+    score: 0,
+    sunAzimuth: 0,
+    sunElevation: 0,
+    sunTransmittanceRed: 0,
+  };
+
+  #chair?: UnrealProp;
+
+  override async load(ctx: GameCtx): Promise<void> {
+    // Written by `asset_import_unreal` from Content/Office_Pack_Vol_1/Models/SM_Chair_1.uasset.
+    // The importer's output is an ordinary GLB, so this is the ordinary loader call.
+    this.#chair = await UnrealProp.load(ctx, {
+      path: "fab/office-chair/Models/SM_Chair_1.glb",
+      position: { x: 1.6, y: 0, z: 1 },
+      rotationY: -0.6,
+    });
+  }
+
+  override enter(ctx: GameCtx): SceneFrame<GameState, IPhysicsContext> {
+    const showTouchControls = isMobile() && isTouchscreenAvailable();
+    const useAtmosphere = ctx.renderer.kind === "webgpu" && !showTouchControls;
+    const atmosphere = useAtmosphere
+      ? new Atmosphere({
+          rayleigh: [0.005802, 0.013558, 0.0331],
+          mie: [0.00444, 0.00444, 0.00444],
+          ozone: [0.00065, 0.001881, 0.000085],
+          planetRadius: 6360,
+          atmosphereRadius: 6460,
+          resolutions: {
+            transmittance: { width: 128, height: 32 },
+            multiScattering: { width: 16, height: 16 },
+            skyView: { width: 128, height: 72 },
+          },
+        })
+      : undefined;
+    const solarInput = {
+      dayOfYear: 172,
+      timeOfDay: 6,
+      latitude: 49.28,
+      longitude: -123.12,
+      utcOffset: -8,
+    };
+    const sun = { azimuth: 0, elevation: 0 };
+    solarPosition(solarInput, sun);
+    atmosphere?.setSunDirection(sun);
+    if (atmosphere !== undefined) {
+      ctx.add(atmosphere);
+      // Idempotent with the PRD-242 registry when that contract is present; required by the
+      // current renderer seam while this template is also usable on WebGL.
+      atmosphere.attachRenderer(ctx.renderer);
+    }
+    setupSky(ctx.scene, atmosphere);
+    const lighting = setupLighting(
+      ctx.scene,
+      ctx.renderer.raw as Parameters<typeof setupLighting>[1],
+      atmosphere,
+    );
+    // isMobile() arrives as an argument because src/render/ imports no framework package: the
+    // platform decision is made here, in portable game code, exactly like createRandom.
+    setupPost(ctx.renderer, ctx.scene, ctx.camera, {
+      atmosphere,
+      godraysLight: lighting.key,
+      mobile: isMobile(),
+    });
+    setupCamera(ctx.camera as PerspectiveCamera);
+    const loading = createLoadingScreen(ctx);
+    ctx.add(ctx.camera);
+    const touchControls = showTouchControls
+      ? ctx.entities.add("touch-controls", new TouchControls(ctx.camera as PerspectiveCamera))
+      : undefined;
+    const hud = ctx.entities.add("hud", createHud(ctx.camera as PerspectiveCamera, "SCORE"));
+    const floor = new Mesh(new BoxGeometry(10, 0.2, 4), floorMaterial);
+    floor.position.y = -0.1;
+    floor.receiveShadow = true;
+    ctx.add(floor);
+    const nearWallGeometry = new BoxGeometry(1.4, 2.8, 0.6);
+    nearWallGeometry.translate(-3, 1.4, 2.5);
+    const distantRidgeGeometry = new BoxGeometry(12_000, 500, 100);
+    distantRidgeGeometry.translate(0, 230, -5_000);
+    const hazeProbe = new Mesh(
+      mergeGeometries([nearWallGeometry, distantRidgeGeometry]),
+      defaultMaterial,
+    );
+    hazeProbe.castShadow = true;
+    ctx.add(hazeProbe);
+    new RigidBody3D({
+      object: floor,
+      physics: ctx.physics,
+      shape: CollisionShape3D.fromMesh(floor),
+      type: "fixed",
+    });
+    const player = new Player(ctx);
+    ctx.entities.add("player", player);
+    const chair = this.#chair;
+    if (chair === undefined) throw new Error("The Unreal prop did not load before enter().");
+    chair.attach(ctx);
+    ctx.entities.add("unreal-chair", chair);
+    const pickup = new Area3D({
+      physics: ctx.physics,
+      position: { x: 1.5, y: 0.5, z: 0 },
+      shape: CollisionShape3D.box(1, 1, 1),
+    });
+    pickup.on("bodyEntered", (body) => {
+      if (body === player.body) ctx.state.set((state) => ({ score: state.score + 1 }));
+    });
+
+    let elapsed = 0;
+    const statePatch: Partial<GameState> = {};
+    return (frameCtx, dt) => {
+      loading.update();
+      chair.update(dt);
+      player.update(
+        frameCtx,
+        dt,
+        touchControls?.update(frameCtx.input.raw.pointers, frameCtx.viewport.size),
+      );
+      elapsed += dt;
+      solarInput.timeOfDay = (6 + elapsed * 2) % 24;
+      solarPosition(solarInput, sun);
+      if (atmosphere !== undefined) {
+        atmosphere.setSunDirection(sun);
+        lighting.updateSun(atmosphere.getSunDirection());
+      }
+      const state = frameCtx.state.getState();
+      hud.update({
+        primary: state.score,
+        seconds: elapsed,
+      });
+      statePatch.playerX = player.mesh.position.x;
+      statePatch.sunAzimuth = sun.azimuth;
+      statePatch.sunElevation = sun.elevation;
+      if (atmosphere !== undefined) {
+        // The sun's angle is plain arithmetic and keeps moving with the atmosphere deleted, so a
+        // scenario asserting only on it proves nothing. This number cannot be produced without
+        // the node, which is what makes the atmosphere playtest able to go red.
+        const transmittance = atmosphere.sunTransmittance(atmosphere.getSunDirection());
+        if (transmittance instanceof Vector3) statePatch.sunTransmittanceRed = transmittance.x;
+      }
+      frameCtx.state.set(statePatch);
+    };
+  }
+}
