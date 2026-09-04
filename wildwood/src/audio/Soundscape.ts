@@ -3,7 +3,18 @@ import { Vector3 } from "three";
 import type { Mesh, Object3D, PositionalAudio } from "three";
 import type { IPhysicsContext } from "@threenative/physics";
 import { LAKE, POND, TERRAIN_SAMPLES, TERRAIN_SIZE, WATER_LEVEL } from "../render/terrain.js";
+import type { Animal, AnimalState } from "../entities/animals/Animal.js";
 import type { GameState } from "../state.js";
+import {
+  ANIMAL_CLIPS,
+  animalAudio,
+  animalClipDrift,
+  FEEDING_CLIPS,
+  FOOT_VARIANTS,
+  footClip,
+  wolfHowlsWhenGrazing,
+  type IAnimalAudio,
+} from "./animals.js";
 import {
   ALL_STEP_CLIPS,
   FOREST_BED,
@@ -57,6 +68,45 @@ const CUE_VOLUME = 0.9;
 const WATER_REF_DISTANCE = 6;
 const WATER_ROLLOFF = 2;
 
+/**
+ * A call carries; a footfall does not. Two rolloffs, because using one made either the stag
+ * inaudible across a clearing or its hooves audible from the ridge.
+ */
+const VOICE_ROLLOFF = 1.5;
+const BODY_ROLLOFF = 2.6;
+
+/** Levels for the animals, all well under the walker's own feet. */
+const ALARM_VOLUME = 0.85;
+const CALL_VOLUME = 0.5;
+const FEEDING_VOLUME = 0.55;
+const FOOT_VOLUME = 0.45;
+
+/** Seconds between a settled animal's idle calls, per animal, randomised in this range. */
+const CALL_GAP_MIN = 22;
+const CALL_GAP_MAX = 70;
+/** Seconds between bites while grazing. A bite is a discrete event, not a held loop. */
+const BITE_GAP_MIN = 1.8;
+const BITE_GAP_MAX = 3.4;
+/**
+ * Footfalls emitted in one frame, at most.
+ *
+ * A frame that covers many strides is a teleport or a hitch, not a gallop, and replaying the
+ * backlog turns it into a drum roll.
+ */
+const MAX_FOOTFALLS_PER_FRAME = 2;
+
+/** Per-animal bookkeeping. Keyed by identity, so the detail tier's swap is not a burst of cues. */
+interface IAnimalTrack {
+  state: AnimalState;
+  x: number;
+  z: number;
+  /** Metres covered since the last footfall. */
+  travelled: number;
+  callAt: number;
+  biteAt: number;
+  foot: number;
+}
+
 interface IWaterBody {
   readonly x: number;
   readonly z: number;
@@ -79,6 +129,13 @@ export interface IWalkerSound {
   readonly odometer: number;
   readonly groundGap: number;
   readonly wading: boolean;
+  /** Seconds this frame. Drives the call and bite timers, so they stop when the game pauses. */
+  readonly dt: number;
+  /**
+   * The animals as they are right now. `undefined` before the wood is inhabited, and a different
+   * array once the detail tier lands — which is why tracking is keyed by animal identity.
+   */
+  readonly animals?: readonly Animal[] | undefined;
 }
 
 /**
@@ -109,6 +166,12 @@ export class Soundscape {
   #paused = false;
   #disposed = false;
   #beds = 0;
+  #animalClips = new Map<string, AudioBuffer>();
+  #tracks = new WeakMap<Animal, IAnimalTrack>();
+  #animalCues = 0;
+  #clock = 0;
+  /** Species whose graze clip no longer matches what the audio table was written against. */
+  readonly #clipDrift: readonly string[] = animalClipDrift();
 
   constructor(options: ISoundscapeOptions) {
     this.#ambience = new AudioBus({ camera: options.camera });
@@ -128,6 +191,10 @@ export class Soundscape {
       // is bit-identical and the walk sounds mechanical. Better in the snapshot than a surprise.
       unsupported: [...this.#ambience.unsupported],
       water: this.#water.length,
+      animalCues: this.#animalCues,
+      animalClips: this.#animalClips.size,
+      // Empty is the healthy answer. Non-empty means an animation changed and its sound did not.
+      clipDrift: [...this.#clipDrift],
     };
   }
 
@@ -135,8 +202,10 @@ export class Soundscape {
     if (this.#disposed) return;
     this.#syncPause(ctx.state.getState().paused);
     if (this.#paused) return;
+    this.#clock += walker.dt;
     this.#followWater(walker.position);
     this.#walk(walker);
+    if (walker.animals !== undefined) this.#inhabit(walker.animals);
   }
 
   /** The one event this game acknowledges. Cue on its own bus, wood ducked under it. */
@@ -169,6 +238,7 @@ export class Soundscape {
       // buffer decoded for one bus plays on the other.
       loadClip(context, LANDMARK_FOUND.path),
       ...ALL_STEP_CLIPS.map((path) => loadClip(context, path)),
+      ...ANIMAL_CLIPS.map((path) => loadClip(context, path)),
     ]);
     if (this.#disposed) return;
     const buffer = (index: number): AudioBuffer | undefined => {
@@ -194,10 +264,22 @@ export class Soundscape {
       const step = buffer(4 + index);
       if (step !== undefined) this.#steps.set(path, step);
     });
+    const animalStart = 4 + ALL_STEP_CLIPS.length;
+    ANIMAL_CLIPS.forEach((path, index) => {
+      const clip = buffer(animalStart + index);
+      if (clip !== undefined) this.#animalClips.set(path, clip);
+    });
+    if (this.#clipDrift.length > 0) {
+      // Loud, and in `debug()` as well: a chew over an animal that is visibly looking around is a
+      // defect no size, duration or load marker can see.
+      for (const line of this.#clipDrift) console.warn(`TN_AUDIO_ANIMAL_CLIP_DRIFT ${line}`);
+    }
     const missing = settled.filter(({ status }) => status === "rejected").length;
     if (missing > 0) console.warn(`TN_AUDIO_MISSING:${String(missing)}`);
     console.info(
-      `TN_AUDIO_READY beds=${String(this.#beds)} steps=${String(this.#steps.size)} water=${String(this.#water.length)}`,
+      `TN_AUDIO_READY beds=${String(this.#beds)} steps=${String(this.#steps.size)} ` +
+        `water=${String(this.#water.length)} animals=${String(this.#animalClips.size)} ` +
+        `clipDrift=${String(this.#clipDrift.length)}`,
     );
   }
 
@@ -273,6 +355,129 @@ export class Soundscape {
       detune: (Math.random() - 0.5) * 70,
     });
     this.#stepsPlayed += 1;
+  }
+
+  /**
+   * Give the wood its inhabitants.
+   *
+   * Everything here hangs off `animal.state` and `animal.spec.id`, and every voice is welded to
+   * the animal's own `Object3D` so it moves with the body rather than playing from where the
+   * animal was when the cue fired.
+   */
+  #inhabit(animals: readonly Animal[]): void {
+    for (const animal of animals) {
+      const audio = animalAudio(animal.spec.id);
+      if (audio === undefined) continue;
+      const position = animal.object.position;
+      let track = this.#tracks.get(animal);
+      if (track === undefined) {
+        // First sight: adopt the current state silently. The detail tier replaces every animal,
+        // and treating that as six simultaneous state changes would fire six alarms at once.
+        track = {
+          state: animal.state,
+          x: position.x,
+          z: position.z,
+          travelled: 0,
+          callAt: this.#clock + this.#between(CALL_GAP_MIN, CALL_GAP_MAX),
+          biteAt: this.#clock + this.#between(BITE_GAP_MIN, BITE_GAP_MAX),
+          foot: 0,
+        };
+        this.#tracks.set(animal, track);
+        continue;
+      }
+
+      track.travelled += Math.hypot(position.x - track.x, position.z - track.z);
+      track.x = position.x;
+      track.z = position.z;
+
+      if (animal.state !== track.state) {
+        this.#entered(animal, audio, animal.state, track);
+        track.state = animal.state;
+      }
+      this.#footfalls(animal, audio, track);
+      this.#feed(animal, audio, track);
+      this.#call(animal, audio, track);
+    }
+  }
+
+  /** A state the animal has just entered. Only two of the four make a sound of their own. */
+  #entered(animal: Animal, audio: IAnimalAudio, state: AnimalState, track: IAnimalTrack): void {
+    if (state === "flee") {
+      // The alarm, at the moment of bolting. This is the one animal cue a player is meant to
+      // notice, because it is the wood reacting to them.
+      this.#voice(animal, audio, ALARM_VOLUME);
+      if (audio.foot === "wing") this.#emit(animal, audio, footClip("wing", 0), FOOT_VOLUME, 0.9);
+      return;
+    }
+    if (state === "graze") {
+      // The wolf's graze clip is a howl, so its graze sound is the howl and there are no bites.
+      if (wolfHowlsWhenGrazing(animal.spec.id)) this.#voice(animal, audio, CALL_VOLUME);
+      else track.biteAt = this.#clock + this.#between(0.3, 1.2);
+    }
+  }
+
+  /**
+   * Footfalls, paid for by the metre.
+   *
+   * Emitting per metre covered rather than per second is what keeps them locked to the gait: the
+   * same animal walking and bolting is playing two different clips at two different speeds, and
+   * neither this code nor the clip's authored rate has to be consulted for the cadence to follow.
+   */
+  #footfalls(animal: Animal, audio: IAnimalAudio, track: IAnimalTrack): void {
+    let emitted = 0;
+    while (track.travelled >= audio.stride && emitted < MAX_FOOTFALLS_PER_FRAME) {
+      track.travelled -= audio.stride;
+      emitted += 1;
+      track.foot = (track.foot + 1) % FOOT_VARIANTS;
+      this.#emit(animal, audio, footClip(audio.foot, track.foot), FOOT_VOLUME, BODY_ROLLOFF);
+    }
+    // Whatever is left over after the cap is dropped rather than banked, so a hitch does not
+    // repay itself as a drum roll on the next frame.
+    if (emitted >= MAX_FOOTFALLS_PER_FRAME) track.travelled = 0;
+  }
+
+  /** A bite, while grazing, for the species whose graze clip is actually eating. */
+  #feed(animal: Animal, audio: IAnimalAudio, track: IAnimalTrack): void {
+    if (animal.state !== "graze" || audio.feeding === "none") return;
+    if (this.#clock < track.biteAt) return;
+    track.biteAt = this.#clock + this.#between(BITE_GAP_MIN, BITE_GAP_MAX);
+    this.#emit(animal, audio, FEEDING_CLIPS[audio.feeding], FEEDING_VOLUME, BODY_ROLLOFF);
+  }
+
+  /** The occasional call from a settled animal, so a still wood is not a silent one. */
+  #call(animal: Animal, audio: IAnimalAudio, track: IAnimalTrack): void {
+    if (animal.state === "flee" || this.#clock < track.callAt) return;
+    track.callAt = this.#clock + this.#between(CALL_GAP_MIN, CALL_GAP_MAX);
+    this.#voice(animal, audio, CALL_VOLUME);
+  }
+
+  #voice(animal: Animal, audio: IAnimalAudio, volume: number): void {
+    this.#emit(animal, audio, audio.voice, volume, VOICE_ROLLOFF);
+  }
+
+  /** One positional cue, welded to the animal so it travels with the body. */
+  #emit(
+    animal: Animal,
+    audio: IAnimalAudio,
+    path: string,
+    volume: number,
+    rolloff: number,
+  ): void {
+    const buffer = this.#animalClips.get(path);
+    if (buffer === undefined) return;
+    this.#ambience.playAt(buffer, animal.object, {
+      volume: volume * (0.85 + Math.random() * 0.3),
+      refDistance: audio.refDistance,
+      rolloffFactor: rolloff,
+      // Cents. Web only — the bus reports `detune` as unsupported on native, which is why the
+      // footfalls carry two takes rather than relying on this for their variation.
+      detune: (Math.random() - 0.5) * 90,
+    });
+    this.#animalCues += 1;
+  }
+
+  #between(low: number, high: number): number {
+    return low + Math.random() * (high - low);
   }
 
   /**

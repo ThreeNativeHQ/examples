@@ -36,6 +36,150 @@
     "highpassHz": 120.0
   },
   {
+    "name": "voice-fox",
+    "source": "voice-fox",
+    "bytes": 14000,
+    "seconds": 1.76,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 90.0
+  },
+  {
+    "name": "voice-wolf",
+    "source": "voice-wolf",
+    "bytes": 14265,
+    "seconds": 3.2,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 60.0
+  },
+  {
+    "name": "voice-stag",
+    "source": "voice-stag",
+    "bytes": 15607,
+    "seconds": 2.03,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 60.0
+  },
+  {
+    "name": "voice-doe",
+    "source": "voice-doe",
+    "bytes": 9061,
+    "seconds": 1.042,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 90.0
+  },
+  {
+    "name": "voice-pig",
+    "source": "voice-pig",
+    "bytes": 12242,
+    "seconds": 1.559,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 90.0
+  },
+  {
+    "name": "voice-crow",
+    "source": "voice-crow",
+    "bytes": 9743,
+    "seconds": 1.2,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 120.0
+  },
+  {
+    "name": "graze-ungulate",
+    "source": "graze-ungulate",
+    "bytes": 18468,
+    "seconds": 2.2,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "graze-pig",
+    "source": "graze-pig",
+    "bytes": 18300,
+    "seconds": 2.2,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 100.0
+  },
+  {
+    "name": "graze-crow",
+    "source": "graze-crow",
+    "bytes": 15756,
+    "seconds": 2.2,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 120.0
+  },
+  {
+    "name": "step-hoof-1",
+    "source": "step-hoof-1",
+    "bytes": 6478,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 70.0
+  },
+  {
+    "name": "step-hoof-2",
+    "source": "step-hoof-2",
+    "bytes": 6438,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 70.0
+  },
+  {
+    "name": "step-paw-1",
+    "source": "step-paw-1",
+    "bytes": 6301,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 90.0
+  },
+  {
+    "name": "step-paw-2",
+    "source": "step-paw-2",
+    "bytes": 6587,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 90.0
+  },
+  {
+    "name": "step-trotter-1",
+    "source": "step-trotter-1",
+    "bytes": 5189,
+    "seconds": 0.282,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 130.0
+  },
+  {
+    "name": "step-trotter-2",
+    "source": "step-trotter-2",
+    "bytes": 6139,
+    "seconds": 0.48,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 130.0
+  },
+  {
+    "name": "wing-crow",
+    "source": "wing-crow",
+    "bytes": 9230,
+    "seconds": 1.025,
+    "channels": 1,
+    "loop": false,
+    "highpassHz": 120.0
+  },
+  {
     "name": "step-grass-1",
     "source": "step-grass-1",
     "bytes": 6415,

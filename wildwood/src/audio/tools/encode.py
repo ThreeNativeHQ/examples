@@ -78,6 +78,23 @@ def trim(x: np.ndarray, floor_db: float = -46.0, pad_seconds: float = 0.01) -> n
     return x[max(loud[0] - pad, 0) : min(loud[-1] + pad, len(x))]
 
 
+def cap(x: np.ndarray, max_seconds: float, fade_seconds: float = 0.05) -> np.ndarray:
+    """Trim a one-shot to length with a short fade, so the cut is not a click.
+
+    The feeding sounds are generated long and played as intermittent bites rather than as loops,
+    because `AudioBus` can stop every voice or none — there is no way to end one positional loop
+    when an animal stops grazing, so a held loop would outlive the state that started it. Filed in
+    the engine's AUDIO-REQUESTS.md. Chewing is intermittent anyway.
+    """
+    limit = int(max_seconds * RATE)
+    if len(x) <= limit:
+        return x
+    y = x[:limit].copy()
+    fade = min(int(fade_seconds * RATE), len(y))
+    y[-fade:] *= np.linspace(1.0, 0.0, fade).reshape(-1, 1)
+    return y
+
+
 def normalize(x: np.ndarray, peak_db: float) -> np.ndarray:
     x = x - x.mean(axis=0, keepdims=True)  # DC offset wastes headroom and thumps on a loop wrap
     peak = np.abs(x).max()
@@ -110,6 +127,38 @@ JOBS = [
     # encoder input.
     ("landmark-found", "chime-c", 0.0, False, 0.0, -4.0, 120.0),
 ]
+# The animals. Every one is positional and heard close up, so all mono at q0.
+#
+# The high-pass corner is per species and not a house number, because unlike a footstep these
+# have real low content: a stag bellow and a wolf howl carry body down into the low band and
+# cutting it at 100 Hz would make a red deer sound like a goat. 60 Hz takes the generator's
+# rumble and leaves the animal.
+#
+# -4 dBFS on everything with an attack, -3 on the feeding loops. A caw, a wing burst and a hoof
+# fall are all percussive, and Vorbis overshoots a percussive attack on decode — the discovery
+# chime came back at exactly 1.000 from -1.5 and read as clipping.
+ANIMAL_JOBS = [
+    ("voice-fox", 0.0, -4.0, 90.0),
+    ("voice-wolf", 0.0, -4.0, 60.0),
+    ("voice-stag", 0.0, -4.0, 60.0),
+    ("voice-doe", 0.0, -4.0, 90.0),
+    ("voice-pig", 0.0, -4.0, 90.0),
+    ("voice-crow", 0.0, -4.0, 120.0),
+    # One-shots, not loops: see `cap` above for why, and because a bite is a discrete event.
+    ("graze-ungulate", 0.0, -3.0, 100.0),
+    ("graze-pig", 0.0, -3.0, 100.0),
+    ("graze-crow", 0.0, -3.0, 120.0),
+    ("step-hoof-1", 0.0, -4.0, 70.0),
+    ("step-hoof-2", 0.0, -4.0, 70.0),
+    ("step-paw-1", 0.0, -4.0, 90.0),
+    ("step-paw-2", 0.0, -4.0, 90.0),
+    ("step-trotter-1", 0.0, -4.0, 130.0),
+    ("step-trotter-2", 0.0, -4.0, 130.0),
+    ("wing-crow", 0.0, -4.0, 120.0),
+]
+for name, fade, peak, highpass in ANIMAL_JOBS:
+    JOBS.append((name, name, fade, True, 0.0, peak, highpass))
+
 # 100 Hz on every footstep. The inspector caught what nobody had listened for: step-rock-3 came
 # back with 45% of its energy below 100 Hz, rock-1 with 24% and grass-1 with 13%. A boot on stone
 # is a dry click with body around 200-800 Hz; sub-bass under it is generator rumble, and at one
@@ -119,12 +168,19 @@ for surface in ("grass", "dirt", "rock", "leaf", "water"):
         name = f"step-{surface}-{variant}"
         JOBS.append((name, name, 0.0, True, 0.0, -3.0, 100.0))
 
+# One-shots longer than they need to be, capped. A bite, a call and a wing burst are all short;
+# only the discovery chime earns three seconds.
+CAPS = {
+    "graze-ungulate": 2.2, "graze-pig": 2.2, "graze-crow": 2.2,
+    "voice-wolf": 3.2, "voice-stag": 2.2, "wing-crow": 1.1,
+}
+
 report = []
 for name, stem, fade, mono, quality, peak, highpass in JOBS:
     x = decode(os.path.join(RAW, f"{stem}.mp3"), highpass)
     if mono:
         x = to_mono(x)
-    x = seam_loop(x, fade) if fade > 0 else trim(x)
+    x = seam_loop(x, fade) if fade > 0 else cap(trim(x), CAPS.get(name, 6.0))
     x = normalize(x, peak)
     path = os.path.join(OUT, f"{name}.ogg")
     encode(x, path, quality)

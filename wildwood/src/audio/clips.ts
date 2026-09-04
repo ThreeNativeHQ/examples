@@ -3,9 +3,13 @@
  *
  * ## The budget
  *
- * 512 KiB shipped, everything included. That is the number this catalogue was cut to; the delivered
- * total is 498.9 KiB on the wire and 13.71 MiB once decoded, and the second is the one that
- * matters. For scale, the foliage pack alone is tens of megabytes: audio that cost more than a
+ * 768 KiB shipped, everything included, of which the delivered total is 668.6 KiB on the wire and
+ * 17.26 MiB once decoded — and the second is the one that matters, because nothing streams.
+ *
+ * The budget was 512 KiB and covered the ambience and the walker's feet. The six animals raised it
+ * by a quarter: 73.2 KiB of voices, 51.3 KiB of feeding and 45.3 KiB of feet and wings, for six
+ * sound sources a player can walk up to. That is the trade — a wood whose animals are silent is a
+ * diorama, and 170 KiB is less than a tenth of one tree model. For scale, the foliage pack alone is tens of megabytes: audio that cost more than a
  * single tree model would have been the wrong trade however good it sounded.
  *
  * The authoritative byte and band figures live in `CREDITS-AUDIO.md`, measured off the files, and
@@ -48,6 +52,11 @@ export const FOREST_BIRDS = clip("forest-birds");
 export const LAKE_SHORE = clip("lake-shore");
 /** The discovery acknowledgement. Stereo, 3 s, a struck bell, the only cue a player waits for. */
 export const LANDMARK_FOUND = clip("landmark-found");
+
+/**
+ * The animals' own sounds live in `animals.ts`, because which clip a species gets is decided by
+ * its animation clip map and not by anything in this catalogue.
+ */
 
 /** Underfoot. Three takes of each so a walk does not machine-gun one sample. */
 export const SURFACES = ["grass", "leaf", "rock", "dirt", "water"] as const;

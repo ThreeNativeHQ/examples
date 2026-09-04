@@ -1,0 +1,13 @@
+--- a/wildwood/src/scenes/Valley.ts
++++ b/wildwood/src/scenes/Valley.ts
+@@ -651,6 +651,10 @@
+       // After the walk, because the footstep cadence is driven off the odometer and the water
+       // emitter rides the shore nearest wherever the walker now is.
+       soundscape.update(frameCtx, {
++        // The wood's inhabitants, as they are this frame. The detail tier replaces every animal,
++        // so the soundscape tracks them by identity rather than by index.
++        animals: (generation.detailAnimals ?? generation.criticalAnimals)?.animals,
++        dt,
+         groundGap: walker.groundGap,
+         odometer: walker.odometer,
+         position: walker.object.position,
