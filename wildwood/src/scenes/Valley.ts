@@ -3,8 +3,10 @@ import {
   type ICtx,
   Scene,
   type SceneFrame,
+  addInSlices,
   isMobile,
   isWeb,
+  loadAll,
 } from "@threenative/core";
 import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
 import {
@@ -965,41 +967,26 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
       // Install the environment before the first sliced attachment. Adding it last invalidates
       // every newly compiled lit material at once and turns detail completion into a long frame.
       generation.hdri = installStagedHdri(ctx.scene, hdriStage);
-      // Slices of ATTACH_PER_FRAME, and the number is now large because the reason it was small
-      // has been taken over by something better.
+      // The sliced attachment, and its slice size, are now the framework's. This loop was measured
+      // here — 1 per frame 16.5 s, 6 per frame 11.26 s, 24 per frame 9.39 s, 256 per frame 6.89 s,
+      // all at once 7.18 s against an 8 s budget — and `addInSlices` ships that 256 as its default
+      // with the reasoning attached, so no other game has to rediscover the curve. `while: live`
+      // replaces the throw-per-object stale check: a generation invalidated mid-attach now *stops*
+      // and says so, and the one throw below is the caller's decision rather than the loop's.
       //
-      // It began at one object per frame, so the renderer would compile a few newly visible
-      // families per presented frame instead of all of them in one multi-second frame. That was
-      // right when nothing else compiled the world. It is not right now: the framework warms the
-      // whole held scene immediately after this loop (`TN_STARTUP_WARMUP_HELD`, 176 pipelines),
-      // so the compile happens either way and slicing only decides whether it is paid here, one
-      // yield at a time, or there, in one bounded pass.
-      //
-      // Measured, detail-tier duration against an 8 s budget, same build and same content:
-      //
-      //     1 per frame     16.5 s total   (the original)
-      //     6 per frame     11.26 s
-      //    24 per frame      9.39 s
-      //   256 per frame      6.89 s   <- ships
-      //   all at once        7.18 s   (no better, and no yields left at all)
-      //
-      // 256 is where the curve flattens: over roughly four hundred objects it still yields a
-      // couple of times, so the loop presents a frame and the curtain cannot look hung to a
-      // browser watchdog on a slower machine, and it costs nothing against attaching everything
-      // in one go. The long frame it does produce is behind an opaque curtain, which is the whole
-      // reason this is affordable — a frame nobody sees has no frame budget.
-      const ATTACH_PER_FRAME = 256;
-      let attached = 0;
-      for (const object of detailObjects) {
-        if (!live()) throw new StaleGenerationError(generation.id);
-        this.#addDetail(ctx, generation, object);
-        attached += 1;
-        // The sliced attachment is the longest visible stretch of the hold, so it owns the last
-        // third of the bar rather than a frozen 0.62.
-        this.#detailProgress = 0.66 + (attached / detailObjects.length) * 0.34;
-        if (attached % ATTACH_PER_FRAME === 0) await delay(16);
-      }
-      if (!live()) throw new StaleGenerationError(generation.id);
+      // The sliced attachment is the longest visible stretch of the hold, so it owns the last
+      // third of the bar rather than a frozen 0.62.
+      const attachment = await addInSlices(
+        detailObjects,
+        (object) => this.#addDetail(ctx, generation, object),
+        {
+          onProgress: ({ added, total }) => {
+            this.#detailProgress = 0.66 + (added / total) * 0.34;
+          },
+          while: live,
+        },
+      );
+      if (attachment.stopped || !live()) throw new StaleGenerationError(generation.id);
       ctx.state.set({
         boulderCount: foliage.boulderCount,
         fernCount: foliage.fernCount,
@@ -1145,43 +1132,33 @@ async function loadFlora(
   // The walker is no longer out there. The loading curtain now holds until this whole tier lands,
   // so there is nothing to keep responsive and the serialisation became pure latency: measured at
   // **31.7 s of staging** for 52 models on the production build — about 600 ms each, back to back,
-  // almost all of it waiting rather than working.
+  // almost all of it waiting rather than working. Six at a time took flora load from 38.4 s to
+  // 8.8 s, and that six is now `loadAll`'s default rather than this game's constant.
   //
-  // Bounded concurrency instead of unbounded, because the old measurement is still true about task
-  // coalescing: the only thing that must stay smooth now is the progress bar, and a full-width
-  // fan-out would freeze it in exactly the way a stalled loading screen reads as a hang.
-  const FLORA_CONCURRENCY = 6;
-  // Each result is written to its declared slot, never pushed. Completion order under concurrency
-  // is whatever the network returns, and `createFoliage` picks species out of these arrays
-  // positionally — so pushing would reshuffle which species stands where on every single load, and
-  // the valley would never be the same wood twice.
+  // The hand-rolled pool this replaces had to know that results must be written to a declared slot
+  // and never pushed — completion order under concurrency is whatever the network returns, and
+  // `createFoliage` picks species positionally, so pushing reshuffled which species stood where on
+  // every load and the valley was never the same wood twice. `loadAll` returns its results in the
+  // input's order, so the slot is now the index and the trap has nowhere left to live.
   const queue = niches.flatMap((niche) =>
     FLORA[niche].map((name, slot) => ({ name, niche, slot })),
   );
-  // Slots, not chunks: a chunked loop runs at the speed of the slowest model in each chunk, and
-  // these range from a 40 kB clover to a 4 MB pine.
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    for (;;) {
-      const index = next;
-      next += 1;
-      const task = queue[index];
-      if (task === undefined) return;
-      const logical = `flora:${task.name}`;
-      rejectDetailControl(controls, logical);
-      try {
-        const model = await assets.model<{ scene: Group }>(`${FAB}/${task.name}.glb`);
-        loaded[task.niche][task.slot] = extractTreeSpecies(task.name, model);
-      } catch (error) {
-        if (error instanceof StaleGenerationError) throw error;
-        throw new DetailAssetError(logical, error);
-      }
-      await delay(0);
+  const staged = await loadAll(queue, async (task) => {
+    const logical = `flora:${task.name}`;
+    rejectDetailControl(controls, logical);
+    try {
+      const model = await assets.model<{ scene: Group }>(`${FAB}/${task.name}.glb`);
+      return extractTreeSpecies(task.name, model);
+    } catch (error) {
+      if (error instanceof StaleGenerationError) throw error;
+      throw new DetailAssetError(logical, error);
     }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(FLORA_CONCURRENCY, queue.length) }, () => worker()),
-  );
+  });
+  for (const [index, task] of queue.entries()) {
+    const species = staged[index];
+    if (species === undefined) throw new DetailAssetError(`flora:${task.name}`);
+    loaded[task.niche][task.slot] = species;
+  }
   // Emitted in niche order after the fact. The counts are what the markers always meant; only the
   // order in which the species arrived changed, and no caller of `IFoliageSets` depends on it —
   // `createFoliage` picks species by name and `requiredSpecies` looks them up by name.
