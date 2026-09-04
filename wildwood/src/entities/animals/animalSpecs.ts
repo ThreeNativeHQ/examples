@@ -130,9 +130,26 @@ export interface AnimalSpec {
    */
   readonly length: number;
   readonly clips: AnimalClipMap;
-  /** Metres per second on the walk, tuned by eye against the clips' stride. */
+  /**
+   * Metres per second on the walk.
+   *
+   * **Not tuned by eye — read off the clip.** `AnimationPlayer` re-times a cycle to the ground the
+   * body covers, but only inside a 0.15x-3x band, and past the ceiling the rate is clamped rather
+   * than reached: the legs cycle flat out under a body going a different speed, which is the
+   * foot-slide a player actually sees. So the honest speed for a species is the one its own clip
+   * was drawn for, which `player.stride.clipGroundSpeed` states in metres per second.
+   *
+   * `node tools/stride-gate.mjs` prints that number next to each speed here and fails when the
+   * two are more than a gait apart. Change a speed and re-run it.
+   */
   readonly walkSpeed: number;
-  /** Metres per second at a gallop. */
+  /**
+   * Metres per second at a run. Same rule: the clip states the gait, and the gait states the speed.
+   *
+   * These "Run" clips are canters and lopes, not flat-out sprints — measured at 2.4-4.6 m/s. A real
+   * stag tops 15 m/s in the open, and the pack has no clip for it; asking for one anyway is what
+   * put every deer's legs at the 3x ceiling while it crossed the wood like a car.
+   */
   readonly runSpeed: number;
   /** How close a threat may come before the animal bolts, in metres. */
   readonly fleeRadius: number;
@@ -151,8 +168,10 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
     label: "Fox",
     length: 1.05,
     clips: FOX_CLIPS,
-    walkSpeed: 1.3,
-    runSpeed: 8,
+    // Clip stride: walk 0.54 m/s, run 2.37 m/s. A red fox walks 0.5-1.5 and lopes 3-5 through
+    // cover; its 12 m/s sprint is open ground and a few seconds long, and no clip here shows it.
+    walkSpeed: 0.9,
+    runSpeed: 5,
     fleeRadius: 7,
     yawOffset: 0,
   },
@@ -162,8 +181,10 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
     label: "Wolf",
     length: 1.55,
     clips: WOLF_CLIPS,
-    walkSpeed: 1.5,
-    runSpeed: 10,
+    // Clip stride: walk 0.73 m/s, run 2.84 m/s. A wolf's cruising trot is famously ~2.8 m/s, which
+    // is what the run clip was drawn for; 6 is that trot pressed into a bolt.
+    walkSpeed: 1.1,
+    runSpeed: 6,
     fleeRadius: 5,
     yawOffset: 0,
   },
@@ -173,8 +194,11 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
     label: "Stag",
     length: 2.1,
     clips: STAG_CLIPS,
-    walkSpeed: 1.3,
-    runSpeed: 12,
+    // Clip stride: walk 1.29 m/s, run 3.39 m/s. The walk clip was drawn for almost exactly this
+    // speed, which is also a red deer's real walk. The old 12 m/s was a red deer's *open-ground
+    // gallop* asked of a canter clip: rate 3.55, clamped to 3, and the owner saw the legs blur.
+    walkSpeed: 1.35,
+    runSpeed: 8,
     fleeRadius: 10,
     yawOffset: 0,
   },
@@ -184,8 +208,9 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
     label: "Doe",
     length: 1.8,
     clips: DOE_CLIPS,
-    walkSpeed: 1.2,
-    runSpeed: 11,
+    // Clip stride: walk 1.12 m/s, run 2.96 m/s. Lighter than the stag and a shade slower on foot.
+    walkSpeed: 1.15,
+    runSpeed: 7,
     fleeRadius: 11,
     yawOffset: 0,
   },
@@ -195,7 +220,9 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
     label: "Pig",
     length: 1.5,
     clips: PIG_CLIPS,
-    walkSpeed: 1.1,
+    // Clip stride: walk 0.73 m/s, run 4.63 m/s — the pack's one genuinely fast run cycle, and a
+    // boar really does hit 6-11 m/s. 7 was already a speed this clip can carry; only the walk moved.
+    walkSpeed: 0.9,
     runSpeed: 7,
     fleeRadius: 6,
     yawOffset: 0,
@@ -206,8 +233,11 @@ export const ANIMAL_SPECS: readonly AnimalSpec[] = [
     label: "Crow",
     length: 0.5,
     clips: CROW_CLIPS,
-    walkSpeed: 0.6,
-    runSpeed: 2.5,
+    // Clip stride: walk 0.22 m/s, hop 0.14 m/s. Both are near enough on-the-spot, because a crow's
+    // real escape is the wing and not the leg. Until `ANIM_Crow_TakeOff` drives an actual flight
+    // state, a fleeing crow hops, and it hops at a speed its hop cycle can carry.
+    walkSpeed: 0.3,
+    runSpeed: 0.35,
     fleeRadius: 5,
     yawOffset: 0,
   },
