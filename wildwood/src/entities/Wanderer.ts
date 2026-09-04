@@ -46,10 +46,45 @@ const MAX_CLIMB = (50 * Math.PI) / 180;
  *
  * Written as a gradient, `v/h` is this constant plus one frame of gravity and the stall angle
  * stops depending on how fast you happen to be going. It is also the more honest model: the press
- * is *aim*, and how far you overshoot a convex break scales with how fast you crossed it. At 0.25
- * the walk stalls at 64.9° wading and 70.9° walking at 60 Hz, and still at 55.6° wading at 30 Hz —
- * clear of `MAX_CLIMB` at every speed this game can move at, which is the invariant that was
- * missing rather than a number that happened to work.
+ * is *aim*, and how far you overshoot a convex break scales with how fast you crossed it.
+ *
+ * **Do not fix a future version of this by raising `MAX_CLIMB`.** The controller was never
+ * refusing the slope; the step being handed to it was pointing the wrong way.
+ *
+ * ### Why 0.25
+ *
+ * The old fixed press made the effective gradient a function of speed, which is the whole defect.
+ * The new one pins it. At 60 Hz, `v/h` and the angle at which the walk stalls:
+ *
+ * | speed          | was          | is           |
+ * | -------------- | ------------ | ------------ |
+ * | sprint 6.2 m/s | 0.375, 69.4° | 0.303, 73.1° |
+ * | walk 3.4 m/s   | 0.684, 55.6° | 0.346, 70.9° |
+ * | wade 1.5 m/s   | 1.551, 32.8° | 0.468, 64.9° |
+ *
+ * So sprinting is nearly untouched and the slow speeds are brought up to meet it: the fast case
+ * was always fine, and 0.25 is the value that makes the others behave like it.
+ *
+ * The bound is `press + |gravity|·dt < speed · cot(MAX_CLIMB)` at the game's **slowest** speed and
+ * **lowest** frame rate. At 30 Hz and `WADE_SPEED` that caps the press at 0.404, so 0.25 sits 38%
+ * under it. Read the other way, 0.25 holds the invariant down to 22.2 fps, where a press of zero
+ * would hold it to 15.6 — the press costs about six frames per second of headroom and gravity's
+ * own `|g|·dt²` term owns the rest, which no choice of press can remove. Below that the walk is
+ * broken for reasons a constant cannot fix.
+ *
+ * ### What the shallower press costs on the way down
+ *
+ * Measured, because a weaker press is exactly what you would expect to skip off a convex break.
+ * Two arms, one tree, one line apart, both bundles grepped for their own marker: sprinting down
+ * the valley's steepest sustained descent (33→49→47→33° over 18 m) the capsule's worst excursion
+ * above its resting gap was **0.112 m with this press against 0.141 m with the old one**, and over
+ * its sharpest convex break (7→37° in 9 m), 0.076 m against 0.083 m. Capsule radius is 0.30, and
+ * neither arm ever left the ground. The weaker press sticks *better*, which is the right way
+ * round: `snapToGround` is what actually holds the feet down on a descent, and a press heavy
+ * enough to drive the capsule into the slope only gives the solver more to push back out.
+ * `solid-wood` also stays green — `insideTrunkTicks` 0 over 900 ticks of dense wood — so nothing
+ * new snags. Autostep was not tested on its own; this valley has no stairs, and that traverse is
+ * the closest thing to a proof of it here.
  */
 const GROUND_PRESS = 0.25;
 /** Radians per unit of relative pointer motion. */
