@@ -4,7 +4,6 @@
     {
       "path": "public/audio/forest-bed.ogg",
       "loop": true,
-      "seamMaxRatio": 0.6,
       "bands": {
         "sub": {
           "max": 3
@@ -15,12 +14,12 @@
         "air": {
           "min": 35
         }
-      }
+      },
+      "seamMaxRatio": 0.6
     },
     {
       "path": "public/audio/forest-birds.ogg",
       "loop": true,
-      "seamMaxRatio": 0.6,
       "bands": {
         "sub": {
           "max": 4
@@ -31,12 +30,12 @@
         "air": {
           "min": 30
         }
-      }
+      },
+      "seamMaxRatio": 0.6
     },
     {
       "path": "public/audio/lake-shore.ogg",
       "loop": true,
-      "seamMaxRatio": 0.6,
       "bands": {
         "sub": {
           "max": 3
@@ -47,56 +46,27 @@
         "high": {
           "min": 40
         }
-      }
+      },
+      "seamMaxRatio": 0.6
     },
     {
       "path": "public/audio/landmark-found.ogg",
       "loop": false,
       "bands": {
+        "sub": {
+          "max": 3
+        },
         "low": {
           "max": 15
+        },
+        "mid": {
+          "min": 10
         },
         "high": {
           "min": 30
         },
         "air": {
           "min": 15
-        }
-      }
-    },
-    {
-      "path": "public/audio/step-dirt-1.ogg",
-      "loop": false,
-      "bands": {
-        "sub": {
-          "max": 6
-        },
-        "high": {
-          "min": 18
-        }
-      }
-    },
-    {
-      "path": "public/audio/step-dirt-2.ogg",
-      "loop": false,
-      "bands": {
-        "sub": {
-          "max": 6
-        },
-        "high": {
-          "min": 18
-        }
-      }
-    },
-    {
-      "path": "public/audio/step-dirt-3.ogg",
-      "loop": false,
-      "bands": {
-        "sub": {
-          "max": 6
-        },
-        "high": {
-          "min": 18
         }
       }
     },
@@ -137,7 +107,7 @@
       }
     },
     {
-      "path": "public/audio/step-leaf-1.ogg",
+      "path": "public/audio/step-dirt-1.ogg",
       "loop": false,
       "bands": {
         "sub": {
@@ -149,7 +119,7 @@
       }
     },
     {
-      "path": "public/audio/step-leaf-2.ogg",
+      "path": "public/audio/step-dirt-2.ogg",
       "loop": false,
       "bands": {
         "sub": {
@@ -161,7 +131,7 @@
       }
     },
     {
-      "path": "public/audio/step-leaf-3.ogg",
+      "path": "public/audio/step-dirt-3.ogg",
       "loop": false,
       "bands": {
         "sub": {
@@ -209,6 +179,42 @@
       }
     },
     {
+      "path": "public/audio/step-leaf-1.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 6
+        },
+        "high": {
+          "min": 18
+        }
+      }
+    },
+    {
+      "path": "public/audio/step-leaf-2.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 6
+        },
+        "high": {
+          "min": 18
+        }
+      }
+    },
+    {
+      "path": "public/audio/step-leaf-3.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 6
+        },
+        "high": {
+          "min": 18
+        }
+      }
+    },
+    {
       "path": "public/audio/step-water-1.ogg",
       "loop": false,
       "bands": {
@@ -241,6 +247,216 @@
         },
         "high": {
           "min": 18
+        }
+      }
+    },
+    {
+      "path": "public/audio/voice-fox.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 4
+        },
+        "mid": {
+          "min": 45
+        },
+        "high": {
+          "min": 10
+        }
+      }
+    },
+    {
+      "path": "public/audio/voice-wolf.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 4
+        },
+        "low": {
+          "min": 50
+        },
+        "high": {
+          "max": 12
+        }
+      }
+    },
+    {
+      "path": "public/audio/voice-stag.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 4
+        },
+        "low": {
+          "min": 8
+        },
+        "mid": {
+          "min": 30
+        }
+      }
+    },
+    {
+      "path": "public/audio/voice-doe.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 4
+        },
+        "mid": {
+          "min": 45
+        }
+      }
+    },
+    {
+      "path": "public/audio/voice-pig.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 16
+        },
+        "low": {
+          "min": 20
+        },
+        "mid": {
+          "min": 15
+        }
+      }
+    },
+    {
+      "path": "public/audio/voice-crow.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 4
+        },
+        "mid": {
+          "min": 25
+        },
+        "high": {
+          "min": 25
+        }
+      }
+    },
+    {
+      "path": "public/audio/graze-ungulate.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 5
+        },
+        "high": {
+          "min": 25
+        }
+      }
+    },
+    {
+      "path": "public/audio/graze-pig.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 5
+        },
+        "high": {
+          "min": 25
+        }
+      }
+    },
+    {
+      "path": "public/audio/graze-crow.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 5
+        },
+        "mid": {
+          "min": 35
+        }
+      }
+    },
+    {
+      "path": "public/audio/step-hoof-1.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 6
+        },
+        "high": {
+          "min": 30
+        }
+      }
+    },
+    {
+      "path": "public/audio/step-hoof-2.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 6
+        },
+        "high": {
+          "min": 30
+        }
+      }
+    },
+    {
+      "path": "public/audio/step-paw-1.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 6
+        },
+        "high": {
+          "min": 30
+        }
+      }
+    },
+    {
+      "path": "public/audio/step-paw-2.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 6
+        },
+        "high": {
+          "min": 30
+        }
+      }
+    },
+    {
+      "path": "public/audio/step-trotter-1.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 14
+        },
+        "high": {
+          "min": 15
+        }
+      }
+    },
+    {
+      "path": "public/audio/step-trotter-2.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 14
+        },
+        "high": {
+          "min": 15
+        }
+      }
+    },
+    {
+      "path": "public/audio/wing-crow.ogg",
+      "loop": false,
+      "bands": {
+        "sub": {
+          "max": 14
+        },
+        "low": {
+          "min": 20
+        },
+        "mid": {
+          "min": 20
         }
       }
     }
