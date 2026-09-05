@@ -14,14 +14,14 @@ import { palette } from "./palette.js";
 /* BEGIN THREENATIVE LOADING APPEARANCE */
 /** Edit these source constants for the starter's loading look. */
 export const loading = {
-  backgroundColor: palette.skyLow,
+  backgroundColor: palette.void,
   backgroundImage: undefined as string | undefined,
   enabled: true,
   fillImage: undefined as string | undefined,
   logoImage: undefined as string | undefined,
-  progressColor: palette.accent,
+  progressColor: palette.phase,
   showStatus: false,
-  trackColor: palette.skyHigh,
+  trackColor: palette.wallBase,
   bar: { anchorX: 0.5, anchorY: 0.72, height: 12, maxWidth: 520, minWidth: 1, width: 0.62 },
 } as const;
 /* END THREENATIVE LOADING APPEARANCE */

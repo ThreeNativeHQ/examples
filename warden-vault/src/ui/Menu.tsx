@@ -21,8 +21,8 @@ export function Menu() {
   const paused = state.paused;
 
   return (
-    <div className="pointer-events-none absolute bottom-6 left-6 flex items-center gap-3 border border-line bg-panel/75 px-4 py-3 text-[11px] uppercase tracking-[0.14em] text-dim">
-      <span>WASD / arrows to move · space to jump the gap · reach the flag</span>
+    <div className="pointer-events-none absolute bottom-6 right-6 flex items-center gap-3 border border-line bg-panel/75 px-4 py-3 text-[11px] uppercase tracking-[0.14em] text-dim">
+      <span>shove the pile · walk through the glowing ward · stand on the seal</span>
       <button
         aria-pressed={paused}
         className="pointer-events-auto border border-line px-2 py-1 text-text hover:border-lume"

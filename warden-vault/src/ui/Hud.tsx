@@ -2,59 +2,93 @@ import { useUiState } from "@threenative/ui";
 import type { GameState } from "../state.js";
 
 /**
- * The HUD. Plain Tailwind, plain SVG, plain DOM — and the same file on every target.
- *
- * There is no second renderer to keep in step: on web this mounts beside the canvas, and on a
- * phone or a desktop the same bundle renders in the platform's own web view over the game surface.
- * Style it however you like; nothing here is a vocabulary the framework has to understand.
+ * The HUD. Plain Tailwind, plain DOM, and the same file on every target.
  *
  * `useUiState` reads the game's *published* state, which moves at about 10 Hz rather than at the
- * frame rate, and is undefined until the game publishes its first snapshot.
+ * frame rate, and is undefined until the game publishes its first snapshot — so nothing is drawn
+ * until there is something true to draw.
  */
 export function Hud() {
   const state = useUiState<GameState>();
-  // Nothing to draw until the game publishes its first snapshot, a few milliseconds in. Rendering
-  // zeroes instead would put a wrong score on screen and then correct it.
   if (state === undefined) return null;
-  const position = Math.max(0, Math.min(100, Math.abs(state.playerX) * 10));
   const won = state.status === "won";
+  const replaying = state.replayPhase === "first" || state.replayPhase === "second";
 
   return (
     <>
-      <div className="pointer-events-none absolute left-6 top-6 w-32">
-        <div className="text-[10px] uppercase tracking-[0.14em] text-dim">score</div>
-        <div className="text-4xl leading-none tabular-nums text-lume">{state.score}</div>
-        <div className="mt-3 flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-dim">
-          lives
-          {[0, 1, 2].map((slot) => (
-            <i
-              className={`h-2 w-2 border border-line ${slot < state.lives ? "bg-lume" : "bg-panel"}`}
-              key={slot}
-            />
-          ))}
+      <div className="pointer-events-none absolute left-6 top-6 w-56 select-none">
+        <div className="text-[10px] uppercase tracking-[0.22em] text-dim">warden vault</div>
+        <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-dim">
+          seed <b className="font-normal tabular-nums text-text">{state.seed}</b>
         </div>
-        <div className="mt-3 w-24">
-          <div className="flex justify-between gap-2 text-[10px] uppercase tracking-[0.14em] text-dim">
-            <span>position</span>
-            <b className="font-normal tabular-nums text-text">{Math.round(position)}</b>
+
+        <dl className="mt-4 space-y-1 text-[11px] uppercase tracking-[0.12em]">
+          <Row label="solid crates" value={state.crates} />
+          <Row label="phase crates" value={state.phaseCrates} tone="phase" />
+          <Row label="at rest" value={`${state.settledCrates} / ${state.crates + state.phaseCrates}`} />
+          <Row label="shoved" value={state.pushedCrates} />
+          <Row label="push metres" value={state.pushDistance.toFixed(2)} />
+          <Row label="blocked ticks" value={state.blockedTicks} />
+          <Row label="walked through" value={state.passThroughs} tone="phase" />
+          <Row label="seal contacts" value={state.sealContacts} />
+        </dl>
+
+        <div className="mt-4 border-t border-line pt-2 text-[10px] uppercase tracking-[0.14em] text-dim">
+          <div className="flex justify-between gap-2">
+            <span>replay</span>
+            <b className="font-normal tabular-nums text-text">{state.replayPhase}</b>
           </div>
-          <div className="relative mt-1 h-1 overflow-hidden border border-line bg-panel">
-            <i className="absolute inset-y-0 left-0 bg-lume" style={{ width: `${position}%` }} />
+          <div className="flex justify-between gap-2">
+            <span>match</span>
+            <b
+              className={`font-normal tabular-nums ${state.replayMatch ? "text-lume" : "text-text"}`}
+            >
+              {state.replayMatch ? "yes" : "—"}
+            </b>
           </div>
         </div>
       </div>
-      {state.status === "playing" ? null : (
-        <div className="pointer-events-none absolute inset-x-0 top-1/3 flex flex-col items-center gap-2">
-          <output
-            className={`text-5xl uppercase tracking-[0.2em] ${won ? "text-lume" : "text-text"}`}
-          >
-            {won ? "flag reached" : "out of lives"}
+
+      <div className="pointer-events-none absolute bottom-6 left-6 select-none text-[10px] uppercase leading-relaxed tracking-[0.14em] text-dim">
+        <div>arrows or wasd — shove the crates</div>
+        <div>v — run the vault twice and compare</div>
+        <div>r — reset the vault</div>
+      </div>
+
+      {replaying ? (
+        <div className="pointer-events-none absolute inset-x-0 top-8 flex justify-center">
+          <output className="border border-line bg-panel/80 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-lume">
+            determinism check — pass {state.replayPhase === "first" ? "1" : "2"} of 2
           </output>
+        </div>
+      ) : null}
+
+      {won ? (
+        <div className="pointer-events-none absolute inset-x-0 top-1/3 flex flex-col items-center gap-2">
+          <output className="text-5xl uppercase tracking-[0.2em] text-lume">seal broken</output>
           <div className="text-[11px] uppercase tracking-[0.14em] text-dim">
-            press r to run it again
+            reached by {state.sealedBy === "warden" ? "the warden" : "a shoved crate"} — press r to
+            reset
           </div>
         </div>
-      )}
+      ) : null}
     </>
+  );
+}
+
+function Row({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone?: "phase";
+  value: number | string;
+}) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-dim">{label}</dt>
+      <dd className={`tabular-nums ${tone === "phase" ? "text-lume" : "text-text"}`}>{value}</dd>
+    </div>
   );
 }

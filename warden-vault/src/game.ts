@@ -9,26 +9,23 @@ import type { GameState } from "./state.js";
 // game.state is the single store: the fixed-step loop writes it, and React/playtests read it.
 const game = defineGame<GameState, IPhysicsContext>({
   input: {
-    // The four directions of `input.vector("move")`. Declared rather than inherited from the
-    // default binding, so the axis every scene reads is visible where the game is defined.
+    // The four directions of `input.vector("move")`. Arrows are what the sealed proof presses;
+    // WASD is here so a human plays the same game.
     move: {
       down: ["ArrowDown", "KeyS"],
       left: ["ArrowLeft", "KeyA"],
       right: ["ArrowRight", "KeyD"],
       up: ["ArrowUp", "KeyW"],
     },
-    jump: { buttons: [0], keys: ["Space"] },
-    flagGust: { keys: ["KeyG"] },
+    // V runs the vault twice on the same scripted input and reports whether it landed the same.
+    verify: { keys: ["KeyV"] },
     restart: { keys: ["KeyR"] },
-    // Wheel, pinch and the right stick share one portable camera intent. Negative DOM deltaY
-    // (toward-user) is positive scroll intent on browser and native; the scene owns the framing.
-    zoom: { gamepadAxes: [3], pinch: true, scroll: true },
   },
   plugins: [rapier(), replay(), playtest()],
   display: config.display,
   render: config.renderer,
   scenes: { play: Play },
-  seed: 90210,
+  seed: 6132,
   start: "play",
 });
 

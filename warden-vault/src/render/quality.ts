@@ -72,98 +72,83 @@ export function resolveQualityTier(
 }
 
 /**
- * What a desktop gets: a clean coastal look with restrained painterly treatment. The expensive
- * screen-space gathers are deliberately off here: on a small water scene they muddy the grass and
- * turn the water glint into a halo instead of adding useful depth.
+ * What a desktop gets.
+ *
+ * The starter's painterly chain — outline, Kuwahara, watercolour — is off in every tier here, by
+ * name rather than by deletion, so `TN_WORLD_ENVIRONMENT` still reports each one as *not
+ * requested* instead of silently vanishing. The reference this game is built to is a clean
+ * stylised render, and a Kuwahara smear at this camera distance eats the plank braces on the
+ * crates, which are the only surface detail in the room.
+ *
+ * What is on instead: contact occlusion, because a pile of forty crates is nothing but contacts,
+ * and bloom over a high threshold, because exactly two things in the vault emit — the lanterns
+ * and the seal — and they are supposed to be the only things that glow.
  */
 const high: QualitySettings = {
-  // Bloom cost: unmeasured for this authored scene; the low strength keeps water glints alive
-  // without washing the scene in orange.
   bloomEnabled: true,
-  bloomRadius: 0.34,
-  bloomStrength: 0.26,
-  bloomThreshold: 0.64,
+  bloomRadius: 0.42,
+  bloomStrength: 0.62,
+  // High, on purpose: the lantern flames and the seal plate clear it and nothing lit does.
+  bloomThreshold: 0.82,
   denoiseEnabled: false,
-  exposure: 1.04,
+  exposure: 1.06,
+  // Contact scale, in metres. A crate is 0.92 m, so half a metre gathers the crease where two
+  // crates meet and the shadow where one meets the floor, and no further.
+  gtaoEnabled: true,
+  gtaoRadius: 0.5,
+  gtaoResolutionScale: 0.5,
+  gtaoSamples: 12,
+  gtaoScale: 1.25,
   ssgiEnabled: false,
   ssrEnabled: false,
-  sharpenEnabled: false,
-  // Outline cost: unmeasured; it is intentionally a soft blue-green edge, not a black
-  // comic-book stroke.
-  outlineEnabled: true,
-  outlineDepthWeight: 0.32,
-  outlineInkColor: 0x173c4a,
-  outlineSoftness: 0.08,
-  outlineStrength: 0.3,
-  outlineThreshold: 0.2,
-  // Kuwahara cost: unmeasured; the half-resolution scratch and restrained strength preserve
-  // readable grass silhouettes.
-  kuwaharaEnabled: true,
-  kuwaharaRadius: 5,
-  kuwaharaResolutionScale: 0.5,
-  kuwaharaStrength: 0.2,
-  // Watercolour cost: unmeasured; the low mix keeps the paper grouping from flattening the coast.
-  watercolorEnabled: true,
-  watercolorPaperStrength: 0.05,
-  watercolorShadowStrength: 0.04,
-  watercolorShadowTint: 0x7d6b62,
-  watercolorStrength: 0.26,
+  sharpenEnabled: true,
+  // RCAS is a radius: 0 is maximum sharpening and 2 is none.
+  sharpenStrength: 0.95,
+  vignetteAmount: 0.34,
+  outlineEnabled: false,
+  kuwaharaEnabled: false,
+  watercolorEnabled: false,
   renderChainTier: "high",
   tonemapMode: "aces",
 };
 
-/**
- * Medium keeps the same readable coast, with a smaller paint radius and a little less colour
- * grouping for machines that need a cheaper frame.
- */
+/** A machine between the two: the same look with a cheaper occlusion gather. */
 const medium: QualitySettings = {
-  // Bloom cost: unmeasured for this authored scene; keep only a small highlight lift.
   bloomEnabled: true,
-  bloomRadius: 0.3,
-  bloomStrength: 0.22,
-  bloomThreshold: 0.68,
+  bloomRadius: 0.38,
+  bloomStrength: 0.56,
+  bloomThreshold: 0.84,
   denoiseEnabled: false,
-  exposure: 1.03,
+  exposure: 1.05,
+  gtaoEnabled: true,
+  gtaoRadius: 0.45,
+  gtaoResolutionScale: 0.4,
+  gtaoSamples: 8,
+  gtaoScale: 1.2,
   ssgiEnabled: false,
   ssrEnabled: false,
   sharpenEnabled: false,
-  // Outline cost: unmeasured; keep its edge narrow on the cheaper tier.
-  outlineEnabled: true,
-  outlineDepthWeight: 0.28,
-  outlineInkColor: 0x173c4a,
-  outlineSoftness: 0.08,
-  outlineStrength: 0.26,
-  outlineThreshold: 0.22,
-  // Kuwahara cost: unmeasured; radius three keeps the water and grass readable.
-  kuwaharaEnabled: true,
-  kuwaharaRadius: 3,
-  kuwaharaResolutionScale: 0.5,
-  kuwaharaStrength: 0.16,
-  // Watercolour cost: unmeasured; fewer bands and a low mix preserve the coast's value steps.
-  watercolorEnabled: true,
-  watercolorLevels: 6,
-  watercolorPaperStrength: 0.04,
-  watercolorShadowStrength: 0.03,
-  watercolorShadowTint: 0x7d6b62,
-  watercolorStrength: 0.22,
+  vignetteAmount: 0.3,
+  outlineEnabled: false,
+  kuwaharaEnabled: false,
+  watercolorEnabled: false,
   renderChainTier: "medium",
   tonemapMode: "aces",
 };
 
 /**
- * What a phone gets: the cleanest version of the coastal look. Authored paint is omitted to keep
- * the water mesh and touch controls responsive.
+ * What a phone gets: bloom and a vignette, no screen-space gather at all. The occlusion is the
+ * first thing to go — forty simulated bodies are already the frame's budget on a phone.
  */
 const low: QualitySettings = {
-  // Bloom cost: unmeasured for this authored scene; this is the phone-safe highlight lift.
   bloomEnabled: true,
-  bloomRadius: 0.28,
-  bloomStrength: 0.18,
-  bloomThreshold: 0.72,
-  exposure: 1.02,
+  bloomRadius: 0.32,
+  bloomStrength: 0.48,
+  bloomThreshold: 0.86,
+  exposure: 1.04,
+  gtaoEnabled: false,
   sharpenEnabled: false,
-  // The low tier omits authored paint by name: no outline, scratch target, or paper graph is
-  // built on the phone path.
+  vignetteAmount: 0.28,
   outlineEnabled: false,
   kuwaharaEnabled: false,
   watercolorEnabled: false,

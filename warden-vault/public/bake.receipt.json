@@ -1,0 +1,23 @@
+{
+  "outputs": [
+    {
+      "bytes": 150,
+      "path": "native-proof.07d59a2f.png",
+      "producer": "audio",
+      "source": "native-proof.png"
+    },
+    {
+      "bytes": 624,
+      "path": "native-proof.9d3162c0.glb",
+      "producer": "audio",
+      "source": "native-proof.glb"
+    },
+    {
+      "bytes": 5228,
+      "path": "pickup.6b1d6795.ogg",
+      "producer": "audio",
+      "source": "pickup.wav"
+    }
+  ],
+  "pipelineVersion": 9
+}

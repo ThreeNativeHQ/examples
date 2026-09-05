@@ -1,60 +1,49 @@
-// Generated for you. This is ordinary Three.js — edit or delete it freely.
-// ThreeNative does not read this file.
+// Ordinary Three.js — ThreeNative does not read this file.
 //
-// Four lights, and the fourth is the one people forget: a cool rim from behind
-// so silhouettes separate from the background instead of reading as flat
-// cut-outs. Key + bounce + ambient gets you a lit scene; the rim is what makes
-// it look shaded.
-import {
-  AmbientLight,
-  DirectionalLight,
-  HemisphereLight,
-  PCFSoftShadowMap,
-  type Scene,
-} from "three";
+// A dark room with two warm lamps in it. The reference's whole read is that the *ambient* is
+// almost nothing and every bright surface is bright because a named source is pointing at it, so
+// the temptation to raise the fill until the crates are comfortably visible has to be resisted:
+// the moment the floor stops being near-black the picture stops being a vault.
+//
+// The lantern and seal point lights are authored with the props themselves, in `vault.ts`. What
+// is here is the three lights the whole room shares.
+import { AmbientLight, DirectionalLight, HemisphereLight, PCFSoftShadowMap, type Scene } from "three";
 import { palette } from "./palette.js";
 
 type ShadowRenderer = { shadowMap: { enabled: boolean; type: number } };
 
-// Returns the key light: `WorldEnvironment`'s godrays stage raymarches against a shadow
-// map, so the scene hands the sun to `setupPost` and a shadowless light is refused by name
-// instead of rendering a black pass.
+/** Returns the key light: the godrays stage raymarches a shadow map and refuses a shadowless one. */
 export function setupLighting(scene: Scene, renderer: ShadowRenderer): DirectionalLight {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
 
-  // Sky above, ground bounce below. Tint the second colour toward whatever the
-  // floor actually is — it is the cheapest realism in the whole rig.
-  scene.add(new HemisphereLight(palette.skyHigh, palette.skyLow, 1.8));
+  // Sky above, floor bounce below, both cold and both very quiet.
+  scene.add(new HemisphereLight(0x33456a, palette.floorSeam, 0.9));
 
-  const key = new DirectionalLight(palette.accent, 2.4);
-  key.position.set(4, 7, 3);
+  // The key. Warm, high, and from the lantern side, so crate tops catch a little of the same
+  // colour the plaster does and the shadows all fall the same way as in the reference.
+  const key = new DirectionalLight(0xffd0a0, 1.35);
+  key.position.set(-7, 15, 5);
   key.castShadow = true;
-  // 1024² is one quarter of a 2048² map's texel storage and fill work while
-  // retaining enough resolution for this small authored route. Increase it
-  // only when a larger level makes the 18-unit camera extent visibly soft.
-  key.shadow.mapSize.set(1024, 1024);
-  key.shadow.camera.near = 0.5;
-  key.shadow.camera.far = 60;
-  // A shadow camera tight enough to stay crisp cannot also cover a big level;
-  // this extent matches the generated route. Widen it, or move the light with
-  // the player, when the world grows.
-  const extent = 18;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 46;
+  // The extent covers the whole room and nothing else: the vault is 16 x 11 metres and a shadow
+  // camera any wider spends its texels outside the walls.
+  const extent = 10;
   key.shadow.camera.left = -extent;
   key.shadow.camera.right = extent;
   key.shadow.camera.top = extent;
   key.shadow.camera.bottom = -extent;
-  key.shadow.bias = -0.0008;
-  // Rounded geometry self-shadows at grazing angles without this, and the bias
-  // alone would have to grow big enough to detach contact shadows.
-  key.shadow.normalBias = 0.03;
+  key.shadow.bias = -0.0006;
+  // Rounded geometry self-shadows at grazing angles without this, and the bias alone would have
+  // to grow big enough to detach the contact shadow under every crate.
+  key.shadow.normalBias = 0.035;
   scene.add(key);
 
-  const rim = new DirectionalLight(palette.skyHigh, 0.9);
-  rim.position.set(-5, 3, -6);
-  scene.add(rim);
-
-  scene.add(new AmbientLight(palette.skyLow, 0.38));
+  // Just enough ambient that a crate face turned away from every source is still a colour rather
+  // than a silhouette.
+  scene.add(new AmbientLight(0x2e3d58, 0.65));
 
   return key;
 }
