@@ -11,6 +11,12 @@
   "steps": [
     {
       "kind": "wait",
+      "label": "first-look",
+      "waitTicks": 6,
+      "release": true
+    },
+    {
+      "kind": "wait",
       "label": "vault-opens",
       "waitTicks": 240,
       "release": true
@@ -73,7 +79,9 @@
       {
         "atStep": "fall-and-settle",
         "entity": "crate.",
-        "minBodies": 30
+        "minBodies": 30,
+        "compareToStep": "first-look",
+        "minMeanPoseDistance": 0.02
       }
     ],
     "visibility": [

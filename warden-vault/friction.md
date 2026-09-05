@@ -5,7 +5,7 @@ the reference image, the brief, the generated `AGENTS.md`, the four `.d.ts` file
 the missing source, the assertion reference, and the capability searches — of which the searches and
 the `.d.ts` reading were worth every call and the rest was orientation.
 
-**Total tool calls:** ~130.
+**Total tool calls:** ~145.
 
 **Where they went, roughly:** 20 on orientation, 25 on writing the game, 15 on the visual loop,
 **about 45 on proof** — writing scenarios, reading their failures, and fixing what they found — and
@@ -371,3 +371,276 @@ the page error and its stack line.
 **What would have prevented it:** for (1), a note on `IStartupStatus` that it describes the boot and
 not the scene. For (2), one sentence on `ctx.add`: "the object is reparented into the scene".
 **Silent:** yes for (1) — nothing throws, the room is simply empty.
+
+### F16: `atSteps` catches the frame-one fake win — but its failure message throws away the evidence it already has
+**Surface:** `@threenative/playtest` — `resources[].atSteps`, `TN_PLAYTEST_RESOURCE_TRANSITION_ASSERTION_FAILED`
+**What I wanted to assert, in plain words:** the run reached `won` *because* the warden's body
+overlapped the seal — that the terminal state arrived after the contact and never before it. This is
+the exact defect of F5, where the game reported `won` on frame one with the warden eight metres
+away and every scenario I had at the time went green.
+**What I wrote:**
+```json
+{ "id": "state", "path": "status", "atSteps": [
+  { "label": "vault-drops", "equals": "playing" },
+  { "label": "cross-the-vault", "equals": "playing" },
+  { "label": "after-the-contact", "equals": "won" } ] }
+```
+plus `{"entity":"player","with":"seal","kind":"trigger","atStep":"reach-the-seal"}`.
+**What the runner did — the good half:** I reintroduced the F5 defect exactly (seal area lowered
+onto the floor plane, body filter removed) and re-ran. **It failed, and it should have.** So the
+answer to "can you distinguish a real win from that fake one" is *partly yes*: `atSteps` pins the
+value at labelled boundaries, and pinning `status: "playing"` before the contact is the assertion I
+did not know to write when F5 bit me.
+**What the runner did — the bad half:** the message was
+`Resource 'state' path 'status' did not match the expected labeled-step transition.`
+Three times, once per row, with no step, no expectation and no observed value. The report's
+`details.samples` **already carries all of it** —
+`{"expected":{"equals":"playing","label":"vault-drops"},"pass":false,"value":"won"}` — so the
+information exists and only the human-readable line drops it. A build's worth of `grep` to recover
+what the runner had already computed.
+**What I still cannot assert:** causation, and sub-step ordering. `atSteps` is a comparison at step
+*boundaries*. A win that arrives 199 ticks into a 200-tick step is indistinguishable from one that
+arrives at tick 200 alongside the contact. If my `cross-the-vault` step had been one tick longer, or
+if the fake win had appeared one step later than the one I happened to pin, the scenario would have
+gone green on a broken game. I can prove "not won earlier than step N". I cannot prove "won because
+of, and no earlier than, this contact".
+**Cost:** ~4 tool calls including the negative control.
+**What would have prevented it:** see `## Ideas`, `causedBy`.
+
+### F17: A frame-one bug and a lazy assertion produce the same message
+**Surface:** `TN_PLAYTEST_ASSERTION_TRIVIAL`
+**What happened:** against the reintroduced F5 defect, my main win scenario
+(`through-the-ward-onto-the-seal`) failed with
+`Assertion 'resource.state' at path 'status' was already satisfied before the scenario ran (value "won").`
+and `…path 'sealContacts' … (value 1)`. That is the runner correctly refusing a trivial assertion —
+and it is also the *only* thing it said about a game that had won itself before the warden moved.
+The suggestion it offers ("Drive the asserted value from a failing initial state, or assert
+`changed:true`… `allowTrivial` takes the reason it is held") points the author at editing the
+scenario. Following that advice on this run would have added an `allowTrivial` and made a broken
+game green.
+**How I found out:** only because I *knew* the defect was there; I had planted it.
+**Cost:** free this time, and it is exactly the trap that cost six calls in F5.
+**Silent:** yes, in the worst way — the harness detected the symptom and blamed the wrong side.
+**What would have prevented it:** when a resource's initial sample already satisfies a
+`won`/terminal-shaped assertion, that is at least as likely to be a game that started finished as a
+lazy assertion. The message could say so: *"value was already `won` at the first sample — if this is
+a terminal state, the run may have ended before it began."*
+
+### F18: `entityVisible.throughoutFrames` counts frames from before the world exists
+**Surface:** `visual[].entityVisible.throughoutFrames`
+**What I wanted to assert:** the warden never leaves the frame — the brief requires the character to
+stay legible, and this is a fixed camera, so it should hold for the whole run.
+**What I wrote:** `{"entityVisible":{"entity":"player","minProjectedPixels":200,"throughoutFrames":true}}`
+**What happened:** `TN_PLAYTEST_ENTITY_VISIBILITY_DROPPED: Entity 'player' dropped below 200
+projected pixels.` I lowered it to 60. Same. I lowered it to **1** — `Entity 'player' dropped below
+1 projected pixels.` There is no threshold at which it passes, because the run includes frames
+before the scene has presented anything and the entity's projected bounds are zero there.
+**How I found out:** by bisecting the threshold to 1, which is the only way to tell "the entity
+really left the frame" from "the assertion covers frames in which nothing exists".
+**Cost:** 3 tool calls, two runs.
+**What I did instead:** dropped `throughoutFrames` and asserted the final frame only, which proves
+much less — it cannot catch a camera that loses the character for two seconds in the middle.
+**What would have prevented it:** `visual` needs the `window: { startStep, endStep }` that
+`framebufferCoverage` already has. It is the same problem and the same shape of answer.
+**Silent:** no, but the message is misleading: it reports a gameplay symptom for a lifecycle cause.
+
+### F19: Every visual threshold is an absolute magic number, and there is no way to compare two regions
+**Surface:** `visual[].region` — `maxDarkPixelRatio`, `minDarkPixelRatio`, `maxLuminance`, `minNonblankPixelRatio`
+**What I wanted to assert, in plain words:** the seal is the brightest thing in the room and the
+floor is dark — the two-source lighting the reference is built on. That is a *relative* claim and it
+survives a change of exposure, tone curve or palette.
+**What I could write:** two independent absolute rows —
+```json
+{ "region": { "x": 780, "y": 215, "width": 90, "height": 60, "maxDarkPixelRatio": 0.3 } },
+{ "region": { "x": 470, "y": 520, "width": 300, "height": 120, "minDarkPixelRatio": 0.5 } }
+```
+**What happened:** the first attempt failed with
+`Screenshot region at (780, 215) contained 0.19296296296296298 dark pixels, above maximum ratio 0.05.`
+— an excellent message, and a number I then had to hand-fit. The seal is a set of concentric rings
+with dark gaps between them by design, so "19 % dark" is correct and my 5 % was wrong. I ended up
+choosing 0.3 because 0.193 was what this build measured, which is a threshold that says almost
+nothing and will need re-fitting the next time anyone touches the exposure. The rows are also pinned
+to pixel coordinates in a 1280x720 frame: they encode my camera, so any reframing silently
+invalidates them without failing.
+**What I still cannot assert:** "region A is brighter than region B", "this region is brighter than
+it was at step X", or "the region bounded by entity `seal`" — `region.element` binds to a DOM node,
+and there is no entity-bound equivalent even though the runner already projects entity bounds for
+`entityVisible`.
+**Cost:** 3 tool calls, two runs.
+**What would have prevented it:** see `## Ideas`, `regionCompare` and `region.entity`.
+
+### F20: `settled` can tell a real settle from a frozen one — but only by a tuned distance, and the two numbers are a factor of two apart
+**Surface:** `settled[].compareToStep` + `minMeanPoseDistance`
+**What I wanted to assert:** the bodies came to rest *after moving*, not because they were authored
+at rest and never moved — the brief says "stack, topple, collide, and come to rest **after the
+initial drop**", and "45 of 45 asleep" is equally true of a room where nothing ever fell.
+**What I wrote:**
+```json
+{ "atStep": "fall-and-settle", "entity": "crate.", "minBodies": 30,
+  "compareToStep": "first-look", "minMeanPoseDistance": 0.02 }
+```
+**What happened — the good half:** this works, and I had assumed it did not exist. I ran the
+negative control (every crate authored at its resting height, so nothing falls) and it failed:
+`Expected mean settled-pose distance for 'crate.' to reach 0.02m from step 'first-look'; observed
+0.01595886305145731m across 45 bodies.` The real build measures 0.0312 m.
+**What is unsatisfying:** 0.0160 m versus 0.0312 m. A pile that never fell still reports 1.6 cm of
+mean motion, because settling bodies micro-adjust before they sleep. The distinction is a factor of
+two and a hand-fitted threshold, not a category. A game with a gentler drop than mine has no
+threshold that separates the two at all.
+**What would have prevented it:** report the *peak* speed each body reached between the two steps as
+well as the pose delta. "Every body was moving at some point" is categorical; "the mean pose moved
+2 cm" is a magic number. See `## Ideas`, `settled.minPeakSpeed`.
+
+### F21: The determinism check is the one thing in this game the harness cannot check at all
+**Surface:** `resources` vs the brief's replay requirement
+**What I wanted to assert:** that the two replay passes produced the same final state.
+**What I can actually assert:** `{"id":"state","path":"replayMatch","equals":true}` — which reads a
+boolean **my own game computed**. The harness never sees the two digests. If my comparison were
+`replayMatch = true` with no digest at all, every scenario I have would still be green, and the
+report would still say `pass: true` with `trivialityOptOutCount: 0`.
+
+This is the purest example of the thing worth naming in this round: **a green run asserting far less
+than it appears to.** `same-input-twice-same-vault` looks like a determinism proof. It is a proof
+that a boolean in my state store is `true`. I mitigated it inside the game — publishing
+`replayDrift` (the largest disagreeing component, `0` here) and `replayBodies` (3) so the report
+carries the measurement and its scope rather than only the verdict — but that mitigation is *also*
+my own code marking its own homework. Nothing in the harness can distinguish my honest
+implementation from a `return true`.
+
+The general shape: the runner can observe state, contacts, poses, pixels and diagnostics, but it has
+no way to **re-run the same scenario twice and compare its own observations**. That capability would
+move determinism from "the game says so" to "the harness measured it", and it needs nothing from the
+game at all — the observations are already recorded per tick.
+**Cost:** this one cost nothing to discover and about 25 calls to work around (F10).
+**What would have prevented it:** see `## Ideas`, `repeat`.
+
+---
+
+## Ideas
+
+Capabilities I wanted and could not write, with the JSON I would have written. Ordered by what they
+would have saved me on this build.
+
+### 1. `causedBy` — the assertion F5 needed and I still cannot write
+
+The single most valuable one. Today I can prove *"not won before step N"*; I cannot prove *"won
+because of this contact, and never before it"*. The runner already records contacts with ticks and
+resources per tick, so this is a comparison it can do without any new observation channel.
+
+```json
+{
+  "causedBy": [
+    {
+      "effect": { "resource": "state", "path": "status", "becomes": "won" },
+      "cause": { "contact": { "entity": "player", "with": "seal", "kind": "trigger" } },
+      "withinTicks": 4,
+      "neverBefore": true
+    }
+  ]
+}
+```
+
+- `neverBefore: true` fails if the effect is ever observed before the first cause — which is exactly
+  the F5 defect, at tick granularity rather than step granularity.
+- `withinTicks` fails a game that reaches the terminal state a long time after the contact, which is
+  the signature of a distance check or a timer that happens to fire near a contact.
+- The `cause` should also accept `{ "resource": …, "becomes": … }` and `{ "signal": … }`, so
+  "the door opened because the plate was pressed" is expressible with the same row.
+
+This is the sentence the brief is really asking a physics-puzzle proof to make: *the destination was
+reached through simulated contact*. Right now the runner can see the contact and can see the state,
+and nothing relates them.
+
+### 2. `repeat` — let the runner run the scenario twice and compare its own observations
+
+Turns determinism from a claim the game makes into a measurement the harness takes (F21), and it
+needs nothing from the game.
+
+```json
+{
+  "repeat": {
+    "runs": 2,
+    "compare": {
+      "poses": { "entity": "crate.", "maxDrift": 0.0001 },
+      "resources": [{ "id": "state", "path": "status" }],
+      "atStep": "fall-and-settle"
+    }
+  }
+}
+```
+
+Failure would read `run 2 diverged from run 1 by 0.0312 m at body 'crate.27' by step
+'fall-and-settle'` — which is the message I had to build inside my own game to make any progress at
+all on F10, and which every physics game will need. It would also have found F10's real cause much
+faster: two runs of the *same* build in the *same* process, compared by something that is not the
+build under test.
+
+### 3. `visual[].window` and `region.entity`
+
+Two small ones that together make visual assertions usable (F18, F19).
+
+```json
+{
+  "visual": [
+    {
+      "window": { "startStep": "vault-drops", "endStep": "after-the-contact" },
+      "entityVisible": { "entity": "player", "minProjectedPixels": 60, "throughoutFrames": true }
+    },
+    {
+      "region": { "entity": "seal", "pad": 8, "maxDarkPixelRatio": 0.3 }
+    }
+  ]
+}
+```
+
+`window` is already the shape `framebufferCoverage` uses, so it is a consistency fix rather than a
+new idea. `region.entity` reuses the projected bounds the runner already computes for
+`entityVisible`, and removes the pixel coordinates that silently encode my camera into my scenarios.
+
+### 4. `regionCompare` — relative brightness, so a look change does not invalidate every threshold
+
+```json
+{
+  "regionCompare": [
+    { "brighter": { "entity": "seal" }, "than": { "entity": "player" }, "byRatio": 1.5 },
+    { "region": { "entity": "seal" }, "brighterThanAtStep": "vault-drops", "byRatio": 1.3 }
+  ]
+}
+```
+
+Every absolute threshold I wrote in F19 is a number fitted to one build of one look. The claims I
+actually wanted — "the seal is the brightest thing in the room", "the seal got brighter when it was
+broken" — are relative, are stable across exposure and palette changes, and are what a person means
+by "is it lit".
+
+### 5. `settled[].minPeakSpeed` — categorical instead of hand-fitted
+
+```json
+{ "settled": [{ "atStep": "fall-and-settle", "entity": "crate.", "minBodies": 30,
+                "compareToStep": "first-look", "minPeakSpeed": 0.5 }] }
+```
+
+"Every body exceeded 0.5 m/s at some point and is now asleep" separates a real drop from a frozen
+one categorically. `minMeanPoseDistance` separates them by a factor of two and a magic number (F20).
+
+### 6. Two failure messages that already have their evidence and drop it
+
+- `TN_PLAYTEST_RESOURCE_TRANSITION_ASSERTION_FAILED` should print the failing samples it already
+  computed: `at step 'vault-drops' expected "playing", observed "won" (2 of 3 steps failed)` (F16).
+- `TN_PLAYTEST_ASSERTION_TRIVIAL` on a value that looks terminal should offer the other reading
+  before the scenario-editing advice: *"the run may have ended before it began"* (F17).
+
+### 7. `contacts[].requiresEntityNames` — or just say it
+
+A `contacts` row against a game whose physics bodies carry no `entity` can never pass, and the
+message says "was not observed", which reads as a gameplay failure (F9). The runner knows the
+contact log has no named participants at all. One extra clause — *"no physics body in this run
+declared an `entity`; contacts cannot be attributed"* — turns a two-hour hunt into a one-line fix.
+
+### 8. An `entity` default, and a `deliveredMotion` accessor
+
+Not assertions, but the two API changes that would have removed the most silent failure from this
+build: default a physics node's `entity` to the name it was registered under with
+`ctx.entities.add` (F9), and give `CharacterBody3D` a `deliveredMotion` reading the solver's last
+applied delta, so "was I blocked" is not a question every game answers wrongly against a deferred
+transform (F12).
