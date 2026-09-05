@@ -6,11 +6,11 @@ export const palette = {
   /** Beyond the walls. Almost black, faintly blue. */
   void: 0x0a0e16,
   /** The flagstone floor. */
-  floor: 0x30394a,
+  floor: 0x2a3341,
   /** The seams between flagstones — one step darker, never black. */
   floorSeam: 0x171d29,
   /** The plaster band the lantern light lands on. */
-  wall: 0xb08a4e,
+  wall: 0xbb9155,
   /** The dark plinth under it and the skirting at the floor. */
   wallBase: 0x2b3242,
   /** Pillars, capping rail, lantern housings. */

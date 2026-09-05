@@ -1,15 +1,68 @@
 # friction.md — warden-vault (physics-puzzle, framework arm)
 
-**First game code written at tool call:** (see below)
-**Total tool calls:** (updated at the end)
+**First game code written at tool call:** 22. Calls 1-21 were the operating contract, the scaffold,
+the reference image, the brief, the generated `AGENTS.md`, the four `.d.ts` files that stand in for
+the missing source, the assertion reference, and the capability searches — of which the searches and
+the `.d.ts` reading were worth every call and the rest was orientation.
+
+**Total tool calls:** ~130.
+
+**Where they went, roughly:** 20 on orientation, 25 on writing the game, 15 on the visual loop,
+**about 45 on proof** — writing scenarios, reading their failures, and fixing what they found — and
+the rest on commits and the friction log. The proof share is the headline number in this round and it
+is not waste: nine of the eleven scenarios failed at least once, and **seven of those failures were
+real defects in the game**, not bad assertions. Two of the seven would have shipped a game that dies
+on a documented keypress.
 
 ## Honest verdict
 
-(written at the end)
+The framework helped, and the help and the friction came from the same place. Physics, the fixed
+step, input, the render chain, the state bridge and the loading screen are all real and all worked;
+`TN_WORLD_ENVIRONMENT` naming every stage it did *not* build, `TN_QUALITY_TIER` naming the source of
+the tier, and the asset error page printing both URLs it tried are better diagnostics than most
+engines ship. I never had to write a renderer, a loop, a collision solver or a state bridge: the
+game is **2,121 lines I wrote**, on top of 1,963 lines of generated source I kept largely unchanged
+(the render chain, the loading screen, the shape helpers, the UI shell), plus 736 lines of scenario
+JSON. But the two hardest days of this build were both framework
+gaps rather than game problems: **a dynamic rigid body cannot be repositioned**, which makes "run the
+simulation again from the same state" inexpressible without destroying and rebuilding every body —
+and rebuilding changes the answer, deterministically and invisibly (F10); and **the playtest surface
+keys on a physics `entity` namespace that is not the scene-registry namespace**, so a game whose
+trigger demonstrably fired reports no contact at all (F9). Both are silent. Neither is discoverable
+from the types.
+
+The playtest runner itself is the best part of the framework and the most expensive. Its diagnostics
+are specific enough to act on — it names the path, prints the value, and refuses to let an assertion
+that was already true count as proof — and that refusal is *right*: it caught four rows of mine that
+proved nothing, including one that had been green for two suite runs while measuring a deferred
+transform that was always zero (F12). The cost is that the triviality rule cannot see a value that
+changed before its first sample (F7) or one that came back to where it started (F14), and its own
+suggested remedy (`changed: true`) does not fix either. Every one of those cost a build and a run.
+
+Net: **helped**, clearly — but the friction is concentrated in exactly the surface this round is
+about, and it is the kind that costs a day rather than a minute.
 
 ## What I wrote by hand that the framework already shipped
 
-(updated as discovered)
+Nothing large, and I checked. Before the determinism work I searched
+`engine_search_capabilities` for "put a rigid body back where it started and reset the physics
+world", "restart a level so the physics simulation begins from the same state" and "compare two runs
+of the same simulation for determinism"; the index returned `afterPhysics`, `CollisionShape3D`,
+`rapier`, `Joint3D`, `TerrainTiles`, `sendUiIntent`, `buildStaticColliders`, `createRandom`,
+`Scheduler` and `GPUReadback`. None of them resets a body, and the digest-and-drift comparison I
+wrote (about 30 lines) has no equivalent in the manifest. `createReplayDriver` is the closest thing
+and it replays *input*, which was never the problem — my input was already scripted and pure.
+
+Two smaller ones, both caught by searching first rather than after: I nearly hand-rolled a seeded
+PRNG before using `ctx.random`, and I considered writing an instanced draw for forty crates before
+reading `InstancedBatch` — which I then correctly did **not** use, because every crate carries its
+own simulated transform and instancing would have meant writing forty matrices a frame to save
+forty draws.
+
+One I got wrong in the other direction: the starter's `shapes.ts` already had `roundedBox`, and I
+used it — but I wrote `crateShape.ts`'s geometry merge without searching first, and `mergeGeometries`
+silently returns `null` when its inputs' attribute sets differ. `roundedBox` deletes its UVs, my
+plank boxes had them, and I only avoided a null geometry because I happened to remember the rule.
 
 ---
 
