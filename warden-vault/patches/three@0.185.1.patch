@@ -1,0 +1,287 @@
+diff --git a/build/three.cjs b/build/three.cjs
+index 8939a67d..b0f91724 100644
+--- a/build/three.cjs
++++ b/build/three.cjs
+@@ -26116,6 +26116,8 @@ function copyArrayContents( src, target ) {
+  */
+ class BatchedMesh extends Mesh {
+ 
++	static threeNativeBatchedVelocityPatch = true;
++
+ 	/**
+ 	 * Constructs a new batched mesh.
+ 	 *
+diff --git a/build/three.core.js b/build/three.core.js
+index 0bb9262c..868a634b 100644
+--- a/build/three.core.js
++++ b/build/three.core.js
+@@ -26136,6 +26136,8 @@ function copyArrayContents( src, target ) {
+  */
+ class BatchedMesh extends Mesh {
+ 
++	static threeNativeBatchedVelocityPatch = true;
++
+ 	/**
+ 	 * Constructs a new batched mesh.
+ 	 *
+diff --git a/build/three.webgpu.js b/build/three.webgpu.js
+index 2e490796..325b497a 100644
+--- a/build/three.webgpu.js
++++ b/build/three.webgpu.js
+@@ -18500,7 +18500,8 @@ const instance = /*@__PURE__*/ Fn( ( [ matrices, colors = null ], builder ) => {
+ 
+ 			const previousInstanceData = _previousInstanceMatrices.get( object );
+ 
+-			previousInstanceData.previousInstanceMatrix.array.set( matrices.array );
++			const scheduledPrevious = object[ Symbol.for( 'threenative.velocity.previousInstanceMatrices' ) ];
++			previousInstanceData.previousInstanceMatrix.array.set( scheduledPrevious ?? matrices.array );
+ 
+ 		} );
+ 
+@@ -18599,6 +18600,7 @@ const batch = /*@__PURE__*/ Fn( ( [ batchMesh ], builder ) => {
+ 	const indirectId = getIndirectIndex( batchMesh._indirectTexture, int( batchingIdNode ) );
+ 
+ 	const matricesTexture = batchMesh._matricesTexture;
++	const previousMatricesTexture = batchMesh._previousMatricesTexture ?? matricesTexture;
+ 
+ 	const size = int( textureSize( textureLoad( matricesTexture ), 0 ).x ).toConst();
+ 	const j = float( indirectId ).mul( 4 ).toInt().toConst();
+@@ -18626,6 +18628,19 @@ const batch = /*@__PURE__*/ Fn( ( [ batchMesh ], builder ) => {
+ 
+ 	positionLocal.assign( batchingMatrix.mul( positionLocal ) );
+ 
++	if ( builder.needsPreviousData() ) {
++
++		const previousBatchingMatrix = mat4(
++			textureLoad( previousMatricesTexture, ivec2( x, y ) ),
++			textureLoad( previousMatricesTexture, ivec2( x.add( 1 ), y ) ),
++			textureLoad( previousMatricesTexture, ivec2( x.add( 2 ), y ) ),
++			textureLoad( previousMatricesTexture, ivec2( x.add( 3 ), y ) )
++		);
++
++		positionPrevious.assign( previousBatchingMatrix.mul( positionPrevious ).xyz );
++
++	}
++
+ 	const transformedNormal = normalLocal.div( vec3( bm[ 0 ].dot( bm[ 0 ] ), bm[ 1 ].dot( bm[ 1 ] ), bm[ 2 ].dot( bm[ 2 ] ) ) );
+ 
+ 	const batchingNormal = bm.mul( transformedNormal ).xyz;
+@@ -18777,7 +18792,8 @@ const skinning = /*@__PURE__*/ Fn( ( [ skinnedMesh ], builder ) => {
+ 
+ 			if ( skeletonData !== undefined ) {
+ 
+-				skeletonData.previousBoneMatrices.set( skeleton.boneMatrices );
++				const scheduledPrevious = object[ Symbol.for( 'threenative.velocity.previousBoneMatrices' ) ];
++				skeletonData.previousBoneMatrices.set( scheduledPrevious ?? skeleton.boneMatrices );
+ 
+ 			}
+ 
+@@ -18844,7 +18860,8 @@ const computeSkinning = /*@__PURE__*/ Fn( ( [ skinnedMesh, toPosition = null ],
+ 
+ 			if ( state !== undefined ) {
+ 
+-				state.previousBoneMatrices.set( skeleton.boneMatrices );
++				const scheduledPrevious = skinnedMesh[ Symbol.for( 'threenative.velocity.previousBoneMatrices' ) ];
++				state.previousBoneMatrices.set( scheduledPrevious ?? skeleton.boneMatrices );
+ 
+ 			}
+ 
+@@ -39725,7 +39742,8 @@ class VelocityNode extends TempNode {
+ 
+ 		const previousModelMatrix = getPreviousMatrix( object );
+ 
+-		this.previousModelWorldMatrix.value.copy( previousModelMatrix );
++		const scheduledPrevious = object[ Symbol.for( 'threenative.velocity.previousWorldMatrix' ) ];
++		this.previousModelWorldMatrix.value.copy( scheduledPrevious ?? previousModelMatrix );
+ 
+ 		//
+ 
+@@ -53841,7 +53859,7 @@ class NodeBuilder {
+ 
+ 		const mrt = this.renderer.getMRT();
+ 
+-		return ( mrt && mrt.has( 'velocity' ) ) || getDataFromObject( this.object ).useVelocity === true;
++		return ( mrt && mrt.has( 'velocity' ) ) || getDataFromObject( this.object ).useVelocity === true || this.object.userData?.useVelocity === true;
+ 
+ 	}
+ 
+@@ -83814,6 +83832,14 @@ class WebGPUBackend extends Backend {
+ 		 */
+ 		this.compatibilityMode = null;
+ 
++		/**
++		 * A reference to the WebGPU instance that creates adapters.
++		 *
++		 * @type {?GPU}
++		 * @default null
++		 */
++		this.gpu = null;
++
+ 		/**
+ 		 * A reference to the device.
+ 		 *
+@@ -83926,7 +83952,9 @@ class WebGPUBackend extends Backend {
+ 				xrCompatible: renderer.xr.enabled
+ 			};
+ 
+-			const adapter = ( typeof navigator !== 'undefined' ) ? await navigator.gpu.requestAdapter( adapterOptions ) : null;
++			this.gpu = ( typeof navigator !== 'undefined' ) ? navigator.gpu : null;
++
++			const adapter = this.gpu !== null ? await this.gpu.requestAdapter( adapterOptions ) : null;
+ 
+ 			if ( adapter === null ) {
+ 
+diff --git a/src/nodes/accessors/Batch.js b/src/nodes/accessors/Batch.js
+index ab62e98d..2cf4bb60 100644
+--- a/src/nodes/accessors/Batch.js
++++ b/src/nodes/accessors/Batch.js
+@@ -1,6 +1,6 @@
+ 
+ import { normalLocal } from './Normal.js';
+-import { positionLocal } from './Position.js';
++import { positionLocal, positionPrevious } from './Position.js';
+ import { vec3, mat3, mat4, int, ivec2, float, Fn } from '../tsl/TSLBase.js';
+ import { textureLoad } from './TextureNode.js';
+ import { textureSize } from './TextureSizeNode.js';
+@@ -64,6 +64,7 @@ export const batch = /*@__PURE__*/ Fn( ( [ batchMesh ], builder ) => {
+ 	const indirectId = getIndirectIndex( batchMesh._indirectTexture, int( batchingIdNode ) );
+ 
+ 	const matricesTexture = batchMesh._matricesTexture;
++	const previousMatricesTexture = batchMesh._previousMatricesTexture ?? matricesTexture;
+ 
+ 	const size = int( textureSize( textureLoad( matricesTexture ), 0 ).x ).toConst();
+ 	const j = float( indirectId ).mul( 4 ).toInt().toConst();
+@@ -90,6 +91,19 @@ export const batch = /*@__PURE__*/ Fn( ( [ batchMesh ], builder ) => {
+ 	const bm = mat3( batchingMatrix );
+ 
+ 	positionLocal.assign( batchingMatrix.mul( positionLocal ) );
++	if ( builder.needsPreviousData() ) {
++
++		const previousBatchingMatrix = mat4(
++			textureLoad( previousMatricesTexture, ivec2( x, y ) ),
++			textureLoad( previousMatricesTexture, ivec2( x.add( 1 ), y ) ),
++			textureLoad( previousMatricesTexture, ivec2( x.add( 2 ), y ) ),
++			textureLoad( previousMatricesTexture, ivec2( x.add( 3 ), y ) )
++		);
++
++		positionPrevious.assign( previousBatchingMatrix.mul( positionPrevious ).xyz );
++
++	}
++
+ 
+ 	const transformedNormal = normalLocal.div( vec3( bm[ 0 ].dot( bm[ 0 ] ), bm[ 1 ].dot( bm[ 1 ] ), bm[ 2 ].dot( bm[ 2 ] ) ) );
+ 
+@@ -104,5 +118,3 @@ export const batch = /*@__PURE__*/ Fn( ( [ batchMesh ], builder ) => {
+ 	}
+ 
+ }, 'void' );
+-
+-
+diff --git a/src/nodes/accessors/Instance.js b/src/nodes/accessors/Instance.js
+index b89834b9..c7b7bdd7 100644
+--- a/src/nodes/accessors/Instance.js
++++ b/src/nodes/accessors/Instance.js
+@@ -220,7 +220,8 @@ export const instance = /*@__PURE__*/ Fn( ( [ matrices, colors = null ], builder
+ 
+ 			const previousInstanceData = _previousInstanceMatrices.get( object );
+ 
+-			previousInstanceData.previousInstanceMatrix.array.set( matrices.array );
++			const scheduledPrevious = object[ Symbol.for( 'threenative.velocity.previousInstanceMatrices' ) ];
++			previousInstanceData.previousInstanceMatrix.array.set( scheduledPrevious ?? matrices.array );
+ 
+ 		} );
+ 
+diff --git a/src/nodes/accessors/Skinning.js b/src/nodes/accessors/Skinning.js
+index 2356aed8..aaeea633 100644
+--- a/src/nodes/accessors/Skinning.js
++++ b/src/nodes/accessors/Skinning.js
+@@ -149,7 +149,8 @@ export const skinning = /*@__PURE__*/ Fn( ( [ skinnedMesh ], builder ) => {
+ 
+ 			if ( skeletonData !== undefined ) {
+ 
+-				skeletonData.previousBoneMatrices.set( skeleton.boneMatrices );
++				const scheduledPrevious = object[ Symbol.for( 'threenative.velocity.previousBoneMatrices' ) ];
++				skeletonData.previousBoneMatrices.set( scheduledPrevious ?? skeleton.boneMatrices );
+ 
+ 			}
+ 
+@@ -216,7 +217,8 @@ export const computeSkinning = /*@__PURE__*/ Fn( ( [ skinnedMesh, toPosition = n
+ 
+ 			if ( state !== undefined ) {
+ 
+-				state.previousBoneMatrices.set( skeleton.boneMatrices );
++				const scheduledPrevious = skinnedMesh[ Symbol.for( 'threenative.velocity.previousBoneMatrices' ) ];
++				state.previousBoneMatrices.set( scheduledPrevious ?? skeleton.boneMatrices );
+ 
+ 			}
+ 
+diff --git a/src/nodes/accessors/VelocityNode.js b/src/nodes/accessors/VelocityNode.js
+index 373548b0..c48002ab 100644
+--- a/src/nodes/accessors/VelocityNode.js
++++ b/src/nodes/accessors/VelocityNode.js
+@@ -106,7 +106,8 @@ class VelocityNode extends TempNode {
+ 
+ 		const previousModelMatrix = getPreviousMatrix( object );
+ 
+-		this.previousModelWorldMatrix.value.copy( previousModelMatrix );
++		const scheduledPrevious = object[ Symbol.for( 'threenative.velocity.previousWorldMatrix' ) ];
++		this.previousModelWorldMatrix.value.copy( scheduledPrevious ?? previousModelMatrix );
+ 
+ 		//
+ 
+diff --git a/src/nodes/core/NodeBuilder.js b/src/nodes/core/NodeBuilder.js
+index be00b81e..1990da8f 100644
+--- a/src/nodes/core/NodeBuilder.js
++++ b/src/nodes/core/NodeBuilder.js
+@@ -3450,7 +3450,7 @@ class NodeBuilder {
+ 
+ 		const mrt = this.renderer.getMRT();
+ 
+-		return ( mrt && mrt.has( 'velocity' ) ) || getDataFromObject( this.object ).useVelocity === true;
++		return ( mrt && mrt.has( 'velocity' ) ) || getDataFromObject( this.object ).useVelocity === true || this.object.userData?.useVelocity === true;
+ 
+ 	}
+ 
+diff --git a/src/objects/BatchedMesh.js b/src/objects/BatchedMesh.js
+index 2ef7cb25..35cc0ffe 100644
+--- a/src/objects/BatchedMesh.js
++++ b/src/objects/BatchedMesh.js
+@@ -181,6 +181,8 @@ function copyArrayContents( src, target ) {
+  */
+ class BatchedMesh extends Mesh {
+ 
++	static threeNativeBatchedVelocityPatch = true;
++
+ 	/**
+ 	 * Constructs a new batched mesh.
+ 	 *
+diff --git a/src/renderers/webgpu/WebGPUBackend.js b/src/renderers/webgpu/WebGPUBackend.js
+index 06e20369..37b5e0be 100644
+--- a/src/renderers/webgpu/WebGPUBackend.js
++++ b/src/renderers/webgpu/WebGPUBackend.js
+@@ -102,6 +102,14 @@ class WebGPUBackend extends Backend {
+ 		 */
+ 		this.compatibilityMode = null;
+ 
++		/**
++		 * A reference to the WebGPU instance that creates adapters.
++		 *
++		 * @type {?GPU}
++		 * @default null
++		 */
++		this.gpu = null;
++
+ 		/**
+ 		 * A reference to the device.
+ 		 *
+@@ -214,7 +222,9 @@ class WebGPUBackend extends Backend {
+ 				xrCompatible: renderer.xr.enabled
+ 			};
+ 
+-			const adapter = ( typeof navigator !== 'undefined' ) ? await navigator.gpu.requestAdapter( adapterOptions ) : null;
++			this.gpu = ( typeof navigator !== 'undefined' ) ? navigator.gpu : null;
++
++			const adapter = this.gpu !== null ? await this.gpu.requestAdapter( adapterOptions ) : null;
+ 
+ 			if ( adapter === null ) {
+ 
