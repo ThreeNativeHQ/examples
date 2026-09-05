@@ -9,6 +9,9 @@ share three distinct image payloads. Asset provenance: Fab item `1ac647da-b1bc-4
 The source GLBs remain local, licensed editor inputs and are excluded from this public repository.
 Owners of the pack can copy the six named GLBs from their existing Wildwood import into
 `assets/models/`; the filenames are listed in `src/render/quarry.ts`.
+Those imports carry a height/AO/curvature mask in the base-color slot; `src/render/quarry.ts`
+corrects that source binding to a neutral stone base while preserving the mask as AO and the
+normal map for surface detail.
 The build's asset manifest resolves the files actually rendered.
 
 This is PRD-349's cook proof. `threenative.config.ts` deliberately has no `assets` block.

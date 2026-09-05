@@ -1,6 +1,6 @@
 import {
   Box3, BoxGeometry, Color, DirectionalLight, Fog, Group, HemisphereLight,
-  Mesh, MeshStandardMaterial, PCFSoftShadowMap, type Object3D, type Scene, Vector3,
+  Mesh, MeshStandardMaterial, NoColorSpace, PCFSoftShadowMap, type Object3D, type Scene, Vector3,
 } from "three";
 
 export const PROPS = [
@@ -11,6 +11,22 @@ export const PROPS = [
   { name: "SM_cliff01", x: -6.2, z: -7, width: 9.0, yaw: 0.25 },
   { name: "SM_cliff02", x: 5.8, z: -8, width: 10.0, yaw: -0.2 },
 ] as const;
+
+export const STONE_BASE_COLOR = 0x77736b;
+
+function correctImportedStoneMaterial(mesh: Mesh, material: MeshStandardMaterial): boolean {
+  const packedMask = material.map;
+  if (packedMask === null) return false;
+  material.map = null;
+  material.color.set(STONE_BASE_COLOR);
+  material.aoMap = packedMask;
+  material.aoMapIntensity = 0.45;
+  packedMask.colorSpace = NoColorSpace;
+  const uv = mesh.geometry.getAttribute("uv");
+  if (uv !== undefined && mesh.geometry.getAttribute("uv2") === undefined) mesh.geometry.setAttribute("uv2", uv);
+  material.needsUpdate = true;
+  return true;
+}
 
 /** The game chooses framing and scale; imported materials and their texture pixels stay intact. */
 export function placeProp(model: Object3D, spec: (typeof PROPS)[number]): Object3D {
@@ -31,6 +47,9 @@ export function placeProp(model: Object3D, spec: (typeof PROPS)[number]): Object
     if (object instanceof Mesh) {
       object.castShadow = true;
       object.receiveShadow = true;
+      for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+        if (material instanceof MeshStandardMaterial) correctImportedStoneMaterial(object, material);
+      }
     }
   });
   root.updateMatrixWorld(true);

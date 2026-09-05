@@ -1,16 +1,20 @@
 {
   "schemaVersion": 1,
-  "name": "quarry-walk-past-six-textured-props",
+  "name": "quarry-android-walk-past-six-textured-props",
   "target": "web",
-  "viewport": { "width": 1280, "height": 720 },
   "warmupFrames": 0,
   "steps": [
-    { "kind": "wait", "waitTicks": 60, "label": "settle-on-stone", "release": true, "screenshot": "quarry-start" },
+    { "kind": "wait", "waitTicks": 60, "label": "settle-on-stone", "release": true, "screenshot": "initial-world" },
     { "kind": "input", "press": "KeyW", "holdTicks": 450, "label": "walk-the-quarry-route", "release": true },
-    { "kind": "wait", "waitTicks": 30, "label": "end-of-route", "release": true, "screenshot": "quarry-walk" }
+    { "kind": "wait", "waitTicks": 30, "label": "end-of-route", "release": true }
   ],
   "assert": {
-    "diagnostics": { "noConsoleErrors": true, "runtimeReady": true },
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": false,
+      "networkErrorsOptOutReason": "Android mailbox transport has no browser network observer.",
+      "runtimeReady": true
+    },
     "movement": { "entity": "walker", "minDistance": 20 },
     "resources": [
       { "id": "state", "path": "props", "equals": 6, "allowTrivial": "All six imported props must exist before and after the walk." },

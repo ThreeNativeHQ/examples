@@ -1,15 +1,26 @@
 import { type ICtx, loadAll, Scene, type SceneFrame } from "@threenative/core";
-import { buildStaticColliders, type IPhysicsContext, type RigidBody3D } from "@threenative/physics";
-import { Mesh, MeshStandardMaterial, type Object3D, type PerspectiveCamera } from "three";
+import {
+  CollisionShape3D,
+  RigidBody3D,
+  type IPhysicsContext,
+} from "@threenative/physics";
+import {
+  Box3,
+  Mesh,
+  MeshStandardMaterial,
+  type Object3D,
+  type PerspectiveCamera,
+  Vector3,
+} from "three";
 import { Player } from "../entities/Player.js";
-import { buildQuarry, placeProp, PROPS } from "../render/quarry.js";
+import { buildQuarry, placeProp, PROPS, STONE_BASE_COLOR } from "../render/quarry.js";
 import type { GameState } from "../state.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
 
 export class Play extends Scene<GameState, IPhysicsContext> {
   static override readonly initialState: GameState = {
-    ready: false, props: 0, texturedProps: 0, normalMappedProps: 0,
+    ready: false, props: 0, texturedProps: 0, normalMappedProps: 0, stoneMaterialProps: 0,
     visited: 0, distance: 0, playerZ: 15, groundGap: 0,
   };
   private props: Object3D[] = [];
@@ -28,25 +39,44 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     ctx.add(ground);
     let texturedProps = 0;
     let normalMappedProps = 0;
+    let stoneMaterialProps = 0;
     for (const prop of this.props) {
-      let colour = false;
+      let textured = false;
       let normal = false;
+      let corrected = false;
       prop.traverse((object) => {
         if (!(object instanceof Mesh)) return;
         for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
           if (!(material instanceof MeshStandardMaterial)) continue;
-          colour ||= material.map !== null;
+          textured ||= material.map !== null || material.aoMap !== null;
           normal ||= material.normalMap !== null;
+          corrected ||= material.map === null && material.aoMap !== null && material.color.getHex() === STONE_BASE_COLOR;
         }
       });
-      texturedProps += Number(colour);
+      texturedProps += Number(textured);
       normalMappedProps += Number(normal);
+      stoneMaterialProps += Number(corrected);
       ctx.add(prop);
       ctx.entities.add(prop.name, prop);
     }
     this.bodies = [
-      ...buildStaticColliders(ctx, ground),
-      ...this.props.flatMap((prop) => buildStaticColliders(ctx, prop)),
+      new RigidBody3D({
+        physics: ctx.physics,
+        position: { x: 0, y: -0.25, z: 0 },
+        shape: CollisionShape3D.box(90, 0.5, 90),
+        type: "fixed",
+      }),
+      ...this.props.map((prop) => {
+        const bounds = new Box3().setFromObject(prop);
+        const size = bounds.getSize(new Vector3());
+        const center = bounds.getCenter(new Vector3());
+        return new RigidBody3D({
+          physics: ctx.physics,
+          position: center,
+          shape: CollisionShape3D.box(size.x, size.y, size.z),
+          type: "fixed",
+        });
+      }),
     ];
     const player = new Player(ctx);
     this.player = player;
@@ -56,7 +86,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     camera.far = 180;
     camera.updateProjectionMatrix();
     player.frameCamera(camera);
-    ctx.state.set({ ready: true, props: this.props.length, texturedProps, normalMappedProps });
+    ctx.state.set({ ready: true, props: this.props.length, texturedProps, normalMappedProps, stoneMaterialProps });
     console.info(`TN_QUARRY_READY: props=${this.props.length}, textured=${texturedProps}, normals=${normalMappedProps}`);
     const visited = new Set<string>();
     return (frame, dt) => {
