@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/core": "file:../.packages/threenative-core-0.3.0-prd349-372d28b590d1.tgz",
+    "@threenative/core": "file:../.packages/threenative-core-0.3.0-prd349-ffc61e8bc50e.tgz",
     "@threenative/physics": "file:../.packages/threenative-physics-0.3.0-prd349-15e1261f0d2c.tgz",
     "@threenative/ui": "file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz",
     "react": "19.2.0",
@@ -36,7 +36,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@threenative/core": "file:../.packages/threenative-core-0.3.0-prd349-372d28b590d1.tgz",
+      "@threenative/core": "file:../.packages/threenative-core-0.3.0-prd349-ffc61e8bc50e.tgz",
       "@threenative/assets": "file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz"
     }
   }

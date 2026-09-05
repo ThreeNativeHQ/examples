@@ -5,7 +5,7 @@
   "viewport": { "width": 1280, "height": 720 },
   "warmupFrames": 0,
   "steps": [
-    { "kind": "wait", "waitTicks": 60, "label": "settle-on-stone", "release": true },
+    { "kind": "wait", "waitTicks": 60, "label": "settle-on-stone", "release": true, "screenshot": "quarry-start" },
     { "kind": "input", "press": "KeyW", "holdTicks": 450, "label": "walk-the-quarry-route", "release": true },
     { "kind": "wait", "waitTicks": 30, "label": "end-of-route", "release": true, "screenshot": "quarry-walk" }
   ],
