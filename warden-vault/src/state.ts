@@ -28,6 +28,9 @@ export type GameState = {
   sealedBy: "crate" | "none" | "warden";
   /** Metres walked. */
   odometer: number;
+  /** The warden's vertical speed, and whether the solver reports it standing on something. */
+  wardenFall: number;
+  wardenGrounded: boolean;
   playerX: number;
   playerZ: number;
   /** Set from the UI's pause and resume intents, and read back by the menu. */
@@ -36,8 +39,19 @@ export type GameState = {
   replayPhase: "done" | "first" | "idle" | "second";
   /** True only once both passes ran and their final-state digests were identical. */
   replayMatch: boolean;
+  /**
+   * Largest absolute difference between the two passes over every body's position and rotation
+   * component, in metres and quaternion units. A boolean says the passes disagreed; this says by
+   * how much, which is the difference between float noise and two different simulations.
+   */
+  replayDrift: number;
   /** Fixed-step ticks each replay pass runs. */
   replayTicks: number;
+  /**
+   * How many bodies the check covered. Published beside the verdict because a determinism claim
+   * without a scope is not a claim: this is the rig, not the whole vault.
+   */
+  replayBodies: number;
   /** The world seed the vault was built from. */
   seed: number;
   /** The run: "playing" until the seal is reached, then "won" and it stays "won". */

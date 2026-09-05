@@ -8,7 +8,7 @@ import { WARDEN_MASK } from "./Crate.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
 
-const MOVE_SPEED = 3.4;
+const MOVE_SPEED = 4.5;
 /** Capsule: total height 2 * (halfHeight + radius) = 1.12 m, centred on the body origin. */
 const CAPSULE_HALF_HEIGHT = 0.28;
 const CAPSULE_RADIUS = 0.28;
@@ -32,6 +32,7 @@ export class Warden {
   #blockedTicks = 0;
   #previous = new Vector3();
   #hasPrevious = false;
+  #asked = 0;
   #facing = 0;
 
   constructor(ctx: GameCtx, materials: IVaultMaterials) {
@@ -47,6 +48,10 @@ export class Warden {
     this.body = new CharacterBody3D({
       autostep: { includeDynamicBodies: false, maxHeight: 0.32, minWidth: 0.2 },
       collisionMask: WARDEN_MASK,
+      // Named, or the runtime contact log records this body as an anonymous id and a `contacts`
+      // assertion has nothing to match on. The registry name (`ctx.entities.add("player", ...)`)
+      // is a different namespace and does not reach the physics observation.
+      entity: "player",
       object: this.mesh,
       physics: ctx.physics,
       pushesDynamicBodies: true,
@@ -59,21 +64,28 @@ export class Warden {
    * check hands the same scripted vector in that the keyboard would have produced.
    */
   update(dt: number, move: { readonly x: number; readonly z: number }): void {
-    if (this.#hasPrevious) this.#odometer += this.mesh.position.distanceTo(this.#previous);
+    // Both measurements below read LAST tick's ask against LAST tick's delivery, and they have to.
+    //
+    // `moveAndSlide` queues motion for the bulk step; `mesh.position` still holds the previous
+    // transform until the solver writes it, some time after this function returns. Comparing the
+    // ask with `mesh.position` inside the same call therefore always measures zero delivered
+    // motion, and "the warden was blocked" becomes "the warden pressed a key" — measured, it
+    // counted 400 blocked ticks in a 400-tick run in which the warden crossed six metres.
+    if (this.#hasPrevious) {
+      const delivered = Math.hypot(
+        this.mesh.position.x - this.#previous.x,
+        this.mesh.position.z - this.#previous.z,
+      );
+      this.#odometer += this.mesh.position.distanceTo(this.#previous);
+      if (this.#asked > 0.004 && delivered < this.#asked * BLOCKED_FRACTION)
+        this.#blockedTicks += 1;
+    }
     this.#previous.copy(this.mesh.position);
     this.body.velocity.x = move.x * MOVE_SPEED;
     this.body.velocity.z = move.z * MOVE_SPEED;
-    const asked = Math.hypot(this.body.velocity.x, this.body.velocity.z) * dt;
+    this.#asked = Math.hypot(this.body.velocity.x, this.body.velocity.z) * dt;
     this.body.moveAndSlide(dt);
     this.#hasPrevious = true;
-    // `moveAndSlide` queues motion for the bulk step, so `position` still holds the previous
-    // transform here; the comparison below is this tick's ask against LAST tick's delivery, which
-    // is the honest one-frame-late reading and the only one available before the step runs.
-    const delivered = Math.hypot(
-      this.mesh.position.x - this.#previous.x,
-      this.mesh.position.z - this.#previous.z,
-    );
-    if (asked > 0.004 && delivered < asked * BLOCKED_FRACTION) this.#blockedTicks += 1;
     if (move.x !== 0 || move.z !== 0) {
       const target = Math.atan2(move.x, move.z);
       // Shortest-arc turn, framerate independent, so the figure faces the shove rather than
@@ -88,10 +100,25 @@ export class Warden {
   }
 
   teleport(position: { readonly x: number; readonly y: number; readonly z: number }): void {
+    // Velocity survives a teleport, and `velocity.y` is the component this class never writes —
+    // gravity accumulates into it every step. Two replay passes that start from different
+    // vertical speeds resolve their first contacts differently, and the run that is supposed to
+    // prove determinism reports 0.28 m of drift. Reset the whole vector, not the two axes the
+    // caller happens to set.
+    this.body.velocity.set(0, 0, 0);
     this.body.teleport(position);
     this.mesh.position.set(position.x, position.y, position.z);
     this.#previous.copy(this.mesh.position);
     this.#hasPrevious = false;
+    this.#asked = 0;
+  }
+
+  get fallSpeed(): number {
+    return this.body.velocity.y;
+  }
+
+  get grounded(): boolean {
+    return this.body.grounded;
   }
 
   get blockedTicks(): number {

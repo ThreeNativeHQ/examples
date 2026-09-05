@@ -39,6 +39,12 @@ export function Hud() {
             <b className="font-normal tabular-nums text-text">{state.replayPhase}</b>
           </div>
           <div className="flex justify-between gap-2">
+            <span>drift</span>
+            <b className="font-normal tabular-nums text-text">
+              {state.replayPhase === "done" ? state.replayDrift.toExponential(1) : "—"}
+            </b>
+          </div>
+          <div className="flex justify-between gap-2">
             <span>match</span>
             <b
               className={`font-normal tabular-nums ${state.replayMatch ? "text-lume" : "text-text"}`}

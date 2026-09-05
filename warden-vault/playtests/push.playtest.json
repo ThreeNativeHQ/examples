@@ -1,5 +1,5 @@
 {
-  "name": "starter-respawn",
+  "name": "warden-shoves-a-crate",
   "target": "web",
   "schemaVersion": 1,
   "viewport": {
@@ -11,20 +11,20 @@
   "steps": [
     {
       "kind": "wait",
-      "label": "play-scene-loads",
-      "waitTicks": 600,
+      "label": "fall-and-settle",
+      "waitTicks": 400,
       "release": true
     },
     {
       "kind": "input",
-      "label": "run-off-world",
+      "label": "shove",
       "press": "ArrowRight",
-      "holdTicks": 240,
+      "holdTicks": 110,
       "release": true
     },
     {
       "kind": "wait",
-      "label": "respawn",
+      "label": "crate-comes-to-rest",
       "waitTicks": 90,
       "release": true
     }
@@ -35,33 +35,38 @@
       "noNetworkErrors": true,
       "runtimeReady": true
     },
-    "movement": {
-      "entity": "player",
-      "pathLength": 4,
-      "reachesPositionWithin": {
-        "position": [-2, 0.5, 0],
-        "maxDistance": 0.35
-      }
-    },
     "resources": [
       {
         "id": "state",
-        "path": "respawns",
+        "path": "pushedCrates",
         "gte": 1,
         "changed": true
       },
       {
         "id": "state",
-        "path": "lives",
-        "equals": 2,
+        "path": "pushDistance",
+        "gte": 0.5,
         "changed": true
+      },
+      {
+        "id": "state",
+        "path": "settled",
+        "equals": true
       }
     ],
+    "movement": {
+      "entity": "player",
+      "minDistance": 1.5,
+      "minAxisDelta": {
+        "axis": "x",
+        "min": 1.5
+      }
+    },
     "visibility": [
       {
-        "allowTrivial": "The starter scene begins with the player visible and in frame; this held visibility row accompanies the respawn assertion.",
         "entity": "player",
-        "minProjectedPixels": 20
+        "minProjectedPixels": 100,
+        "allowTrivial": "The vault is one fixed shot and the warden is framed in it from the first tick; this row is a held invariant and exists to catch a warden that leaves the picture."
       }
     ]
   }

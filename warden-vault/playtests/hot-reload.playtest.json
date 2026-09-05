@@ -1,5 +1,5 @@
 {
-  "name": "starter-hot-reload-subject",
+  "name": "hot-reload-subject",
   "target": "web",
   "schemaVersion": 1,
   "viewport": {
@@ -22,7 +22,7 @@
     },
     {
       "kind": "input",
-      "label": "collect",
+      "label": "shove",
       "press": "ArrowRight",
       "holdTicks": 100,
       "release": true
@@ -47,13 +47,14 @@
     "resources": [
       {
         "id": "state",
-        "path": "score",
-        "gte": 1,
+        "path": "pushDistance",
+        "gte": 0.3,
         "changed": true
       },
       {
         "id": "state",
-        "path": "playerX",
+        "path": "odometer",
+        "gte": 0.5,
         "changed": true
       }
     ],

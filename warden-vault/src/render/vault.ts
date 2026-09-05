@@ -29,7 +29,7 @@ export const VAULT = {
 // Pushed into the corner and away from the pile. A seal within a metre of the crate field is
 // tripped by the opening drop itself: a crate toppling off the stack slid to (1.91, -1.45) and
 // won the run before the warden moved.
-export const SEAL = { half: 1.15, x: 4.1, z: -2.5 } as const;
+export const SEAL = { half: 1.35, x: 4.0, z: -2.4 } as const;
 
 /** An axis-aligned solid box, in world space, for the scene to hand to the physics backend. */
 export interface ISolidBox {

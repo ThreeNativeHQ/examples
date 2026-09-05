@@ -1,6 +1,6 @@
 import type { ICtx } from "@threenative/core";
 import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
-import { type Material, Mesh, type Quaternion, Vector3 } from "three";
+import { type Material, Mesh, Quaternion, Vector3 } from "three";
 import { CRATE_SIZE, crateGeometry } from "../render/crateShape.js";
 import type { GameState } from "../state.js";
 
@@ -18,13 +18,32 @@ import type { GameState } from "../state.js";
  */
 export type CrateKind = "phase" | "solid";
 
-/** Layer 1 is everything solid. Layer 4 is the phase crates, and only they are on it. */
+/**
+ * Three layers, and the third one is the reason this is not two.
+ *
+ * 1 — solid crates and the warden. 2 — the room: floor, walls. 4 — the ward.
+ *
+ * The ward has to fall, stack on itself and rest on the floor, so it cannot be a sensor; and it
+ * has to be transparent to *everything the player can move*, not only to the warden. A ward that
+ * blocked crates while letting the warden through produced a dead level: the warden shoved a crate
+ * north, the crate wedged against the ward, and the warden — already touching that crate — could
+ * not advance a single millimetre toward the seal. `playerZ` was bit-identical to its spawn value
+ * after two hundred ticks of held input, which reads exactly like an input binding that never
+ * arrived.
+ */
 export const SOLID_LAYER = 1;
+export const WORLD_LAYER = 2;
 export const PHASE_LAYER = 4;
-/** What the warden scans: everything except the phase layer. */
-export const WARDEN_MASK = 0xffff & ~PHASE_LAYER;
+/** Solid crates scan other solid crates, the warden, and the room. Never the ward. */
+export const SOLID_MASK = SOLID_LAYER | WORLD_LAYER;
+/** The ward scans the room and itself, and nothing else in the vault. */
+export const PHASE_MASK = WORLD_LAYER | PHASE_LAYER;
+/** What the warden scans: solid crates and the room. */
+export const WARDEN_MASK = SOLID_LAYER | WORLD_LAYER;
 
 export interface ICrateOptions {
+  /** Names the body for the runner's physics cohort — `settled` matches on this prefix. */
+  readonly entity: string;
   readonly kind?: CrateKind;
   /** Restores a full orientation — the replay check rebuilds crates from captured poses. */
   readonly quaternion?: Quaternion;
@@ -62,7 +81,15 @@ export class Crate {
       // A box shape, not `fromMesh`: the merged brace planks would become a convex hull a
       // centimetre proud of the crate on every face, and a stack of those never sits flush.
       collisionLayer: this.kind === "phase" ? PHASE_LAYER : SOLID_LAYER,
-      mass: 6,
+      collisionMask: this.kind === "phase" ? PHASE_MASK : SOLID_MASK,
+      // Without a name every body is reported as `physics.body.<n>`, and a `settled` assertion can
+      // only address the whole world — which always contains the walls and the floor, and those
+      // never sleep. Naming the crates is what makes "the crates came to rest" assertable.
+      entity: options.entity,
+      // Light, and measured rather than chosen. At 6 kg the warden shoving a crate crossed 2.5 m
+      // in 3.3 s instead of 11; at 2.5 kg, six. Rapier bounds a character's push by the
+      // character's own mass and no option here exposes it, so the crate is what has to give.
+      mass: 1.5,
       object: this.mesh,
       physics: ctx.physics,
       shape: CollisionShape3D.box(CRATE_SIZE, CRATE_SIZE, CRATE_SIZE),
@@ -77,6 +104,22 @@ export class Crate {
   /** Metres from where the opening drop left it. Zero until `markRest` has run. */
   displacement(): number {
     return this.mesh.position.distanceTo(this.rest);
+  }
+
+  /**
+   * Put this body back at a pose without destroying it.
+   *
+   * `RigidBody3D` has no `teleport` — `CharacterBody3D` does — so the only documented way to move
+   * a dynamic body is an impulse or a force, and neither can place one. `syncToPhysics()` is
+   * undocumented but is the one member that could plausibly push the object's transform back into
+   * the backend, which is what this needs: destroying and recreating forty-four bodies instead
+   * changes the order the backend hands out handles, and that alone moved the pile by centimetres.
+   */
+  reset(position: Vector3, quaternion: Quaternion): void {
+    this.mesh.position.copy(position);
+    this.mesh.quaternion.copy(quaternion);
+    this.body.linearVelocity = { x: 0, y: 0, z: 0 };
+    this.body.syncToPhysics();
   }
 
   markRest(): void {

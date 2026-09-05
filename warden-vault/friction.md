@@ -125,3 +125,61 @@ body's `type` would be enough to drop every fixed collider in one line.
 **What would have prevented it:** `look.mjs` already knows about `window.__LOOK_VANTAGES__`; it
 should also wait on the runtime's own readiness (`ctx.startup.whenReady()` is already exposed) or on
 the loading layer being torn down, instead of a wall-clock constant.
+
+### F7: A scenario cannot witness anything the game does before the runner's first sample
+**Surface:** `@threenative/playtest` runner — `TN_PLAYTEST_ASSERTION_TRIVIAL`
+**What I was trying to do:** prove the brief's requirement that thirty-plus dynamic bodies "stack,
+topple, collide, and come to rest after the initial drop".
+**What happened:** every assertion about the drop failed as *trivial*: `settledCrates` already read
+44 at the first sample, `settled` was already `true`. The runner's first observation lands after
+`startup.whenReady()` — 3.0 s in on this machine — and the pile built in `Scene.enter()` had fallen,
+collided and gone to sleep 2.2 s before that. The diagnostic's own advice ("assert `changed: true`")
+does not help, because the change happened in a window the scenario cannot reach.
+**How I found out:** the diagnostic, which is excellent — it names the path and prints the value it
+was already satisfied by. It just cannot say *why* the value was already settled.
+**Cost:** ~4 tool calls plus two full scenario runs.
+**What I did instead:** moved the drop behind `ctx.startup.whenReady()` so the vault opens on the
+first observed frame. This is a better opening for a player too, so it is not a pure tax — but I
+changed the game to fit the instrument, which is worth naming.
+**What would have prevented it:** the triviality diagnostic could say "the first sample was taken at
+tick N, T ms after the runtime reported ready" — that one sentence turns "your assertion is bad"
+into "your event happened before I was looking".
+**Silent:** no — the diagnostic is loud and specific. The *cause* is the silent part.
+
+### F8: `settled` matches every physics body in the world, including the ones that never sleep
+**Surface:** `@threenative/playtest` — the `settled` assertion
+**What I was trying to do:** assert that the dropped crates came to rest.
+**What happened:** `TN_PLAYTEST_PHYSICS_NOT_SETTLED: Expected at least 30 physics bodies matching
+'physics.body.' to be asleep; observed 44 of 49.` All 44 crates *were* asleep. The other five are
+the floor slab and the four walls — fixed bodies, which never report as sleeping — and there is no
+way to exclude them by kind. `minBodies: 30` reads like a floor on the cohort; it is not the
+predicate that decides the pass.
+**How I found out:** the message, which prints both numbers and so at least made the arithmetic
+visible. The fix was not visible: the `entity` field on the assertion is a *prefix match on the
+body's own `entity` option*, and `RigidBody3D`'s `entity` is documented as one word with no type.
+**Cost:** ~3 tool calls and one run.
+**What I did instead:** named every crate `crate.<n>` and asserted `entity: "crate."`.
+**What would have prevented it:** exclude fixed bodies from the cohort by default — a fixed body is
+never going to fall asleep and its presence can only ever make the assertion wrong — or say in the
+assertion reference that `entity` is a prefix over `RigidBody3D({ entity })` and that unnamed
+bodies land in one undifferentiated `physics.body.` pool.
+
+### F9: Physics contacts are invisible to a `contacts` assertion unless the bodies are named
+**Surface:** `@threenative/physics` `entity` option, `@threenative/playtest` `contacts` assertion
+**What I was trying to do:** assert `{"kind": "trigger", "minCount": 1}` for the warden entering
+the seal — the brief requires the destination to be reached through simulated contact, so the
+contact log is exactly the evidence that matters.
+**What happened:** `TN_PLAYTEST_CONTACT_NOT_OBSERVED: Expected contact/trigger for 'player' was not
+observed 1 time(s)` — on a run where the game's own state showed the trigger had fired, the run was
+`won`, and `sealContacts` was 1. The contact log keys on the **physics** `entity` option, which is a
+different namespace from `ctx.entities.add("player", ...)`. Registering the entity in the scene
+registry is not enough; the `CharacterBody3D` and the `Area3D` each need their own `entity` string.
+**How I found out:** by elimination — every other assertion in the same scenario passed, including
+the one reading the state the trigger handler wrote.
+**Cost:** ~3 tool calls, one full run.
+**What I did instead:** `new CharacterBody3D({ entity: "player" })` and `new Area3D({ entity:
+"seal" })`, then asserted `{"entity": "player", "with": "seal", "kind": "trigger"}`.
+**What would have prevented it:** the diagnostic knows the log is empty of *any* named contact; it
+could say so — "no physics body in this run declared an `entity`, so no contact can be attributed".
+Or the physics nodes could default `entity` to the scene-registry name they were added under.
+**Silent:** yes — a game that works reports a missing contact, and the two `player`s look like one.

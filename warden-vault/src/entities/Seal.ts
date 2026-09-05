@@ -27,6 +27,7 @@ export class Seal {
   constructor(ctx: ICtx<GameState, IPhysicsContext>, mesh: Object3D) {
     this.mesh = mesh;
     this.area = new Area3D({
+      entity: "seal",
       physics: ctx.physics,
       // Lifted clear of the floor slab: an area whose underside sits on y = 0 overlaps the fixed
       // floor body from the first step, and the run reports itself won before anything moves.
