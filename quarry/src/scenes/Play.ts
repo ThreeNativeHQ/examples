@@ -1,6 +1,17 @@
 import { type ICtx, loadAll, Scene, type SceneFrame } from "@threenative/core";
-import { buildStaticColliders, type IPhysicsContext, type RigidBody3D } from "@threenative/physics";
-import { Mesh, MeshStandardMaterial, type Object3D, type PerspectiveCamera } from "three";
+import {
+  CollisionShape3D,
+  RigidBody3D,
+  type IPhysicsContext,
+} from "@threenative/physics";
+import {
+  Box3,
+  Mesh,
+  MeshStandardMaterial,
+  type Object3D,
+  type PerspectiveCamera,
+  Vector3,
+} from "three";
 import { Player } from "../entities/Player.js";
 import { buildQuarry, placeProp, PROPS } from "../render/quarry.js";
 import type { GameState } from "../state.js";
@@ -45,8 +56,23 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       ctx.entities.add(prop.name, prop);
     }
     this.bodies = [
-      ...buildStaticColliders(ctx, ground),
-      ...this.props.flatMap((prop) => buildStaticColliders(ctx, prop)),
+      new RigidBody3D({
+        physics: ctx.physics,
+        position: { x: 0, y: -0.25, z: 0 },
+        shape: CollisionShape3D.box(90, 0.5, 90),
+        type: "fixed",
+      }),
+      ...this.props.map((prop) => {
+        const bounds = new Box3().setFromObject(prop);
+        const size = bounds.getSize(new Vector3());
+        const center = bounds.getCenter(new Vector3());
+        return new RigidBody3D({
+          physics: ctx.physics,
+          position: center,
+          shape: CollisionShape3D.box(size.x, size.y, size.z),
+          type: "fixed",
+        });
+      }),
     ];
     const player = new Player(ctx);
     this.player = player;
