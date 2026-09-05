@@ -3,6 +3,7 @@ export type GameState = {
   props: number;
   texturedProps: number;
   normalMappedProps: number;
+  stoneMaterialProps: number;
   visited: number;
   distance: number;
   playerZ: number;

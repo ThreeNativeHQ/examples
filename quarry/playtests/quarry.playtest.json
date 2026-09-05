@@ -14,8 +14,9 @@
     "movement": { "entity": "walker", "minDistance": 20 },
     "resources": [
       { "id": "state", "path": "props", "equals": 6, "allowTrivial": "All six imported props must exist before and after the walk." },
-      { "id": "state", "path": "texturedProps", "equals": 6, "allowTrivial": "Measured from the loaded material maps; grey props fail." },
+      { "id": "state", "path": "texturedProps", "equals": 6, "allowTrivial": "Every imported prop retains a non-color material map after the packed mask is removed from base color." },
       { "id": "state", "path": "normalMappedProps", "equals": 6, "allowTrivial": "Every imported normal-map binding survives loading." },
+      { "id": "state", "path": "stoneMaterialProps", "equals": 6, "allowTrivial": "Every imported stone uses a neutral base color instead of the packed mask texture." },
       { "id": "state", "path": "visited", "equals": 6, "changed": true },
       { "id": "state", "path": "distance", "gte": 20, "changed": true },
       { "id": "state", "path": "groundGap", "gte": -0.1, "lte": 0.2, "allowTrivial": "The controller stays on the stone floor throughout the route." }
