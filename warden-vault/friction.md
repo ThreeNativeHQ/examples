@@ -183,3 +183,80 @@ the one reading the state the trigger handler wrote.
 could say so — "no physics body in this run declared an `entity`, so no contact can be attributed".
 Or the physics nodes could default `entity` to the scene-registry name they were added under.
 **Silent:** yes — a game that works reports a missing contact, and the two `player`s look like one.
+
+### F10: A dynamic `RigidBody3D` cannot be repositioned, so "run it again" is not expressible
+**Surface:** `@threenative/physics` — `RigidBody3D`
+**What I was trying to do:** the brief's determinism requirement — run the same input sequence twice
+under a fixed step and report whether the two runs ended in the same state.
+**What happened:** there is no way to put a dynamic body back. `CharacterBody3D` has `teleport`;
+`RigidBody3D` has `applyImpulse`, `applyForce`, `applyForceAtPoint` and a `linearVelocity` setter,
+and its doc comment says those four exist "because there is otherwise no portable way to move a
+dynamic body at all" — which is true and is exactly the problem: an impulse cannot *place*
+anything. There is no position setter, no `teleport`, and no angular-velocity setter.
+`syncToPhysics()` is undocumented and looked like the one candidate; it is not. Measured: after
+writing the object's transform and calling it, then giving the solver ninety settling steps, the
+pile was still **0.8011 m** from the pose it had been handed. It does not write a dynamic body.
+
+So the only way to reset a physics world from user space is to destroy every body and build new
+ones — and that changes the answer. Rebuilding 44 crates and running the identical script twice
+produced two results that disagreed by **0.2817955017089844 m across 220 of 308 recorded
+components**, to the same sixteen digits on every run. It alternates: moving a throwaway rebuild
+from before pass one to before pass two made the two digests swap places exactly. Consecutive
+rebuilds never get the same backend handles, and the solver's answer depends on them.
+
+I ruled out the obvious alternatives on the way: `dt` is genuinely fixed (one distinct value,
+`0.016666666666666666`, over every replay tick), and the character's leftover `velocity.y` survives
+a `teleport` (a real bug in my code, fixed).
+**How I found out:** by building a drift metric — the largest single component the two passes
+disagree on — because a boolean `replayMatch: false` told me nothing at all. Everything above came
+from that number plus a differing-component count.
+**Cost:** the largest single item in this build. Roughly 25 tool calls and nine full scenario runs.
+**What I did instead:** the check now runs on a three-body rig in a vault emptied for the duration,
+with one throwaway build inserted so both passes allocate an *even* number of build-and-discard
+cycles apart. That is bit-identical — `differing=0` over 24 components. The game publishes
+`replayBodies: 3` beside `replayMatch` so the scope of the claim is in the report, not in a reader's
+assumption. I could not make the claim for all 44.
+**What would have prevented it:** `RigidBody3D.teleport(position, rotation)` with velocities zeroed,
+matching the one `CharacterBody3D` already has. Failing that, `syncToPhysics()` should either write
+a dynamic body's transform or throw for one, and its doc comment should say which.
+**Silent:** yes, twice over — `syncToPhysics()` silently does nothing, and a rebuilt world silently
+simulates differently.
+
+### F11: A character's push strength is not tunable, so crate mass is the only lever
+**Surface:** `@threenative/physics` — `CharacterBody3D({ pushesDynamicBodies: true })`
+**What I was trying to do:** have the warden shove crates across the room at walking speed, which is
+the whole verb of a physics puzzle.
+**What happened:** `pushesDynamicBodies` is a boolean and nothing else. Rapier bounds a kinematic
+character's push by the character's own mass, which no option here exposes. With crates at the
+starter's `mass: 8` the warden crossed 2.5 m in 3.3 s of held input instead of 11; at 6 kg, still
+2.5 m; at 2.5 kg, 6 m; at 1.5 kg it crosses cleanly. Nothing reported that the character was being
+slowed — the state just showed a small odometer.
+**How I found out:** a `movement.minDistance` assertion failing with the number it did reach, then a
+per-60-tick position trace I wrote myself.
+**Cost:** ~6 tool calls and three runs, entangled with F12 below.
+**What I did instead:** dropped crate mass to 1.5 kg and raised the warden's speed. The crates are
+now lighter than a crate should be, which is a look-and-feel cost paid for a physics limitation.
+**What would have prevented it:** a `pushStrength` or `characterMass` option beside
+`pushesDynamicBodies`, or a note in its doc comment that push authority scales with nothing the
+game can set.
+
+### F12: `moveAndSlide` is deferred, and every naive "did I actually move" measurement reads zero
+**Surface:** `@threenative/physics` — `CharacterBody3D.moveAndSlide`
+**What I was trying to do:** count the ticks where the warden asked to move and a body stopped it —
+the brief requires the character to be unable to walk through solid bodies, and a count is how you
+assert that.
+**What happened:** I compared the asked-for step against `object.position` immediately after
+`moveAndSlide`. That is always zero delivered motion, because the solver writes the transform after
+the frame. So my "blocked" counter incremented on **every tick the player held a key**: 400 blocked
+ticks in a 400-tick run in which the warden crossed six metres unobstructed. The scenario asserting
+`blockedTicks >= 20` passed, and proved nothing.
+**How I found out:** a position trace I added for an unrelated reason showed `blocked` climbing 60
+per 60 ticks while `x` was changing steadily.
+**Cost:** ~4 tool calls; the wrong assertion had already been green for two suite runs.
+**What I did instead:** compare last tick's ask against last tick's delivery, one frame late.
+**What would have prevented it:** nothing in the framework — the `moveAndSlide` doc comment warns
+about exactly this in eleven lines, including the `clone()` trap, and I had read it. Recording it
+anyway because a warning that specific being ignored is data: the API shape invites the mistake, and
+a `deliveredMotion` accessor that returned the solver's last applied delta would have removed it.
+**Silent:** yes — a green assertion that measures nothing is the worst possible outcome, and it is
+what I shipped for two runs.
