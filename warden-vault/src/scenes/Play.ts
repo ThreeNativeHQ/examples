@@ -162,7 +162,12 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         uv[index * 2 + 1] = (position.getY(index) - minY) / spanY;
       }
       object.geometry.setAttribute("uv", new BufferAttribute(uv, 2));
-      banner = object;
+      // A clone, because `ctx.add` REPARENTS what it is handed. Adding the loaded mesh itself
+      // empties `model.scene`, the asset loader hands the same cached object back on the next
+      // load, and the scene `R` rebuilds throws "did not contain a mesh" — leaving the game dead
+      // on a keypress the HUD advertises. The clone shares geometry and material, so nothing is
+      // duplicated but the node.
+      banner = object.clone();
     });
     if (banner === undefined) throw new Error("Proof glTF did not contain a mesh.");
     this.#banner = banner;
@@ -236,7 +241,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       });
       for (const crate of crates) crateBodies.add(crate.body);
     };
-    // The vault opens when the runtime is ready, not when the scene is constructed.
+    // The vault opens when the runtime is ready — but only on the run that is still booting.
     //
     // The runner takes its first observation after `startup.whenReady()` resolves, which here was
     // 3.0 s in — by which time crates built in `enter()` have already fallen, collided and gone to
@@ -244,7 +249,13 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // `TN_PLAYTEST_ASSERTION_TRIVIAL: already satisfied before the scenario ran`, because it was.
     // Dropping the pile on the first observed frame makes the settle provable, and it is a better
     // opening for a player too: the room assembles itself instead of already being over.
-    void ctx.startup.whenReady().then(() => buildCrates());
+    //
+    // Startup readiness is a boot milestone, not a per-scene one. On the rebuild that `R` causes
+    // it has already happened and never happens again, so a scene that waits for it a second time
+    // waits forever: pressing R left an empty vault with `crates: 0` and a warden alone in a lit
+    // room. The scenario found that; nothing else would have.
+    if (ctx.startup.progress >= 1) buildCrates();
+    else void ctx.startup.whenReady().then(() => buildCrates());
     const solidCount = authored.filter((plan) => plan.kind === "solid").length;
     if (solidCount < 30 || authored.length - solidCount < 1)
       throw new Error(

@@ -260,3 +260,61 @@ anyway because a warning that specific being ignored is data: the API shape invi
 a `deliveredMotion` accessor that returned the solver's last applied delta would have removed it.
 **Silent:** yes — a green assertion that measures nothing is the worst possible outcome, and it is
 what I shipped for two runs.
+
+### F13: The scaffold ships twenty scenarios written against a different game, and you must triage all of them
+**Surface:** `playtests/` in the `starter` template
+**What I was trying to do:** start proving my own game.
+**What happened:** the template ships 24 scenario files, every one of them written against the
+coastal demo the template also ships — `goal`, `coyote`, `respawn`, `odometer`, `zoom-wheel`,
+`cloth`, `models`, `textures` with baseline PNGs. All of them assert on a `GameState` shape my game
+does not have (`score`, `lives`, `flagDisplacement`). None of them can survive contact with a new
+game, and `pnpm test` runs `playtests/*.playtest.json`, so the first thing a new game's test command
+does is fail twenty times for reasons that have nothing to do with the new game.
+**How I found out:** by reading them one at a time to decide what to keep.
+**Cost:** ~2 tool calls plus the reading.
+**What I did instead:** deleted 20 and rewrote 4.
+**What would have prevented it:** ship the demo's scenarios under `playtests/starter/` and point the
+`test` glob at `playtests/*.playtest.json`, so the shipped proofs are available to read and
+obviously not yours to keep. The generated `AGENTS.md` tells you to "keep
+`playtests/survives.playtest.json` as smoke proof and update outcome tests" — but `survives`
+asserts on two `components` rows (`groundClearance`, `normaliseFactor`) that only exist because the
+starter's `Player` calls `GroundSnap` and `normaliseToMetres`. A flat-floored game that deletes
+`conventions.ts` cannot keep the file the instructions say to keep.
+
+### F14: `changed: true` cannot express "it came back", and the diagnostic recommends it anyway
+**Surface:** `@threenative/playtest` — `TN_PLAYTEST_ASSERTION_TRIVIAL`, `resources.changed`
+**What I was trying to do:** prove that `R` rebuilds the vault: `status` goes `playing` → `won` →
+`playing`, and `sealedBy` goes `none` → `warden` → `none`. A round trip is exactly what a restart
+*is*.
+**What happened:** both rows failed as trivial — "already satisfied before the scenario ran" —
+because triviality compares the first sample with the final one, and a round trip ends where it
+started. `changed: true` does not help; it is the very thing the diagnostic's suggestion recommends.
+The right tool is `atSteps`, which is listed in the assertion reference but is not what the
+diagnostic points at.
+**How I found out:** two failed runs and a re-read of the reference.
+**Cost:** ~3 tool calls, two runs.
+**What I did instead:** `"atSteps": [{"label": "won", "equals": "won"}, {"label": "vault-reopens",
+"equals": "playing"}]`, which is a much better assertion than what I first wrote — it pins the value
+at both ends instead of only at the end.
+**What would have prevented it:** one clause in the triviality suggestion: "…or `atSteps`, when the
+value is supposed to return to where it started."
+
+### F15: Two restart bugs the scenario found and nothing else would have
+**Surface:** my game, `ctx.startup.whenReady()`, `ctx.add()`
+**What I was trying to do:** write the outcome test for `R`, which the HUD advertises.
+**What happened:** two separate defects, both invisible in normal play because I had never pressed R
+after winning.
+1. `ctx.startup.whenReady()` is a **boot** milestone, not a per-scene one. My vault opened on that
+   promise (see F7). On the rebuild `goto("play")` causes it has already resolved and never resolves
+   again, so `buildCrates()` never ran: `crates: 0`, an empty room, a warden alone in it. Fixed by
+   opening immediately when `ctx.startup.progress >= 1`.
+2. `ctx.add()` **reparents** the object it is handed. Adding the mesh found inside a loaded glTF
+   empties that glTF's scene; the asset loader hands the same cached object back on the next load,
+   and my `load()` threw `Proof glTF did not contain a mesh` — a dead game after one keypress. Fixed
+   by cloning. `ctx.add`'s doc comment describes what it returns and says nothing about ownership.
+**How I found out:** the scenario. `crates: 0` in the report and a `TN_PLAYTEST_CONSOLE_ERROR` with
+the page error and its stack line.
+**Cost:** ~6 tool calls, three runs — and worth every one.
+**What would have prevented it:** for (1), a note on `IStartupStatus` that it describes the boot and
+not the scene. For (2), one sentence on `ctx.add`: "the object is reparented into the scene".
+**Silent:** yes for (1) — nothing throws, the room is simply empty.
