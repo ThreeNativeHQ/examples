@@ -5,22 +5,22 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@threenative/core': file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz
-  '@threenative/assets': file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz
+  '@threenative/core': file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz
+  '@threenative/assets': file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz
 
 importers:
 
   .:
     dependencies:
       '@threenative/core':
-        specifier: file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz
-        version: file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0)
+        specifier: file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz
+        version: file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0)
       '@threenative/physics':
         specifier: file:../.packages/threenative-physics-0.3.0-prd349-15e1261f0d2c.tgz
-        version: file:../.packages/threenative-physics-0.3.0-prd349-15e1261f0d2c.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0))(three@0.185.1)
+        version: file:../.packages/threenative-physics-0.3.0-prd349-15e1261f0d2c.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0))(three@0.185.1)
       '@threenative/ui':
         specifier: file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz
-        version: file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+        version: file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       react:
         specifier: 19.2.0
         version: 19.2.0
@@ -35,11 +35,11 @@ importers:
         specifier: 4.3.3
         version: 4.3.3(vite@8.2.0(esbuild@0.27.0)(jiti@2.7.0))
       '@threenative/assets':
-        specifier: file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz
-        version: file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz
+        specifier: file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz
+        version: file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz
       '@threenative/playtest':
-        specifier: file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz
-        version: file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1)
+        specifier: file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz
+        version: file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1)
       '@threenative/runtime-native':
         specifier: file:../.packages/threenative-runtime-native-0.3.0-e64c2454cdbd.tgz
         version: file:../.packages/threenative-runtime-native-0.3.0-e64c2454cdbd.tgz
@@ -56,8 +56,8 @@ importers:
         specifier: 6.0.5
         version: 6.0.5(vite@8.2.0(esbuild@0.27.0)(jiti@2.7.0))
       create-threenative:
-        specifier: file:../.packages/create-threenative-0.2.3-prd349-b4a51528a025.tgz
-        version: file:../.packages/create-threenative-0.2.3-prd349-b4a51528a025.tgz(@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz)
+        specifier: file:../.packages/create-threenative-0.2.3-prd349-746944db6f7a.tgz
+        version: file:../.packages/create-threenative-0.2.3-prd349-746944db6f7a.tgz(@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz)
       esbuild:
         specifier: 0.27.0
         version: 0.27.0
@@ -779,12 +779,12 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz':
-    resolution: {integrity: sha512-c8A3fqdHuCZUxfEzEiBNMcI7fcJ0KmvWvARUFEc+7qpgXTEUCc7gSkpmv+V2182VSUHrBGbbbklwH7CWZsjYFQ==, tarball: file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz}
+  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz':
+    resolution: {integrity: sha512-wh8Aw+mZQLae80iB/wb+cz+zNTKujCyS2a/Fkh/iw4erqlSH7bgoNKuPuHiwu2JtAzha2PDll8KHc1FgjG1NrQ==, tarball: file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz}
     version: 0.3.0
 
-  '@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz':
-    resolution: {integrity: sha512-WHA3g6QllHs4rup31T2VsP6Y5gO9MYW6qx83COlI45QCBbv4PExcg2GF26lLrLX5+e4raueeDzd0DSaglbnRhQ==, tarball: file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz}
+  '@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz':
+    resolution: {integrity: sha512-3VDAbuna7D9dsJBGnJoN7STJOJDdEtECR2tLbr26xLFWvlmxCVHPb+0pc1DRnE67XTX3FSyZz1hSUwNkB5yuIQ==, tarball: file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz}
     version: 0.3.0
     peerDependencies:
       '@threenative/playtest': '>=0.3.0 <0.4.0'
@@ -805,8 +805,8 @@ packages:
       '@threenative/core': '>=0.3.0 <0.4.0'
       three: '>=0.185.0 <0.186.0'
 
-  '@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz':
-    resolution: {integrity: sha512-Haj5luY3vdBOAwxwV8bKKwRH4D7YyNVVGo22LUm4/jXPO0vRovd3TRor1OIH6nB6xX4hwkc3dhGOQsjQnJLPww==, tarball: file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz}
+  '@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz':
+    resolution: {integrity: sha512-c3WNaSdw2BmsGS4F6neHMtwLIpHB0GHHkiOhA4goUkHg8vEEDUuiEm+C506zWHd/kcXnHl+pVDIgeSrcOzaZDw==, tarball: file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz}
     version: 0.3.0
     hasBin: true
     peerDependencies:
@@ -937,8 +937,8 @@ packages:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
 
-  create-threenative@file:../.packages/create-threenative-0.2.3-prd349-b4a51528a025.tgz:
-    resolution: {integrity: sha512-QpNcVwDcML75lriFJC40nuLtUWIyqEbTwCDQ+MKS0DPCQvKpWWUKyrLIVA4xCqp+CPODwTRhNqWHNyFbjnIszQ==, tarball: file:../.packages/create-threenative-0.2.3-prd349-b4a51528a025.tgz}
+  create-threenative@file:../.packages/create-threenative-0.2.3-prd349-746944db6f7a.tgz:
+    resolution: {integrity: sha512-eZPWkzZRad2370fi14Z/sR+ubW/oQycER4qfHZ0SOxqDumjCvS7ZjnQ1/UGnc29ffPe5zMywirRYf1alcLiUUQ==, tarball: file:../.packages/create-threenative-0.2.3-prd349-746944db6f7a.tgz}
     version: 0.2.3
     hasBin: true
     peerDependencies:
@@ -2178,7 +2178,7 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.2.0(esbuild@0.27.0)(jiti@2.7.0)
 
-  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz':
+  '@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz':
     dependencies:
       '@gltf-transform/core': 4.4.2
       '@gltf-transform/extensions': 4.4.2
@@ -2187,7 +2187,6 @@ snapshots:
       draco3dgltf: 1.5.7
       jpeg-js: 0.4.4
       ktx-parse: 1.1.0
-      ktx2-encoder: 0.6.0
       meshoptimizer: 1.1.1
       pngjs: 7.0.0
       three: 0.185.1
@@ -2197,7 +2196,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0)':
+  '@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0)':
     dependencies:
       three: 0.185.1
       three-mesh-bvh: 0.9.14(three@0.185.1)
@@ -2205,7 +2204,7 @@ snapshots:
       threenative-sculpt-mcp: 0.1.1
       zustand: 5.0.14(@types/react@19.2.0)(react@19.2.0)
     optionalDependencies:
-      '@threenative/playtest': file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1)
+      '@threenative/playtest': file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1)
       react: 19.2.0
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -2215,14 +2214,14 @@ snapshots:
       - supports-color
       - use-sync-external-store
 
-  '@threenative/physics@file:../.packages/threenative-physics-0.3.0-prd349-15e1261f0d2c.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0))(three@0.185.1)':
+  '@threenative/physics@file:../.packages/threenative-physics-0.3.0-prd349-15e1261f0d2c.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0))(three@0.185.1)':
     dependencies:
       '@dimforge/rapier3d-compat': 0.19.3
-      '@threenative/core': file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0)
+      '@threenative/core': file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0)
       recast-navigation: 0.43.1
       three: 0.185.1
 
-  '@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1)':
+  '@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1)':
     dependencies:
       pngjs: 7.0.0
     optionalDependencies:
@@ -2233,9 +2232,9 @@ snapshots:
     dependencies:
       pngjs: 7.0.0
 
-  '@threenative/ui@file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+  '@threenative/ui@file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz(@threenative/core@file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
-      '@threenative/core': file:../.packages/threenative-core-0.3.0-prd349-c0b4c8aeccdc.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0)
+      '@threenative/core': file:../.packages/threenative-core-0.3.0-prd349-17361b6ad7ad.tgz(@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz(playwright@1.58.2)(three@0.185.1))(@types/react@19.2.0)(react@19.2.0)
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
 
@@ -2343,12 +2342,12 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  create-threenative@file:../.packages/create-threenative-0.2.3-prd349-b4a51528a025.tgz(@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz):
+  create-threenative@file:../.packages/create-threenative-0.2.3-prd349-746944db6f7a.tgz(@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz):
     dependencies:
       '@gltf-transform/core': 4.4.2
       '@gltf-transform/extensions': 4.4.2
       '@gltf-transform/functions': 4.4.2
-      '@threenative/assets': file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz
+      '@threenative/assets': file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz
       draco3dgltf: 1.5.7
       ktx-parse: 1.1.0
       ktx2-encoder: 0.6.0
