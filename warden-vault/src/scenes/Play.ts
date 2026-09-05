@@ -74,6 +74,9 @@ function replayInput(tick: number): { readonly x: number; readonly z: number } {
   return tick < 8 ? { x: 0, z: 0 } : { x: 1, z: 0 };
 }
 
+/** The one crate allowed in the lane: the one the warden starts against. */
+const PUSH_CRATE_INDEX = 22;
+
 interface ICrateAuthoring {
   readonly colour: number;
   readonly kind: CrateKind;
@@ -194,8 +197,8 @@ export class Play extends Scene<GameState, IPhysicsContext> {
         }),
     );
 
-    bannerMesh.scale.setScalar(0.3);
-    bannerMesh.position.set(VAULT.halfX - 0.1, 1.32, 2.5);
+    bannerMesh.scale.setScalar(0.24);
+    bannerMesh.position.set(VAULT.halfX - 0.1, 1.38, 2.6);
     bannerMesh.rotation.set(0, -Math.PI / 2, 0);
     ctx.add(bannerMesh);
 
@@ -545,7 +548,12 @@ function phaseWallBounds(): {
  */
 function authorCrates(random: IRandom): readonly ICrateAuthoring[] {
   const plans: ICrateAuthoring[] = [];
-  const colour = (): number => Math.floor(random.range(0, 2.999));
+  // A seeded rotation through the three colours rather than three independent draws. Random
+  // draws clumped: one load came up amber-heavy on the whole east half of the pile, which reads
+  // as a palette with two colours in it rather than three.
+  const start = Math.floor(random.range(0, 2.999));
+  let drawn = 0;
+  const colour = (): number => (start + drawn++) % 3;
   const jitter = (amount: number): number => random.range(-amount, amount);
 
   // The pile: four columns, two deep, three high, in the middle of the room.
@@ -569,29 +577,41 @@ function authorCrates(random: IRandom): readonly ICrateAuthoring[] {
 
   // The crate the warden is already leaning on when the vault opens. It is directly in the lane,
   // so the first press of ArrowRight shoves it — which is the mechanic, not decoration.
-  // Head-on with the warden's own z, so the shove has no sideways reaction. Offset by even a
-  // third of a metre, the push slides the warden into the crates lining the south wall.
-  plans.push({ colour: 0, kind: "solid", rotationY: jitter(0.1), x: -2.9, y: 0.5, z: WARDEN_SPAWN.z });
+  // Half a crate off the warden's centre line, which is the whole difference between shoving a
+  // crate aside and carrying it the length of the room. Head-on, the character controller pushed
+  // it the entire crossing and covered 6.8 m of a 9.5 m lane in the time a proof allows; offset,
+  // the first contact deflects it north and the warden walks on. It is still the first thing the
+  // player touches, and it is still what the reference picture shows.
+  plans.push({ colour: 0, kind: "solid", rotationY: jitter(0.1), x: -2.9, y: 0.5, z: WARDEN_SPAWN.z - 0.44 });
 
   // Singles around the room, clear of the seal's footprint.
   // The warden's lane runs the length of the room at z = 2.0, and the three crates nearest it are
   // held to a sixth of a radian: a crate yawed half a radian has a 0.62 m footprint half-extent
   // rather than 0.46, and three of those turned the crossing into a bulldoze that stalled the
   // warden five metres short of the seal.
-  const laneAdjacent = new Set([2, 3, 6]);
+  // The four crates nearest the aisle are held to a sixth of a radian: a crate yawed half a
+  // radian has a 0.62 m footprint half-extent rather than 0.46, and the lane check has to leave
+  // room for the worst case of every crate in the room.
+  // The four crates nearest the aisle are held to a sixth of a radian: a crate yawed half a
+  // radian has a 0.62 m footprint half-extent rather than 0.46, and the lane check has to leave
+  // room for the worst case of every crate in the room.
+  const laneAdjacent = new Set([9, 10, 11, 13]);
   const singles: readonly (readonly [number, number])[] = [
     [-4.5, -2.6],
     [-3.5, -0.4],
-    [-1.1, 3.3],
-    [1.3, 3.3],
-    [1.4, -2.7],
-    [-0.3, -3.1],
-    [4.6, 3.3],
-    [5.05, 0.25],
-    [2.1, 1.05],
     [-0.9, 0.6],
     [-4.3, 0.9],
+    [1.4, -2.7],
+    [-0.3, -3.1],
     [1.25, -3.4],
+    [-5.0, -1.6],
+    [1.9, 0.45],
+    [-4.6, 1.1],
+    [-1.3, 1.15],
+    [1.3, 1.1],
+    [-2.6, -3.3],
+    [0.4, 1.1],
+    [3.0, -0.3],
   ];
   for (const [index, [x, z]] of singles.entries())
     plans.push({
@@ -605,7 +625,7 @@ function authorCrates(random: IRandom): readonly ICrateAuthoring[] {
 
   // Three off-balance crates: authored above and beside a neighbour so the drop tips them over.
   const topplers: readonly (readonly [number, number, number])[] = [
-    [-2.0, 1.55, 1.3],
+    [-2.0, 1.55, 0.55],
     [0.5, 1.5, -2.9],
     [0.55, 2.45, -1.3],
   ];
@@ -615,18 +635,77 @@ function authorCrates(random: IRandom): readonly ICrateAuthoring[] {
   // The ward: three wide, two high, standing across the seal's approach. Every route from the
   // warden's lane to the seal goes through it, and none of it stops the warden.
   for (let column = 0; column < 3; column += 1)
-    for (let level = 0; level < 2; level += 1)
-      plans.push({
-        colour: 0,
-        kind: "phase",
-        rotationY: 0,
-        x: 3.15 + column * 0.94,
-        y: 0.5 + level * 0.95,
-        z: 0.85,
-      });
+    plans.push({ colour: 0, kind: "phase", rotationY: 0, x: 3.15 + column * 0.94, y: 0.5, z: 0.85 });
+  plans.push({ colour: 0, kind: "phase", rotationY: 0, x: 4.09, y: 1.44, z: 0.85 });
 
   assertClearOfSeal(plans);
+  assertLaneClear(plans);
+  assertClearOfWard(plans);
   return plans;
+}
+
+/** The ward's footprint, so nothing solid is authored inside a body it cannot collide with. */
+const WARD = { centreX: 4.09, centreZ: 0.85, halfX: 1.41, halfZ: 0.46 } as const;
+
+/**
+ * Refuses a layout with a solid crate standing inside the ward.
+ *
+ * The ward is transparent to every movable body, which is what stops a shoved crate wedging
+ * against it and dead-ending the level. The cost is that a crate authored on top of it simply
+ * interpenetrates, and on the first screen that does not read as a ghost — it reads as two boxes
+ * clipping through each other. A crate *pushed* into it is fine and is the point; a crate that
+ * starts there is a mistake.
+ */
+function assertClearOfWard(plans: readonly ICrateAuthoring[]): void {
+  for (const [index, plan] of plans.entries()) {
+    if (plan.kind === "phase") continue;
+    const reach = footprint(plan.rotationY);
+    if (
+      Math.abs(plan.x - WARD.centreX) < WARD.halfX + reach &&
+      Math.abs(plan.z - WARD.centreZ) < WARD.halfZ + reach
+    )
+      throw new Error(
+        `Crate ${index} is authored inside the ward at (${plan.x.toFixed(2)}, ${plan.z.toFixed(2)}). The ward collides with nothing movable, so it would clip through it on the first frame.`,
+      );
+  }
+}
+
+/** The strip the warden crosses. Nothing but the crate it starts against may stand in it. */
+/**
+ * The aisle along the front of the vault, and why it is where it is.
+ *
+ * The near wall is 1.9 m of stone between the camera and the front of the room, and at this
+ * elevation it hides everything within about 1.3 m of it: the warden spawned at z 3.15 and only
+ * the top of its head cleared the rail. Anything the player has to see stands at z 2.4 or less.
+ */
+export const LANE = { halfWidth: 0.5, z: WARDEN_SPAWN.z } as const;
+
+/**
+ * Refuses a layout that blocks the crossing.
+ *
+ * The route from the spawn to the seal is the only route the game guarantees, and it turned out to
+ * be a hostage to the seeded jitter: adding two decorative crates changed how many numbers the
+ * authoring drew from `ctx.random`, every later rotation shifted, and two crates that had been
+ * clear of the lane by centimetres moved into it. The warden then bulldozed instead of walking and
+ * stopped six metres short of the seal — a level that had been finishable for six runs became
+ * unfinishable because of two crates placed nowhere near the lane.
+ *
+ * So the lane is an invariant with a check, not an intention with a comment.
+ */
+function assertLaneClear(plans: readonly ICrateAuthoring[]): void {
+  for (const [index, plan] of plans.entries()) {
+    if (index === PUSH_CRATE_INDEX) continue;
+    const reach = footprint(plan.rotationY);
+    if (Math.abs(plan.z - LANE.z) < LANE.halfWidth + reach)
+      throw new Error(
+        `Crate ${index} stands in the warden's lane: z ${plan.z.toFixed(2)} with a ${reach.toFixed(2)} m footprint is inside ${(LANE.z - LANE.halfWidth).toFixed(2)}..${(LANE.z + LANE.halfWidth).toFixed(2)}. The crossing to the seal is the only route this level guarantees.`,
+      );
+  }
+}
+
+/** Half-extent of a crate's footprint along either axis once it is yawed. */
+function footprint(rotationY: number): number {
+  return (CRATE_SIZE / 2) * (Math.abs(Math.cos(rotationY)) + Math.abs(Math.sin(rotationY)));
 }
 
 /**
@@ -641,7 +720,7 @@ function authorCrates(random: IRandom): readonly ICrateAuthoring[] {
  */
 function assertClearOfSeal(plans: readonly ICrateAuthoring[]): void {
   for (const [index, plan] of plans.entries()) {
-    const reach = (CRATE_SIZE / 2) * (Math.abs(Math.cos(plan.rotationY)) + Math.abs(Math.sin(plan.rotationY)));
+    const reach = footprint(plan.rotationY);
     const overlapsX = Math.abs(plan.x - SEAL.x) < SEAL.half + reach;
     const overlapsZ = Math.abs(plan.z - SEAL.z) < SEAL.half + reach;
     if (overlapsX && overlapsZ)

@@ -15,7 +15,7 @@ const CAPSULE_RADIUS = 0.28;
 /** How far the solver has to fall short of the asked-for step before it counts as blocked. */
 const BLOCKED_FRACTION = 0.45;
 
-export const WARDEN_SPAWN = { x: -4.2, y: 0.62, z: 2.3 } as const;
+export const WARDEN_SPAWN = { x: -4.2, y: 0.62, z: 2.35 } as const;
 
 /**
  * The controlled character: a capsule that pushes, and a figure that leans the way it is pushing.

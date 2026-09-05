@@ -71,12 +71,12 @@ export function createVaultRoom(materials: IVaultMaterials): IVaultRoom {
   const seamGeometry = new BoxGeometry(1, 0.02, 1);
   for (let index = -2; index <= 2; index += 1) {
     const alongZ = new Mesh(seamGeometry, materials.floorSeam);
-    alongZ.scale.set(0.06, 1, outerZ * 2);
+    alongZ.scale.set(0.09, 1, outerZ * 2);
     alongZ.position.set(index * 2.35, 0.005, 0);
     alongZ.receiveShadow = false;
     root.add(alongZ);
     const alongX = new Mesh(seamGeometry, materials.floorSeam);
-    alongX.scale.set(outerX * 2, 1, 0.06);
+    alongX.scale.set(outerX * 2, 1, 0.09);
     alongX.position.set(0, 0.005, index * 1.95);
     root.add(alongX);
   }
@@ -182,7 +182,7 @@ export function createVaultRoom(materials: IVaultMaterials): IVaultRoom {
     const flame = block(0.22, 0.3, 0.22, materials.lantern, { castShadow: false, radius: 0.05 });
     flame.position.set(lantern.x, 1.28, lantern.z);
     root.add(flame);
-    const light = new PointLight(palette.lantern, 9, 8.5, 1.9);
+    const light = new PointLight(palette.lantern, 8, 7.5, 1.9);
     light.position.set(lantern.x + out.x * 0.3, 1.3, lantern.z + out.z * 0.3);
     root.add(light);
   }
@@ -206,7 +206,7 @@ export function createVaultRoom(materials: IVaultMaterials): IVaultRoom {
   const seal = new Group();
   seal.name = "vault-seal";
   seal.position.set(SEAL.x, 0, SEAL.z);
-  const rimSpan = SEAL.half * 2 + 0.32;
+  const rimSpan = SEAL.half * 2 + 0.26;
   for (const [dx, dz] of [
     [0, -1],
     [0, 1],
@@ -215,13 +215,13 @@ export function createVaultRoom(materials: IVaultMaterials): IVaultRoom {
   ] as const) {
     const alongX = dz !== 0;
     const kerb = block(
-      alongX ? rimSpan : 0.32,
+      alongX ? rimSpan : 0.26,
       0.15,
-      alongX ? 0.32 : rimSpan,
+      alongX ? 0.26 : rimSpan,
       materials.sealRim,
       { radius: 0.05 },
     );
-    kerb.position.set(dx * (SEAL.half + 0.16), 0.075, dz * (SEAL.half + 0.16));
+    kerb.position.set(dx * (SEAL.half + 0.13), 0.075, dz * (SEAL.half + 0.13));
     seal.add(kerb);
   }
   // Concentric squares, drawn as FRAMES with dark floor showing between them. Three filled
@@ -230,15 +230,15 @@ export function createVaultRoom(materials: IVaultMaterials): IVaultRoom {
   const glowMaterials: MeshBasicMaterial[] = [];
   const plate = new Mesh(
     new BoxGeometry(SEAL.half * 2, 0.02, SEAL.half * 2),
-    new MeshBasicMaterial({ color: new Color(palette.phase).multiplyScalar(0.13) }),
+    new MeshBasicMaterial({ color: new Color(palette.phase).multiplyScalar(0.2) }),
   );
   plate.position.y = 0.012;
   seal.add(plate);
   const rings: readonly { readonly bar: number; readonly brightness: number; readonly span: number }[] =
     [
-      { bar: 0.11, brightness: 0.34, span: SEAL.half * 1.82 },
-      { bar: 0.1, brightness: 0.52, span: SEAL.half * 1.24 },
-      { bar: 0.09, brightness: 0.78, span: SEAL.half * 0.68 },
+      { bar: 0.11, brightness: 0.4, span: SEAL.half * 1.82 },
+      { bar: 0.1, brightness: 0.58, span: SEAL.half * 1.24 },
+      { bar: 0.09, brightness: 0.76, span: SEAL.half * 0.68 },
     ];
   rings.forEach((ring, index) => {
     const material = new MeshBasicMaterial({
@@ -266,13 +266,13 @@ export function createVaultRoom(materials: IVaultMaterials): IVaultRoom {
   });
   // The core the rings surround: the brightest thing in the room, and the only part that blooms.
   const coreMaterial = new MeshBasicMaterial({
-    color: new Color(palette.phase).multiplyScalar(1.05),
+    color: new Color(palette.phase).multiplyScalar(0.95),
   });
   glowMaterials.push(coreMaterial);
   const core = new Mesh(new BoxGeometry(SEAL.half * 0.42, 0.02, SEAL.half * 0.42), coreMaterial);
   core.position.y = 0.04;
   seal.add(core);
-  const sealLight = new PointLight(palette.phase, 7, 10, 1.7);
+  const sealLight = new PointLight(palette.phase, 9, 13, 1.6);
   sealLight.position.set(0, 1.3, 0);
   seal.add(sealLight);
   root.add(seal);
@@ -285,7 +285,7 @@ export function createVaultRoom(materials: IVaultMaterials): IVaultRoom {
         .copy(new Color(palette.phase))
         .multiplyScalar((baseBrightness[index] ?? 1) * scale);
     });
-    sealLight.intensity = lit ? 17 : 7;
+    sealLight.intensity = lit ? 22 : 9;
   };
 
   return { object: root, seal, setSealLit, solids };

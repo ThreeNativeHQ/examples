@@ -18,11 +18,11 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
   renderer.shadowMap.type = PCFSoftShadowMap;
 
   // Sky above, floor bounce below, both cold and both very quiet.
-  scene.add(new HemisphereLight(0x33456a, palette.floorSeam, 0.9));
+  scene.add(new HemisphereLight(0x33456a, palette.floorSeam, 0.6));
 
   // The key. Warm, high, and from the lantern side, so crate tops catch a little of the same
   // colour the plaster does and the shadows all fall the same way as in the reference.
-  const key = new DirectionalLight(0xffd0a0, 1.35);
+  const key = new DirectionalLight(0xf4e8da, 0.8);
   key.position.set(-7, 15, 5);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
@@ -43,7 +43,7 @@ export function setupLighting(scene: Scene, renderer: ShadowRenderer): Direction
 
   // Just enough ambient that a crate face turned away from every source is still a colour rather
   // than a silhouette.
-  scene.add(new AmbientLight(0x2e3d58, 0.65));
+  scene.add(new AmbientLight(0x33425e, 0.52));
 
   return key;
 }

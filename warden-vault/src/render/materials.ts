@@ -51,7 +51,7 @@ export function createMaterials(): IVaultMaterials {
     // it still reads as a solid-shaped object rather than a smudge.
     phase: new MeshStandardMaterial({
       color: palette.phase,
-      emissive: new Color(palette.phase).multiplyScalar(0.5),
+      emissive: new Color(palette.phase).multiplyScalar(0.34),
       metalness: 0,
       opacity: 0.55,
       roughness: 0.1,
@@ -59,8 +59,10 @@ export function createMaterials(): IVaultMaterials {
     }),
     // Dimmer than the palette entry: at full value the ward clips to white under bloom and
     // stops reading as a crate-shaped thing at all.
-    phaseCore: new MeshBasicMaterial({ color: new Color(palette.phase).multiplyScalar(0.62) }),
-    lantern: new MeshBasicMaterial({ color: palette.lantern }),
+    phaseCore: new MeshBasicMaterial({ color: new Color(palette.phase).multiplyScalar(0.46) }),
+    // Below full value: an unclamped emissive at this bloom threshold turns each lantern into a
+    // white disc and the wall behind it into a wash.
+    lantern: new MeshBasicMaterial({ color: new Color(palette.lantern).multiplyScalar(0.8) }),
     warden: new MeshStandardMaterial({ color: palette.warden, roughness: 0.62 }),
     wardenDark: new MeshStandardMaterial({
       color: new Color(palette.warden).multiplyScalar(0.72),

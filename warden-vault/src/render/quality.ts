@@ -87,9 +87,9 @@ export function resolveQualityTier(
 const high: QualitySettings = {
   bloomEnabled: true,
   bloomRadius: 0.42,
-  bloomStrength: 0.62,
+  bloomStrength: 0.5,
   // High, on purpose: the lantern flames and the seal plate clear it and nothing lit does.
-  bloomThreshold: 0.82,
+  bloomThreshold: 0.85,
   denoiseEnabled: false,
   exposure: 1.06,
   // Contact scale, in metres. A crate is 0.92 m, so half a metre gathers the crease where two

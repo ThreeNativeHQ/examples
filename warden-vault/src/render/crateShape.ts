@@ -33,7 +33,7 @@ export function crateGeometry(): BufferGeometry {
     ];
   for (const face of faces) {
     for (const sign of [1, -1]) {
-      const plank = new BoxGeometry(diagonal, 0.072, 0.03);
+      const plank = new BoxGeometry(diagonal, 0.058, 0.028);
       // `roundedBox` welds away its UVs, and `mergeGeometries` refuses a set of geometries whose
       // attributes do not match exactly — it returns null and logs, which is easy to miss.
       plank.deleteAttribute("uv");
@@ -48,7 +48,7 @@ export function crateGeometry(): BufferGeometry {
     // A rail along the top and bottom of each side face, which is what stops the X reading as a
     // sticker and starts it reading as carpentry.
     for (const edge of [half - 0.1, -half + 0.1]) {
-      const rail = new BoxGeometry(CRATE_SIZE * 0.98, 0.075, 0.03);
+      const rail = new BoxGeometry(CRATE_SIZE * 0.98, 0.062, 0.028);
       rail.deleteAttribute("uv");
       rail.applyMatrix4(new Matrix4().makeTranslation(0, edge, 0.01));
       rail.applyMatrix4(face.rotation);

@@ -10,11 +10,25 @@ import type { PerspectiveCamera, Vector3 } from "three";
 import { Vector3 as Vec3 } from "three";
 
 export const VAULT_SHOT = {
-  fov: 32,
-  /** Where the camera sits. Roughly 40 degrees above the floor, off the front-left corner. */
-  position: new Vec3(-1.5, 12.6, 11.6),
+  fov: 31,
+  /**
+   * Where the camera sits: about 44 degrees above the floor and 30 degrees off the room's axis.
+   *
+   * The yaw is the part that matters, and about twenty degrees is the window. An axis-aligned shot puts the near wall across the bottom of
+   * the frame as a flat band and flattens the whole room into a rectangle; swinging the camera
+   * onto the corner is what makes the left wall recede and gives the picture the diagonal the
+   * reference is built on; past thirty the room reads as a diamond with dead corners.
+   *
+   * The numbers are solved rather than eyeballed. Four attempts at nudging them by hand each cost
+   * a build and a screenshot and each landed with the room cropped on one side; projecting the
+   * room's eight outer corners through this exact camera and binary-searching the distance found
+   * a fit in one pass. Yaw 17 degrees, elevation 41, the room spanning 1.84 of the 2.0 of clip
+   * space vertically — so the near wall is just cropped, as it is in the reference — and biased a
+   * little right of centre, which is where the HUD is not.
+   */
+  position: new Vec3(-4.35, 13.33, 14.72),
   /** What it points at: the middle of the room, biased toward the seal corner. */
-  target: new Vec3(0.05, 0.25, -0.55),
+  target: new Vec3(0, 0.4, 0.5),
   /** How far the shot is allowed to drift toward the warden, in metres. */
   drift: 0.1,
 } as const;

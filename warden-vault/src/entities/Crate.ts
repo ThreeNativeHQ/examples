@@ -89,7 +89,7 @@ export class Crate {
       // Light, and measured rather than chosen. At 6 kg the warden shoving a crate crossed 2.5 m
       // in 3.3 s instead of 11; at 2.5 kg, six. Rapier bounds a character's push by the
       // character's own mass and no option here exposes it, so the crate is what has to give.
-      mass: 1.5,
+      mass: 1.2,
       object: this.mesh,
       physics: ctx.physics,
       shape: CollisionShape3D.box(CRATE_SIZE, CRATE_SIZE, CRATE_SIZE),
