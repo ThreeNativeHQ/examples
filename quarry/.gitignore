@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.threenative/
+artifacts/
+public/models/
+public/shared/
+public/assets.manifest.json
+public/basis_transcoder.*
+assets/exclusion-proof.bin
+# Landscape Pro source files are licensed pack content, not cleared for standalone publication.
+assets/models/
+public/basis/
+public/bake.receipt.json
+public/.bake.pending-receipt.json

@@ -1,0 +1,43 @@
+{
+  "name": "quarry",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "threenative build",
+    "build:web": "threenative build --target web",
+    "build:desktop": "threenative build --target desktop",
+    "test": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@threenative/core": "file:../.packages/threenative-core-0.3.0-prd349-372d28b590d1.tgz",
+    "@threenative/physics": "file:../.packages/threenative-physics-0.3.0-prd349-15e1261f0d2c.tgz",
+    "@threenative/ui": "file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@threenative/assets": "file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz",
+    "@threenative/playtest": "file:../.packages/threenative-playtest-0.3.0-acf14db76bba.tgz",
+    "@threenative/runtime-native": "file:../.packages/threenative-runtime-native-0.3.0-e64c2454cdbd.tgz",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "@types/three": "0.185.3",
+    "@vitejs/plugin-react": "6.0.5",
+    "create-threenative": "file:../.packages/create-threenative-0.2.3-prd349-b4a51528a025.tgz",
+    "esbuild": "0.27.0",
+    "playwright": "1.58.2",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "8.2.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@threenative/core": "file:../.packages/threenative-core-0.3.0-prd349-372d28b590d1.tgz",
+      "@threenative/assets": "file:../.packages/threenative-assets-0.3.0-prd349-4a3f21b06ce1.tgz"
+    }
+  }
+}

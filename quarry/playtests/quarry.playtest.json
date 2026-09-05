@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "name": "quarry-walk-past-six-textured-props",
+  "target": "web",
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 0,
+  "steps": [
+    { "kind": "wait", "waitTicks": 60, "label": "settle-on-stone", "release": true },
+    { "kind": "input", "press": "KeyW", "holdTicks": 450, "label": "walk-the-quarry-route", "release": true },
+    { "kind": "wait", "waitTicks": 30, "label": "end-of-route", "release": true, "screenshot": "quarry-walk" }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "runtimeReady": true },
+    "movement": { "entity": "walker", "minDistance": 20 },
+    "resources": [
+      { "id": "state", "path": "props", "equals": 6, "allowTrivial": "All six imported props must exist before and after the walk." },
+      { "id": "state", "path": "texturedProps", "equals": 6, "allowTrivial": "Measured from the loaded material maps; grey props fail." },
+      { "id": "state", "path": "normalMappedProps", "equals": 6, "allowTrivial": "Every imported normal-map binding survives loading." },
+      { "id": "state", "path": "visited", "equals": 6, "changed": true },
+      { "id": "state", "path": "distance", "gte": 20, "changed": true },
+      { "id": "state", "path": "groundGap", "gte": -0.1, "lte": 0.2, "allowTrivial": "The controller stays on the stone floor throughout the route." }
+    ]
+  }
+}
