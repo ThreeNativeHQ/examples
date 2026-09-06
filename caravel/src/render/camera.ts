@@ -14,6 +14,8 @@ export function setupCamera(camera: PerspectiveCamera): void {
 const CHASE = { astern: 7.4, height: 3.7, starboard: 2.1 } as const;
 /** How far ahead of the bow the camera looks, so the next mark is in frame before it is reached. */
 const LEAD = 5.2;
+/** The least water the camera keeps under it, in metres. */
+const FREEBOARD = 1.5;
 
 /**
  * Follow from off the starboard quarter, near the water, **behind the bow**.
@@ -33,6 +35,7 @@ export function followShip(
   target: { x: number; y: number; z: number },
   heading: number,
   deltaTime: number,
+  seaAtCamera: (x: number, z: number) => number,
 ): void {
   const forwardX = -Math.sin(heading);
   const forwardZ = -Math.cos(heading);
@@ -45,5 +48,14 @@ export function followShip(
   camera.position.x += (wantX - camera.position.x) * blend;
   camera.position.y += (wantY - camera.position.y) * blend;
   camera.position.z += (wantZ - camera.position.z) * blend;
+  // Never below the sea it is looking at.
+  //
+  // The height offset is measured from the ship, and the ship is in a trough about half the time
+  // — so a camera seven metres astern of a hull that has just dropped into one sits level with, or
+  // inside, the crest between them. The frame then goes to a wall of water with a mast sticking
+  // out of it, which reads as the renderer having failed rather than as a sea running. The
+  // clearance is generous because a crest arriving between two frames has to clear it too.
+  const floor = seaAtCamera(camera.position.x, camera.position.z) + FREEBOARD;
+  if (camera.position.y < floor) camera.position.y = floor;
   camera.lookAt(target.x + forwardX * LEAD, target.y + 1.2, target.z + forwardZ * LEAD);
 }

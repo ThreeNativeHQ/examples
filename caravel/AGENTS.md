@@ -4,7 +4,7 @@ Instructions for the AI agent in this game. `CLAUDE.md` mirrors this file; edit 
 
 ## Ownership
 
-ThreeNative owns bootstrap, renderer, fixed-step loop, input, loading, physics bindings, and the state bridge. This repository owns ship handling, `WaveField`, `Buoyancy3D`, course order, HUD,
+ThreeNative owns bootstrap, renderer, fixed-step loop, input, loading, physics bindings, and the state bridge. This repository owns ship handling, the sea state, `Buoyancy3D`, course order, HUD,
 water, and look; `src/game.ts` is portable and React mounts from `src/main.ts`.
 
 ## Start every change
@@ -49,16 +49,28 @@ pnpm test:native
 ```
 
 `Ship.ts` uses `RigidBody3D` plus `Buoyancy3D`; apply forces before fixed-step simulation.
-The same field shades the sea as displaces it. `src/render/water-material.ts` feeds
-`WaveField.heightNode()` and `normalNode()` into `waterColourNode`, so crests, troughs and the
-sun's glint all come from the wave sum rather than from a texture. Hand that colour function a
-constant and the surface still moves and the picture stops changing: the sea photographs as one
-flat sheet. Prefer `normalNode()` over differencing the height — the field differentiates its own
-wave sum, and a differenced normal repeats wherever the sampling grid does.
+The sea is a `SpectralOcean` and it draws **nothing** — the mesh, the material, every colour, the
+foam line and the tessellation are all in `src/render/ocean.ts`, which is this game's file and not
+the framework's. The vertex stage reads the same cascade buffers the CPU height query is copied
+from, so the water the ship rides is the water on screen. Three things about it that are easy to
+get wrong and expensive to diagnose:
 
-`WaveField.sample(x, z, time)` drives both hull measurements and packed water displacement. Tune
-wave constants in `src/render/palette.ts`, hull points in `src/entities/Ship.ts`, and course order
-in `src/scenes/Sailing.ts`. The single React HUD reads published state; keep
+1. **The game owns the sea's clock.** `ocean.advance(seconds)` every frame, or the compute passes
+   run forever on the spectrum at t = 0: the dispatches count up, the readback lands, and the bytes
+   are identical. A still ocean passes every other assertion in this template.
+2. **`sampleHeight` is a copy, and it says how old it is.** Read it through `surfaceHeight()` in the
+   same file, which corrects for that age by sampling upwind at the swell's phase speed. Anything
+   put straight onto the raw height floats on water the renderer stopped drawing.
+3. **Difference the normal finer than the mesh.** Shading detail below the geometric resolution is
+   what a normal is for; buying it as geometry costs twice the triangle budget for an identical
+   frame. `normalNode` is view space and overrides `normalView`, so hand it
+   `transformNormalToView(...)` — fed a world-space normal the sun's reflection becomes a column of
+   glare that follows the camera.
+
+Tune the sea state in `SEA`, the surface's look below it, hull points and handling in
+`src/entities/Ship.ts`, and the course in `src/scenes/Sailing.ts`. The sails are `SoftBody3D` and
+live at the **scene root**, not under the hull: the class disposes itself on `removed`, so `Ship`
+carries them to their yards each tick. The single React HUD reads published state; keep
 `playtests/survives.playtest.json` as smoke proof and native scenarios honest.
 
 On a touch-primary device (`isMobile() && isTouchscreenAvailable()`), `src/render/touch-controls.ts`
@@ -70,7 +82,10 @@ Leave `assets` absent: the cook selects target-decodable passes, with `models.sh
 
 Relative look capture: a binding with `pointerRelative: true` captures the canvas on click by default; set `captureOnClick: false` and call `ctx.input.captureMouse()` from your own gesture to opt out. Desktop mode precedence is CLI (`--windowed`, `--maximized`, `--fullscreen`) over `display.fullscreen` over `window.maximized`; with both false, `window.width`/`height` size the normal window.
 Scenes use `load`, `enter`, `update`, `exit`, `render`; physics nodes are Godot-named and disposable. Generated conventions call `normaliseToMetres` for authored ship scale; buoyancy owns water contact.
-`input.vector("move").y` is +up and means forward wind; use one explicit `-move.y` conversion.
+`input.vector()` ends in `clampLength(0, 1)`, which is right for a thumbstick and wrong for two
+independent controls: read through one vector, a helm and a set of sheets held together each get
+0.707. `helm` and `sheets` are separate bindings for that reason; `move` stays for the touch stick.
+`.y` is +up and means forward; use one explicit conversion to the model's bow.
 Rigged assets: put a `.glb` in `assets/`, await `ctx.assets.model("hero.glb")` in `Scene.load()`, then drive `AnimationPlayer` beside its entity. `ctx.goto(name)` rebuilds without resetting game
 state; from a frame function `goto` and then `return`; `ctx.state.set({ /* copy this game's initial-state shape */ })`
 is a partial patch. `game.goto("<scene-name>")` also rebuilds the scene, but it resets the game's

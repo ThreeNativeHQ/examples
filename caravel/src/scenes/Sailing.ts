@@ -196,7 +196,9 @@ export class Sailing extends Scene<GameState, IPhysicsContext> {
       // the ship was not: the horizon slid up and down behind a hull that was itself steady, so
       // the ship read as bobbing out of the water and back into it.
       sea.follow(ship.visual.position.x, ship.visual.position.z);
-      followShip(camera, ship.visual.position, ship.heading, deltaTime);
+      followShip(camera, ship.visual.position, ship.heading, deltaTime, (x, z) =>
+        surfaceHeight(ocean, x, z, deltaTime) ?? 0,
+      );
       followSun(sun, ship.visual.position);
     };
   }
