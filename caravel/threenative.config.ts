@@ -1,0 +1,40 @@
+import type { IThreeNativeConfig } from "@threenative/core";
+
+const config: IThreeNativeConfig = {
+  app: {
+    id: "com.threenative.sailing",
+    name: "sailing",
+    version: "1.0.0",
+    build: 1,
+    icon: "public/icon.png",
+    icons: { web: { favicon: "public/favicon.svg" } },
+  },
+  display: {
+    orientation: "landscape",
+    fullscreen: true,
+    keepScreenOn: true,
+    maxFps: 60,
+  },
+  window: {
+    title: "sailing",
+    width: 1280,
+    height: 720,
+    maximized: false,
+    resizable: true,
+  },
+  bootSplash: { backgroundColor: "#061b2b" },
+  nativeEntry: "src/game.ts",
+  renderer: {
+    preferWebGPU: true,
+    resolutionScale: "auto",
+    // Multisampling resolves triangle edges. A cutout silhouette — foliage, a fence, hair — is
+    // carved inside the triangle by an alpha test, so it resolves through the coverage mask or
+    // not at all, which is what this spends the samples above on. It costs no target and no
+    // extra pass; set it false for a deliberately hard-edged look. `TN_ALPHA_ANTIALIASING`
+    // reports what it did, and says so when a single-sampled surface leaves it nothing to do.
+    alphaAntialiasing: true,
+  },
+  ui: { renderer: "web" },
+};
+
+export default config;

@@ -1,0 +1,72 @@
+{
+  "name": "caravel",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "threenative build",
+    "build:web": "threenative build --target web",
+    "build:desktop": "threenative build --target desktop",
+    "build:android": "threenative build --target android",
+    "build:ios": "threenative build --target ios",
+    "test:native": "pnpm build:desktop && threenative-playtest --scenario native-playtests/survives.playtest.json --target desktop --executable dist-native/sailing",
+    "pretest": "playwright install chromium",
+    "test": "vite build && threenative-playtest --scenario \"playtests/*.playtest.json\" --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port $PORT --strictPort\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@threenative/core": "file:../.packages/threenative-core-0.3.0-caravel-5217e06b49a9.tgz",
+    "@threenative/physics": "file:../.packages/threenative-physics-0.3.0-caravel-15e1261f0d2c.tgz",
+    "@threenative/ui": "file:../.packages/threenative-ui-0.3.0-caravel-48199aa2c821.tgz",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-reconciler": "0.33.0",
+    "three": "0.185.1",
+    "threenative-blender-mcp": "file:../.packages/threenative-blender-mcp-0.1.0-caravel-081d3cee294c.tgz",
+    "@threenative/raw-unreal": "file:../.packages/threenative-raw-unreal-0.1.0-caravel-f16ffc59736c.tgz",
+    "@threenative/ueformat": "file:../.packages/threenative-ueformat-0.1.0-caravel-556e52979ddb.tgz"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@threenative/assets": "file:../.packages/threenative-assets-0.3.0-caravel-5663d4ec5acd.tgz",
+    "@threenative/playtest": "file:../.packages/threenative-playtest-0.3.0-caravel-858861c15e64.tgz",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "@types/three": "0.185.3",
+    "@vitejs/plugin-react": "6.0.5",
+    "create-threenative": "file:../.packages/create-threenative-0.2.3-caravel-edd09d5693ed.tgz",
+    "esbuild": "0.27.0",
+    "playwright": "1.62.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "8.2.0",
+    "@gltf-transform/cli": "4.4.2",
+    "threenative-engine-mcp": "file:../.packages/threenative-engine-mcp-0.2.0-caravel-b132222e3578.tgz"
+  },
+  "optionalDependencies": {
+    "@threenative/runtime-native": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-runtime-native-0.3.0.tgz"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@threenative/core",
+      "@threenative/runtime-native"
+    ],
+    "patchedDependencies": {
+      "three@0.185.1": "patches/three@0.185.1.patch"
+    },
+    "overrides": {
+      "create-threenative": "file:/home/joao/projects/threenative/.tnshots/packages/create-threenative-0.2.3.tgz",
+      "@threenative/assets": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-assets-0.3.0.tgz",
+      "threenative-blender-mcp": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-blender-mcp-0.1.0.tgz",
+      "@threenative/core": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-core-0.3.0.tgz",
+      "threenative-engine-mcp": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-engine-mcp-0.2.0.tgz",
+      "@threenative/physics": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-physics-0.3.0.tgz",
+      "@threenative/playtest": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-playtest-0.3.0.tgz",
+      "@threenative/raw-unreal": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-raw-unreal-0.1.0.tgz",
+      "@threenative/runtime-native": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-runtime-native-0.3.0.tgz",
+      "@threenative/ueformat": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-ueformat-0.1.0.tgz",
+      "@threenative/ui": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-ui-0.3.0.tgz"
+    }
+  }
+}
