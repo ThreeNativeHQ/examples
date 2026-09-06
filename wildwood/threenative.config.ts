@@ -33,8 +33,6 @@ const config: IThreeNativeConfig = {
     resolutionScale: "auto",
   },
   assets: {
-    // Text-bearing title artwork stays lossless, identical to the browser source.
-    textures: { overrides: [{ glob: "loading/forest.png", codec: "none" }] },
     // Authoring material library, never loaded by the valley. The engine reports omitted bytes.
     // Compression, shared images and the uncooked-byte budget use their target-aware defaults.
     exclude: ["**/UnrealMaterialLibrary.glb"],
