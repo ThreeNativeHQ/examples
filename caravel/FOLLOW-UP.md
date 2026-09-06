@@ -46,7 +46,14 @@ Four things that were wrong on the way, all recorded in the code where they bit:
 - Flat shading, because the class replaces a material's position node and nothing else — authored
   normals go on pointing where the sail was cut while the sail swings away from them.
 
-The pennant at the main truck is **still a static quad**. It is the obvious next one.
+The pennant at the main truck is **still a static quad**. It is the obvious next one, and it needs
+its own node material — `materials.trim` is shared with the rails and the wales.
+
+The sails answer the sheets as well as the wind: press on the canvas is wind *times* how much sail
+is set, so `S` spills them. That is also what makes their playtest honest — `sailBelly` is a large
+number from the first frame the canvas fills, so a threshold on it is satisfied before a scenario
+starts. The scenario spills and re-sets, and asserts `sailMotion`, which is zero by construction
+until something moves the cloth.
 
 ### 3. The hull rode water the renderer had stopped drawing — **fixed here, and it is a contract**
 
@@ -88,7 +95,25 @@ than a free-spinning rigid body, but it is a workaround: until a game can reach 
 damping, `submergedFraction` is not a number this game can show a player, which is why the HUD's
 waterline reads `Ship.immersion` instead.
 
-### 5. Not started
+### 5. The native target builds here but cannot be run — **unverified, not failing**
+
+`pnpm test:native` bundles the game and the UI cleanly and then stops at the launcher:
+
+```
+Missing prebuilt runtime for 'linux-x64': .../@threenative/runtime-native/prebuilt/linux-x64/threenative-runtime
+```
+
+`prebuilt/install-status.json` says why, and it is not this game:
+
+```
+"reason": "Prebuilt release manifest fetch failed for 'linux-x64' at
+  https://github.com/ThreeNativeHQ/threenative/releases/download/runtime-native-v0.3.0/prebuilt-lock.json: HTTP 404."
+```
+
+So `native-playtests/survives.playtest.json` has **not** been run against any of the work in this
+folder. The desktop bundle compiles; nothing has executed it. Say "unverified", not "passing".
+
+### 6. Not started
 
 - **`defense`** template: the board reads as confusing and needs a pass.
 - **`platformer`** template: agreed plan is to port `fox-native`'s look into it (its render layer —

@@ -111,18 +111,7 @@ export class Sailing extends Scene<GameState, IPhysicsContext> {
     let markDistance = 0;
     let status: GameState["status"] = "sailing";
 
-    const advanceSailing = (frameCtx: GameCtx, deltaTime: number, wind: number): void => {
-      if (frameCtx.input.justPressed("capsize")) {
-        ship.capsize();
-        status = "lost";
-        return;
-      }
-      ship.update(
-        frameCtx,
-        deltaTime,
-        wind,
-        touchControls?.update(frameCtx.input.raw.pointers, frameCtx.viewport.size),
-      );
+    const scoreCourse = (wind: number): void => {
       const next = COURSE[buoysRounded];
       if (next === undefined) return;
       // Bearing to the next mark **relative to the bow**, which is what the HUD arrow points
@@ -168,7 +157,24 @@ export class Sailing extends Scene<GameState, IPhysicsContext> {
       // a paused sea.
       ocean.advance(elapsed);
       const wind = Math.max(0, 1 - elapsed / WIND_DURATION);
-      if (status === "sailing") advanceSailing(frameCtx, deltaTime, wind);
+      const sailing = status === "sailing";
+      if (sailing && frameCtx.input.justPressed("capsize")) {
+        ship.capsize();
+        status = "lost";
+      }
+      // The hull is updated whatever the outcome, and only the *scoring* stops.
+      //
+      // Skipping the whole update once the passage ended froze the ship where it stood while the
+      // sea went on moving underneath it — the one thing in the frame that cannot happen, and the
+      // frame the player is left looking at while they read "course complete". A finished ship
+      // carries its way, rides the swell and slows; a capsized one has no wind in anything.
+      ship.update(
+        frameCtx,
+        deltaTime,
+        ship.capsized ? 0 : wind,
+        touchControls?.update(frameCtx.input.raw.pointers, frameCtx.viewport.size),
+      );
+      if (status === "sailing") scoreCourse(wind);
 
       // The marks float. They are moored to the sea bed, not nailed to y = 0: left at a fixed
       // height they stood in a hole when the swell rose past them and hung in the air over every
