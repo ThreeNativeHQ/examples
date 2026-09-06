@@ -973,12 +973,6 @@
       "source": "landscape/waves_normal.jpg"
     },
     {
-      "bytes": 35569,
-      "path": "loading/forest.2731ea20.ktx2",
-      "producer": "audio+ktx2+model",
-      "source": "loading/forest.png"
-    },
-    {
       "bytes": 1324,
       "path": "native-proof.147b9d21.glb",
       "producer": "audio+ktx2+model",
