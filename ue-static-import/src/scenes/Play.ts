@@ -12,6 +12,7 @@ import { BoxGeometry, Mesh, type PerspectiveCamera, Vector3 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { Player } from "../entities/Player.js";
 import { UnrealProp } from "../entities/UnrealProp.js";
+import { UnrealSkeletalProp } from "../entities/UnrealSkeletalProp.js";
 import { setupCamera } from "../render/camera.js";
 import { createHud } from "../render/hud.js";
 import { setupLighting } from "../render/lighting.js";
@@ -34,6 +35,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   };
 
   #chair?: UnrealProp;
+  #wolf?: UnrealSkeletalProp;
 
   override async load(ctx: GameCtx): Promise<void> {
     // Written by `asset_import_unreal` from Content/Office_Pack_Vol_1/Models/SM_Chair_1.uasset.
@@ -42,6 +44,15 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       path: "fab/office-chair/Models/SM_Chair_1.glb",
       position: { x: 1.6, y: 0, z: 1 },
       rotationY: -0.6,
+    });
+    // The skeletal case: SK_Wolf plus two standalone ActorX AnimSequences, converted twice from
+    // the same Unreal source with only src/unreal/psa.ts differing between the two runs.
+    this.#wolf = await UnrealSkeletalProp.load(ctx, {
+      path: "/wolf-ab/psa-fixed/SK_Wolf.glb",
+      controlPath: "/wolf-ab/psa-old/SK_Wolf.glb",
+      position: { x: -1.4, y: 0, z: 0.4 },
+      rotationY: 2.2,
+      clip: "ANIM_Wolf_Walk",
     });
   }
 
@@ -124,6 +135,10 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     if (chair === undefined) throw new Error("The Unreal prop did not load before enter().");
     chair.attach(ctx);
     ctx.entities.add("unreal-chair", chair);
+    const wolf = this.#wolf;
+    if (wolf === undefined) throw new Error("The Unreal skeletal prop did not load before enter().");
+    wolf.attach(ctx);
+    ctx.entities.add("unreal-wolf", wolf);
     const pickup = new Area3D({
       physics: ctx.physics,
       position: { x: 1.5, y: 0.5, z: 0 },
@@ -138,6 +153,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     return (frameCtx, dt) => {
       loading.update();
       chair.update(dt);
+      wolf.update(dt);
       player.update(
         frameCtx,
         dt,

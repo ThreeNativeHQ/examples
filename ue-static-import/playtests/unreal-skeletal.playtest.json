@@ -1,0 +1,74 @@
+{
+  "name": "unreal-skeletal",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 30,
+  "steps": [{ "kind": "wait", "label": "walk", "waitTicks": 120, "release": true }],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "components": [
+      {
+        "entity": "unreal-wolf",
+        "component": "mirrorSignatureFixed",
+        "equals": false,
+        "allowTrivial": "The whole claim is that this file needs no repair, so it must hold from the first frame. Its red control is the sibling assertion below, measured on the same mesh converted by the same importer with only src/unreal/psa.ts swapped."
+      },
+      {
+        "entity": "unreal-wolf",
+        "component": "mirrorSignatureOld",
+        "equals": true,
+        "allowTrivial": "The control arm: the same SK_Wolf converted by the pre-fix PSA reader. This is the assertion that would go red if reconcileMirroredClips had simply stopped detecting anything, which is the way the sibling assertion could pass for the wrong reason."
+      },
+      {
+        "entity": "unreal-wolf",
+        "component": "clipCount",
+        "equals": 2,
+        "allowTrivial": "Clips are attached at import and fixed thereafter. Two standalone ActorX AnimSequences were bound to the skeleton by joint name; zero would mean the PSA path never ran and neither mirror assertion would mean anything."
+      },
+      {
+        "entity": "unreal-wolf",
+        "component": "boneCount",
+        "gte": 30,
+        "allowTrivial": "A rig's bone count does not change during play. It proves the uncooked USkeletalMesh decoded into a real skeleton rather than a static mesh."
+      },
+      {
+        "entity": "unreal-wolf",
+        "component": "advancedFrames",
+        "changed": true
+      }
+    ],
+    "animation": [
+      {
+        "entity": "unreal-wolf",
+        "clip": "ANIM_Wolf_Walk",
+        "entered": true,
+        "advancedFrames": 30,
+        "finished": false
+      }
+    ],
+    "visibility": [
+      {
+        "entity": "unreal-wolf",
+        "present": true,
+        "minProjectedPixels": 2000,
+        "allowTrivial": "A prop placed for the camera is visible from the first frame; absence is the red case and was recorded before this entity existed."
+      }
+    ],
+    "visual": [
+      {
+        "region": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "minNonblankPixelRatio": 0.01
+        }
+      }
+    ]
+  }
+}

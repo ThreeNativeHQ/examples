@@ -7,3 +7,10 @@ public/fab/
 
 # UE Viewer writes its per-package error log into whatever directory the importer ran from.
 notify.log
+
+# ANIMAL VARIETY PACK (Fab listing 2dd7964c-a601-4264-a53d-465dcae1644c) and everything derived
+# from it. `fab_get_asset` reports its licences as Fab Standard Personal and Professional, which
+# do not permit redistributing a pack's assets as standalone files, and this remote is public.
+# The same call the repository root already makes for Landscape Pro. tools/import-wolf-ab.mjs is
+# committed instead: anyone who owns the pack regenerates both arms in one command.
+public/wolf-ab/
