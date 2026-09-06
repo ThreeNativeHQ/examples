@@ -192,7 +192,13 @@ function forestBackdropTexture(): Texture {
   }
 
   // Three silhouette bands make a real valley rather than a flat colour field.
-  const forestBand = (baseline: number, color: string, count: number, seed: number): void => {
+  const forestBand = (
+    baseline: number,
+    color: string,
+    count: number,
+    seed: number,
+    bottom = baseline,
+  ): void => {
     context.fillStyle = color;
     for (let index = 0; index < count; index += 1) {
       const roll = ((index * 7_919 + seed * 104_729) % 10_007) / 10_007;
@@ -201,8 +207,8 @@ function forestBackdropTexture(): Texture {
       const width = 18 + roll * 28;
       context.beginPath();
       context.moveTo(x, baseline - height);
-      context.lineTo(x - width, baseline);
-      context.lineTo(x + width, baseline);
+      context.lineTo(x - width, bottom);
+      context.lineTo(x + width, bottom);
       context.closePath();
       context.fill();
       context.fillRect(x - 3, baseline - height * 0.55, 6, height * 0.7);
@@ -210,7 +216,8 @@ function forestBackdropTexture(): Texture {
   };
   forestBand(330, "#1b3525", 23, 5);
   forestBand(400, "#10251a", 29, 11);
-  forestBand(475, "#09160f", 34, 17);
+  // Continue the foreground beyond the canvas edge; an in-frame shared baseline reads as tiling.
+  forestBand(475, "#09160f", 34, 17, canvas.height + 1);
 
   // The only warm mark: a trail curling from the player into the dark tree line.
   context.strokeStyle = "#d89847";
