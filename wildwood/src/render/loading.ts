@@ -18,7 +18,7 @@ import {
 /** Edit these source constants for the starter's loading look. */
 export const loading = {
   backgroundColor: 0x08110c,
-  backgroundImage: undefined as string | undefined,
+  backgroundImage: "loading/forest.png" as string | undefined,
   enabled: true,
   fillImage: undefined as string | undefined,
   logoImage: undefined as string | undefined,
@@ -422,7 +422,10 @@ export function createLoadingScreen(
     mesh.material.color.set(0xffffff);
     mesh.material.needsUpdate = true;
     ownedTextures.add(texture);
-    if (mesh === backdrop) backdropTexture = texture;
+    if (mesh === backdrop) {
+      backdropTexture = texture;
+      console.info("TN_LOADING_ART_READY");
+    }
     layout();
     updateProgress(progress);
   };
