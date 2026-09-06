@@ -72,6 +72,9 @@ export class Ship {
   #capsized = false;
   #normaliseFactor: number;
   #heading = 0;
+  /** The extremes of `sailBelly` seen so far, for the one number that proves the canvas moves. */
+  #bellyLow = Number.POSITIVE_INFINITY;
+  #bellyHigh = 0;
   /** Way on, in metres per second along the bow. The hull carries it; the keys only ask for it. */
   #speed = 0;
   /** What the hull is actually making good over the ground, measured off the body. */
@@ -136,7 +139,10 @@ export class Ship {
         // A throttled copy of the cloth's own vertices, so a scenario can assert that the canvas is
         // actually filling rather than that three quads exist. A still sail passes every visual
         // assertion this template has.
-        readbackEveryFrames: 4,
+        //
+        // The fore course alone, and only every twelfth frame. Three sails copying ninety-nine
+        // vec4s off the GPU every fourth frame is three copies buying one number.
+        readbackEveryFrames: index === 0 ? 12 : 0,
         // Canvas, and a long way stiffer than it looks like it should need. Spring acceleration is
         // stiffness times stretch, so the top row has to carry eight rows of cloth against a local
         // gravity of seventeen: at 52 that balanced at three quarters of a unit of stretch and the
@@ -282,7 +288,11 @@ export class Ship {
     // `rotation.z` lifts the starboard rail, so a turn to starboard leans the ship to port.
     const heelTarget = rudder * authority * 0.17 + press * 0.05;
     this.#heel += (heelTarget - this.#heel) * Math.min(1, Math.max(0, deltaTime) * 2.4);
-    this.#trimSails(press);
+    // The rig shows the helm's decision, not only the weather. Spilling the sheets takes the press
+    // off the canvas: the sails go slack, the ship loses way, and the two happen together — which
+    // is the feedback that makes `S` read as spilling wind rather than as a brake pedal. A quarter
+    // of the press stays because a square course does not vanish when it is not drawing.
+    this.#trimSails(press * (0.25 + 0.75 * Math.max(0, throttle)));
     // Hard over is about thirty-five degrees on a real ship, and the blade eases across rather
     // than snapping: a rudder that teleports between its stops is the tell that the helm is a
     // number rather than a thing hanging in the water.
@@ -316,6 +326,11 @@ export class Ship {
       // Placement is taken from the drawn hull rather than the physics body, so the rig rides on
       // the ship the player can see.
       sail.body.wind.set(0, press * SAIL_PRESS * 0.12, press * SAIL_PRESS * gust);
+    }
+    const belly = this.sailBelly;
+    if (belly > 0) {
+      this.#bellyLow = Math.min(this.#bellyLow, belly);
+      this.#bellyHigh = Math.max(this.#bellyHigh, belly);
     }
   }
 
@@ -435,6 +450,20 @@ export class Ship {
     return furthest;
   }
 
+  /**
+   * How far the canvas has travelled between its slackest and its fullest, in the cloth's units.
+   *
+   * Zero before anything has been observed, and it only grows — which is the whole reason it
+   * exists. `sailBelly` on its own is a large number from the first frame the sails have filled,
+   * so a threshold on it is already true before a scenario starts and proves nothing; this is
+   * false at the start by construction and can only become true if the wind is actually moving
+   * the cloth.
+   */
+  get sailMotion(): number {
+    if (this.#bellyLow > this.#bellyHigh) return 0;
+    return this.#bellyHigh - this.#bellyLow;
+  }
+
   /** Fraction of the hull the sea is over, from the swell the ship is actually sitting in. */
   get immersion(): number {
     return this.#capsized ? 1 : this.#immersion;
@@ -455,6 +484,7 @@ export class Ship {
       // height copy is arriving at all. A screenshot cannot tell a still ocean from a moving one.
       seaHeight: this.#seaHeight,
       sailBelly: this.sailBelly,
+      sailMotion: this.sailMotion,
       floatGap: this.visual.position.y - this.#seaHeight,
       readbackStaleFrames: this.#staleFrames,
       oceanSteps: this.#ocean.steps,

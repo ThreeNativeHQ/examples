@@ -15,9 +15,11 @@
 import { type ISpectralOceanOptions, SpectralOcean } from "@threenative/core";
 import { Mesh, PlaneGeometry } from "three";
 import {
+  abs,
   color,
   dot,
   float,
+  max,
   mix,
   oneMinus,
   positionLocal,
@@ -134,7 +136,7 @@ export function surfaceHeight(
 }
 
 /** The drawn surface's edge length in metres, and how finely it is tessellated. */
-export const SURFACE = { segments: 160, size: 300 } as const;
+export const SURFACE = { segments: 128, size: 300 } as const;
 
 /**
  * The step the surface normal is differenced over, in metres.
@@ -147,10 +149,11 @@ export const SURFACE = { segments: 160, size: 300 } as const;
  * sits between the two: fine enough to break the highlight into a glitter path, coarse enough not
  * to alias into sparkle noise as the camera moves.
  *
- * Decoupling the two is also what lets the tessellation stay where it is. Buying the same detail
+ * Decoupling the two is also what pays for the tessellation coming *down*. Buying the same detail
  * as geometry meant 256 segments a side, which took the scene from 138k triangles to 282k and
- * straight through this template's own performance budget — for detail that shades identically
- * from a normal costing nothing per frame.
+ * straight through this template's own performance budget; at 128 the water is a third of the
+ * triangles it was, the p95 frame has real headroom under the 33 ms gate instead of landing on it,
+ * and the surface shades identically because none of what you can see in it was ever geometry.
  */
 const NORMAL_STEP = 0.7;
 
@@ -213,7 +216,25 @@ export interface IWaterSurface {
   readonly mesh: Mesh;
   /** Move the drawn sea to follow a position, keeping the wave field anchored to the world. */
   follow(x: number, z: number): void;
+  /**
+   * Where the ship is, which way it is pointing, and how hard it is pushing water aside.
+   *
+   * `strength` is 0..1 and is the speed made good over the hull's own maximum: a ship lying to
+   * with no way on leaves no wake, which is the point.
+   */
+  wake(x: number, z: number, forwardX: number, forwardZ: number, strength: number): void;
 }
+
+/**
+ * The wake's shape: how far astern it reaches in metres, how fast the wedge opens, and how wide it
+ * is at the transom.
+ *
+ * The half-angle of a real Kelvin wedge is about nineteen degrees whatever the hull is doing,
+ * which is a `spread` near 0.34 — and at that width, over thirty-four metres, the wake covers so
+ * much of a low-camera frame that it stops reading as a wake and becomes a pale smear across the
+ * bottom third. Narrower and shorter is the lie worth telling.
+ */
+const WAKE = { length: 26, spread: 0.21, waist: 0.5 } as const;
 
 export function createWaterMesh(ocean: SpectralOcean): IWaterSurface {
   const geometry = new PlaneGeometry(SURFACE.size, SURFACE.size, SURFACE.segments, SURFACE.segments);
@@ -229,6 +250,9 @@ export function createWaterMesh(ocean: SpectralOcean): IWaterSurface {
   // stays where it is in the world while the mesh slides underneath it. Without that the whole
   // ocean would be dragged along by the ship and the sea would appear to stand still.
   const seaOrigin = uniform(vec2(0, 0));
+  const shipOrigin = uniform(vec2(0, 0));
+  const shipForward = uniform(vec2(0, -1));
+  const wakeStrength = uniform(0);
 
   // Standard, not basic. This is the whole reason the sea now has a sun on it rather than a
   // hand-rolled `pow()` blob: a lit material gets the scene's key light, its hemisphere fill and
@@ -298,15 +322,46 @@ export function createWaterMesh(ocean: SpectralOcean): IWaterSurface {
   // The scene has no environment map to reflect — `sky.ts` builds a vertex-coloured dome, not a
   // cube map — so the reflection is stood in for by the horizon haze the dome fades to. That is
   // also the fog colour, which is why the far water now meets the sky instead of ending at it.
+  // The wake, computed rather than drawn.
+  //
+  // A hull moving through water at six knots that leaves the surface exactly as it found it is the
+  // single clearest tell that a sea is a backdrop rather than something the ship is in — and it
+  // was, because nothing in this material knew the ship existed. This costs no geometry, no
+  // particles and no second pass: the surface already knows its own world position, so it can be
+  // told where the ship is and work out whether it is standing in its wake.
+  //
+  // Everything is in the ship's frame. `astern` is metres behind it and `across` is metres off its
+  // centreline, so the wedge is a comparison rather than a rotation.
+  const toShip = vec2(positionWorld.x.sub(shipOrigin.x), positionWorld.z.sub(shipOrigin.y));
+  const starboardAxis = vec2(shipForward.y.negate(), shipForward.x);
+  const astern = dot(toShip, shipForward).negate();
+  const across = abs(dot(toShip, starboardAxis));
+  // A Kelvin wedge, and it needs both of its parts.
+  //
+  // Filling the wedge evenly gives a soft triangle that reads as haze on the water. What a wake
+  // actually looks like from astern is a churned band directly behind the transom with two bright
+  // arms running out from it at the edges of the wedge, and the arms are the half of it the eye
+  // recognises: they are the only straight lines in a scene made entirely of swell.
+  const halfWidth = astern.mul(WAKE.spread).add(WAKE.waist);
+  const churn = smoothstep(halfWidth.mul(0.62), halfWidth.mul(0.12), across).mul(0.6);
+  const arms = smoothstep(halfWidth.mul(0.5), float(0), abs(across.sub(halfWidth)));
+  const reach = smoothstep(float(WAKE.length), float(0), astern);
+  const begins = smoothstep(float(-1.4), float(1.6), astern);
+  // Never quite to full foam. At 1.0 the arms are the brightest thing in the frame and read as two
+  // searchlights laid on the sea rather than as broken water.
+  const wake = max(churn, arms).mul(reach).mul(begins).mul(wakeStrength).mul(0.78);
+
   const facing = saturate(dot(viewNormal, positionViewDirection));
   // Exponent five is water's own Schlick curve, and 0.4 is as far as the mix is allowed to go.
   // At an exponent of four and a weight of 0.8 the term stopped being a reflection and became a
   // wash: a chase camera sits low, so most of the sea is at a grazing angle from it, and nearly
   // the whole frame went to horizon haze with the deep water gone entirely.
   const sheen = pow(oneMinus(facing), float(5)).mul(0.4);
-  material.colorNode = mix(surfaced, color(palette.skyLow), sheen);
+  // Wake over the sheen, not under it. Disturbed water is not a mirror, so foam that the fresnel
+  // then washes with sky is foam the horizon can hide.
+  material.colorNode = mix(mix(surfaced, color(palette.skyLow), sheen), color(FOAM), wake);
   // Foam is not a mirror. Roughening the crests is what stops them reading as chrome.
-  material.roughnessNode = mix(float(0.4), float(0.86), crest);
+  material.roughnessNode = mix(float(0.4), float(0.86), max(crest, wake));
 
   const mesh = new Mesh(geometry, material);
   mesh.receiveShadow = true;
@@ -319,6 +374,11 @@ export function createWaterMesh(ocean: SpectralOcean): IWaterSurface {
   const quad = SURFACE.size / SURFACE.segments;
   return {
     mesh,
+    wake(x: number, z: number, forwardX: number, forwardZ: number, strength: number): void {
+      shipOrigin.value.set(x, z);
+      shipForward.value.set(forwardX, forwardZ);
+      wakeStrength.value = Math.max(0, Math.min(1, strength));
+    },
     follow(x: number, z: number): void {
       const snappedX = Math.round(x / quad) * quad;
       const snappedZ = Math.round(z / quad) * quad;

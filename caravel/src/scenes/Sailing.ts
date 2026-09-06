@@ -49,6 +49,10 @@ const ROUNDING_RADIUS = 7;
  * shadow on the sea beside it. This is the draught that puts the paint line where the water is.
  */
 const BUOY_DRAUGHT = 0.32;
+/** Half the hull's length: where the wake is born. */
+const TRANSOM = 2.1;
+/** The speed the wake is at its fullest, in metres per second. `Ship`'s own hull speed. */
+const MAX_WAKE_SPEED = 4.6;
 /** Seconds of fair wind. Run out of it before the last mark and the passage is lost. */
 const WIND_DURATION = 120;
 
@@ -196,6 +200,16 @@ export class Sailing extends Scene<GameState, IPhysicsContext> {
       // the ship was not: the horizon slid up and down behind a hull that was itself steady, so
       // the ship read as bobbing out of the water and back into it.
       sea.follow(ship.visual.position.x, ship.visual.position.z);
+      // The wake starts at the transom, not at the ship's centre, or the foam runs up under the
+      // hull and the caravel appears to be sitting in it rather than making it.
+      const bow = ship.forward;
+      sea.wake(
+        ship.visual.position.x - bow.x * TRANSOM,
+        ship.visual.position.z - bow.z * TRANSOM,
+        bow.x,
+        bow.z,
+        ship.speed / MAX_WAKE_SPEED,
+      );
       followShip(camera, ship.visual.position, ship.heading, deltaTime, (x, z) =>
         surfaceHeight(ocean, x, z, deltaTime) ?? 0,
       );
