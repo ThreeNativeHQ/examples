@@ -1,20 +1,23 @@
 import type { ICtx } from "@threenative/core";
-import type { SpectralOcean } from "@threenative/core";
+import { SoftBody3D, type SpectralOcean } from "@threenative/core";
 import {
   Buoyancy3D,
   CollisionShape3D,
   type IPhysicsContext,
   RigidBody3D,
 } from "@threenative/physics";
-import { type Object3D, Group, MathUtils } from "three";
+import { Euler, Group, MathUtils, type Object3D, Quaternion, Vector3 } from "three";
 import { prepareShipConventions } from "../conventions.js";
 import { createMaterials } from "../render/materials.js";
 import { surfaceHeight } from "../render/ocean.js";
-import { createShipModel } from "../render/props.js";
+import { SHIP_SAILS, createSails, createShipModel } from "../render/props.js";
 import type { ITouchInput } from "../render/touch-controls.js";
 import type { GameState } from "../state.js";
 
 type GameCtx = ICtx<GameState, IPhysicsContext>;
+
+/** Scratch for composing a sail's rest rotation with the hull's. Allocating per tick is not free. */
+const REST = new Quaternion();
 
 /**
  * `SpectralOcean` as the water surface `Buoyancy3D` measures against.
@@ -47,6 +50,13 @@ const WAY_RATE = 0.9;
 const DESIGN_DRAUGHT = 0.62;
 /** How far the model rides above its own origin, so the sea meets it lower down the topsides. */
 const FREEBOARD_TRIM = 0.16;
+/**
+ * How hard a full wind presses on a sail, as a local-space acceleration.
+ *
+ * Local, so it is in the model's own units rather than metres, and aft because that is where a
+ * following wind fills a square course from.
+ */
+const SAIL_PRESS = 12;
 
 /** Half the hull's length and half its beam: where the swell is probed for pitch and roll. */
 const HALF_LENGTH = 1.7;
@@ -72,6 +82,17 @@ export class Ship {
   #heel = 0;
   /** The blade on the stern post, kept out of the merged hull so it can answer the helm. */
   readonly #rudder: Object3D | undefined;
+  /**
+   * The cloth, and where on the ship each piece of it hangs.
+   *
+   * These are not children of the hull. `SoftBody3D` disposes itself the moment it leaves the
+   * scene, and `ctx.add` — the call that attaches it to the renderer at all — puts it at the
+   * scene root, so parenting it to the ship afterwards would tear it down on the same frame.
+   * They are carried to their yards each tick instead, which costs three matrix updates.
+   */
+  readonly #sails: { body: SoftBody3D; anchor: Vector3; rest: Euler }[] = [];
+  /** The hull inside `visual`. Its transform carries the metre normalisation the yards are in. */
+  readonly #model: Group;
   #elapsed = 0;
   #immersion = 0.5;
   #seaHeight = 0;
@@ -84,6 +105,7 @@ export class Ship {
     this.visual.position.set(0, 0.24, 7);
     this.mesh.castShadow = true;
     const model = createShipModel(createMaterials());
+    this.#model = model;
     // Named in `props.ts`, found here. The rest of the hull is merged into one mesh per material
     // and cannot move; this is the piece that has to, because a helm with no visible rudder is
     // the difference between steering a ship and dragging a model around.
@@ -96,6 +118,43 @@ export class Ship {
     // without moving the hull off the water — `floatGap` is measured on `visual`, and this does
     // not touch it.
     model.position.y = FREEBOARD_TRIM;
+
+    // The canvas. `belliedSail` baked the belly into the vertices, so the sails looked exactly as
+    // full in a dying breeze as in a fresh one — on a passage whose entire fail state is running
+    // out of wind, and whose HUD counts that wind down in percent, the rig was the one thing on
+    // screen that never mentioned it.
+    for (const [index, cloth] of createSails(createMaterials()).entries()) {
+      const sail = SHIP_SAILS[index];
+      if (sail === undefined) continue;
+      const body = new SoftBody3D(cloth.mesh, {
+        damping: 2.2,
+        // Local-space, so metres per second squared divided by the model's own scale. Handing the
+        // solver 9.81 in a model normalised to 0.57 gives cloth on a body nearly twice the size of
+        // the world it is in, and the sails hang like chainmail.
+        gravity: [0, -9.81 / this.#normaliseFactor, 0],
+        pinned: cloth.pinned,
+        // A throttled copy of the cloth's own vertices, so a scenario can assert that the canvas is
+        // actually filling rather than that three quads exist. A still sail passes every visual
+        // assertion this template has.
+        readbackEveryFrames: 4,
+        // Canvas, and a long way stiffer than it looks like it should need. Spring acceleration is
+        // stiffness times stretch, so the top row has to carry eight rows of cloth against a local
+        // gravity of seventeen: at 52 that balanced at three quarters of a unit of stretch and the
+        // sails hung to the waterline. This holds them to within a few per cent of their cut, and
+        // 1/60 is still far inside the explicit solver's stability limit of 2/sqrt(k).
+        stiffness: 1_200,
+        wind: [0, 0, 0],
+      });
+      body.name = `sail-${index}`;
+      body.castShadow = true;
+      body.scale.setScalar(this.#normaliseFactor);
+      ctx.add(body);
+      this.#sails.push({
+        anchor: new Vector3(sail.x, sail.y, sail.z),
+        body,
+        rest: new Euler(sail.pitch, sail.yaw, 0),
+      });
+    }
     // The hull hangs off `visual`, not off the physics body.
     //
     // `Buoyancy3D` applies its displaced-volume force at each hull point, so a point that is
@@ -223,6 +282,7 @@ export class Ship {
     // `rotation.z` lifts the starboard rail, so a turn to starboard leans the ship to port.
     const heelTarget = rudder * authority * 0.17 + press * 0.05;
     this.#heel += (heelTarget - this.#heel) * Math.min(1, Math.max(0, deltaTime) * 2.4);
+    this.#trimSails(press);
     // Hard over is about thirty-five degrees on a real ship, and the blade eases across rather
     // than snapping: a rudder that teleports between its stops is the tell that the helm is a
     // number rather than a thing hanging in the water.
@@ -231,6 +291,32 @@ export class Ship {
       this.#rudder.rotation.y += (blade - this.#rudder.rotation.y) * Math.min(1, deltaTime * 6);
     }
     this.#rideTheSwell(deltaTime);
+  }
+
+  /**
+   * Carry each sail to its yard, and put the wind into it.
+   *
+   * The wind vector is in the cloth's **own** space, which is what makes this three numbers rather
+   * than a rotation: a square course is turned to face forward, so pressing it along its local +Z
+   * fills it aft whatever course the ship is steering; the mizzen lateen is turned side-on by its
+   * own rest rotation, so the same +Z presses it to leeward. The gust term is not decoration —
+   * canvas that holds one shape is canvas the simulation is not moving, and a still sail on a
+   * moving ship reads as a bug.
+   */
+  #trimSails(press: number): void {
+    for (const sail of this.#sails) {
+      // Through the **model's** matrix, not the visual's. The yard coordinates in `SHIP_SAILS`
+      // are in the hull's own authored units, and the model sits inside `visual` carrying the
+      // metre normalisation and the freeboard trim: read through `visual` alone, a yard at y=4.27
+      // put the sail 4.27 *metres* above the sea with the masts bare underneath it.
+      this.#model.updateMatrixWorld(true);
+      sail.body.position.copy(sail.anchor).applyMatrix4(this.#model.matrixWorld);
+      sail.body.quaternion.copy(this.visual.quaternion).multiply(REST.setFromEuler(sail.rest));
+      const gust = 1 + Math.sin(this.#elapsed * 1.7 + sail.anchor.z) * 0.16;
+      // Placement is taken from the drawn hull rather than the physics body, so the rig rides on
+      // the ship the player can see.
+      sail.body.wind.set(0, press * SAIL_PRESS * 0.12, press * SAIL_PRESS * gust);
+    }
   }
 
   /**
@@ -328,6 +414,27 @@ export class Ship {
     return this.#capsized;
   }
 
+  /**
+   * How far the canvas has blown out of its cut, in the cloth's own units.
+   *
+   * The sails are authored dead flat, so every millimetre of this is the simulation's. It is the
+   * only number that separates cloth from three static quads, and it is the one a dying wind has
+   * to bring down.
+   */
+  get sailBelly(): number {
+    let furthest = 0;
+    for (const sail of this.#sails) {
+      const sample = sail.body.sample;
+      if (sample === undefined) continue;
+      for (let index = 2; index < sample.data.length; index += 3) {
+        const z = sample.data[index];
+        if (z === undefined || !Number.isFinite(z)) continue;
+        furthest = Math.max(furthest, Math.abs(z));
+      }
+    }
+    return furthest;
+  }
+
   /** Fraction of the hull the sea is over, from the swell the ship is actually sitting in. */
   get immersion(): number {
     return this.#capsized ? 1 : this.#immersion;
@@ -347,6 +454,7 @@ export class Ship {
       // existing: the sea under it, how far the drawn hull sits off that surface, and whether the
       // height copy is arriving at all. A screenshot cannot tell a still ocean from a moving one.
       seaHeight: this.#seaHeight,
+      sailBelly: this.sailBelly,
       floatGap: this.visual.position.y - this.#seaHeight,
       readbackStaleFrames: this.#staleFrames,
       oceanSteps: this.#ocean.steps,
@@ -355,6 +463,7 @@ export class Ship {
   }
 
   dispose(): void {
+    for (const sail of this.#sails) sail.body.removeFromParent();
     this.body.dispose();
     this.mesh.removeFromParent();
     this.visual.removeFromParent();
