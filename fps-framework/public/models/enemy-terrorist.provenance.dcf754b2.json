@@ -1,0 +1,36 @@
+{
+  "asset": "enemy-terrorist.glb",
+  "character": {
+    "author": "Toast",
+    "license": "CC-BY-4.0",
+    "source": "https://sketchfab.com/3d-models/cs2-terrorist-819cae24597f467aa975b05ee5528fd0",
+    "title": "Cs2 Terrorist"
+  },
+  "animationDonor": {
+    "asset": "Mixamo rifle animation clips",
+    "author": "Adobe Mixamo",
+    "source": "https://www.mixamo.com/",
+    "license": "Royalty-free use in personal, commercial, and non-profit projects, including video games",
+    "licenseEvidence": "https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html",
+    "clips": [
+      "RifleIdle",
+      "RifleWalk",
+      "RifleCrouchWalk",
+      "RifleCrouchWalkToIdle",
+      "FiringRifle",
+      "HitReaction",
+      "DeathFront",
+      "DeathBack",
+      "DeathHeadshot"
+    ],
+    "method": "Rest-pose-aware retargeting through Three.js SkeletonUtils.retargetClip; authored by scripts/import-fps-enemy-animations.mjs."
+  },
+  "processing": [
+    "Selected one of four overlapping character variants.",
+    "Removed the zero-duration T-pose clip.",
+    "Retargeted the Mixamo rifle locomotion, reaction, and death clip set.",
+    "Removed the stale embedded Beretta; the separately licensed AK-47 is attached by structured prefab data.",
+    "Converted embedded textures to WebP at quality 86.",
+    "Added the Mixamo Firing Rifle clip (FiringRifle) with scripts/import-fps-enemy-animations.mjs --clips \"Firing Rifle.fbx\"; the rig carried no firing pose before it."
+  ]
+}

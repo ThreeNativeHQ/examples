@@ -1,0 +1,46 @@
+{
+  "schema": "threenative.asset-provider-provenance",
+  "version": "0.1.0",
+  "provider": "poly-haven",
+  "providerAssetId": "kloofendal_38d_partly_cloudy_puresky",
+  "sourceUrl": "https://polyhaven.com/a/kloofendal_38d_partly_cloudy_puresky",
+  "apiInfoUrl": "https://api.polyhaven.com/info/kloofendal_38d_partly_cloudy_puresky",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://polyhaven.com/license",
+  "authors": [
+    "Greg Zaal",
+    "Jarod Guest"
+  ],
+  "resolution": "1k",
+  "format": "hdr",
+  "retrievedAt": "2026-07-27T06:27:37.051Z",
+  "files": [
+    {
+      "bytes": 1366191,
+      "md5": "48d6eb05802512ceb8a0ed76af646702",
+      "path": "kloofendal_38d_partly_cloudy_puresky_1k.hdr",
+      "sha256": "78882f3e560d7f6f2856f5ff071c52da51098507c391fdbb811dc9f79c403704",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_38d_partly_cloudy_puresky_1k.hdr",
+      "retained": false
+    },
+    {
+      "bytes": 19453266,
+      "md5": "b7be21c6ac8537a809ff991f910e5d9f",
+      "path": "tonemapped.jpg",
+      "sha256": "bc87febf264a912cbd8c6fe9b36b8b0d4a4cd1cf971545e6ea4529bd4225787e",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/kloofendal_38d_partly_cloudy_puresky.jpg",
+      "retained": false
+    }
+  ],
+  "derived": [
+    {
+      "bytes": 150695,
+      "inputs": [
+        "tonemapped.jpg"
+      ],
+      "kind": "environment-jpeg-2048",
+      "path": "environment.jpg",
+      "sha256": "7907550a1d29f59ed74cea2c35b6bb7a3d153a76fa7f400fa6463c590c50e66d"
+    }
+  ]
+}
