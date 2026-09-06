@@ -42,6 +42,21 @@ const LAYERS = [
  * So the geometry stays procedural, in `src/render/foliage.ts`, and wears these textures. That is
  * the honest split: the pack's *surfaces* are what made it worth owning, and those import
  * perfectly.
+ *
+ * CORRECTION, 2026-09-04 — the note above is about THIS importer's reader, and it does not
+ * generalise. `@threenative/raw-unreal` reads these packages: 61 of the pack's 62 static meshes
+ * parse, and vertex and section counts match this importer's own `import-report.json` EXACTLY on
+ * all 58 models both read (SM_BoughGroup01 7101/2, SM_FarnGroup01 426/1, …). Its README documents
+ * the UE4.2x `mesh-description-ue4` and UE4.6-4.2x `raw-mesh` layouts this pack uses. The single
+ * failure is a typed `UNSUPPORTED_STATIC_MESH_LAYOUT`, never invented geometry.
+ *
+ * So the procedural-foliage workaround was not necessary, and the real meshes are available:
+ *
+ *   import { parseUAssetStaticMesh } from "@threenative/raw-unreal";
+ *   const decoded = parseUAssetStaticMesh(readFileSync("…/SM_pine04.uasset"));
+ *
+ * `raw-unreal` reads geometry only — no textures, no materials, and skeletal throws — so the
+ * texture import below stays exactly as it is. Tracked as `docs/PRDs/assets/PRD-352` in the engine.
  */
 
 /** Bark, frond, blade and leaf maps, which is what makes procedural geometry stop looking procedural. */

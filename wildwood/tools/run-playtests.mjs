@@ -200,6 +200,21 @@ async function captureAnimals() {
       () => globalThis.__TN_ANIMALS_OBSERVATION__,
     );
     validateAnimalObservation(observation);
+    // The animals are Unreal skeletal meshes, and their clips reach the game through an ActorX PSA
+    // conversion that once landed every one of them Z-mirrored against its own bind pose. The
+    // engine's loader detects that and un-mirrors it, so the wood looked right while six files on
+    // disk were wrong — the repair fired on every boot and said so in an info line nobody read.
+    // With the importer fixed (threenative-asset-mcp 0890578) a re-imported animal needs no
+    // repair, so a warning here is no longer routine: it means these GLBs were converted by an
+    // importer that predates the fix, and re-importing the pack is what clears it.
+    const repaired = diagnostics
+      .filter((entry) => entry.text?.includes("TN_ASSETS_MIRRORED_CLIPS_REPAIRED"))
+      .map((entry) => entry.text.split(" ")[1] ?? "unknown");
+    if (repaired.length > 0) {
+      throw new Error(
+        `TN_ANIMAL_CLIPS_NEEDED_REPAIR: the loader un-mirrored clips for ${String(repaired.length)} model${repaired.length === 1 ? "" : "s"} (${repaired.join(", ")}); re-import the pack with a current importer`,
+      );
+    }
     if (cliArgs.includes("--require-forward")) {
       const backwards = observation.subjects
         .filter((subject) => subject.modelForwardDot.mean < 0)

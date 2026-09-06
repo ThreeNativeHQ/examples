@@ -1,995 +1,1325 @@
 {
   "outputs": [
     {
-      "bytes": 10003420,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Materials/UnrealMaterialLibrary.fb0fd8c4.glb",
-      "producer": "",
-      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Materials/UnrealMaterialLibrary.glb"
+      "bytes": 57529,
+      "path": "basis/basis_transcoder.js",
+      "producer": "basis-transcoder",
+      "source": null
     },
     {
-      "bytes": 10530964,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.0d77b429.glb",
-      "producer": "",
+      "bytes": 527333,
+      "path": "basis/basis_transcoder.wasm",
+      "producer": "basis-transcoder",
+      "source": null
+    },
+    {
+      "bytes": 30388,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.76ad52e4.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.glb"
     },
     {
-      "bytes": 10521200,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup02.554f9861.glb",
-      "producer": "",
+      "bytes": 19752,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup02.dfcc6873.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup02.glb"
     },
     {
-      "bytes": 10521640,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup03.749459d4.glb",
-      "producer": "",
+      "bytes": 20280,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup03.762a7ccf.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup03.glb"
     },
     {
-      "bytes": 1751632,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup01.a845333d.glb",
-      "producer": "",
+      "bytes": 4860,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup01.96e5fc55.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup01.glb"
     },
     {
-      "bytes": 1751424,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup02.dffb649c.glb",
-      "producer": "",
+      "bytes": 4640,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup02.c4868ca7.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup02.glb"
     },
     {
-      "bytes": 1751460,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup03.1ee348d2.glb",
-      "producer": "",
+      "bytes": 4672,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup03.01031c72.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup03.glb"
     },
     {
-      "bytes": 828544,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup01.fe1ff22c.glb",
-      "producer": "",
+      "bytes": 3696,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup01.97eda8e0.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup01.glb"
     },
     {
-      "bytes": 830164,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup02.e1530d6e.glb",
-      "producer": "",
+      "bytes": 5464,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup02.cf00c17f.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup02.glb"
     },
     {
-      "bytes": 831680,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup01.bcf89463.glb",
-      "producer": "",
+      "bytes": 6816,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup01.8e7e5d97.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup01.glb"
     },
     {
-      "bytes": 830924,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup02.16a1eb48.glb",
-      "producer": "",
+      "bytes": 6060,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup02.0707e6de.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup02.glb"
     },
     {
-      "bytes": 829800,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup03.d4fa6163.glb",
-      "producer": "",
+      "bytes": 4960,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup03.2927386a.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_GrassGroup03.glb"
     },
     {
-      "bytes": 828196,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_LargePlant.2384b9f8.glb",
-      "producer": "",
+      "bytes": 3328,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_LargePlant.9c642bb5.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_LargePlant.glb"
     },
     {
-      "bytes": 483036,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup01.f30cdb80.glb",
-      "producer": "",
+      "bytes": 11320,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup01.e7af2fcc.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup01.glb"
     },
     {
-      "bytes": 491568,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup02.56ae39d0.glb",
-      "producer": "",
+      "bytes": 20292,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup02.d86f4484.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup02.glb"
     },
     {
-      "bytes": 829680,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_PlantGroup01.05a3135a.glb",
-      "producer": "",
+      "bytes": 4944,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_PlantGroup01.4e024ecc.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_PlantGroup01.glb"
     },
     {
-      "bytes": 3303220,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup01.f952f7b8.glb",
-      "producer": "",
+      "bytes": 6032,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup01.5b64f495.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup01.glb"
     },
     {
-      "bytes": 3302576,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup02.ecf7391c.glb",
-      "producer": "",
+      "bytes": 5336,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup02.940c5e50.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup02.glb"
     },
     {
-      "bytes": 844600,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup01.d288b9d9.glb",
-      "producer": "",
+      "bytes": 20496,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup01.a08bd5a2.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup01.glb"
     },
     {
-      "bytes": 835976,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup02.3b866cad.glb",
-      "producer": "",
+      "bytes": 11460,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup02.26df7514.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_WeathGroup02.glb"
     },
     {
-      "bytes": 8168892,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_bush01.7b889bd8.glb",
-      "producer": "",
+      "bytes": 63816,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_bush01.3b767f94.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_bush01.glb"
     },
     {
-      "bytes": 4944880,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff01.ff167691.glb",
-      "producer": "",
+      "bytes": 90008,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff01.78c3e50a.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff01.glb"
     },
     {
-      "bytes": 5279152,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff02.3487faa8.glb",
-      "producer": "",
+      "bytes": 70680,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff02.73071963.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff02.glb"
     },
     {
-      "bytes": 5333356,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff03.7fbb396f.glb",
-      "producer": "",
+      "bytes": 88036,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff03.561afcaf.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff03.glb"
     },
     {
-      "bytes": 7793176,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff_Mesh.91ba8e1f.glb",
-      "producer": "",
+      "bytes": 69644,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff_Mesh.37193957.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff_Mesh.glb"
     },
     {
-      "bytes": 4936976,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock01_lod00.bd135df1.glb",
-      "producer": "",
+      "bytes": 80996,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock01_lod00.a34341ed.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock01_lod00.glb"
     },
     {
-      "bytes": 5282632,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock02_lod00.46329337.glb",
-      "producer": "",
+      "bytes": 74568,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock02_lod00.46e0e720.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock02_lod00.glb"
     },
     {
-      "bytes": 5328048,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock03_lod00.51e14ae5.glb",
-      "producer": "",
+      "bytes": 82264,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock03_lod00.22f9f957.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock03_lod00.glb"
     },
     {
-      "bytes": 5248572,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock04_lod00.3524a8e8.glb",
-      "producer": "",
+      "bytes": 75456,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock04_lod00.d47fd3a3.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock04_lod00.glb"
     },
     {
-      "bytes": 2272804,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover01.570e9080.glb",
-      "producer": "",
+      "bytes": 3684,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover01.0ad993fe.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover01.glb"
     },
     {
-      "bytes": 2272732,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover02.4774dd80.glb",
-      "producer": "",
+      "bytes": 3616,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover02.dd3555c1.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover02.glb"
     },
     {
-      "bytes": 2272768,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover03.18031211.glb",
-      "producer": "",
+      "bytes": 3652,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover03.885ac5de.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover03.glb"
     },
     {
-      "bytes": 8994328,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree01.f42fddf1.glb",
-      "producer": "",
+      "bytes": 160244,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree01.b9eaf267.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree01.glb"
     },
     {
-      "bytes": 9032896,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree02.320bd83a.glb",
-      "producer": "",
+      "bytes": 203048,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree02.7b816083.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree02.glb"
     },
     {
-      "bytes": 9300704,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree03.e6d0048b.glb",
-      "producer": "",
+      "bytes": 90024,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree03.2acc4d62.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree03.glb"
     },
     {
-      "bytes": 9273476,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree04.3609dfbb.glb",
-      "producer": "",
+      "bytes": 60848,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree04.971e87de.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree04.glb"
     },
     {
-      "bytes": 9410588,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree05.80049008.glb",
-      "producer": "",
+      "bytes": 208308,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree05.e7b937eb.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree05.glb"
     },
     {
-      "bytes": 503484,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush01_lod00.dccbc0bc.glb",
-      "producer": "",
+      "bytes": 19076,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush01_lod00.fffded6c.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush01_lod00.glb"
     },
     {
-      "bytes": 509896,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush02_lod00.0a9f97db.glb",
-      "producer": "",
+      "bytes": 26020,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush02_lod00.4080c563.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush02_lod00.glb"
     },
     {
-      "bytes": 511812,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush03_lod00.decfc21d.glb",
-      "producer": "",
+      "bytes": 28104,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush03_lod00.b0d87815.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush03_lod00.glb"
     },
     {
-      "bytes": 509500,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush04_lod00.f261a7f2.glb",
-      "producer": "",
+      "bytes": 25552,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush04_lod00.3f385371.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush04_lod00.glb"
     },
     {
-      "bytes": 9365852,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree01.1d8077ef.glb",
-      "producer": "",
+      "bytes": 160260,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree01.a5aa81cf.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree01.glb"
     },
     {
-      "bytes": 9404424,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree02.299ceff5.glb",
-      "producer": "",
+      "bytes": 203064,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree02.aec2d2b4.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_green-tree02.glb"
     },
     {
-      "bytes": 2711364,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn01.67a38a59.glb",
-      "producer": "",
+      "bytes": 29556,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn01.78c7cd10.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn01.glb"
     },
     {
-      "bytes": 2706024,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn02.6875cece.glb",
-      "producer": "",
+      "bytes": 23724,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn02.cd3cf7dd.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn02.glb"
     },
     {
-      "bytes": 9093564,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small01.17a44382.glb",
-      "producer": "",
+      "bytes": 10484,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small01.6559099b.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small01.glb"
     },
     {
-      "bytes": 9090912,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small02.6c255d3b.glb",
-      "producer": "",
+      "bytes": 7812,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small02.b4cfc0ff.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small02.glb"
     },
     {
-      "bytes": 9092052,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small03.35b65646.glb",
-      "producer": "",
+      "bytes": 8964,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small03.0dd11f8b.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small03.glb"
     },
     {
-      "bytes": 9208532,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine01.e8e092fc.glb",
-      "producer": "",
+      "bytes": 132540,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine01.b946c627.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine01.glb"
     },
     {
-      "bytes": 9204540,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine02.ad041099.glb",
-      "producer": "",
+      "bytes": 127492,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine02.f3c8e2e5.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine02.glb"
     },
     {
-      "bytes": 9194072,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine03.616e4c78.glb",
-      "producer": "",
+      "bytes": 116820,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine03.eab399d9.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine03.glb"
     },
     {
-      "bytes": 9218288,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine04.f02ffd93.glb",
-      "producer": "",
+      "bytes": 143728,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine04.c54873e0.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine04.glb"
     },
     {
-      "bytes": 9292876,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine05.440a7950.glb",
-      "producer": "",
+      "bytes": 220288,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine05.db572186.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine05.glb"
     },
     {
-      "bytes": 4908420,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock01_lod000.4cb12009.glb",
-      "producer": "",
+      "bytes": 50692,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock01_lod000.bac1c816.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock01_lod000.glb"
     },
     {
-      "bytes": 4909168,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock02_lod000.7938eeee.glb",
-      "producer": "",
+      "bytes": 51324,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock02_lod000.4241840d.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock02_lod000.glb"
     },
     {
-      "bytes": 4909656,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock03_lod000.440138e0.glb",
-      "producer": "",
+      "bytes": 51936,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock03_lod000.aa501f57.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock03_lod000.glb"
     },
     {
-      "bytes": 4909432,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock04_lod000.2e48350f.glb",
-      "producer": "",
+      "bytes": 51504,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock04_lod000.55d4ce65.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_rock04_lod000.glb"
     },
     {
-      "bytes": 6266944,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_tree_dead.e5c161e7.glb",
-      "producer": "",
+      "bytes": 37352,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_tree_dead.34da0c5e.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_tree_dead.glb"
     },
     {
-      "bytes": 1812,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_waterPlane.c6755868.glb",
-      "producer": "",
+      "bytes": 1792,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_waterPlane.7cbb405e.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_waterPlane.glb"
     },
     {
       "bytes": 155109,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/import-report.30189b5a.json",
-      "producer": "",
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/import-report.122657a3.json",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/import-report.json"
     },
     {
-      "bytes": 19485043,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock01_normal.9ee6d61e.png",
-      "producer": "",
+      "bytes": 12215457,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock01_normal.4573016e.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock01_normal.png"
     },
     {
-      "bytes": 51375942,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock02_height_AO_Curvature_TGA.32d5d302.png",
-      "producer": "",
+      "bytes": 20052809,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock02_height_AO_Curvature_TGA.82b2d1c0.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock02_height_AO_Curvature_TGA.png"
     },
     {
-      "bytes": 49803806,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock03_height_AO_Curvature_TGA.0f9aba5c.png",
-      "producer": "",
+      "bytes": 19526249,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock03_height_AO_Curvature_TGA.dc037fd9.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock03_height_AO_Curvature_TGA.png"
     },
     {
-      "bytes": 48306400,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock04_height_AO_Curvature.af8cd168.png",
-      "producer": "",
+      "bytes": 19889776,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock04_height_AO_Curvature.bb29a1bb.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_cliffrock04_height_AO_Curvature.png"
     },
     {
-      "bytes": 1697206,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs.655b2dbb.png",
-      "producer": "",
+      "bytes": 707460,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs.9b5f6fca.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs.png"
     },
     {
-      "bytes": 1265876,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs_normal.854b7154.png",
-      "producer": "",
+      "bytes": 641956,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs_normal.9754282a.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_dead_tree_leafs_normal.png"
     },
     {
-      "bytes": 4021132,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_farn_alphas.80d9aa90.png",
-      "producer": "",
+      "bytes": 1712852,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_farn_alphas.71a77a59.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_farn_alphas.png"
     },
     {
-      "bytes": 2429701,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_grass_bush_atlas_alpha.0098e20d.png",
-      "producer": "",
+      "bytes": 15875,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_grass_bush_atlas_alpha.8638fb83.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_grass_bush_atlas_alpha.png"
     },
     {
-      "bytes": 347509,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_leafs_cherry_laurel_greyMaps.3c135905.png",
-      "producer": "",
+      "bytes": 39695,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_leafs_cherry_laurel_greyMaps.8fd29cd5.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_leafs_cherry_laurel_greyMaps.png"
     },
     {
       "bytes": 534,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00-2__rgb_XVector_a_XExtentDividedby2048reaches2048_UV_3.f2a0db53.png",
-      "producer": "",
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00-2__rgb_XVector_a_XExtentDividedby2048reaches2048_UV_3.84084909.png",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00-2__rgb_XVector_a_XExtentDividedby2048reaches2048_UV_3.png"
     },
     {
       "bytes": 845,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00_rgb_XVector_a_XExtentDividedby2048reaches2048_UV_2.8d30e2ab.png",
-      "producer": "",
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00_rgb_XVector_a_XExtentDividedby2048reaches2048_UV_2.5d4be415.png",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_lod00_rgb_XVector_a_XExtentDividedby2048reaches2048_UV_2.png"
     },
     {
-      "bytes": 45946583,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_medium-rocks_height_ao_curvaturel_TGA.c2d39e38.png",
-      "producer": "",
+      "bytes": 20087271,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_medium-rocks_height_ao_curvaturel_TGA.f3f1e447.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_medium-rocks_height_ao_curvaturel_TGA.png"
     },
     {
-      "bytes": 18708392,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_new_farn_masks.f16c7acb.png",
-      "producer": "",
+      "bytes": 2254756,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_new_farn_masks.76425fa6.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_new_farn_masks.png"
     },
     {
-      "bytes": 1730283,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_tree_pine_Leafs_opacity_maps.5b1f89e0.png",
-      "producer": "",
+      "bytes": 256015,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_tree_pine_Leafs_opacity_maps.be65f142.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/T_tree_pine_Leafs_opacity_maps.png"
     },
     {
-      "bytes": 1709745,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_diffuse.3b35f999.png",
-      "producer": "",
+      "bytes": 652358,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_diffuse.ca9fc1f8.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_diffuse.png"
     },
     {
-      "bytes": 1590836,
-      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_normal.e43a4b55.png",
-      "producer": "",
+      "bytes": 782279,
+      "path": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_normal.fb01551d.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/textures/dead_tree_leafs_green_normal.png"
     },
     {
-      "bytes": 710461408,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/Materials/UnrealMaterialLibrary.885be90b.glb",
-      "producer": "",
-      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/Materials/UnrealMaterialLibrary.glb"
-    },
-    {
       "bytes": 76275,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/import-report.3774a1bf.json",
-      "producer": "",
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/import-report.8df980dc.json",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/import-report.json"
     },
     {
-      "bytes": 7123726,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_BaseColor.a28da610.png",
-      "producer": "",
+      "bytes": 4243129,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_BaseColor.66fcece5.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_BaseColor.png"
     },
     {
-      "bytes": 8668681,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Nml.f240c813.png",
-      "producer": "",
+      "bytes": 746634,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Nml.87841434.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Nml.png"
     },
     {
-      "bytes": 11087578,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_OcclusionRoughnessMetallic.277c89a7.png",
-      "producer": "",
+      "bytes": 669487,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_OcclusionRoughnessMetallic.24237688.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_OcclusionRoughnessMetallic.png"
     },
     {
       "bytes": 259,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Specular.529223c0.png",
-      "producer": "",
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Specular.7b2e6104.png",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Crow/Textures/T_Crow_Specular.png"
     },
     {
-      "bytes": 28208419,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_BaseColor.b488af1b.png",
-      "producer": "",
+      "bytes": 10055053,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_BaseColor.1c72031f.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_BaseColor.png"
     },
     {
-      "bytes": 21930228,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_Nml.1f2e0b73.png",
-      "producer": "",
+      "bytes": 1702615,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_Nml.1f61832c.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeeDoe_Nml.png"
     },
     {
-      "bytes": 30981971,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeerDoe_OcclusionRoughnessMetallic.872e2188.png",
-      "producer": "",
+      "bytes": 2098494,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeerDoe_OcclusionRoughnessMetallic.714e7cad.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_DeerDoe_OcclusionRoughnessMetallic.png"
     },
     {
-      "bytes": 34481932,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_BaseColor.5033852d.png",
-      "producer": "",
+      "bytes": 13169224,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_BaseColor.8f7e1178.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_BaseColor.png"
     },
     {
-      "bytes": 32123936,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Nml.c72c52ae.png",
-      "producer": "",
+      "bytes": 2301183,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Nml.ec3ee3f4.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Nml.png"
     },
     {
-      "bytes": 35550367,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_OcclusionRoughnessMetllic.defc8f53.png",
-      "producer": "",
+      "bytes": 2648875,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_OcclusionRoughnessMetllic.a1bf2289.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_OcclusionRoughnessMetllic.png"
     },
     {
       "bytes": 255,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Specular.cde4219f.png",
-      "producer": "",
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Specular.323c27be.png",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/DeerStagAndDoe/Textures/T_Stag_Specular.png"
     },
     {
-      "bytes": 9824066,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_BaseColor.e73d57e0.png",
-      "producer": "",
+      "bytes": 3516393,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_BaseColor.97df1fd3.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_BaseColor.png"
     },
     {
-      "bytes": 8970165,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Nml.58ddd412.png",
-      "producer": "",
+      "bytes": 638824,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Nml.61ab9f5d.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Nml.png"
     },
     {
-      "bytes": 9112030,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_OcclusionRoughnessMetallic.9bd104d8.png",
-      "producer": "",
+      "bytes": 641269,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_OcclusionRoughnessMetallic.521aff79.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_OcclusionRoughnessMetallic.png"
     },
     {
       "bytes": 121,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Specular.2cd01d28.png",
-      "producer": "",
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Specular.10f1033d.png",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Fox/Textures/T_Fox_Specular.png"
     },
     {
-      "bytes": 33983533,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_BaseColor.0d77b5e0.png",
-      "producer": "",
+      "bytes": 15090156,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_BaseColor.109d80ca.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_BaseColor.png"
     },
     {
-      "bytes": 34961163,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_Nml.d3cfcb2a.png",
-      "producer": "",
+      "bytes": 2592050,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_Nml.3e035da9.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_Nml.png"
     },
     {
-      "bytes": 32368842,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_OcclusionRoughnessMetallic.fe2c768d.png",
-      "producer": "",
+      "bytes": 2672578,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_OcclusionRoughnessMetallic.305372c0.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_PigDirty_OcclusionRoughnessMetallic.png"
     },
     {
-      "bytes": 30953769,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_BaseColor.87abc329.png",
-      "producer": "",
+      "bytes": 11825356,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_BaseColor.8ef32f7d.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_BaseColor.png"
     },
     {
-      "bytes": 26756580,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Nml.dc09c091.png",
-      "producer": "",
+      "bytes": 2031923,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Nml.e108d3ec.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Nml.png"
     },
     {
-      "bytes": 36800119,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_OcclusionRoughnessMetallic.773bbc7a.png",
-      "producer": "",
+      "bytes": 2809488,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_OcclusionRoughnessMetallic.b39f42d7.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_OcclusionRoughnessMetallic.png"
     },
     {
       "bytes": 186,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Specular.a29fb11a.png",
-      "producer": "",
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Specular.809cdf82.png",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Pig/Textures/T_Pig_Specular.png"
     },
     {
-      "bytes": 34122098,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfArctic_BaseColorAlpha.c9704a03.png",
-      "producer": "",
+      "bytes": 13854035,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfArctic_BaseColorAlpha.7346db49.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfArctic_BaseColorAlpha.png"
     },
     {
-      "bytes": 31763996,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_BaseColorAlpha.499c52e7.png",
-      "producer": "",
+      "bytes": 12571282,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_BaseColorAlpha.03813b47.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_BaseColorAlpha.png"
     },
     {
-      "bytes": 236895,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_Illum.2a81873f.png",
-      "producer": "",
+      "bytes": 10383,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_Illum.1d0a97fb.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_WolfDark_Illum.png"
     },
     {
-      "bytes": 34674977,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_BaseColorAlpha.e5ed0440.png",
-      "producer": "",
+      "bytes": 13845857,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_BaseColorAlpha.c6b7798b.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_BaseColorAlpha.png"
     },
     {
-      "bytes": 28146039,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Nml.6c57d884.png",
-      "producer": "",
+      "bytes": 2331969,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Nml.a854fdaf.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Nml.png"
     },
     {
-      "bytes": 32397309,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_OcclusionRoughnessMetallic.47e02a90.png",
-      "producer": "",
+      "bytes": 2383011,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_OcclusionRoughnessMetallic.c5ac7c57.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_OcclusionRoughnessMetallic.png"
     },
     {
       "bytes": 121,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Specular.2cd01d28.png",
-      "producer": "",
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Specular.10f1033d.png",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c-ue/textures/Content/AnimalVarietyPack/Wolf/Textures/T_Wolf_Specular.png"
     },
     {
-      "bytes": 296944,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/doe.79c73504.glb",
-      "producer": "",
+      "bytes": 289316,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/doe.c2f9eef0.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/doe.glb"
     },
     {
-      "bytes": 314484,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/fox.36417a70.glb",
-      "producer": "",
+      "bytes": 298096,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/fox.a14b9750.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/fox.glb"
     },
     {
-      "bytes": 332272,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/husky.fa1e3ead.glb",
-      "producer": "",
+      "bytes": 292060,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/husky.36b69842.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/husky.glb"
     },
     {
-      "bytes": 283328,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/stag.2ee540ca.glb",
-      "producer": "",
+      "bytes": 286444,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/stag.1b7a9e9f.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/stag.glb"
     },
     {
-      "bytes": 522540,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Crow.524360df.glb",
-      "producer": "",
+      "bytes": 454052,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Crow.9c4628d2.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Crow.glb"
     },
     {
-      "bytes": 3448564,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerDoe.83db21f0.glb",
-      "producer": "",
+      "bytes": 448868,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerDoe.120361ce.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerDoe.glb"
     },
     {
-      "bytes": 4157912,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerStag.7f2a888e.glb",
-      "producer": "",
+      "bytes": 484412,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerStag.6ff6b1a7.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerStag.glb"
     },
     {
-      "bytes": 4506768,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Fox.572cca26.glb",
-      "producer": "",
+      "bytes": 507620,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Fox.cecf291c.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Fox.glb"
     },
     {
-      "bytes": 3397048,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Pig.9ff1546e.glb",
-      "producer": "",
+      "bytes": 548604,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Pig.953fad84.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Pig.glb"
     },
     {
-      "bytes": 573156,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Wolf.93413fda.glb",
-      "producer": "",
+      "bytes": 496976,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Wolf.8b6c92fc.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Wolf.glb"
     },
     {
       "bytes": 18801,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/import-report.2dcd71c3.json",
-      "producer": "",
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/import-report.aec4e675.json",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/import-report.json"
     },
     {
-      "bytes": 30981971,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_DeerDoe_OcclusionRoughnessMetallic.872e2188.png",
-      "producer": "",
+      "bytes": 2098494,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_DeerDoe_OcclusionRoughnessMetallic.714e7cad.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_DeerDoe_OcclusionRoughnessMetallic.png"
     },
     {
-      "bytes": 9112030,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Fox_OcclusionRoughnessMetallic.9bd104d8.png",
-      "producer": "",
+      "bytes": 641269,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Fox_OcclusionRoughnessMetallic.521aff79.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Fox_OcclusionRoughnessMetallic.png"
     },
     {
-      "bytes": 36800119,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Pig_OcclusionRoughnessMetallic.773bbc7a.png",
-      "producer": "",
+      "bytes": 2809488,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Pig_OcclusionRoughnessMetallic.b39f42d7.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Pig_OcclusionRoughnessMetallic.png"
     },
     {
-      "bytes": 35550367,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Stag_OcclusionRoughnessMetllic.defc8f53.png",
-      "producer": "",
+      "bytes": 2648875,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Stag_OcclusionRoughnessMetllic.a1bf2289.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/textures/T_Stag_OcclusionRoughnessMetllic.png"
     },
     {
-      "bytes": 316220,
-      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/wolf.fb33b8ed.glb",
-      "producer": "",
+      "bytes": 301184,
+      "path": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/wolf.cc66ba9b.glb",
+      "producer": "audio+ktx2+model",
       "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/wolf.glb"
     },
     {
       "bytes": 5451493,
-      "path": "hdri/kloofendal_48d_2k.23d73b43.hdr",
-      "producer": "",
+      "path": "hdri/kloofendal_48d_2k.6df423be.hdr",
+      "producer": "audio+ktx2+model",
       "source": "hdri/kloofendal_48d_2k.hdr"
     },
     {
-      "bytes": 242282,
-      "path": "landscape/cliffrock01_moss_diffuse.d8cca7ba.jpg",
-      "producer": "",
+      "bytes": 159694,
+      "path": "landscape/cliffrock01_moss_diffuse.db4fe5d6.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/cliffrock01_moss_diffuse.jpg"
     },
     {
       "bytes": 934228,
-      "path": "landscape/cliffrock01_moss_normal.9ab9650f.jpg",
-      "producer": "",
+      "path": "landscape/cliffrock01_moss_normal.23e6a845.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/cliffrock01_moss_normal.jpg"
     },
     {
-      "bytes": 384832,
-      "path": "landscape/cliffrocks_diffuse.be29b985.jpg",
-      "producer": "",
+      "bytes": 184073,
+      "path": "landscape/cliffrocks_diffuse.ce66b951.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/cliffrocks_diffuse.jpg"
     },
     {
       "bytes": 1040451,
-      "path": "landscape/cliffrocks_normal.d03e41a7.jpg",
-      "producer": "",
+      "path": "landscape/cliffrocks_normal.8e38b8ad.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/cliffrocks_normal.jpg"
     },
     {
-      "bytes": 118273,
-      "path": "landscape/clover_diffuse.e4e89df5.jpg",
-      "producer": "",
+      "bytes": 80405,
+      "path": "landscape/clover_diffuse.4cc670d1.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/clover_diffuse.jpg"
     },
     {
       "bytes": 399902,
-      "path": "landscape/clover_normal.1eb2d74a.jpg",
-      "producer": "",
+      "path": "landscape/clover_normal.d6155890.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/clover_normal.jpg"
     },
     {
-      "bytes": 337305,
-      "path": "landscape/dead_tree_trunk_diffuse.7449ad55.jpg",
-      "producer": "",
+      "bytes": 205571,
+      "path": "landscape/dead_tree_trunk_diffuse.f98b46fc.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/dead_tree_trunk_diffuse.jpg"
     },
     {
       "bytes": 699338,
-      "path": "landscape/dead_tree_trunk_normal.1440daca.jpg",
-      "producer": "",
+      "path": "landscape/dead_tree_trunk_normal.354abb38.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/dead_tree_trunk_normal.jpg"
     },
     {
-      "bytes": 364611,
-      "path": "landscape/farn_alphas.f75a0d4c.jpg",
-      "producer": "",
+      "bytes": 90992,
+      "path": "landscape/farn_alphas.30ca7722.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/farn_alphas.jpg"
     },
     {
-      "bytes": 733988,
-      "path": "landscape/farn_diffuse.b52ce384.png",
-      "producer": "",
+      "bytes": 364685,
+      "path": "landscape/farn_diffuse.e1993e51.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/farn_diffuse.png"
     },
     {
       "bytes": 333975,
-      "path": "landscape/farn_normal.e15fa612.jpg",
-      "producer": "",
+      "path": "landscape/farn_normal.f196c397.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/farn_normal.jpg"
     },
     {
       "bytes": 9007,
-      "path": "landscape/grass_bush_atlas_alpha.3ded45e7.jpg",
-      "producer": "",
+      "path": "landscape/grass_bush_atlas_alpha.07de094a.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/grass_bush_atlas_alpha.jpg"
     },
     {
-      "bytes": 58840,
-      "path": "landscape/grass_bush_atlas_diffuse.d201d0a3.jpg",
-      "producer": "",
+      "bytes": 37722,
+      "path": "landscape/grass_bush_atlas_diffuse.9238086d.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/grass_bush_atlas_diffuse.jpg"
     },
     {
       "bytes": 73465,
-      "path": "landscape/grass_bush_atlas_normal.1f4cdb02.jpg",
-      "producer": "",
+      "path": "landscape/grass_bush_atlas_normal.b1260141.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/grass_bush_atlas_normal.jpg"
     },
     {
-      "bytes": 241948,
-      "path": "landscape/grassgroup_diffuse.419e412b.png",
-      "producer": "",
+      "bytes": 151021,
+      "path": "landscape/grassgroup_diffuse.5ea48a47.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/grassgroup_diffuse.png"
     },
     {
-      "bytes": 329268,
-      "path": "landscape/ground_dirt_01_diffuse.da7339ae.jpg",
-      "producer": "",
+      "bytes": 195819,
+      "path": "landscape/ground_dirt_01_diffuse.beed195c.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_dirt_01_diffuse.jpg"
     },
     {
       "bytes": 1170362,
-      "path": "landscape/ground_dirt_01_normal.5af4ba34.jpg",
-      "producer": "",
+      "path": "landscape/ground_dirt_01_normal.7b26b824.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_dirt_01_normal.jpg"
     },
     {
-      "bytes": 370977,
-      "path": "landscape/ground_forest_diffuse.552b68bb.jpg",
-      "producer": "",
+      "bytes": 201343,
+      "path": "landscape/ground_forest_diffuse.04153f27.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_forest_diffuse.jpg"
     },
     {
       "bytes": 1163986,
-      "path": "landscape/ground_forest_normal.890b29b3.jpg",
-      "producer": "",
+      "path": "landscape/ground_forest_normal.603a04a7.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_forest_normal.jpg"
     },
     {
-      "bytes": 282583,
-      "path": "landscape/ground_grass_01_diffuse.b2e4b450.jpg",
-      "producer": "",
+      "bytes": 184452,
+      "path": "landscape/ground_grass_01_diffuse.7046ca93.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_grass_01_diffuse.jpg"
     },
     {
       "bytes": 1144853,
-      "path": "landscape/ground_grass_01_normal.89146a60.jpg",
-      "producer": "",
+      "path": "landscape/ground_grass_01_normal.c16f7a45.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_grass_01_normal.jpg"
     },
     {
-      "bytes": 347210,
-      "path": "landscape/ground_grass_02_diffuse.925dd85a.jpg",
-      "producer": "",
+      "bytes": 185453,
+      "path": "landscape/ground_grass_02_diffuse.e28312b8.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_grass_02_diffuse.jpg"
     },
     {
       "bytes": 1082551,
-      "path": "landscape/ground_grass_02_normal.fa5f7f20.jpg",
-      "producer": "",
+      "path": "landscape/ground_grass_02_normal.8cc34de6.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_grass_02_normal.jpg"
     },
     {
-      "bytes": 323064,
-      "path": "landscape/ground_rock_01_diffuse.0ba22e0b.jpg",
-      "producer": "",
+      "bytes": 201601,
+      "path": "landscape/ground_rock_01_diffuse.2fc1d385.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_rock_01_diffuse.jpg"
     },
     {
       "bytes": 838054,
-      "path": "landscape/ground_rock_01_normal.e87659af.jpg",
-      "producer": "",
+      "path": "landscape/ground_rock_01_normal.fb02af90.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_rock_01_normal.jpg"
     },
     {
-      "bytes": 334027,
-      "path": "landscape/ground_rock_02_diffuse.3b72f2e3.jpg",
-      "producer": "",
+      "bytes": 204252,
+      "path": "landscape/ground_rock_02_diffuse.625293ad.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_rock_02_diffuse.jpg"
     },
     {
       "bytes": 1103735,
-      "path": "landscape/ground_rock_02_normal.18842db5.jpg",
-      "producer": "",
+      "path": "landscape/ground_rock_02_normal.d9261b98.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_rock_02_normal.jpg"
     },
     {
-      "bytes": 387383,
-      "path": "landscape/ground_rock_03_diffuse.a2d5528c.jpg",
-      "producer": "",
+      "bytes": 198744,
+      "path": "landscape/ground_rock_03_diffuse.4cf9c369.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_rock_03_diffuse.jpg"
     },
     {
       "bytes": 966279,
-      "path": "landscape/ground_rock_03_normal.e6bda9b8.jpg",
-      "producer": "",
+      "path": "landscape/ground_rock_03_normal.0f50d156.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/ground_rock_03_normal.jpg"
     },
     {
-      "bytes": 1092240,
-      "path": "landscape/leafs_diffuse.1d0c471f.png",
-      "producer": "",
+      "bytes": 531131,
+      "path": "landscape/leafs_diffuse.cb3f5123.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/leafs_diffuse.png"
     },
     {
       "bytes": 488020,
-      "path": "landscape/leafs_normal.ed7a63b2.jpg",
-      "producer": "",
+      "path": "landscape/leafs_normal.c0a655c7.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/leafs_normal.jpg"
     },
     {
-      "bytes": 347648,
-      "path": "landscape/pine_bark_diffuse.2db104a0.jpg",
-      "producer": "",
+      "bytes": 201577,
+      "path": "landscape/pine_bark_diffuse.bec253db.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/pine_bark_diffuse.jpg"
     },
     {
       "bytes": 949037,
-      "path": "landscape/pine_bark_normal.3c2e7c35.jpg",
-      "producer": "",
+      "path": "landscape/pine_bark_normal.1ca6a7df.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/pine_bark_normal.jpg"
     },
     {
-      "bytes": 102403,
-      "path": "landscape/tree_pine_barkdetail_diffuse.6084beaa.jpg",
-      "producer": "",
+      "bytes": 66177,
+      "path": "landscape/tree_pine_barkdetail_diffuse.55c6ad32.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/tree_pine_barkdetail_diffuse.jpg"
     },
     {
       "bytes": 528041,
-      "path": "landscape/tree_pine_barkdetail_normal.6a164dfc.jpg",
-      "producer": "",
+      "path": "landscape/tree_pine_barkdetail_normal.fceb34a2.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/tree_pine_barkdetail_normal.jpg"
     },
     {
-      "bytes": 693795,
-      "path": "landscape/tree_pine_leafs_opacity.81401a87.jpg",
-      "producer": "",
+      "bytes": 87437,
+      "path": "landscape/tree_pine_leafs_opacity.b9c4757f.ktx2",
+      "producer": "audio+ktx2+model",
       "source": "landscape/tree_pine_leafs_opacity.jpg"
     },
     {
       "bytes": 28917,
-      "path": "landscape/water01.22d80064.jpg",
-      "producer": "",
+      "path": "landscape/water01.66d2e832.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/water01.jpg"
     },
     {
       "bytes": 370356,
-      "path": "landscape/waves_normal.c9a8b965.jpg",
-      "producer": "",
+      "path": "landscape/waves_normal.43f02560.jpg",
+      "producer": "audio+ktx2+model",
       "source": "landscape/waves_normal.jpg"
     },
     {
-      "bytes": 624,
-      "path": "native-proof.76e567c1.glb",
-      "producer": "",
+      "bytes": 1324,
+      "path": "native-proof.147b9d21.glb",
+      "producer": "audio+ktx2+model",
       "source": "native-proof.glb"
     },
     {
       "bytes": 150,
-      "path": "native-proof.c70e1b5e.png",
-      "producer": "",
+      "path": "native-proof.6b1bc241.png",
+      "producer": "audio+ktx2+model",
       "source": "native-proof.png"
     },
     {
-      "bytes": 39246,
-      "path": "pickup.1fb25627.wav",
-      "producer": "",
+      "bytes": 5228,
+      "path": "pickup.692b0980.ogg",
+      "producer": "audio+ktx2+model",
       "source": "pickup.wav"
+    },
+    {
+      "bytes": 1076887,
+      "path": "shared/images/009b78b0854ec182.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup01.glb"
+    },
+    {
+      "bytes": 149885,
+      "path": "shared/images/0682d428549202d1.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup01.glb"
+    },
+    {
+      "bytes": 941587,
+      "path": "shared/images/10480202368716cf.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Fox.glb"
+    },
+    {
+      "bytes": 702970,
+      "path": "shared/images/1225fffeab040aa9.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Pig.glb"
+    },
+    {
+      "bytes": 1119677,
+      "path": "shared/images/15577aeaa69d3edd.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff01.glb"
+    },
+    {
+      "bytes": 1362317,
+      "path": "shared/images/173e4da9076dfbd1.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff_Mesh.glb"
+    },
+    {
+      "bytes": 909397,
+      "path": "shared/images/1fd1182c61db69e7.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerStag.glb"
+    },
+    {
+      "bytes": 782279,
+      "path": "shared/images/1ff7ea3de5af8a0c.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree03.glb"
+    },
+    {
+      "bytes": 424520,
+      "path": "shared/images/20bff9903aa4f018.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff_Mesh.glb"
+    },
+    {
+      "bytes": 140440,
+      "path": "shared/images/293eaf496ebe4e38.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush01_lod00.glb"
+    },
+    {
+      "bytes": 205323,
+      "path": "shared/images/2fa2946d0ae272d7.etc1s.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_tree_dead.glb"
+    },
+    {
+      "bytes": 1325801,
+      "path": "shared/images/3184a0ec85fa7eaf.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.glb"
+    },
+    {
+      "bytes": 364685,
+      "path": "shared/images/38e504e3729fe3bc.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup01.glb"
+    },
+    {
+      "bytes": 182,
+      "path": "shared/images/39fd7d82a1edc2f4.none.png",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerDoe.glb"
+    },
+    {
+      "bytes": 652358,
+      "path": "shared/images/3b3c85658ebbb09d.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree03.glb"
+    },
+    {
+      "bytes": 1193802,
+      "path": "shared/images/3fba52f17635394e.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliffrock04_lod00.glb"
+    },
+    {
+      "bytes": 131,
+      "path": "shared/images/40489c92616d0583.none.png",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/doe.glb"
+    },
+    {
+      "bytes": 1277462,
+      "path": "shared/images/4377e931e0be328d.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff_Mesh.glb"
+    },
+    {
+      "bytes": 762761,
+      "path": "shared/images/4ce362c6eb0453e8.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerDoe.glb"
+    },
+    {
+      "bytes": 76633,
+      "path": "shared/images/51e7db89eb33277a.etc1s.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.glb"
+    },
+    {
+      "bytes": 277123,
+      "path": "shared/images/5c069012313086c2.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_bush01.glb"
+    },
+    {
+      "bytes": 1220071,
+      "path": "shared/images/602a06302eadc660.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff03.glb"
+    },
+    {
+      "bytes": 1013175,
+      "path": "shared/images/609d8adef064563a.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Fox.glb"
+    },
+    {
+      "bytes": 494822,
+      "path": "shared/images/629a683396309013.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FarnGroup01.glb"
+    },
+    {
+      "bytes": 707460,
+      "path": "shared/images/671d576909a964d8.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree01.glb"
+    },
+    {
+      "bytes": 340864,
+      "path": "shared/images/794ad68b1b84be4b.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_RockGroup01.glb"
+    },
+    {
+      "bytes": 113260,
+      "path": "shared/images/7ae3d1e74bc5f23a.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup01.glb"
+    },
+    {
+      "bytes": 117136,
+      "path": "shared/images/7cf47e4420dfb772.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_grass_bush01_lod00.glb"
+    },
+    {
+      "bytes": 738502,
+      "path": "shared/images/81e217e6139f585a.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerDoe.glb"
+    },
+    {
+      "bytes": 1354695,
+      "path": "shared/images/8ce82fc5e5682f1b.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small01.glb"
+    },
+    {
+      "bytes": 1350953,
+      "path": "shared/images/8e43afdefd81e558.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.glb"
+    },
+    {
+      "bytes": 1082962,
+      "path": "shared/images/9394ee6452224ba1.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.glb"
+    },
+    {
+      "bytes": 121,
+      "path": "shared/images/9546e25db6808a46.none.png",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/stag.glb"
+    },
+    {
+      "bytes": 1169663,
+      "path": "shared/images/969f8ece40e96e38.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff02.glb"
+    },
+    {
+      "bytes": 554187,
+      "path": "shared/images/97c2907460314a1a.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover01.glb"
+    },
+    {
+      "bytes": 775462,
+      "path": "shared/images/a208bc4532b5279b.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn01.glb"
+    },
+    {
+      "bytes": 586805,
+      "path": "shared/images/a9e9e27716ee8893.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_BoughGroup01.glb"
+    },
+    {
+      "bytes": 21145,
+      "path": "shared/images/b1c1865dde0ebe83.etc1s.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup01.glb"
+    },
+    {
+      "bytes": 587778,
+      "path": "shared/images/b2026dfe08556929.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_new_farn01.glb"
+    },
+    {
+      "bytes": 435254,
+      "path": "shared/images/b21d3adc2d23421d.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff_Mesh.glb"
+    },
+    {
+      "bytes": 342181,
+      "path": "shared/images/b3c1e226377accb2.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_FlowerGroup01.glb"
+    },
+    {
+      "bytes": 146377,
+      "path": "shared/images/b406572c23ca2b6d.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_NettleGroup01.glb"
+    },
+    {
+      "bytes": 1238878,
+      "path": "shared/images/b841736691353557.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_tree_dead.glb"
+    },
+    {
+      "bytes": 122377,
+      "path": "shared/images/b9bf147eabe64a72.etc1s.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_tree_dead.glb"
+    },
+    {
+      "bytes": 989728,
+      "path": "shared/images/bade3a7cf50b28ff.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_DeerStag.glb"
+    },
+    {
+      "bytes": 68758,
+      "path": "shared/images/c22066d200e1963a.etc1s.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover01.glb"
+    },
+    {
+      "bytes": 531131,
+      "path": "shared/images/c8d73d06cddd3781.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small01.glb"
+    },
+    {
+      "bytes": 1299272,
+      "path": "shared/images/d919c438bfdb9cc1.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_cliff01.glb"
+    },
+    {
+      "bytes": 536487,
+      "path": "shared/images/e0d83dfb972ff0bc.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_bush01.glb"
+    },
+    {
+      "bytes": 122,
+      "path": "shared/images/e5fe3d3f23d84dc3.none.png",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/husky.glb"
+    },
+    {
+      "bytes": 924889,
+      "path": "shared/images/e87876d5f6e29ae8.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/2dd7964c-a601-4264-a53d-465dcae1644c/ue/Models/SK_Pig.glb"
+    },
+    {
+      "bytes": 626001,
+      "path": "shared/images/eecbf40e7b6cea4a.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small01.glb"
+    },
+    {
+      "bytes": 316645,
+      "path": "shared/images/ef4739fb8f5d5ddf.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_clover01.glb"
+    },
+    {
+      "bytes": 641956,
+      "path": "shared/images/fa3cad3f96519eb3.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_dead-tree01.glb"
+    },
+    {
+      "bytes": 1349410,
+      "path": "shared/images/fba1045bf2e5c7ec.uastc.ktx2",
+      "producer": "image",
+      "source": "fab/1ac647da-b1bc-4e72-a56d-60aaeb6918e1/Models/SM_pine-small01.glb"
     }
   ],
-  "pipelineVersion": 8
+  "pipelineVersion": 9
 }

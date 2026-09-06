@@ -33,11 +33,9 @@ const config: IThreeNativeConfig = {
     resolutionScale: "auto",
   },
   assets: {
-    // Mobile has no WebAssembly, so neither Basis-decoded textures nor Meshopt-decoded geometry
-    // can ship there — and these demo assets are tiny enough that compression only ever grew
-    // them. Ship exactly what is committed.
-    models: "none",
-    textures: "none",
+    // Authoring material library, never loaded by the valley. The engine reports omitted bytes.
+    // Compression, shared images and the uncooked-byte budget use their target-aware defaults.
+    exclude: ["**/UnrealMaterialLibrary.glb"],
   },
   // One UI on every target: src/ui/ renders through the platform's own browser-class renderer,
   // so the same React, Tailwind, CSS and SVG run on web, desktop, Android and iOS alike.

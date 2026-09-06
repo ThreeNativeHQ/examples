@@ -92,7 +92,7 @@ export interface IWorldEnvironmentOptions {
    * at half resolution costs a quarter of the rays and is very hard to see in the result.
    */
   readonly ssrResolutionScale?: number;
-  /** Spatial denoise over the SSGI result. Off is noisier and cheaper. */
+  /** Spatial denoise over SSGI and GTAO. Off is noisier and cheaper. */
   readonly denoiseEnabled?: boolean;
   /** Raymarched shafts. Needs `godraysLight`, and that light must cast shadows. */
   readonly godraysEnabled?: boolean;
@@ -253,6 +253,40 @@ function stage(definition: {
 function denoised(node: ReturnType<typeof denoise>): ChainNode {
   return node as unknown as ChainNode;
 }
+
+/**
+ * How far the contact-occlusion filter reaches, in texels of the occlusion buffer — so at
+ * `gtaoResolutionScale: 0.5` twice this many display pixels.
+ *
+ * `DenoiseNode` defaults to 5 and its loop is a fixed 16 taps at any radius, so reaching
+ * further is free: the same sixteen samples are simply spread over a wider neighbourhood.
+ * 16 rather than the 12 the speckle itself measures at, because the owner asked for the contact
+ * shading a shade softer once the crawl was gone — and a wider reach here is the one way to buy
+ * that which does not touch a texture.
+ */
+const CONTACT_DENOISE_RADIUS = 16;
+/**
+ * Exponent on normal agreement between a sample and its centre. `DenoiseNode` defaults to 5.
+ *
+ * **This is the number that decides whether the filter does anything at all in foliage**, and
+ * it is why filtering the occlusion term at the node's defaults left the grain in place. The
+ * weight is `pow(max(dot(n, nSample), 0), normalPhi)`: in a fern understory the normals of two
+ * adjacent pixels routinely disagree, at 5 every neighbour's weight collapses, the filter
+ * returns the centre texel it was handed, and the result reports as denoised while being
+ * identical to the noise. Contact occlusion is a property of a small neighbourhood *in depth*,
+ * not of surfaces that happen to face the same way, so the normal term is loosened and the
+ * depth term below does the work of keeping the filter local.
+ */
+const CONTACT_DENOISE_NORMAL_PHI = 1.5;
+/**
+ * How far apart in metres, along the view normal, two pixels can be and still be averaged
+ * together. `DenoiseNode` defaults to 5 — five metres, which at contact scale is no constraint
+ * at all and is what the loosened normal term above would otherwise let bleed.
+ *
+ * 0.35 m is the same order as `gtaoRadius` (0.18 m): the gather's own neighbourhood. A frond
+ * and the soil a metre behind it are no longer each other's neighbours.
+ */
+const CONTACT_DENOISE_DEPTH_PHI = 0.35;
 export type OutputRenderer = {
   kind: string;
   raw: unknown;
@@ -408,14 +442,51 @@ export class WorldEnvironment {
 
     const base = target.baseColour?.(scenePass) ?? scenePass.getTextureNode("output");
     const exposed = convertToTexture(base).mul(options.exposure);
-    const giDenoise = (node: ChainNode): ChainNode =>
+    const spatialDenoise = <T extends Node>(node: T): T | ChainNode =>
       options.denoiseEnabled ? denoised(denoise(node, depth, normal(), view)) : node;
+    // The contact term gets its own filter rather than sharing the GI one above, tuned by the
+    // three `CONTACT_DENOISE_*` constants. Same node, same cost, different question: the GI
+    // gather is a colour field where normal agreement is a good edge test, and this is a scalar
+    // occlusion field at `gtaoResolutionScale` where it is the reason nothing gets filtered.
+    //
+    // Why the fix lives here and not in `sharpenStrength`: raising RCAS from 0.28 to 0.9 does
+    // hide this grain, and it hides it by softening every ground and leaf texture in the game.
+    // A localized artifact does not buy a whole-frame blur — see the game's
+    // `tests/contact-shading.test.mjs` `soft-sharpen` control, which fails on that value.
+    const contactDenoise = <T extends Node>(node: T): T | ChainNode => {
+      if (!options.denoiseEnabled) return node;
+      const filter = denoise(node, depth, normal(), view);
+      filter.radius.value = CONTACT_DENOISE_RADIUS;
+      filter.normalPhi.value = CONTACT_DENOISE_NORMAL_PHI;
+      filter.depthPhi.value = CONTACT_DENOISE_DEPTH_PHI;
+      return denoised(filter);
+    };
 
     const stages: ChainStage[] = [
       stage({
         name: "ssgi",
         build: (input) => {
           const gi = ssgi(input, depth, normal(), view);
+          // **The one line that fixes the crawling speckle in this scene, and it is a default.**
+          //
+          // `SSGINode` ships this `true`, and its own documentation on the property says that
+          // value "requires the usage of `TRAANode`" — while with it `false`, "a manual denoise
+          // via `DenoiseNode` is required". Those are the two supported configurations and this
+          // chain has to be one of them. It has no TRAA stage. Left `true`, the node rotates its
+          // slice direction by `frameId % 6` and its ray-start offset by `frameId % 4` every
+          // frame, betting that consecutive frames get averaged, and nothing here averages them:
+          // a fresh noise realization goes to the display every frame, which on screen is dark
+          // speckle that crawls rather than grain that sits still. Two captures of the *same*
+          // build differed by 5.2/255 of mean luminance for this reason alone — 70% of the
+          // difference between the arms being compared — concentrated in the dense foliage where
+          // the artifact was reported. It also defeats a spatial filter by construction: no
+          // single-frame filter can resolve a signal whose design assumes a temporal one.
+          //
+          // So: off, and the `DenoiseNode` the node asks for in exchange is `spatialDenoise`
+          // below, over both gathered terms. `GTAONode` carries the same property and already
+          // defaults to `false`, which is why filtering the contact term helped and never
+          // closed it — GTAO's grain was static all along and SSGI's was not.
+          gi.useTemporalFiltering = false;
           const tier = SSGI_QUALITY[options.ssgiQuality];
           gi.sliceCount.value = tier.sliceCount;
           gi.stepCount.value = tier.stepCount;
@@ -451,8 +522,8 @@ export class WorldEnvironment {
           // lands on. That is the standard approximation, and it is why a red wall tints a
           // white floor at all. `ssgiIntensity` is the game's dial on that second term —
           // gathered light is unbounded, and a small white room at 1.0 blows out.
-          const occlusion = giDenoise(gi.getAONode());
-          const indirect = giDenoise(gi.getGINode());
+          const occlusion = spatialDenoise(gi.getAONode());
+          const indirect = spatialDenoise(gi.getGINode());
           return input.mul(occlusion.r).add(input.mul(indirect.rgb).mul(options.ssgiIntensity));
         },
       }),
@@ -460,6 +531,13 @@ export class WorldEnvironment {
         name: "ambientOcclusion",
         build: (input) => {
           const contact = ao(depth, normal(), view);
+          // Stated, not inherited. `GTAONode` carries the same `useTemporalFiltering` property
+          // as `SSGINode` and today defaults it to `false` — which is the only reason the
+          // contact term's grain was static while the GI gather's crawled. That is a default in
+          // a dependency, and `SSGINode` ships the opposite one, so nothing about this scene's
+          // correctness should rest on which way three happens to have set it. This chain has no
+          // TRAA stage; both gathers therefore run the spatial-denoise path, and both say so.
+          contact.useTemporalFiltering = false;
           contact.radius.value = options.gtaoRadius;
           contact.scale.value = options.gtaoScale;
           contact.samples.value = options.gtaoSamples;
@@ -469,7 +547,11 @@ export class WorldEnvironment {
           // Applied before SSGI by the chain's canonical order; composing it after the GI
           // combine instead darkens crevices the gather re-lit — that is a look choice, and
           // this file is where you make it.
-          return input.mul(contact.r);
+          // Filter the stochastic contact term before it darkens the beauty pass: sharpening
+          // raw half-resolution GTAO amplified its sampling grain around foliage. `contactDenoise`
+          // rather than `spatialDenoise` — see its comment for why the node's own defaults filter
+          // nothing here.
+          return input.mul(contactDenoise(contact).r);
         },
       }),
       stage({
@@ -635,6 +717,10 @@ export class WorldEnvironment {
       `TN_WORLD_ENVIRONMENT:${JSON.stringify({
         denoise: options.denoiseEnabled,
         exposure: options.exposure,
+        // Both gathers' per-frame noise rotation, named on every run. It is off because this
+        // chain has no TRAA stage to average it, and a run that silently turned it back on
+        // would otherwise look exactly like a scene that had simply got noisier.
+        gatherTemporalFiltering: false,
         marker: "TN_WORLD_ENVIRONMENT",
         ssgiQuality: options.ssgiQuality,
         stages,

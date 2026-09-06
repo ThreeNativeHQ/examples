@@ -183,6 +183,24 @@ const high: IWorldEnvironmentOptions = {
   // `SKY_ENVIRONMENT_INTENSITY` was raised 0.7 -> 1.8 off its own sweep, so the ambient lift SSGI
   // was providing now comes from the sky — which is why the interior is *brighter* with SSGI off,
   // and its dead shadow four times smaller, rather than the reverse.
+  //
+  // **Correction, 2026-09-03: the two scale figures above are not this file's to answer for, and
+  // this comment drew the wrong conclusion from them.** `0.61 with frames to spare` is a
+  // contradiction that sat here being read as normal — a game holding 60.0 fps standing *and*
+  // walking has headroom, and a controller that had given it back would have said 1.0. It did not,
+  // because of an engine defect: on a panel whose refresh equals `display.maxFps`, `fps` is
+  // bounded above by the target, so the controller's whole test lived in the 2% under it and seven
+  // presents dropped by the compositor out of 300 read as a pixel deficit. Fewer pixels do not
+  // bring a dropped present back, so each step won nothing and the next window spent another rung.
+  // Fixed in `@threenative/core` (`resolution-scaler.ts`, and see
+  // `packages/core/__tests__/resolution-scaler-vsync.spec.ts`); replayed against the fixed
+  // controller, this recorded state climbs 0.61 -> 1.0.
+  //
+  // So **both rows' scale columns understate what this machine can draw, by an unknown amount, and
+  // the SSGI decision they were used to argue is unsettled until the ablation is re-measured
+  // against the fixed engine.** The fps and image columns stand; the scale column does not.
+  // `SSGINode` has also since gained an `ssgiResolutionScale` (default 0.5), which the 14.4 ms
+  // figure predates.
   ssgiEnabled: true,
   ssgiQuality: "low",
   // Screen-space reflections: ~4.1 ms.
@@ -201,7 +219,13 @@ const high: IWorldEnvironmentOptions = {
   // denoiser and the half-resolution reflection take out, so it earns its cost only on a tier
   // that runs one of them.
   sharpenEnabled: true,
-  // **0 is maximum sharpening and 2 is none** — it is a radius, not a gain.
+  // 0 is maximum sharpening and 2 is none.
+  //
+  // **0.9 was tried here to hide the contact-occlusion speckle, and rejected.** It works, and
+  // the matched pair of screenshots says what it costs: the ground texture and the fern edges
+  // go with it, because RCAS is a whole-frame operator and the grain was in one term of one
+  // stage. Localized artifact, localized fix — the occlusion term is filtered in
+  // `worldEnvironment.ts` (`contactDenoise`), and this stays where it shipped.
   sharpenStrength: 0.28,
   // A sixth of a stop off the extreme corner. Not a mood: every real lens does this, and its
   // absence is one of the things that reads as "rendered" rather than "photographed".
@@ -299,7 +323,13 @@ const medium: IWorldEnvironmentOptions = {
   // denoiser and the half-resolution reflection take out, so it earns its cost only on a tier
   // that runs one of them.
   sharpenEnabled: true,
-  // **0 is maximum sharpening and 2 is none** — it is a radius, not a gain.
+  // 0 is maximum sharpening and 2 is none.
+  //
+  // **0.9 was tried here to hide the contact-occlusion speckle, and rejected.** It works, and
+  // the matched pair of screenshots says what it costs: the ground texture and the fern edges
+  // go with it, because RCAS is a whole-frame operator and the grain was in one term of one
+  // stage. Localized artifact, localized fix — the occlusion term is filtered in
+  // `worldEnvironment.ts` (`contactDenoise`), and this stays where it shipped.
   sharpenStrength: 0.28,
   // A sixth of a stop off the extreme corner. Not a mood: every real lens does this, and its
   // absence is one of the things that reads as "rendered" rather than "photographed".
@@ -336,7 +366,13 @@ const low: IWorldEnvironmentOptions = {
   // denoiser and the half-resolution reflection take out, so it earns its cost only on a tier
   // that runs one of them.
   sharpenEnabled: true,
-  // **0 is maximum sharpening and 2 is none** — it is a radius, not a gain.
+  // 0 is maximum sharpening and 2 is none.
+  //
+  // **0.9 was tried here to hide the contact-occlusion speckle, and rejected.** It works, and
+  // the matched pair of screenshots says what it costs: the ground texture and the fern edges
+  // go with it, because RCAS is a whole-frame operator and the grain was in one term of one
+  // stage. Localized artifact, localized fix — the occlusion term is filtered in
+  // `worldEnvironment.ts` (`contactDenoise`), and this stays where it shipped.
   sharpenStrength: 0.28,
   // A sixth of a stop off the extreme corner. Not a mood: every real lens does this, and its
   // absence is one of the things that reads as "rendered" rather than "photographed".

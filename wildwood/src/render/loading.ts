@@ -80,10 +80,7 @@ interface ILoadingController {
   finish(): void;
 }
 
-function noOp(
-  layer: ILoadingHost["canvasLayer"],
-  options: ILoadingOptions,
-): ILoadingController {
+function noOp(layer: ILoadingHost["canvasLayer"], options: ILoadingOptions): ILoadingController {
   layer.opaque = false;
   options.onReveal?.();
   return { finish: () => undefined, update: () => undefined };
@@ -129,9 +126,21 @@ function forestPixelTexture(): DataTexture {
       const trail = y > 108 && Math.abs(x - trailCentre) < 2 + depth * 3;
       // A stable hash gives the native-safe field the same lichen mottling as the canvas path.
       const lichen = ((x * 73_856_093) ^ (y * 19_349_663)) >>> 28;
-      pixels[offset] = trail ? 216 : forest ? 8 + lichen / 4 : Math.round(19 - depth * 11 + lichen / 3);
-      pixels[offset + 1] = trail ? 152 : forest ? 22 + lichen : Math.round(39 - depth * 24 + lichen);
-      pixels[offset + 2] = trail ? 71 : forest ? 15 + lichen / 2 : Math.round(28 - depth * 18 + lichen / 2);
+      pixels[offset] = trail
+        ? 216
+        : forest
+          ? 8 + lichen / 4
+          : Math.round(19 - depth * 11 + lichen / 3);
+      pixels[offset + 1] = trail
+        ? 152
+        : forest
+          ? 22 + lichen
+          : Math.round(39 - depth * 24 + lichen);
+      pixels[offset + 2] = trail
+        ? 71
+        : forest
+          ? 15 + lichen / 2
+          : Math.round(28 - depth * 18 + lichen / 2);
       pixels[offset + 3] = 255;
     }
   }
@@ -149,7 +158,13 @@ function forestBackdropTexture(): Texture {
   canvas.width = 960;
   canvas.height = 540;
   const context = canvas.getContext("2d");
-  if (context === null) throw new Error("The loading illustration needs a 2D canvas context.");
+  if (
+    context === null ||
+    typeof context.createLinearGradient !== "function" ||
+    typeof context.ellipse !== "function" ||
+    typeof context.bezierCurveTo !== "function"
+  )
+    return forestPixelTexture();
 
   const sky = context.createLinearGradient(0, 0, 0, canvas.height);
   sky.addColorStop(0, "#13271c");
