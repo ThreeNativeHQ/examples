@@ -63,3 +63,4 @@ artifacts/
 /wildwood/public/landscape/
 /wildwood/public/landscape-pro*/
 /.mcp-tools/
+.worktrees
