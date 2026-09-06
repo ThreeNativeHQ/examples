@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "endpoint": "https://127.0.0.1:4433/game",
+  "issuerUrl": "https://127.0.0.1:9443/token",
+  "room": "networking-proof",
+  "playerId": "player-a"
+}
