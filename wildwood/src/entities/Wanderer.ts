@@ -293,24 +293,3 @@ export class Wanderer {
     this.#lastZ = z;
   }
 }
-
-/**
- * Ask the browser or native host for the mouse.
- *
- * Relative look uses pointer lock on the web. The native canvas exposes the same method and maps
- * it to SDL relative mouse mode, so the request stays in the game layer and behaves the same on
- * both targets. The request is made only after the player clicks the game surface, keeping menus
- * and the initial loading screen on normal pointer behavior.
- */
-export function capturePointerOnClick(): () => void {
-  if (typeof document === "undefined") return () => undefined;
-  const canvas = document.getElementById("canvas") ?? document.querySelector("canvas");
-  if (canvas === null || typeof canvas.requestPointerLock !== "function") {
-    return () => undefined;
-  }
-  const request = (): void => {
-    if (document.pointerLockElement === null) void canvas.requestPointerLock();
-  };
-  canvas.addEventListener("click", request);
-  return () => canvas.removeEventListener("click", request);
-}

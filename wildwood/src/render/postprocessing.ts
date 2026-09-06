@@ -71,6 +71,11 @@ function applyWhenReady(
   nextFrame(attempt);
 }
 
+/** Set output color interpretation before loading; pass construction still waits for the world. */
+export function preparePost(renderer: OutputRenderer, mobile: boolean): void {
+  new WorldEnvironment(qualityPreset(resolveQualityTier({ mobile }))).prepare(renderer);
+}
+
 export function setupPost(
   renderer: OutputRenderer,
   scene: Scene,

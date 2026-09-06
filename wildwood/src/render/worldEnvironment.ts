@@ -364,6 +364,11 @@ export class WorldEnvironment {
     };
   }
 
+  /** Establish the authored tone curve before the first loading frame, without building passes. */
+  prepare(renderer: OutputRenderer): void {
+    (renderer.raw as { toneMapping?: number }).toneMapping = TONEMAP[this.#options.tonemapMode];
+  }
+
   /**
    * Installs the chain. Returns what actually ran — the same applied report the chain
    * printed — so a scene can assert on it instead of scraping the console.
@@ -379,7 +384,7 @@ export class WorldEnvironment {
   } {
     const options = this.#options;
     const raw = renderer.raw as { toneMapping?: number; toneMappingExposure?: number };
-    raw.toneMapping = TONEMAP[options.tonemapMode];
+    this.prepare(renderer);
 
     const requested = (
       ["ssgi", "ambientOcclusion", "godRays", "ssr", "sharpen", "bloom", "vignette"] as const

@@ -72,6 +72,25 @@ await build({
 if (mutation) assert.equal(mutations, mutation === "soft-sharpen" ? 3 : 1);
 const { WorldEnvironment, qualityPreset } = await import(`${temporary}/render.mjs`);
 
+for (const tier of ["low", "medium", "high"]) {
+  test(`${tier}: preparing output before loading prevents a tone-map change at world entry`, () => {
+    const raw = { toneMapping: 0, toneMappingExposure: 1 };
+    const renderer = {
+      kind: "webgpu",
+      raw,
+      createRenderChain: (definition) => ({
+        applied: { stages: definition.request.stages, dropped: [] },
+      }),
+    };
+    const world = new WorldEnvironment(qualityPreset(tier));
+    world.prepare(renderer);
+    assert.equal(raw.toneMapping, 4);
+    const loadingOutput = { ...raw };
+    world.apply(renderer, new Scene(), new PerspectiveCamera());
+    assert.deepEqual(raw, loadingOutput);
+  });
+}
+
 function nodes(rootNode) {
   const found = new Set();
   const visit = (node) => {
@@ -135,7 +154,12 @@ for (const tier of ["low", "medium", "high"]) {
     // each weighted by `pow(dot(n, n_sample), 5)`, so in fern understory — where every
     // neighbour's normal disagrees — the filter returns the noisy centre texel and calls it
     // denoised. Reach further, stop on depth instead of on normal agreement.
-    const reference = new DenoiseNode(filter.textureNode, filter.depthNode, filter.normalNode, camera);
+    const reference = new DenoiseNode(
+      filter.textureNode,
+      filter.depthNode,
+      filter.normalNode,
+      camera,
+    );
     assert.ok(
       filter.radius.value > reference.radius.value,
       `contact reach ${filter.radius.value} must exceed the ${reference.radius.value}-texel default`,

@@ -27,7 +27,7 @@ import {
   Vector3,
 } from "three";
 import { Soundscape } from "../audio/Soundscape.js";
-import { Wanderer, capturePointerOnClick } from "../entities/Wanderer.js";
+import { Wanderer } from "../entities/Wanderer.js";
 import {
   type IFoliageSets,
   type ITreeSpecies,
@@ -42,7 +42,7 @@ import { setupForestLighting } from "../render/lighting.js";
 import { createLoadingScreen } from "../render/loading.js";
 import { createMotes } from "../render/motes.js";
 import { type ILandmarkMaps, createBannerMaterial, createMaterials } from "../render/materials.js";
-import { setupPost } from "../render/postprocessing.js";
+import { preparePost, setupPost } from "../render/postprocessing.js";
 import { setupSkyHdri } from "../render/sky-hdri.js";
 import { spawnWildwoodAnimals, type IWildwoodAnimals } from "../entities/animals/spawnWildwoodAnimals.js";
 import {
@@ -285,7 +285,6 @@ function spawnOverride(): { x: number; z: number; yaw: number } | undefined {
 
 export class Valley extends Scene<GameState, IPhysicsContext> {
   #banner: Mesh | undefined;
-  #releasePointer: (() => void) | undefined;
   #ground: ITerrainMaps | undefined;
   #criticalTree: ITreeSpecies | undefined;
   #loading: ReturnType<typeof createLoadingScreen> | undefined;
@@ -386,6 +385,7 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     ctx.startup.hold("wildwood:detail-tier", this.#detailSettled, 45_000);
 
     // This synchronous game-owned view exists before the first `ctx.assets` request below.
+    preparePost(ctx.renderer, isMobile());
     this.#loading = createLoadingScreen(ctx, {
       holdProgress: () => this.#detailProgress,
       onReveal: () => {
@@ -591,9 +591,6 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     // post all in the first frame — a spawn looking at nothing reads as a broken load.
     const start = spawnOverride() ?? { x: TRAILHEAD.x, yaw: -0.6, z: TRAILHEAD.z };
     const walker = ctx.entities.add("walker", new Wanderer(ctx, start.x, start.z, start.yaw));
-    // Torn down in `exit` below. A pointer-lock listener left on a canvas the next scene reuses
-    // grabs the mouse for a scene that never asked for it.
-    this.#releasePointer = capturePointerOnClick();
 
     // The wood, its water and the walker's own feet, on two buses of their own. Construction
     // is synchronous and loading is not: the valley must appear when it is drawn, not when its
@@ -1053,8 +1050,6 @@ export class Valley extends Scene<GameState, IPhysicsContext> {
     this.#invalidateGeneration("scene-exit");
     this.#loading?.finish();
     this.#loading = undefined;
-    this.#releasePointer?.();
-    this.#releasePointer = undefined;
     this.#scene = undefined;
   }
 }
