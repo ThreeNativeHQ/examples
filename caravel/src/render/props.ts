@@ -457,9 +457,28 @@ export function createShipModel(materials: ISailingMaterials): Group {
   rigid.add(bowsprit);
 
   // Rudder and tiller, hung on the transom.
-  const rudder = piece(new BoxGeometry(0.08, 1.02, 0.3), materials.hull);
-  rudder.position.set(0, -0.02, 3.26);
-  rigid.add(rudder);
+  //
+  // The rudder is the one part of the hull that is **not** in the merged assembly, and it is out
+  // of it on purpose: `RigidAssembly` bakes every part's matrix into one mesh per material, which
+  // is the right trade for a ship whose planks never move and the wrong one for the single piece
+  // that has to answer the helm. It hangs off its own named group instead, pivoted at the head of
+  // the stern post, and `Ship` turns it.
+  //
+  // It was also 1.02 long and centred on the waterline, which put its top at y = 0.49 against a
+  // transom whose wale sits at 1.66: from astern — the only angle the chase camera ever offers —
+  // it read as a loose plank floating alongside the ship rather than as a rudder hung on it.
+  const rudderPivot = new Group();
+  rudderPivot.name = "rudder";
+  rudderPivot.position.set(0, 1.1, 3.24);
+  // Long enough to reach from the wale to a little below the keel, and no longer: at 1.85 it hung
+  // a clear third of its length under the hull and read from astern as a loose board being towed.
+  const blade = piece(new BoxGeometry(0.09, 1.5, 0.3), materials.hull);
+  blade.position.set(0, -0.66, 0.06);
+  rudderPivot.add(blade);
+  const pintle = piece(new CylinderGeometry(0.055, 0.055, 0.62, 6), materials.trim);
+  pintle.position.set(0, -0.2, -0.04);
+  rudderPivot.add(pintle);
+  ship.add(rudderPivot);
   const tiller = piece(new CylinderGeometry(0.025, 0.025, 0.7, 5), materials.spar);
   tiller.rotation.x = Math.PI / 2 - 0.25;
   tiller.position.set(0, 2.0, 2.72);
@@ -518,24 +537,34 @@ export function createShipModel(materials: ISailingMaterials): Group {
 }
 
 /** A course marker: a float with a banded topmark and a small flag. */
+/**
+ * A spar buoy: a float, a mast and a flag, standing about three and a half metres out of the sea.
+ *
+ * It used to stand 1.2 m, which is the height of a real harbour mark and completely wrong for
+ * this game. The course now runs a hundred and twenty metres around a headland, and at thirty
+ * metres — the gap between two marks — a 1.2 m buoy was four pixels of red against a moving sea
+ * and the player had nothing to steer towards. A mark you cannot see is not a mark.
+ */
 export function createBuoy(materials: ISailingMaterials): Group {
   const buoy = new Group();
   const rigid = new RigidAssembly();
-  const body = new Mesh(new CylinderGeometry(0.2, 0.26, 0.66, 10), materials.buoy);
-  body.position.y = 0.16;
+  const body = new Mesh(new CylinderGeometry(0.34, 0.44, 1.1, 12), materials.buoy);
+  body.position.y = 0.2;
   body.castShadow = true;
-  const band = new Mesh(new CylinderGeometry(0.22, 0.22, 0.13, 10), materials.trim);
-  band.position.y = 0.28;
+  const band = new Mesh(new CylinderGeometry(0.37, 0.37, 0.22, 12), materials.trim);
+  band.position.y = 0.42;
   band.castShadow = true;
-  const cap = new Mesh(new SphereGeometry(0.23, 10, 7), materials.buoy);
-  cap.position.y = 0.51;
+  const cap = new Mesh(new SphereGeometry(0.38, 12, 8), materials.buoy);
+  cap.position.y = 0.78;
   cap.scale.y = 0.6;
   cap.castShadow = true;
-  const pole = new Mesh(new CylinderGeometry(0.025, 0.025, 0.7, 5), materials.spar);
-  pole.position.y = 0.85;
-  const flag = new Mesh(belliedSail(0.4, 0.24, 0.05, 0.4), materials.trim);
+  const pole = new Mesh(new CylinderGeometry(0.05, 0.06, 2.6, 6), materials.spar);
+  pole.position.y = 2.05;
+  pole.castShadow = true;
+  const flag = new Mesh(belliedSail(1.05, 0.62, 0.12, 0.4), materials.trim);
   flag.rotation.y = Math.PI / 2;
-  flag.position.set(0, 1.04, 0.17);
+  flag.position.set(0, 2.85, 0.44);
+  flag.castShadow = true;
   for (const part of [body, band, cap, pole, flag]) rigid.add(part);
   rigid.attachTo(buoy);
   return buoy;

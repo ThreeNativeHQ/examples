@@ -26,7 +26,10 @@ export function createMaterials(): ISailingMaterials {
     // read as a single carved lump.
     deck: new MeshStandardMaterial({ color: 0xd9b98a, roughness: 0.68, metalness: 0 }),
     hull: new MeshStandardMaterial({ color: 0x8a5a3a, roughness: 0.72, metalness: 0.03 }),
-    buoy: new MeshStandardMaterial({ color: palette.accent, roughness: 0.4, metalness: 0.08 }),
+    // Not `palette.accent`. The accent is the crest-water colour, so a buoy painted with it was
+    // literally the same teal as the sea it floated in and vanished at any range worth steering
+    // by. A navigation mark is safety orange for exactly this reason.
+    buoy: new MeshStandardMaterial({ color: 0xe8681c, roughness: 0.44, metalness: 0.06 }),
     sail: new MeshStandardMaterial({
       color: 0xf2e7d2,
       metalness: 0,
