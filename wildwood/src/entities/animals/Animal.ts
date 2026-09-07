@@ -305,8 +305,8 @@ export class Animal {
         continue;
       }
       const report = clipTrackBindings(
-        this.#player.player.mixer.getRoot() as Object3D,
-        this.#player.player.clip(name),
+        this.#player.mixer.getRoot() as Object3D,
+        this.#player.clip(name),
       );
       lines.push(
         `${this.spec.id} ${semantic}=${name} bound ${report.bound}/${report.tracks}` +

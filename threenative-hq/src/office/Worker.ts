@@ -109,8 +109,8 @@ export class Worker {
    * observations, so exposing the player here is what turns "the worker is typing" into an
    * assertion a scenario can fail on rather than something only a human can see.
    */
-  get animation() {
-    return this.#player.player;
+  get animation(): SkeletalMesh3D {
+    return this.#player;
   }
 
   /**
@@ -240,7 +240,7 @@ export class Worker {
     this.#transitionAge += dt;
     // A one-shot that never reports finished holds its last frame forever, and a worker frozen
     // half-way into a chair looks exactly like a worker whose session hung. Time it out.
-    if (this.#player.player.finished || this.#transitionAge > TRANSITION_TIMEOUT_SECONDS) {
+    if (this.#player.finished || this.#transitionAge > TRANSITION_TIMEOUT_SECONDS) {
       this.#player.play(clipForState(this.#transition).clip, { fade: 0.15 });
       this.#transition = undefined;
       this.#transitionAge = 0;
