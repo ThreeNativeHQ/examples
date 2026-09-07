@@ -1,9 +1,8 @@
 import type { ICtx } from "@threenative/core";
-import { AnimationPlayer, isWeb, normaliseToMetres } from "@threenative/core";
+import { isWeb, SkeletalMesh3D } from "@threenative/core";
 import { CharacterBody3D, CollisionShape3D, type IPhysicsContext } from "@threenative/physics";
 import type { AnimationClip } from "three";
 import { Group, type Object3D, type PerspectiveCamera, Vector3 } from "three";
-import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { tintMannequin } from "./mannequin.js";
 import type { GameState } from "../state.js";
 
@@ -60,7 +59,7 @@ export class Visitor {
   readonly body: CharacterBody3D;
   readonly #rig: Group;
   #head: Object3D | undefined;
-  readonly #player: AnimationPlayer;
+  readonly #player: SkeletalMesh3D;
   #clip = "Idle_Loop";
   #yaw: number;
   #pitch = -0.05;
@@ -72,18 +71,20 @@ export class Visitor {
     this.object.position.copy(spawn);
     ctx.add(this.object);
 
-    const rig = cloneSkinned(options.source) as Group;
-    normaliseToMetres(rig, { metres: 1.8, axis: "height" });
+    const player = new SkeletalMesh3D({
+      clips: options.clips,
+      requiredClips: ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop"],
+      size: { metres: 1.8, axis: "height" },
+      source: options.source,
+      strideRoot: this.object,
+    });
+    const rig = player.root as Group;
     tintMannequin(rig, 0xc9a227);
     rig.position.y = -BODY_DROP;
     // Deliberately not added to `this.object`: an invisible lens-width body is worse than none.
     this.#rig = rig;
     this.#head = rig.getObjectByName("Head");
-    this.#player = new AnimationPlayer({
-      clips: options.clips,
-      root: rig,
-      strideRoot: this.object,
-    });
+    this.#player = player;
     this.#player.play(this.#clip);
     this.body = new CharacterBody3D({
       autostep: { maxHeight: 0.3, minWidth: 0.2 },

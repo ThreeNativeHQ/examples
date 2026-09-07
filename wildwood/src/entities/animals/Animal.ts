@@ -1,11 +1,9 @@
 import {
-  AnimationPlayer,
+  SkeletalMesh3D,
   boneLengths,
   clipTrackBindings,
-  normaliseToMetres,
   type IBoneLengthSnapshot,
 } from "@threenative/core";
-import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import {
   BufferGeometry,
   MathUtils,
@@ -42,6 +40,8 @@ const LOOPED: ReadonlySet<string> = new Set(["idle", "idleAlt", "alert", "graze"
 const STEER_INTERVAL = 1 / 12;
 /** Wander targets tried before an animal gives up and just walks somewhere dry. */
 const TARGET_TRIES = 12;
+/** Loaded sources are shared by every placement of a species; clean each one before cloning. */
+const PREPARED_SOURCES = new WeakSet<Object3D>();
 
 /** The clips behind one loaded animal GLB, exactly as the loader handed them over. */
 export interface IAnimalModel {
@@ -56,11 +56,9 @@ export type AnimalGround = (x: number, z: number) => number;
  * One animal of the wood.
  *
  * A plain class, gameplay all the way down: an AI state machine (idle, graze, wander, flee)
- * drives an engine `AnimationPlayer` playing the animal's real clips, over a `SkeletonUtils`
- * clone of the loaded GLB — a plain `.clone(true)` of a skinned model renders as a giant
- * broken copy, so the skeleton-aware clone is not optional. The clone is measured for scale
- * never; the source's bind-pose bounds before cloning are what normalise a six-unit authoring
- * scale down to a 0.7 m fox.
+ * drives a `SkeletalMesh3D` playing the animal's real clips. The shared preparation owns the
+ * skeleton-safe instance, skin-aware size measurement, and load-time clip validation; the
+ * animal keeps the state machine, placement, and fade policy here.
  *
  * The entity owns no terrain and no player: ground height and the threat's position arrive as
  * call arguments, so the same class runs on the valley's analytic heightfield or on a harness's
@@ -71,7 +69,7 @@ export class Animal {
   /** The group the AI moves and scales. The skinned clone is its only child. */
   readonly object: Group;
 
-  #player: AnimationPlayer;
+  #player: SkeletalMesh3D;
   #ground: AnimalGround;
   #rng: () => number;
   #state: AnimalState = "idle";
@@ -126,15 +124,6 @@ export class Animal {
     });
     this.#steerIn = this.#rng() * STEER_INTERVAL;
 
-    const clone = cloneSkeleton(model.scene);
-    clone.name = `${spec.id}-rig`;
-
-    // The junk vertices render: skinned triangles outside the animal's real bounds draw as
-    // colossal translucent slabs across the valley, because nothing in the skin weights pulls
-    // them onto the body. Strip them once, at load — and before measuring, so the measurement
-    // sees the animal.
-    stripJunkTriangles(clone);
-
     // A placement is two numbers typed into a scene file; the waterline is where the terrain
     // noise happened to cross zero. When those two disagree the animal starts in the lake, and an
     // animal that starts in the lake has nothing to steer away from — every whisker is wet and it
@@ -149,22 +138,25 @@ export class Animal {
 
     this.object = new Group();
     this.object.name = `animal-${spec.id}`;
-    this.object.add(clone);
     this.object.position.set(stand.x, options.ground(stand.x, stand.z), stand.z);
 
-    // Normalise to the spec's real-world length with the engine's own measurement.
-    //
-    // This used to be a hand-rolled walker that computed `matrixWorld * POSITION`. That is the
-    // right formula for a rigid mesh and the WRONG one for a skinned rig: a skinned vertex
-    // renders at `sum(w * bone.matrixWorld * boneInverse) * position`, a different space
-    // entirely once the rig carries scale — which every quantized import does, because the
-    // dequantisation lands in the inverse bind matrices. The walker read every animal as ~1.96
-    // units (the width of the quantisation cube) while the fox's skeleton spans 0.33, so the
-    // fox was normalised to a third of its size and rendered as an ant.
-    //
-    // `normaliseToMetres` measures through `Box3.setFromObject`, which asks each mesh where its
-    // vertices actually land — skin included. It was installed the whole time.
-    const scale = normaliseToMetres(this.object, { axis: "longest", metres: spec.length });
+    // Clean the loaded source before shared preparation clones and measures it. Every placement
+    // of one species shares this source, so the game-owned asset repair is deliberately once per
+    // source rather than once per instance.
+    prepareAnimalSource(model.scene);
+    const requiredClips = Object.values(spec.clips).map((name) => this.#clips.require(name));
+    this.#player = new SkeletalMesh3D({
+      clips: model.animations,
+      requiredClips,
+      size: { axis: "longest", metres: spec.length },
+      source: model.scene,
+      strideRoot: this.object,
+    });
+    const clone = this.#player.root;
+    clone.name = `${spec.id}-rig`;
+    this.object.add(clone);
+
+    const scale = this.#player.scaleFactor;
     console.info(`TN_ANIMALS_SCALE:${spec.id} scale=${scale.toFixed(4)}`);
 
     // Capture the invariance baseline under the same ancestor transform every later comparison
@@ -175,13 +167,6 @@ export class Animal {
     this.#heading = this.#rng() * Math.PI * 2;
     this.#timer = this.#rng() * 3;
 
-    // `strideRoot` is the group the AI actually moves: the mixer writes the clone, so measuring
-    // the clone would read the clip's own motion back as if the body had walked.
-    this.#player = new AnimationPlayer({
-      clips: model.animations,
-      root: clone,
-      strideRoot: this.object,
-    });
     this.#enter("idle");
   }
 
@@ -319,7 +304,10 @@ export class Animal {
         lines.push(`${this.spec.id} ${semantic}: MISSING (${this.spec.clips[semantic]})`);
         continue;
       }
-      const report = clipTrackBindings(this.#player.mixer.getRoot() as Object3D, this.#player.clip(name));
+      const report = clipTrackBindings(
+        this.#player.player.mixer.getRoot() as Object3D,
+        this.#player.player.clip(name),
+      );
       lines.push(
         `${this.spec.id} ${semantic}=${name} bound ${report.bound}/${report.tracks}` +
           (report.unbound.length > 0 ? ` UNBOUND: ${report.unbound.map((t) => t.track).join(", ")}` : ""),
@@ -425,13 +413,26 @@ class AnimalLookup {
     }
     return undefined;
   }
+
+  /** Resolve a declared semantic to an exact loaded clip name, failing before preparation. */
+  require(name: string): string {
+    const resolved = this.find(name);
+    if (resolved === undefined) throw new Error(`Animal clip is missing: ${name}.`);
+    return resolved;
+  }
+}
+
+function prepareAnimalSource(source: Object3D): void {
+  if (PREPARED_SOURCES.has(source)) return;
+  stripJunkTriangles(source);
+  PREPARED_SOURCES.add(source);
 }
 
 /**
  * Remove every triangle with fewer than two vertices inside the 1st-99th-percentile box,
  * measured **in bind space**, which is the space this filter is self-consistent in: the box
  * and the vertices tested against it are built the same way, so outliers fall out regardless of
- * where the skin ultimately renders. Sizing is `normaliseToMetres`'s job, not this one's.
+ * where the skin ultimately renders. Sizing is the shared preparation's job, not this one's.
  *
  * The Quaternius GLBs carry a handful of junk triangles far outside the body (the fox reaches
  * ±100 units on Z while the animal occupies the middle fifth). Skinned, their weights point at

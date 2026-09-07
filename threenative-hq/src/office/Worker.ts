@@ -1,7 +1,6 @@
-import { AnimationPlayer, normaliseToMetres } from "@threenative/core";
+import { SkeletalMesh3D } from "@threenative/core";
 import type { AnimationClip, Group, Object3D } from "three";
 import { BoxGeometry, Group as ThreeGroup, Mesh, MeshBasicMaterial, Vector3 } from "three";
-import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { hostTint } from "../render/palette.js";
 import { tintMannequin } from "./mannequin.js";
 import {
@@ -11,6 +10,7 @@ import {
   TYPE_TO_SIT,
   type WorkerState,
   clipForState,
+  requiredClips,
 } from "./states.js";
 
 export type WorkerHost = keyof typeof hostTint;
@@ -52,7 +52,7 @@ export class Worker {
    * explicit box is both the fix and the kinder hit target.
    */
   readonly picks: readonly Object3D[];
-  readonly #player: AnimationPlayer;
+  readonly #player: SkeletalMesh3D;
   #state: WorkerState = "arriving";
   /** A one-shot sit/stand is playing and must finish before the state's own clip resumes. */
   #transition: WorkerState | undefined;
@@ -65,10 +65,14 @@ export class Worker {
   constructor(options: IWorkerOptions) {
     const body = new ThreeGroup();
     body.name = "worker";
-    const rig = cloneSkinned(options.source);
-    // A mannequin is authored at whatever height its author liked; an office is a real room and
-    // the desks are 0.74 m. Normalising here keeps every asset swap honest about scale.
-    normaliseToMetres(rig, { metres: 1.8, axis: "height" });
+    const player = new SkeletalMesh3D({
+      clips: options.clips,
+      requiredClips: requiredClips(),
+      size: { metres: 1.8, axis: "height" },
+      source: options.source,
+      strideRoot: body,
+    });
+    const rig = player.root;
     tintMannequin(rig, hostTint[options.host]);
     body.add(rig);
 
@@ -85,7 +89,7 @@ export class Worker {
 
     this.object = body;
     this.picks = [proxy];
-    this.#player = new AnimationPlayer({ clips: options.clips, root: rig, strideRoot: body });
+    this.#player = player;
     this.#player.play(clipForState(this.#state).clip);
   }
 
@@ -105,8 +109,8 @@ export class Worker {
    * observations, so exposing the player here is what turns "the worker is typing" into an
    * assertion a scenario can fail on rather than something only a human can see.
    */
-  get animation(): AnimationPlayer {
-    return this.#player;
+  get animation() {
+    return this.#player.player;
   }
 
   /**
@@ -236,7 +240,7 @@ export class Worker {
     this.#transitionAge += dt;
     // A one-shot that never reports finished holds its last frame forever, and a worker frozen
     // half-way into a chair looks exactly like a worker whose session hung. Time it out.
-    if (this.#player.finished || this.#transitionAge > TRANSITION_TIMEOUT_SECONDS) {
+    if (this.#player.player.finished || this.#transitionAge > TRANSITION_TIMEOUT_SECONDS) {
       this.#player.play(clipForState(this.#transition).clip, { fade: 0.15 });
       this.#transition = undefined;
       this.#transitionAge = 0;
