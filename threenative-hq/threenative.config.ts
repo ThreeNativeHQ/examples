@@ -33,10 +33,13 @@ const config: IThreeNativeConfig = {
     resolutionScale: "auto",
   },
   assets: {
-    // Mobile has no WebAssembly, so neither Basis-decoded textures nor Meshopt-decoded geometry
-    // can ship there — and these demo assets are tiny enough that compression only ever grew
-    // them. Ship exactly what is committed.
-    models: "none",
+    // Native WebGPU needs separate attribute buffers. The compiler applies that layout to native
+    // targets while these switches keep the small demo assets otherwise byte-stable.
+    models: {
+      passes: { dedup: false, meshopt: false, prune: false, quantize: false, reorder: false },
+      textures: "none",
+      virtual: "none",
+    },
     textures: "none",
   },
   // One UI on every target: src/ui/ renders through the platform's own browser-class renderer,

@@ -3,6 +3,7 @@ import {
   boneLengths,
   clipTrackBindings,
   type IBoneLengthSnapshot,
+  type IStrideReport,
 } from "@threenative/core";
 import {
   BufferGeometry,
@@ -156,7 +157,7 @@ export class Animal {
     clone.name = `${spec.id}-rig`;
     this.object.add(clone);
 
-    const scale = this.#player.scaleFactor;
+    const scale = this.#player.root.scale.x;
     console.info(`TN_ANIMALS_SCALE:${spec.id} scale=${scale.toFixed(4)}`);
 
     // Capture the invariance baseline under the same ancestor transform every later comparison
@@ -177,6 +178,21 @@ export class Animal {
   /** Current clip name, for debug surfaces and playtests. */
   get clip(): string | undefined {
     return this.#player.current;
+  }
+
+  /** Runtime animation observations for the native and browser playtest bridge. */
+  get animation(): {
+    readonly advancedFrames: number;
+    readonly current: string | undefined;
+    readonly finished: boolean;
+    readonly stride: IStrideReport;
+  } {
+    return {
+      advancedFrames: this.#player.advancedFrames,
+      current: this.#player.current,
+      finished: this.#player.finished,
+      stride: this.#player.stride,
+    };
   }
 
   /** Metres from the home centre, for the debug HUD. */
