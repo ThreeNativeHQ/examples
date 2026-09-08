@@ -22,9 +22,8 @@ function compassPoint(heading: number): string {
  */
 export function Hud() {
   const state = useUiState<GameState>();
-  // Nothing to draw until the game publishes its first snapshot, a few milliseconds in. Rendering
-  // zeroes instead would put a wrong bearing on screen and then correct it.
-  if (state === undefined) return null;
+  // State arrives during preload. The reveal snapshot marks when the loading curtain lifts.
+  if (state === undefined || state.revealTreeCount < 0) return null;
 
   const found = state.discovered;
   const total = state.landmarkTotal;
@@ -85,9 +84,7 @@ export function Hud() {
 
       {/* Centre: the inspect prompt, and the reticle it hangs under. */}
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3">
-        <i
-          className={`h-1 w-1 rounded-full ${state.canInspect ? "bg-warn" : "bg-text/40"}`}
-        />
+        <i className={`h-1 w-1 rounded-full ${state.canInspect ? "bg-warn" : "bg-text/40"}`} />
         {state.canInspect ? (
           <output className="border border-line bg-panel/80 px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-warn">
             press e — {state.inspectTarget}
@@ -109,9 +106,7 @@ export function Hud() {
 
       {state.objectiveComplete ? (
         <div className="pointer-events-none absolute inset-x-0 top-1/4 flex flex-col items-center gap-2">
-          <output className="text-4xl uppercase tracking-[0.2em] text-warn">
-            all five found
-          </output>
+          <output className="text-4xl uppercase tracking-[0.2em] text-warn">all five found</output>
           <div className="text-[11px] uppercase tracking-[0.14em] text-dim">
             {state.odometer.toFixed(0)} metres walked · press r to start again
           </div>

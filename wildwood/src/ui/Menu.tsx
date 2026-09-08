@@ -17,7 +17,7 @@ import type { GameState } from "../state.js";
 export function Menu() {
   const send = useUiIntent();
   const state = useUiState<GameState>();
-  if (state === undefined) return null;
+  if (state === undefined || state.revealTreeCount < 0) return null;
   const paused = state.paused;
 
   return (
