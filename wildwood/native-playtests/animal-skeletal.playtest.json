@@ -1,0 +1,56 @@
+{
+  "artifacts": { "screenshots": false },
+  "assert": {
+    "animation": [
+      {
+        "advancedFrames": 5,
+        "clip": "ANIM_Fox_Run",
+        "entered": true,
+        "entity": "animal-a",
+        "strideSynced": true
+      }
+    ],
+    "movement": {
+      "entity": "animal-a",
+      "minDistance": 0.5
+    },
+    "resources": [
+      {
+        "allowTrivial": "The proof scene is ready before the first fixed tick so later assertions can inspect both prepared animals.",
+        "equals": true,
+        "id": "state",
+        "path": "ready"
+      },
+      {
+        "allowTrivial": "The two skeleton handles are independent at construction and should remain independent while both animals animate.",
+        "equals": true,
+        "id": "state",
+        "path": "skeletonsIndependent"
+      },
+      {
+        "changed": true,
+        "id": "state",
+        "lte": 0.1,
+        "path": "animalA.maxDeviation"
+      },
+      {
+        "allowTrivial": "The idle Fox is the rigid-pose control; the running Fox has the separate measured deviation bound above.",
+        "equals": true,
+        "id": "state",
+        "path": "animalB.rigid"
+      },
+      {
+        "allowTrivial": "The native loop advances the idle control during startup warmup; changed:true still requires the sampled frame count to increase during the scenario.",
+        "changed": true,
+        "gte": 5,
+        "id": "state",
+        "path": "animalB.advancedFrames"
+      }
+    ]
+  },
+  "name": "wildwood-native-animal-skeletal",
+  "schemaVersion": 1,
+  "steps": [{ "waitTicks": 120 }],
+  "target": "desktop",
+  "warmupFrames": 2
+}
