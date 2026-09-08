@@ -1,4 +1,4 @@
-import { AnimationPlayer, SkeletalMesh3D } from "@threenative/core";
+import { SkeletalMesh3D } from "@threenative/core";
 import type { AnimationClip, Group, Object3D } from "three";
 import { BoxGeometry, Group as ThreeGroup, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import { hostTint } from "../render/palette.js";
@@ -10,6 +10,7 @@ import {
   TYPE_TO_SIT,
   type WorkerState,
   clipForState,
+  requiredClips,
 } from "./states.js";
 
 export type WorkerHost = keyof typeof hostTint;
@@ -51,7 +52,7 @@ export class Worker {
    * explicit box is both the fix and the kinder hit target.
    */
   readonly picks: readonly Object3D[];
-  readonly #player: AnimationPlayer;
+  readonly #player: SkeletalMesh3D;
   #state: WorkerState = "arriving";
   /** A one-shot sit/stand is playing and must finish before the state's own clip resumes. */
   #transition: WorkerState | undefined;
@@ -64,15 +65,16 @@ export class Worker {
   constructor(options: IWorkerOptions) {
     const body = new ThreeGroup();
     body.name = "worker";
-    const mesh = new SkeletalMesh3D({
-      source: options.source,
+    const player = new SkeletalMesh3D({
       clips: options.clips,
-      requiredClips: [clipForState(this.#state).clip],
+      requiredClips: requiredClips(),
       size: { metres: 1.8, axis: "height" },
+      source: options.source,
       strideRoot: body,
     });
-    tintMannequin(mesh.root, hostTint[options.host]);
-    body.add(mesh.root);
+    const rig = player.root;
+    tintMannequin(rig, hostTint[options.host]);
+    body.add(rig);
 
     const proxy = new Mesh(
       new BoxGeometry(0.75, 1.8, 0.75),
@@ -87,7 +89,7 @@ export class Worker {
 
     this.object = body;
     this.picks = [proxy];
-    this.#player = mesh.player;
+    this.#player = player;
     this.#player.play(clipForState(this.#state).clip);
   }
 
@@ -107,7 +109,7 @@ export class Worker {
    * observations, so exposing the player here is what turns "the worker is typing" into an
    * assertion a scenario can fail on rather than something only a human can see.
    */
-  get animation(): AnimationPlayer {
+  get animation(): SkeletalMesh3D {
     return this.#player;
   }
 
