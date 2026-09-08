@@ -974,11 +974,11 @@ packages:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
   '@threenative/assets@file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz':
-    resolution: {integrity: sha512-wh8Aw+mZQLae80iB/wb+cz+zNTKujCyS2a/Fkh/iw4erqlSH7bgoNKuPuHiwu2JtAzha2PDll8KHc1FgjG1NrQ==, tarball: file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz}
+    resolution: {integrity: sha512-280gkqfcIBk9FkRrXi0jfAXOS/dZdikwbsB+mtQzstsTyMxHGEFfGvGSpNlAMWNRRIcjcrNRhazF83oSV34zcA==, tarball: file:../.packages/threenative-assets-0.3.0-prd349-5453e0035088.tgz}
     version: 0.3.0
 
   '@threenative/core@file:../.packages/wildwood-wrap-20260905/threenative-core-0.3.0.tgz':
-    resolution: {integrity: sha512-CKoCJRUjuJCqCyjJNpD6rOgMUKZBvy9s5LsYEF1/tiJpS/Mfd/I/QXoO0keyTHVlD7Mdkc6Vu7odcwQ43ckTDw==, tarball: file:../.packages/wildwood-wrap-20260905/threenative-core-0.3.0.tgz}
+    resolution: {integrity: sha512-tV5qn1/S/tzCVBGBKB8VCIpuNfrwJe6F0C2mohhpI++eqaSxb9aRDi1Cx95TfqgpOzPdvtBvYFkIFG2gHelH3g==, tarball: file:../.packages/wildwood-wrap-20260905/threenative-core-0.3.0.tgz}
     version: 0.3.0
     peerDependencies:
       '@threenative/playtest': '>=0.3.0 <0.4.0'
@@ -993,14 +993,14 @@ packages:
         optional: true
 
   '@threenative/physics@file:../.packages/threenative-physics-0.3.0-7e419324f826.tgz':
-    resolution: {integrity: sha512-DJ7IBPX2oj6QzTYdmMSmDwQd3bxXwIYSeiAHuPr6YhCVWZSeWEaEFH+dN8Cmoa5x4Xvf3eq70l+hCzmW3G+0Pw==, tarball: file:../.packages/threenative-physics-0.3.0-7e419324f826.tgz}
+    resolution: {integrity: sha512-x0xOGpiq6uwZK69oeWOEpWtHYC96e/rhRh7TA9psHlJZFXaxVFsdtzWkJV4YAm3bRVqm8TUTFw/QokJrvtqrhg==, tarball: file:../.packages/threenative-physics-0.3.0-7e419324f826.tgz}
     version: 0.3.0
     peerDependencies:
       '@threenative/core': '>=0.3.0 <0.4.0'
       three: '>=0.185.0 <0.186.0'
 
   '@threenative/playtest@file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz':
-    resolution: {integrity: sha512-c3WNaSdw2BmsGS4F6neHMtwLIpHB0GHHkiOhA4goUkHg8vEEDUuiEm+C506zWHd/kcXnHl+pVDIgeSrcOzaZDw==, tarball: file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz}
+    resolution: {integrity: sha512-3gKpXySrpKj3VJ7VLwQVmiKzL9fR+ZeE7V279hH5SpznElzE2uQyW4EBLToIyU7/loVTTiwF1d7lpPYy9qOjjg==, tarball: file:../.packages/threenative-playtest-0.3.0-prd349-11797e7d3539.tgz}
     version: 0.3.0
     hasBin: true
     peerDependencies:
@@ -1013,11 +1013,11 @@ packages:
         optional: true
 
   '@threenative/runtime-native@file:../.packages/threenative-runtime-native-0.3.0-input-window-20260905-191431.tgz':
-    resolution: {integrity: sha512-zmHbnMf99YrdMruxv1oVamJsA3H6JrHVjt+1ND+ueFKJ4F6v1OiTUx5OOFrW2D6gnD8njEP1OygkffhHhOGPfg==, tarball: file:../.packages/threenative-runtime-native-0.3.0-input-window-20260905-191431.tgz}
+    resolution: {integrity: sha512-+2a9PrKJjGvmpBU3IgAFz2Ye1Z6bXtEZ3GdfTxnSacF1qMcfztfB5g1yDckJgzawbrCtGHFzZ8oI7BE3cq4V7g==, tarball: file:../.packages/threenative-runtime-native-0.3.0-input-window-20260905-191431.tgz}
     version: 0.3.0
 
   '@threenative/ui@file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz':
-    resolution: {integrity: sha512-ulSvoDIo2xkyeW3ETmiPYpGG7Um+PjhLFCR7uwoJtuy1Og4P76yyju5sb3T69DjkOb/E0KqCUawJIARte0zbjw==, tarball: file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz}
+    resolution: {integrity: sha512-lyxlQitT7h/XJlmlyUnZcZ3sDJJvlNWZfIXKxkLZScNki4qHH12zVBgAp5iMTknxUbVb4OqBnLIyDhSLnPPVHw==, tarball: file:../.packages/threenative-ui-0.3.0-4e5c3651f3d5.tgz}
     version: 0.3.0
     peerDependencies:
       '@threenative/core': '>=0.3.0 <0.4.0'
@@ -1278,7 +1278,7 @@ packages:
     engines: {node: '>= 0.10'}
 
   create-threenative@file:../.packages/create-threenative-0.2.3-input-window-20260905-191431.tgz:
-    resolution: {integrity: sha512-XEJnXA1m3WYPcsbKcwj8Pjf0HlXTTFWltvHnTL4ubu8lFRf31LWhwb1rs9ac+zSOgxoF8qo07Yet5BPIuiwmTw==, tarball: file:../.packages/create-threenative-0.2.3-input-window-20260905-191431.tgz}
+    resolution: {integrity: sha512-4WkKE8SZNXpa5IMzARS810w2uUrP6X9SN2MBWO2Dd7lkXJT3VSAlYEnoy/6wUxa1DAH8pOirbqpqJ99gxf76jA==, tarball: file:../.packages/create-threenative-0.2.3-input-window-20260905-191431.tgz}
     version: 0.2.3
     hasBin: true
     peerDependencies:
@@ -2200,7 +2200,7 @@ packages:
     hasBin: true
 
   threenative-engine-mcp@file:../.packages/threenative-engine-mcp-0.2.0-fa2d3f69fd14.tgz:
-    resolution: {integrity: sha512-DhcMoNdPrKQaHyE0rbs6GKbwDOGLj1LvoUQqJOa/qw30gcH0hHbPc5aSqkr7UIDbV7r2o17V0We7htKfnGWpGw==, tarball: file:../.packages/threenative-engine-mcp-0.2.0-fa2d3f69fd14.tgz}
+    resolution: {integrity: sha512-JDtP+BVWoYE82FUx0Di1SZG9bVu/4rD5VoP+VoD9uoHgQn4kFIzPI3wXLTWloOfuffU07y1cnlenvvD3lQQe7A==, tarball: file:../.packages/threenative-engine-mcp-0.2.0-fa2d3f69fd14.tgz}
     version: 0.2.0
     hasBin: true
 

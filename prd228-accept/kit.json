@@ -1,7 +1,0 @@
-{
-  "name": "platformer",
-  "title": "Platformer",
-  "blurb": "A side-scrolling platformer with jumping, patrols, pickups, and camera follow.",
-  "genre": "platformer",
-  "kit": true
-}

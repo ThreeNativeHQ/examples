@@ -1,7 +1,6 @@
-import { AnimationPlayer, normaliseToMetres } from "@threenative/core";
+import { AnimationPlayer, SkeletalMesh3D } from "@threenative/core";
 import type { AnimationClip, Group, Object3D } from "three";
 import { BoxGeometry, Group as ThreeGroup, Mesh, MeshBasicMaterial, Vector3 } from "three";
-import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { hostTint } from "../render/palette.js";
 import { tintMannequin } from "./mannequin.js";
 import {
@@ -65,12 +64,15 @@ export class Worker {
   constructor(options: IWorkerOptions) {
     const body = new ThreeGroup();
     body.name = "worker";
-    const rig = cloneSkinned(options.source);
-    // A mannequin is authored at whatever height its author liked; an office is a real room and
-    // the desks are 0.74 m. Normalising here keeps every asset swap honest about scale.
-    normaliseToMetres(rig, { metres: 1.8, axis: "height" });
-    tintMannequin(rig, hostTint[options.host]);
-    body.add(rig);
+    const mesh = new SkeletalMesh3D({
+      source: options.source,
+      clips: options.clips,
+      requiredClips: [clipForState(this.#state).clip],
+      size: { metres: 1.8, axis: "height" },
+      strideRoot: body,
+    });
+    tintMannequin(mesh.root, hostTint[options.host]);
+    body.add(mesh.root);
 
     const proxy = new Mesh(
       new BoxGeometry(0.75, 1.8, 0.75),
@@ -85,7 +87,7 @@ export class Worker {
 
     this.object = body;
     this.picks = [proxy];
-    this.#player = new AnimationPlayer({ clips: options.clips, root: rig, strideRoot: body });
+    this.#player = mesh.player;
     this.#player.play(clipForState(this.#state).clip);
   }
 

@@ -1,11 +1,10 @@
 import {
   AnimationPlayer,
+  SkeletalMesh3D,
   boneLengths,
   clipTrackBindings,
-  normaliseToMetres,
   type IBoneLengthSnapshot,
 } from "@threenative/core";
-import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import {
   BufferGeometry,
   MathUtils,
@@ -126,15 +125,6 @@ export class Animal {
     });
     this.#steerIn = this.#rng() * STEER_INTERVAL;
 
-    const clone = cloneSkeleton(model.scene);
-    clone.name = `${spec.id}-rig`;
-
-    // The junk vertices render: skinned triangles outside the animal's real bounds draw as
-    // colossal translucent slabs across the valley, because nothing in the skin weights pulls
-    // them onto the body. Strip them once, at load — and before measuring, so the measurement
-    // sees the animal.
-    stripJunkTriangles(clone);
-
     // A placement is two numbers typed into a scene file; the waterline is where the terrain
     // noise happened to cross zero. When those two disagree the animal starts in the lake, and an
     // animal that starts in the lake has nothing to steer away from — every whisker is wet and it
@@ -149,39 +139,29 @@ export class Animal {
 
     this.object = new Group();
     this.object.name = `animal-${spec.id}`;
-    this.object.add(clone);
     this.object.position.set(stand.x, options.ground(stand.x, stand.z), stand.z);
 
-    // Normalise to the spec's real-world length with the engine's own measurement.
-    //
-    // This used to be a hand-rolled walker that computed `matrixWorld * POSITION`. That is the
-    // right formula for a rigid mesh and the WRONG one for a skinned rig: a skinned vertex
-    // renders at `sum(w * bone.matrixWorld * boneInverse) * position`, a different space
-    // entirely once the rig carries scale — which every quantized import does, because the
-    // dequantisation lands in the inverse bind matrices. The walker read every animal as ~1.96
-    // units (the width of the quantisation cube) while the fox's skeleton spans 0.33, so the
-    // fox was normalised to a third of its size and rendered as an ant.
-    //
-    // `normaliseToMetres` measures through `Box3.setFromObject`, which asks each mesh where its
-    // vertices actually land — skin included. It was installed the whole time.
-    const scale = normaliseToMetres(this.object, { axis: "longest", metres: spec.length });
-    console.info(`TN_ANIMALS_SCALE:${spec.id} scale=${scale.toFixed(4)}`);
+    const skeletalMesh = new SkeletalMesh3D({
+      source: model.scene,
+      clips: model.animations,
+      requiredClips: spec.clips,
+      size: { axis: "longest", metres: spec.length },
+      strideRoot: this.object,
+    });
+    skeletalMesh.root.name = `${spec.id}-rig`;
+    stripJunkTriangles(skeletalMesh.root);
+    this.object.add(skeletalMesh.root);
+
+    console.info(`TN_ANIMALS_SCALE:${spec.id} scale=${skeletalMesh.scaleFactor.toFixed(4)}`);
 
     // Capture the invariance baseline under the same ancestor transform every later comparison
     // reads, and before any clip can write a pose onto the rig.
-    this.bindBoneLengths = boneLengths(clone);
+    this.bindBoneLengths = boneLengths(skeletalMesh.root);
 
     this.#home = this.object.position.clone().setY(0);
     this.#heading = this.#rng() * Math.PI * 2;
     this.#timer = this.#rng() * 3;
-
-    // `strideRoot` is the group the AI actually moves: the mixer writes the clone, so measuring
-    // the clone would read the clip's own motion back as if the body had walked.
-    this.#player = new AnimationPlayer({
-      clips: model.animations,
-      root: clone,
-      strideRoot: this.object,
-    });
+    this.#player = skeletalMesh.player;
     this.#enter("idle");
   }
 
