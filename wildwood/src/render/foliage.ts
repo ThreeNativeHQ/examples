@@ -40,7 +40,6 @@ import {
   BufferAttribute,
   BufferGeometry,
   Box3,
-  DoubleSide,
   Euler,
   Group,
   InstancedMesh,
@@ -50,9 +49,8 @@ import {
   Vector3,
   type Texture,
 } from "three";
-import { MeshStandardNodeMaterial } from "three/webgpu";
-import { float, instanceIndex, positionGeometry, positionLocal, sin, texture, time, uv, vec3 } from "three/tsl";
 import { hash2, slopeAt, surfaceAt, WATER_LEVEL } from "./terrain.js";
+import { createSharedFoliageMaterial } from "./sharedMaterials.js";
 
 /**
  * One draw-call-able slice of an imported mesh: the pack splits most species into an opaque part
@@ -301,71 +299,20 @@ export function packSectionMaterial(
   section: ITreeSection,
   wind: { readonly strength: number; readonly stiffness: number; readonly speed: number },
   gain: readonly [number, number, number],
-): MeshStandardNodeMaterial {
-  const material = new MeshStandardNodeMaterial({ metalness: 0, roughness: 0.92 });
-  const sample = texture(section.map, uv());
-  material.colorNode = sample.rgb.mul(vec3(gain[0], gain[1], gain[2]));
-  if (section.normal !== undefined) material.normalMap = section.normal;
-  section.map.anisotropy = 8;
-  if (section.cutout) {
-    material.side = DoubleSide;
-    material.shadowSide = DoubleSide;
-    // The GLB carries a real alpha channel, unlike the JPEG atlases this used to be fed — so the
-    // cut runs on alpha itself, at the threshold the import recorded from the pack.
-    material.alphaTest = section.alphaCutoff;
-    material.opacityNode = sample.a;
-  }
-  if (wind.strength > 0) applyWind(material, wind.strength, wind.stiffness, wind.speed);
-  return material;
-}
-
-/**
- * A material that bends with the wind.
- *
- * `strength` is the sway in metres at one metre above the instance origin; `stiffness` is the
- * exponent on height, so a high number keeps the lower trunk rigid and puts all the motion in the
- * crown. Each instance gets its own phase from its index — without that the whole wood leans as
- * one object, which is the single loudest tell of a fake wind.
- */
-function applyWind(
-  material: MeshStandardNodeMaterial,
-  strength: number,
-  stiffness: number,
-  speed: number,
-): void {
-  // A cheap decorrelating hash: sin of a large irrational multiple of the index.
-  const phase = float(instanceIndex).mul(12.9898).sin().mul(43_758.545).fract().mul(6.2831);
-  // Two waves, and BOTH are slow. Real foliage in a light breeze moves at well under a tenth of a
-  // hertz — the sway is something you notice only if you stop and watch a branch. The harmonic is
-  // quiet and further from an integer ratio, so the two never line up into a visible pulse.
-  const gust = sin(time.mul(speed).add(phase))
-    .mul(0.82)
-    .add(sin(time.mul(speed * 1.73).add(phase.mul(1.7))).mul(0.18));
-  // The lift reads **`positionGeometry`**, not `positionLocal`. This is the one trap in the file:
-  // for an InstancedMesh the pipeline multiplies the instance matrix into `positionLocal` BEFORE
-  // the material's `positionNode` runs, so `positionLocal.y` up here is the plant's height *in the
-  // world* — and lifting on it shoves the base around as much as the crown, which reads as the
-  // whole plant hovering. `positionGeometry` is the raw attribute: zero at the root, so the base
-  // is pinned and only the crown bends. The displacement itself is still applied to
-  // `positionLocal`, in instance space, which for yaw-only placements is world-aligned anyway.
-  // `float(0)` and `float(stiffness)`, not `0` and `stiffness`. A bare JS number reaches the
-  // generated GLSL as an int literal, and `max(float, int)` has no overload — the shader fails to
-  // compile and the whole material silently falls back, which on screen looks like the wind simply
-  // not working rather than like an error.
-  const lift = positionGeometry.y.max(float(0)).pow(float(stiffness));
-  const bend = gust.mul(lift).mul(float(strength));
-  material.positionNode = vec3(
-    positionLocal.x.add(bend),
-    // Bending an arc without shortening the radius stretches the plant; taking a little height back
-    // in proportion to the square of the bend keeps a swaying trunk the length it started.
-    positionLocal.y.sub(bend.mul(bend).mul(float(0.35))),
-    positionLocal.z.add(bend.mul(float(0.55))),
-  );
+): ReturnType<typeof createSharedFoliageMaterial> {
+  return createSharedFoliageMaterial({
+    alphaCutoff: section.alphaCutoff,
+    cutout: section.cutout,
+    gain,
+    map: section.map,
+    normal: section.normal,
+    wind,
+  });
 }
 
 function instance(
   geometry: BufferGeometry,
-  material: MeshStandardNodeMaterial,
+  material: ReturnType<typeof createSharedFoliageMaterial>,
   points: readonly IScatterPoint[],
   place: (point: IScatterPoint, index: number, matrix: Matrix4) => void,
   name: string,
