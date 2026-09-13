@@ -1,35 +1,27 @@
 /** Two instanced billboard batches: turbulent smoke/mist and emissive fire/sparks. */
+import {
+  attribute,
+  cameraProjectionMatrix,
+  cameraViewMatrix,
+  cos,
+  float,
+  length,
+  max,
+  mix,
+  positionLocal,
+  pow,
+  sin,
+  smoothstep,
+  step,
+  uv,
+  vec2,
+  vec4,
+} from "three/tsl";
 import * as T from "three";
+import { MeshBasicNodeMaterial } from "three/webgpu";
 import { ParticlePool, type IParticle } from "../sim/particle-state.js";
 import { aircraftWorld, DAMAGE_ZONES, ZONE_POSITIONS } from "../sim/damage.js";
 import { clamp, distance3, lerp, rng } from "../sim/math.js";
-
-const vertex = `
-attribute vec3 aPosition; attribute vec3 aColor;
-attribute vec4 aShape; attribute vec3 aExtra;
-varying vec2 vUv; varying vec3 vColor; varying float vAlpha; varying float vSeed; varying float vKind; varying float vDepth;
-void main(){vUv=uv;vColor=aColor;vAlpha=aShape.z;vSeed=aExtra.x;vKind=aExtra.y;
- vec2 xy=position.xy*vec2(aShape.x,aShape.y);float c=cos(aShape.w),s=sin(aShape.w);xy=mat2(c,-s,s,c)*xy;
- vec4 mv=modelViewMatrix*vec4(aPosition,1.0);mv.xy+=xy;vDepth=-mv.z;gl_Position=projectionMatrix*mv;
-}`;
-
-const fragment = `
-precision highp float;
-varying vec2 vUv;varying vec3 vColor;varying float vAlpha;varying float vSeed;varying float vKind;varying float vDepth;
-uniform float uGlow;
-float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
-float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
-void main(){vec2 q=vUv*2.0-1.0;float n=noise(vUv*6.0+vSeed)*.60+noise(vUv*13.0-vSeed)*.27+noise(vUv*27.0+vSeed)*.13;
- float radial=length(q),mask=(1.0-smoothstep(.20,1.0,radial+(n-.5)*.34));float opacity=mask*(.30+n*.90)*vAlpha;
- vec3 col=vColor*(.70+.22*(1.0-vUv.y)+n*.25);
- if(vKind>0.5&&vKind<1.5){opacity=pow(mask,1.55)*vAlpha;col=vColor*(.65+1.6*pow(max(0.0,1.0-radial),2.0));}
- if(vKind>1.5&&vKind<2.5){opacity=pow(max(0.0,1.0-radial),.8)*vAlpha;col=vColor;}
- if(vKind>2.5){opacity=(1.0-smoothstep(.65,.92,max(abs(q.x),abs(q.y))))*vAlpha;col=vColor;}
- float fog=1.0-exp(-vDepth*vDepth*.000028*.000028);col=mix(col,vec3(.30,.40,.45),fog*(1.0-uGlow));opacity*=1.0-fog*.86;
- if(opacity<.008)discard;gl_FragColor=vec4(col,opacity);
- #include <tonemapping_fragment>
- #include <colorspace_fragment>
-}`;
 
 function batch(capacity: number, glow: boolean): any {
   const g = new T.InstancedBufferGeometry();
@@ -45,15 +37,45 @@ function batch(capacity: number, glow: boolean): any {
     g.setAttribute(key, new T.InstancedBufferAttribute(arrays[key], n).setUsage(T.DynamicDrawUsage));
   }
   g.instanceCount = 0;
-  const material = new T.ShaderMaterial({
-    uniforms: { uGlow: { value: glow ? 1 : 0 } },
-    vertexShader: vertex,
-    fragmentShader: fragment,
-    transparent: true,
-    depthWrite: false,
+
+  const aPosition: any = attribute("aPosition", "vec3");
+  const aColor: any = attribute("aColor", "vec3");
+  const aShape: any = attribute("aShape", "vec4");
+  const aExtra: any = attribute("aExtra", "vec3");
+
+  const material = new MeshBasicNodeMaterial({
     depthTest: true,
+    depthWrite: false,
+    transparent: true,
     blending: glow ? T.AdditiveBlending : T.NormalBlending,
   });
+
+  // The quad is billboarded by rotating it in view space, exactly as the original GLSL did.
+  const size: any = aShape.xy;
+  const local: any = vec2(positionLocal.x.mul(size.x) as any, positionLocal.y.mul(size.y) as any);
+  const c: any = cos(aShape.w);
+  const s: any = sin(aShape.w);
+  const rotated: any = vec2(local.x.mul(c).sub(local.y.mul(s)), local.x.mul(s).add(local.y.mul(c)));
+  const mv: any = cameraViewMatrix.mul(vec4(aPosition, 1));
+  material.vertexNode = cameraProjectionMatrix.mul(vec4(mv.xy.add(rotated), mv.z, mv.w));
+
+  // Per-kind masks: soft smoke, tight glow, hard spark, boxed streak.
+  const q = uv().mul(2).sub(1);
+  const radial = length(q);
+  const soft = smoothstep(float(1.0), float(0.15), radial);
+  const glowAlpha = pow(soft, float(1.55));
+  const spark = pow(max(float(1).sub(radial), float(0)), float(0.8));
+  const streak = smoothstep(float(0.92), float(0.6), max(q.x.abs(), q.y.abs()));
+  const kind = aExtra.y;
+  const alpha = mix(
+    mix(soft, glowAlpha, step(float(0.5), kind)),
+    mix(spark, streak, step(float(2.5), kind)),
+    step(float(1.5), kind),
+  );
+  material.opacityNode = alpha.mul(aShape.z);
+  const shade = uv().y.oneMinus().mul(0.3).add(0.7);
+  material.colorNode = aColor.mul(mix(shade, float(1.0), step(float(0.5), kind)));
+
   const mesh = new T.Mesh(g, material);
   mesh.frustumCulled = false;
   mesh.renderOrder = glow ? 6 : 5;

@@ -19,10 +19,12 @@ reuse it here — do not grow a second flight model in this repo.
 
 ## Platform
 
-This game is **web-only by choice**: its ocean, sky and combat-particle shaders are GLSL, and the
-project selects core's WebGL2 backend (`renderer.preferWebGPU: false`). It does not claim desktop,
-Android or iOS. The port to those targets is a TSL rewrite of `src/render/ocean.ts`,
-`src/render/world.ts`'s sky shader and `src/render/particles.ts`.
+The game runs on core's default **WebGPU** backend. Its ocean, sky and combat-particle effects are
+TSL node materials (`src/render/ocean.ts`, `src/render/particles.ts`, and the sky in
+`src/render/world.ts`), so the same source is the web and native rendering path. **Shadow maps are
+off**: three r185's WebGPU shadow pass raised a `bindingBuffer ... used in submit while destroyed`
+validation error for this scene, so lighting is the hemisphere and directional lights only. Do not
+claim desktop, Android or iOS until a `--target` playtest has run.
 
 ## Verify
 

@@ -5,13 +5,17 @@ import { clamp, distance2, forward, rng } from "../sim/math.js";
 import { ellipsoid, makeAircraft, makeCrew, makeIsland, makeShip, mat, cloudTexture, smokeTexture, wakeTexture } from "./assets.js";
 import { animateDauntless, makeDauntless } from "./dauntless.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals } from "./model-damage.js";
-import { makeOceanSurface, type IOceanSurface } from "./ocean.js";
+import { createOcean, createWaterMesh } from "./ocean.js";
 import { CombatParticles } from "./particles.js";
+import type { SpectralOcean } from "@threenative/core";
+import { color, dot, float, mix, normalize, positionLocal, pow, smoothstep, vec3 } from "three/tsl";
+import { MeshBasicNodeMaterial } from "three/webgpu";
 
 export interface IWorldHost {
   scene: T.Scene;
   camera: T.PerspectiveCamera;
   renderer: { raw: unknown };
+  add: (object: T.Object3D) => unknown;
 }
 
 export class WorldView {
@@ -35,8 +39,8 @@ export class WorldView {
   smokeTex: T.Texture;
   cloudTex: T.Texture;
   wakeTex: T.Texture;
-  sea!: IOceanSurface;
-  waterMat!: T.ShaderMaterial;
+  ocean!: SpectralOcean;
+  sea!: T.Mesh;
   sky!: T.Mesh;
   clouds: T.Sprite[] = [];
   crew!: T.Group;
@@ -62,8 +66,8 @@ export class WorldView {
     this.renderer.outputColorSpace = T.SRGBColorSpace;
     this.renderer.toneMapping = T.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.95;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = T.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.type = T.BasicShadowMap;
     this.scene.fog = new T.FogExp2(0x8fa9b4, 0.000028);
     const hemi = new T.HemisphereLight(0xc6dbe4, 0x34545f, 0.7);
     this.scene.add(hemi);
@@ -71,7 +75,7 @@ export class WorldView {
     this.sun.position.set(-200, 140, -240);
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
-    this.sun.castShadow = true;
+    this.sun.castShadow = false;
     this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 1, far: 850 });
     this.sun.shadow.bias = -0.000035;
@@ -89,31 +93,39 @@ export class WorldView {
   }
 
   makeSky(): void {
-    this.sky = new T.Mesh(
-      new T.SphereGeometry(70000, 24, 16),
-      new T.ShaderMaterial({
-        side: T.BackSide,
-        depthWrite: false,
-        uniforms: { sun: { value: this.sunDir } },
-        vertexShader: "varying vec3 vDir;void main(){vDir=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
-        fragmentShader:
-          "varying vec3 vDir;uniform vec3 sun;void main(){vec3 d=normalize(vDir);float h=max(0.0,d.y);vec3 horizon=vec3(.34,.49,.57);vec3 zenith=vec3(.055,.20,.36);vec3 col=mix(horizon,zenith,pow(h,.46));float glow=pow(max(0.0,dot(d,sun)),9.0);col+=vec3(.50,.28,.11)*glow*.75;float disk=pow(max(0.0,dot(d,sun)),2100.0);col+=vec3(4.0,2.9,1.8)*disk;col=mix(col,vec3(.30,.43,.46),(1.0-smoothstep(-.12,0.0,d.y)));gl_FragColor=vec4(col,1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}",
-      }),
-    );
+    // A TSL node material, so the same sky runs on the WebGPU backend as on web. The sphere is
+    // centred on the camera each frame; `positionLocal` is therefore the view direction.
+    const material = new MeshBasicNodeMaterial({ side: T.BackSide, depthWrite: false, fog: false });
+    const direction = normalize(positionLocal);
+    const height = direction.y.max(0);
+    // Linear values, copied from the standalone build's sky shader. `color(hex)` would convert
+    // them from sRGB first and darken the whole sky.
+    const horizon = vec3(0.34, 0.49, 0.57);
+    const zenith = vec3(0.055, 0.2, 0.36);
+    const sun = normalize(vec3(-0.62, 0.23, -0.75));
+    const facing = dot(direction, sun).max(0);
+    const gradient = mix(horizon, zenith, pow(height, float(0.46)));
+    const glow = vec3(0.5, 0.28, 0.11).mul(pow(facing, float(9)).mul(0.75));
+    const disk = vec3(4, 2.9, 1.8).mul(pow(facing, float(2100)));
+    const sky = gradient.add(glow).add(disk);
+    const belowMix = float(1).sub(smoothstep(float(-0.12), float(0), direction.y));
+    material.colorNode = mix(sky, vec3(0.3, 0.43, 0.46), belowMix);
+    this.sky = new T.Mesh(new T.SphereGeometry(70000, 32, 16), material);
     this.sky.frustumCulled = false;
     this.sky.renderOrder = -10;
     this.scene.add(this.sky);
   }
 
   makeOcean(): void {
-    this.sea = makeOceanSurface(this.sunDir);
-    this.waterMat = this.sea.material;
-    this.scene.add(this.sea.mesh);
+    // `ctx.add` hands the compute-driven SpectralOcean to the renderer so its cascades run.
+    this.ocean = this.host.add(createOcean()) as SpectralOcean;
+    this.sea = createWaterMesh(this.ocean);
+    this.scene.add(this.sea);
   }
 
   makeClouds(): void {
     const random = rng(1842);
-    const material = new T.SpriteMaterial({ map: this.cloudTex, color: 0xf8efe0, transparent: true, opacity: 0.55, depthWrite: false, fog: true });
+    const material = new T.SpriteMaterial({ map: this.cloudTex, color: 0xf8efe0, transparent: true, opacity: 0.3, depthWrite: false, fog: true });
     for (let i = 0; i < 65; i += 1) {
       const s = new T.Sprite(material);
       s.position.set((random() - 0.5) * 46000, 1300 + random() * 1600, (random() - 0.5) * 45000);
@@ -188,7 +200,7 @@ export class WorldView {
   setQuality(q: string): void {
     this.quality = q;
     this.renderer.setPixelRatio(q === "low" ? Math.min(devicePixelRatio, 1) : Math.min(devicePixelRatio, q === "high" ? 2 : 1.5));
-    this.renderer.shadowMap.enabled = q !== "low";
+    this.renderer.shadowMap.enabled = false;
     for (let i = 0; i < this.clouds.length; i += 1) this.clouds[i].visible = q !== "low" || i % 2 === 0;
   }
 
@@ -219,7 +231,8 @@ export class WorldView {
     this.setAirframe();
     this.wallTime = wallTime;
     const time = briefing ? wallTime : b.time;
-    this.waterMat.uniforms.uTime.value = time;
+    this.ocean.advance(time);
+    this.sea.position.set(this.camera.position.x, 0, this.camera.position.z);
     for (const c of this.clouds) c.position.x = c.userData.origin + time * 3;
     for (const s of b.ships) {
       const m = this.meshes.get(s.id);
@@ -284,7 +297,6 @@ export class WorldView {
     this.updateProjectiles();
     this.updateCamera(dt, briefing, time);
     this.particles.update(b, this.camera.position);
-    this.sea.update(this.camera.position, time, b.ships);
     this.sky.position.copy(this.camera.position);
     this.sun.position.set(p.x - 260, p.y + 220, p.z - 320);
     this.sun.target.position.set(p.x, p.y, p.z);

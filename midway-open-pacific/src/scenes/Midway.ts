@@ -35,7 +35,7 @@ export class Midway extends Scene<GameState, undefined> {
   enter(ctx: ICtx<GameState, undefined>): void {
     this.ctx = ctx;
     this.battle = new Battle();
-    this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer }, this.battle);
+    this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer, add: (object) => ctx.add(object) }, this.battle);
     this.hud = new Hud(this.battle, this.world);
     this.audio = new Soundscape();
     this.attachInput();

@@ -23,9 +23,11 @@ pnpm build
 pnpm typecheck
 ```
 
-`pnpm dev` runs the Vite dev server. The game selects core's WebGL2 backend
-(`renderer.preferWebGPU: false`) because its ocean, sky and particle shaders are authored as GLSL;
-that makes this an honest **web** lane. Rewriting those shaders as TSL is what native would take.
+`pnpm dev` runs the Vite dev server. The game runs on the default **WebGPU** backend: its ocean,
+sky and combat particles are TSL node materials (`src/render/ocean.ts`, `world.ts`, `particles.ts`),
+not GLSL. Shadow maps are deliberately off — three r185's WebGPU shadow pass raised a
+`bindingBuffer ... used in submit while destroyed` validation error for this scene; the scene is
+lit by the hemisphere and directional lights instead.
 
 ## Layout
 

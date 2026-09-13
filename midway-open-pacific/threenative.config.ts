@@ -24,10 +24,8 @@ const config: IThreeNativeConfig = {
   bootSplash: { backgroundColor: "#102a37" },
   nativeEntry: "src/game.ts",
   renderer: {
-    // The ported ocean, sky and combat-particle shaders are authored as GLSL, so this game
-    // selects the WebGL2 backend core provides instead of the WebGPU/TSL default. Rewriting
-    // them as TSL is the work web-only status asks for; until then this is an honest web lane.
-    preferWebGPU: false,
+    // WebGPU by default; the ocean, sky and combat particles are TSL node materials so the same
+    // source runs on the WebGPU backend on web and native.
     resolutionScale: "auto",
     alphaAntialiasing: true,
   },
