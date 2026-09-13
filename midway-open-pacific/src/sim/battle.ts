@@ -29,6 +29,19 @@ import {
   type IStamp,
   type Outcome,
 } from "./sortie.js";
+import {
+  approach,
+  APPROACH_SPEED,
+  CRUISE_SPEED,
+  finalReady,
+  GLIDE,
+  GROOVE_FLARE,
+  recoveryDeck,
+  reserveEstimate,
+  routeLength,
+  type IApproach,
+  type IReserve,
+} from "./recovery.js";
 import { SPEAKERS, SPEECH, radioShipName, type ISpeechRequest } from "./radio-script.js";
 import {
   AircraftFlight,
@@ -417,16 +430,122 @@ export class Battle {
     return this.ships.filter((s) => s.team === "jp" && s.kind === "carrier" && !s.sunk && s.deck >= LAUNCH_DECK);
   }
 
+  /** The deck this aircraft is actually being recovered by: the assigned one while it is usable. */
+  get recoveryCarrier(): Any {
+    const p = this.player;
+    const chosen = this.ships.find((s: Any) => s.id === p.home);
+    if (chosen && !chosen.sunk && chosen.team === "us" && chosen.kind === "carrier" && chosen.deck > RECOVERY_DECK)
+      return chosen;
+    return recoveryDeck(this.ships, p, RECOVERY_DECK);
+  }
+
+  approach(): IApproach {
+    return approach(this.player, this.recoveryCarrier);
+  }
+
+  /** H: pick a live friendly deck and set the return course through the astern setup point. */
+  goHome(): Any {
+    const s = recoveryDeck(this.ships, this.player, RECOVERY_DECK);
+    if (!s) {
+      this.event("notice", { text: "NO OPERATIONAL FRIENDLY FLIGHT DECK" });
+      return null;
+    }
+    Object.assign(this.player, { home: s.id, nav: "home", autopilot: true, divertNotice: false });
+    return s;
+  }
+
+  /**
+   * Observed normalized burn, so a fuel leak shows up in the reserve estimate without the engine
+   * physics or the tank being touched.
+   */
+  observeFuel(): void {
+    const p = this.player;
+    const prev = (p.fuelSample ??= { time: this.time, fuel: p.fuel });
+    const span = this.time - prev.time;
+    if (span < 2) return;
+    const rate = (prev.fuel - p.fuel) / span;
+    if (Number.isFinite(rate) && rate > 0) p.burnRate = p.burnRate ? p.burnRate + (rate - p.burnRate) * 0.4 : rate;
+    p.fuelSample = { time: this.time, fuel: p.fuel };
+  }
+
+  returnReserve(): IReserve {
+    const p = this.player;
+    return reserveEstimate(p.fuel, p.burnRate ?? 0, routeLength(p, this.recoveryCarrier), Math.hypot(p.vx || 0, p.vz || 0));
+  }
+
+  /**
+   * Re-evaluate the deck during transit and final. A deck lost underneath the aircraft diverts it
+   * to another; with none left the assist is cancelled and the pilot is told once, truthfully.
+   */
+  updateRecovery(): void {
+    const p = this.player;
+    if (p.mode !== "flight" || p.nav !== "home") return;
+    const current = this.ships.find((s: Any) => s.id === p.home);
+    if (current && !current.sunk && current.team === "us" && current.deck > RECOVERY_DECK) {
+      p.divertNotice = false;
+      return;
+    }
+    const next = recoveryDeck(this.ships, p, RECOVERY_DECK);
+    if (next) {
+      p.home = next.id;
+      if (p.landingAssist && p.landingAssist !== next.id) {
+        p.landingAssist = null;
+        this.say("LSO", "Wave off! That deck is gone. Take it around to the new carrier.", true);
+      }
+      if (!p.divertNotice) {
+        p.divertNotice = true;
+        this.say("LSO", `Deck unavailable. Divert to ${next.name}.`, true);
+      }
+    } else if (!p.divertNotice) {
+      p.divertNotice = true;
+      p.landingAssist = null;
+      p.autopilot = false;
+      this.say("BATTLE CONTROL", "No friendly flight deck remains. You have control.", true);
+    }
+  }
+
   get navigationPoint(): Any {
     if (this.player.nav === "home") {
-      const h = this.home;
-      if (h && !h.sunk) return { ...h, y: 130 };
+      const a = this.approach();
+      if (a.carrier) return { ...a.point, y: a.altitude };
     }
     if (this.target) {
       const c = this.contacts.get(this.target);
       if (c) return { ...contactEstimate(c, this.time), y: 1800 };
     }
     return this.search;
+  }
+
+  /**
+   * What the wing is actually doing, not what it was told. An accepted order is never reported as
+   * an executed attack: the counts come from live aircraft, their tactic and their real target.
+   */
+  wingStatus(): string {
+    const wing = this.aircraft.filter((a: Any) => a.wing === true && a.team === "us" && a.hp > 0);
+    if (!wing.length) return "No wing aircraft airborne.";
+    const designated = this.sortie.target;
+    const counts = new Map<string, number>();
+    for (const a of wing) {
+      const attacking = a.tactic === "dive" || a.tactic === "torpedo-run";
+      const state = ["launch", "muster", "formation"].includes(a.tactic)
+        ? "forming"
+        : a.tactic === "rtb" || a.tactic === "landing" || a.tactic === "ditching"
+          ? "returning"
+          : attacking && designated && a.target === designated
+            ? "attacking the designated carrier"
+            : attacking
+              ? "attacking other shipping"
+              : a.tactic === "intercept" || a.tactic === "evade" || a.tactic === "extend"
+                ? "engaged"
+                : a.tactic === "escort"
+                  ? "escorting"
+                  : "en route";
+      counts.set(state, (counts.get(state) ?? 0) + 1);
+    }
+    const summary = [...counts].map(([state, n]) => `${n} ${state}`).join(" · ");
+    if (this.command === "strike" && !designated)
+      return `${summary}. No valid strike target designated.`;
+    return `${summary}.`;
   }
 
   setCommand(cmd: string): void {
@@ -817,7 +936,14 @@ export class Battle {
     }
     if (weapon !== "strafe") this.recordImpact(s, point, { owner, team, weapon, nearMiss, damage: amount });
     const mark: IStamp | null = opts.stamp ?? null;
-    if (amount > 0 && hitQualifies(this.sortie, mark, s, weapon, nearMiss)) {
+    // The debrief reports what this crew actually did, so every direct hit counts — including the
+    // ones after the assignment is already satisfied.
+    if (amount > 0 && !nearMiss && hostile && (weapon === "bomb" || weapon === "torpedo")) {
+      if (byPlayer) this.sortie.personalHits += 1;
+      else if (byWing && mark?.ordered) this.sortie.wingHits += 1;
+    }
+    const wasPending = this.sortie.objective === "pending";
+    if (amount > 0 && wasPending && hitQualifies(this.sortie, mark, s, weapon, nearMiss)) {
       recordObjectiveHit(this.sortie, s, weapon, mark!.ordered, this.contacts.get(s.id), this.time);
       this.say(
         "SCOUT TWO",
@@ -939,6 +1065,8 @@ export class Battle {
     this.effects = this.effects.filter((f) => f.age < f.life);
     this.updateShips(dt);
     this.updatePlayer(dt, input);
+    this.observeFuel();
+    this.updateRecovery();
     stepWheels(this.player, dt);
     this.updateAircraft(dt);
     this.updateWeapons(dt);
@@ -1150,36 +1278,70 @@ export class Battle {
     }
     if (p.autopilot) {
       let nav = this.navigationPoint;
-      let desiredAlt = p.nav === "home" ? 350 : 1800;
+      let desiredAlt = p.nav === "home" ? (nav.y ?? 350) : 1800;
       if (p.landingAssist) {
         const s = this.ships.find((s: Any) => s.id === p.landingAssist);
         if (!s || s.sunk || s.deck < RECOVERY_DECK) {
+          // Cancel the final, but keep flying the aircraft: `updateRecovery` picks the next
+          // available deck and the guidance takes it round again rather than dropping control.
           p.landingAssist = null;
-          p.autopilot = false;
+          p.nav = "home";
           this.say("LSO", "Wave off! Deck unavailable.", true);
           this.voice("R22");
         } else {
           const loc = localPoint(p, s);
           const f = forward(s.heading);
-          nav = { x: s.x + f.x * 75, z: s.z + f.z * 75 };
-          desiredAlt = DECK_HEIGHT + 2 + Math.max(0, -loc.forward - 65) * 0.07;
+          // Chase a point on the centreline a fixed distance ahead of the aircraft. A fixed
+          // waypoint is either passed — and the assist banks hard away at deck height — or so far
+          // off that a thirty-metre lineup error produces no correction at all.
+          const lead = loc.forward + 400;
+          nav = { x: s.x + f.x * lead, z: s.z + f.z * lead };
+          // The glide path aims at the deck and keeps descending through it, because an assist that
+          // levels at deck height never touches: it floats the length of the ship and off the bow.
+          const touch = DECK_HEIGHT + gearClearance(p) - 3;
+          desiredAlt = touch + Math.max(0, -loc.forward - GROOVE_FLARE) * GLIDE;
           p.gear = true;
           p.flaps = 1;
           p.brakes = false;
           p.throttle = clamp(0.59 + (50 - (p.ias || p.speed)) * 0.027, 0.12, 0.98);
           if (loc.forward > 100 && p.y > 26) {
+            // A bolter goes round again on the same guidance. Handing back an unattended aircraft
+            // at full power and no autopilot is how a missed wire became a ditching.
             p.landingAssist = null;
-            p.autopilot = false;
+            p.nav = "home";
             p.throttle = 1;
             this.say("LSO", "Bolter! Full power; climb out and circle for another approach.", true);
           }
         }
       }
+      if (p.autopilot && p.nav === "home" && !p.landingAssist) {
+        // Bridge the gap the player used to have to guess: configure the aircraft for the groove so
+        // it arrives inside the same envelope `assistRecovery` will accept, and no further. Power is
+        // managed across the whole return, because approach power left set after the groove is lost
+        // mushes the aircraft into the sea on the way back round.
+        const state = this.approach();
+        if (state.phase === "groove" || state.phase === "final") {
+          p.gear = true;
+          p.autoGearPending = false;
+          p.flaps = 1;
+          p.brakes = false;
+          p.throttle = clamp(0.55 + (APPROACH_SPEED - (p.ias || p.speed)) * 0.025, 0.15, 0.95);
+        } else {
+          p.brakes = false;
+          p.throttle = clamp(0.78 + (CRUISE_SPEED - (p.ias || p.speed)) * 0.012, 0.4, 1);
+        }
+        // Whatever the phase, never hold a stalled aircraft at approach power.
+        if ((p.stall ?? 0) > 0.25 || (p.ias ?? p.speed) < 42) p.throttle = 1;
+      }
       if (p.autopilot) {
         const desiredBank = clamp(angleDelta(bearing(p, nav), p.heading) * 0.9, -0.62, 0.62);
         const currentBank = -p.roll;
         controls.turn = clamp((desiredBank - currentBank) * 2.5 - p.rollRate * 0.7, -1, 1);
-        let desiredVY = clamp((desiredAlt - p.y) * 0.09, p.landingAssist ? -4 : -12, p.landingAssist ? 3 : 8);
+        // The return leg tracks a glide path rather than a cruise altitude, so it needs to close a
+        // height error instead of drifting towards one: a lazy gain arrives high and bolters.
+        const climbGain = p.nav === "home" ? 0.25 : 0.09;
+        // The arrestment gate rejects a descent steeper than 5 m/s, so the assist stays inside it.
+        let desiredVY = clamp((desiredAlt - p.y) * climbGain, p.landingAssist ? -4.5 : -12, p.landingAssist ? 3 : 8);
         if ((p.ias || p.speed) < 47) desiredVY = Math.min(desiredVY, 0);
         const baseLoad = clamp(1 / Math.max(0.45, Math.cos(currentBank)), 1, 2.2);
         controls.pitch = clamp((baseLoad - 1) / 4.5 + (desiredVY - p.vy) * 0.02, -0.45, 0.6);
@@ -1302,11 +1464,8 @@ export class Battle {
 
   assistRecovery(): boolean {
     const p = this.player;
-    const s = this.ships
-      .filter((s: Any) => s.team === "us" && s.kind === "carrier" && !s.sunk && s.deck > RECOVERY_DECK)
-      .sort((a: Any, b: Any) => distance2(a, p) - distance2(b, p))[0];
-    const local = s ? localPoint(p, s) : null;
-    if (s && local && p.mode === "flight" && p.gear && distance2(p, s) < 700 && p.y < 180 && p.y > 24 && p.speed < 72 && local.forward < 0 && Math.abs(local.right) < 100 && Math.abs(angleDelta(p.heading, s.heading)) < 0.4) {
+    const s = this.recoveryCarrier;
+    if (s && finalReady(p, s)) {
       p.home = s.id;
       p.landingAssist = s.id;
       p.autopilot = true;
@@ -1316,7 +1475,8 @@ export class Battle {
       this.voice("R21", { identity: s.id });
       return true;
     }
-    this.event("notice", { text: "FINAL ASSIST: GEAR DOWN · ASTERN WITHIN 700 M · BELOW 600 FT · UNDER 140 KT · ALIGNED" });
+    const cues = this.approach().cues;
+    this.event("notice", { text: `FINAL ASSIST: ${cues.length ? cues.join(" · ") : "UNAVAILABLE"}` });
     return false;
   }
 

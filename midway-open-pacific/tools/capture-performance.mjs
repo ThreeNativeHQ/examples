@@ -88,12 +88,55 @@ try {
       window.midway.world.renderer.setPixelRatio(Number(r));
     }, process.env.MIDWAY_RATIO);
 
-  // A representative workload: turning, firing, tracers and impacts, not a static camera.
+  // MIDWAY_BURN is the damage workload: every carrier is hit at four real deck points and the
+  // player is flown up the wake of the nearest one, so persistent fires and scorch marks are
+  // actually on screen while the frame is timed. Benchmarking a clean sky proves nothing about
+  // damage rendering. The hits are forced through damageShip, and this is always reported.
+  const burning = !!process.env.MIDWAY_BURN;
+  if (burning) {
+    await page.evaluate(() => {
+      const b = window.midway.battle;
+      const carriers = b.ships.filter((s) => s.kind === "carrier" && !s.sunk);
+      for (const ship of carriers) {
+        const f = { x: Math.sin(ship.heading), z: -Math.cos(ship.heading) };
+        for (const along of [-80, -25, 30, 75])
+          b.damageShip(
+            ship,
+            55,
+            { x: ship.x + f.x * along, y: 20, z: ship.z + f.z * along },
+            "bomb",
+            ship.team === "us" ? "jp" : "us",
+            { owner: "benchmark" },
+          );
+      }
+      const target = carriers.find((s) => s.team === "jp") ?? carriers[0];
+      const f = { x: Math.sin(target.heading), z: -Math.cos(target.heading) };
+      Object.assign(b.player, {
+        x: target.x - f.x * 950,
+        y: 320,
+        z: target.z - f.z * 950,
+        heading: target.heading,
+        pitch: 0.02,
+        roll: 0,
+        vx: f.x * 95,
+        vy: 0,
+        vz: f.z * 95,
+        speed: 95,
+        autopilot: false,
+      });
+      if (b.player.flight?.setAttitude) b.player.flight.setAttitude(target.heading, 0.02, 0);
+    });
+  }
+
+  // A representative workload: turning, firing, tracers and impacts, not a static camera. The
+  // damage workload holds its course instead, so the burning ship stays in frame for both runs.
   await page.keyboard.down("Space");
-  await page.keyboard.down("ArrowLeft");
+  if (!burning) await page.keyboard.down("ArrowLeft");
   await seconds(WARMUP);
-  await page.keyboard.up("ArrowLeft");
-  await page.keyboard.down("ArrowRight");
+  if (!burning) {
+    await page.keyboard.up("ArrowLeft");
+    await page.keyboard.down("ArrowRight");
+  }
 
   const result = await page.evaluate(async (sample) => {
     const s = window.midway;
@@ -151,9 +194,22 @@ try {
     };
   }, SAMPLE);
   await page.keyboard.up("Space");
-  await page.keyboard.up("ArrowRight");
+  if (!burning) await page.keyboard.up("ArrowRight");
+  const damage = await page.evaluate(() => {
+    const b = window.midway.battle;
+    let impacts = 0;
+    let scars = 0;
+    let fires = 0;
+    for (const ship of b.ships) {
+      impacts += (ship.impacts ?? []).length;
+      if (ship.fire > 0.06) fires += 1;
+      scars += (window.midway.world.meshes.get(ship.id)?.userData?.shipScars ?? []).filter((m) => m.visible).length;
+    }
+    return { impacts, scars, burningShips: fires };
+  });
 
   const fps = (ms) => +(1000 / ms).toFixed(1);
+  console.log(`workload: ${burning ? "burning carriers, course held" : "clean sky, turning"} ${JSON.stringify(damage)}`);
   console.log(
     "adapter " + JSON.stringify(adapter) + "\n" +
       `resolution ${WIDTH}x${HEIGHT} at pixel ratio ${result.scene.pixelRatio}, quality ${result.scene.quality}\n` +

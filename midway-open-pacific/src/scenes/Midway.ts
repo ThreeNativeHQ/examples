@@ -5,6 +5,7 @@ import type { ICtx } from "@threenative/core";
 import type * as T from "three";
 import { Battle } from "../sim/battle.js";
 import { LOADOUTS } from "../sim/armament.js";
+import { ASSIGNMENTS, type Assignment } from "../sim/sortie.js";
 import { clamp, distance2 } from "../sim/math.js";
 import { loadImportedShips } from "../render/imported-ships.js";
 import { loadEnvironment } from "../render/environment.js";
@@ -34,6 +35,8 @@ export class Midway extends Scene<GameState, undefined> {
   started = false;
   keys = new Set<string>();
   mouse = { fire: false, looking: false, lx: 0, ly: 0 };
+  /** Briefing selection, kept on the scene so it survives a restart into a fresh Battle. */
+  assignment: Assignment = "strike";
   private audioBuffers: ReadonlyMap<string, AudioBuffer> = new Map();
   private camPos = new Vector3();
   private nextAlbatross = 0;
@@ -140,6 +143,11 @@ export class Midway extends Scene<GameState, undefined> {
     for (const id of ["bomb", "torpedo"]) {
       const el = $("loadout-" + id);
       if (el) this.onElement(el, "click", () => this.selectLoadout(id));
+    }
+    const assignment = document.getElementById("assignment-select") as HTMLSelectElement | null;
+    if (assignment) {
+      assignment.value = this.assignment;
+      this.onElement(assignment, "change", (e) => this.selectAssignment((e.target as HTMLSelectElement).value));
     }
     const deckLoadout = $("deck-loadout") as HTMLSelectElement;
     this.onElement(deckLoadout, "change", (e) => this.selectLoadout((e.target as HTMLSelectElement).value));
@@ -321,7 +329,7 @@ export class Midway extends Scene<GameState, undefined> {
       this.nextAlbatross = this.wall + 9 + Math.random() * 12;
       this.audio.event({ cue: "albatross", at: { x: island.x + 150, y: 20, z: island.z + 150 } });
     }
-    if ((b.status === "lost" || b.status === "won") && !this.ended) {
+    if ((b.status === "lost" || b.status === "won" || b.status === "debrief") && !this.ended) {
       this.ended = true;
       this.clearInput();
       this.hud.debrief();
@@ -368,6 +376,7 @@ export class Midway extends Scene<GameState, undefined> {
     if (fresh) {
       const choice = this.battle.player.loadout;
       this.battle = new Battle();
+      this.battle.selectAssignment(this.assignment);
       this.battle.selectLoadout(choice);
       this.world.reset(this.battle);
       this.hud.b = this.battle;
@@ -389,12 +398,14 @@ export class Midway extends Scene<GameState, undefined> {
   private restartToBriefing(): void {
     this.hideOverlays();
     this.battle = new Battle();
+    this.battle.selectAssignment(this.assignment);
     this.world.reset(this.battle);
     this.hud.b = this.battle;
     this.hud.lastRadio = "";
     this.hud.lastContacts = "";
     this.hud.hitFlash = 0;
     this.ended = false;
+    this.updateAssignmentUI();
     $("flight-ui").classList.add("hidden");
     $("briefing").classList.remove("hidden");
     $("debrief").classList.add("hidden");
@@ -420,6 +431,20 @@ export class Midway extends Scene<GameState, undefined> {
     $("deck-loadout-note").textContent = can ? "Changes aircraft and payload." : "Stop on the flight deck to change loadout.";
   }
 
+  /** The briefing choice outlives a restart, so replay launches the assignment the player picked. */
+  private selectAssignment(id: string): void {
+    if (!this.battle.selectAssignment(id)) return;
+    this.assignment = id as Assignment;
+    this.updateAssignmentUI();
+  }
+
+  private updateAssignmentUI(): void {
+    const select = document.getElementById("assignment-select") as HTMLSelectElement | null;
+    if (select) select.value = this.assignment;
+    const note = document.getElementById("assignment-note");
+    if (note) note.textContent = ASSIGNMENTS[this.assignment].brief;
+  }
+
   private selectLoadout(id: string): void {
     if (!this.battle.selectLoadout(id)) {
       this.hud.toast("LOADOUT LOCKED — STOP ON DECK FIRST");
@@ -436,16 +461,11 @@ export class Midway extends Scene<GameState, undefined> {
   }
 
   private goHome(): void {
-    const home = this.battle.ships
-      .filter((s: any) => s.team === "us" && s.kind === "carrier" && !s.sunk && s.deck > 0.25)
-      .sort((a: any, b: any) => distance2(a, this.battle.player) - distance2(b, this.battle.player))[0];
+    const home = this.battle.goHome();
     if (!home) {
       this.hud.toast("NO OPERATIONAL FRIENDLY FLIGHT DECK");
       return;
     }
-    this.battle.player.home = home.id;
-    this.battle.player.nav = "home";
-    this.battle.player.autopilot = true;
     this.hud.toast(`RETURN COURSE — ${home.name.toUpperCase()}`);
   }
 

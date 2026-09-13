@@ -2,9 +2,15 @@
 import { damageSummary } from "./sim/damage.js";
 import { torpedoEnvelope, torpedoIntercept } from "./sim/armament.js";
 import { attitudeAxes } from "./sim/flight.js";
+import { ASSIGNMENTS, objectiveText, outcomeText, type Assignment } from "./sim/sortie.js";
 import { angleDelta, bearing, bombImpact, clamp, contactEstimate, distance2, distance3, forward } from "./sim/math.js";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
+/** Optional element: the approach, wing and reserve lines are additive, never required markup. */
+const $$ = (id: string) => document.getElementById(id);
+const knots = (metresPerSecond: number) => Math.round(metresPerSecond * 1.94384);
+const feetPerMinute = (metresPerSecond: number) => Math.round(metresPerSecond * 196.85);
+const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 const heading = (h: number) => String(Math.round((h * 180) / Math.PI) % 360).padStart(3, "0");
 const escapeHTML = (s: string) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 
@@ -125,6 +131,28 @@ export class Hud {
       title = "Ships on the horizon";
       desc = "Confirm the carrier group. Press R to transmit fresh sightings.";
     }
+    const sortie = b.sortie;
+    if (sortie.assignment !== "operation" && p.mode !== "deck") {
+      const done = sortie.objective !== "pending";
+      if (p.mode === "service" || b.status === "debrief") {
+        phase = "05 / DEBRIEF";
+        title = "Back aboard the carrier";
+        desc = objectiveText(sortie);
+      } else {
+        phase = done ? "04 / RECOVER" : sortie.assignment === "recon" ? "02 / SCOUT" : "03 / STRIKE";
+        title = done
+          ? "Bring your crew home"
+          : sortie.assignment === "recon"
+            ? "Find and report a carrier"
+            : "Put a weapon on the designated carrier";
+        const action = done
+          ? "H sets the return course. L flies the final."
+          : sortie.assignment === "recon"
+            ? "R transmits fresh sightings."
+            : "TAB designates · 2 orders the wing · B releases.";
+        desc = `${objectiveText(sortie)} ${action}`;
+      }
+    }
     $("mission-phase").textContent = phase;
     $("mission-title").textContent = title;
     $("mission-desc").textContent = desc;
@@ -163,6 +191,23 @@ export class Hud {
     else if (p.brakes && p.pitch < -0.25) tip = "<strong>DIVE BRAKES EXTENDED</strong><br>Amber circle predicts impact. B releases a bomb.";
     else if (p.nav === "home") tip = "<strong>RECOVERY: APPROACH FROM BEHIND THE CARRIER</strong><br>Gear down · below 600 ft · under 140 kt · L within 700 m";
     $("center-tip").innerHTML = tip;
+    const cueLine = $$("approach-cues");
+    if (cueLine) {
+      if (p.mode === "flight" && p.nav === "home") {
+        const a = b.approach();
+        const r = b.returnReserve();
+        cueLine.textContent = a.carrier
+          ? `${a.phase.toUpperCase()} · ${knots(a.speed)} KT AIRSPEED · ${feetPerMinute(a.descent)} FT/MIN · ${a.cues.join(" · ")} · ${r.available ? `RESERVE ${clock(Math.max(0, r.spare))} (EST)` : "RESERVE UNKNOWN"}`
+          : "NO AVAILABLE DECK";
+      } else cueLine.textContent = "";
+    }
+    const orders = $$("command-status");
+    if (orders) {
+      const designated = b.ships.find((s: any) => s.id === sortie.target);
+      orders.textContent = `ASSIGNMENT ${ASSIGNMENTS[sortie.assignment as Assignment].name} · TARGET ${designated ? designated.name.toUpperCase() : "NONE DESIGNATED"} · ${b.wingStatus()}`;
+    }
+    const wingLine = $$("wing-status");
+    if (wingLine) wingLine.textContent = p.mode === "flight" ? `WING / ${b.command.toUpperCase()} — ${b.wingStatus()}` : "";
     $("service").classList.toggle("hidden", p.mode !== "service");
     if (p.mode === "service") {
       $("service-carrier").textContent = `${(b.home?.name || "FRIENDLY CARRIER").toUpperCase()} / DECK OPERATIONS`;
@@ -543,13 +588,40 @@ export class Hud {
 
   debrief(): void {
     const b = this.b;
+    const result = b.sortie.result;
     $("debrief").classList.remove("hidden");
+    const relabel = (id: string, text: string) => {
+      const label = $(id)?.nextElementSibling;
+      if (label) label.textContent = text;
+    };
+    if (result) {
+      $("debrief-phase").textContent = `${ASSIGNMENTS[result.assignment as Assignment].name} / AFTER ACTION REPORT`;
+      $("debrief-title").textContent = outcomeText(result);
+      const arrival =
+        result.outcome === "lost"
+          ? "The crew did not come back."
+          : `Aboard ${result.carrier} with ${Math.round(result.fuel)}% fuel and ${Math.round(result.hp)}% airframe${result.damage.length ? ` · ${result.damage.join(" · ")}` : ""}.`;
+      $("debrief-reason").textContent = `${clock(result.elapsed)} elapsed. ${arrival}`;
+      $("stat-score").textContent = clock(result.elapsed);
+      relabel("stat-score", "ELAPSED");
+      $("stat-kills").textContent = String(result.personalHits);
+      relabel("stat-kills", "YOUR HITS");
+      $("stat-hits").textContent = String(result.wingHits);
+      relabel("stat-hits", "WING HITS");
+      $("stat-sorties").textContent = String(result.reportedCarriers);
+      relabel("stat-sorties", "CARRIERS REPORTED");
+      return;
+    }
     $("debrief-phase").textContent = b.status === "won" ? "OPERATION COMPLETE" : "AFTER ACTION REPORT";
     $("debrief-title").textContent = b.status === "won" ? "You brought them home." : "The Pacific takes its toll.";
     $("debrief-reason").textContent = b.reason;
     $("stat-score").textContent = String(b.score);
+    relabel("stat-score", "SCORE");
     $("stat-kills").textContent = String(b.stats.kills);
+    relabel("stat-kills", "AIRCRAFT");
     $("stat-hits").textContent = String(b.stats.shipHits);
+    relabel("stat-hits", "SHIP HITS");
     $("stat-sorties").textContent = String(b.stats.sorties);
+    relabel("stat-sorties", "SORTIES");
   }
 }

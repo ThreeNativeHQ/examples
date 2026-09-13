@@ -8,7 +8,7 @@ import { createDouglas, animateDouglas, disposeDouglas } from "./imported-aircra
 import { createMidwayAtoll, createSamidare, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
 import { animateDauntless, makeDauntless } from "./dauntless.js";
-import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals } from "./model-damage.js";
+import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScars } from "./model-damage.js";
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
 import { createOcean } from "./ocean.js";
 import { CombatParticles } from "./particles.js";
@@ -282,6 +282,7 @@ export class WorldView {
       m.rotation.set(Math.sin(time * 0.3 + s.baseZ) * 0.004, -s.heading, s.sunk ? s.sink * 0.35 : Math.sin(time * 0.22 + s.baseX) * 0.004 + (1 - s.hp / s.maxHp) * 0.035);
       m.visible = s.sink < 0.95;
       const d = distance2(s, p);
+      updateShipScars(m, s, d, this.quality);
       for (const [i, a] of ((m.userData.parked ?? []) as T.Object3D[]).entries()) {
         a.visible = d < 1900 && i < Math.ceil(s.reserve / 2);
         const child = a as T.Group;

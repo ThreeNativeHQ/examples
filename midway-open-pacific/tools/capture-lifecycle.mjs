@@ -75,6 +75,7 @@ try {
   };
 
   // ---- 1. Torpedo loadout, from the deck -------------------------------------------------
+  await page.selectOption("#assignment-select", "operation");
   await page.click("#loadout-torpedo");
   await page.click("#start-deck");
   await seconds(0.5);
@@ -118,6 +119,7 @@ try {
   await page.keyboard.press("Escape");
   await page.click("#restart-pause");
   await page.waitForSelector("#briefing:not(.hidden)");
+  await page.selectOption("#assignment-select", "operation");
   await page.click("#loadout-bomb");
   await page.click("#start-air");
   await seconds(2);
@@ -324,6 +326,79 @@ try {
   }));
   log("restarted", restarted);
   assert.equal(restarted.crew, 12, `the deck party survives a restart: ${JSON.stringify(restarted)}`);
+
+  // ---- 10. Sortie assignments, wing reporting and the short-sortie debrief --------------------
+  await page.keyboard.press("Escape");
+  await page.click("#restart-pause");
+  await page.waitForSelector("#briefing:not(.hidden)");
+  await page.selectOption("#assignment-select", "recon");
+  const reconAssigned = await page.evaluate(() => ({
+    assignment: window.midway.battle.sortie.assignment,
+    objective: window.midway.battle.sortie.objective,
+  }));
+  assert.equal(reconAssigned.assignment, "recon", JSON.stringify(reconAssigned));
+  assert.equal(reconAssigned.objective, "pending", JSON.stringify(reconAssigned));
+  log("recon assignment", reconAssigned);
+  await page.click("#start-air");
+
+  await seconds(2);
+  await page.keyboard.press("2");
+  await seconds(2);
+  const wingStatus = await page.evaluate(() => document.querySelector("#wing-status")?.textContent ?? "");
+  assert.ok(wingStatus.length > 0, "the wing status line is filled");
+  assert.ok(
+    ["forming", "attacking", "engaged", "returning", "escorting", "en route"].some((w) =>
+      wingStatus.includes(w),
+    ) || wingStatus.includes("No wing aircraft airborne."),
+    `the wing status reports behaviour, not the order: ${JSON.stringify(wingStatus)}`,
+  );
+  log("wing status", wingStatus);
+
+  await page.evaluate(() => {
+    const b = window.midway.battle;
+    const carrier = b.ships.find((s) => s.team === "jp" && s.kind === "carrier" && !s.sunk);
+    b.recordContact(carrier);
+    b.report();
+  });
+  forced.push("recon contact reported directly on the simulation");
+  await page.waitForTimeout(300);
+  const reconObjective = await page.evaluate(() => ({
+    objective: window.midway.battle.sortie.objective,
+    reportedCarriers: window.midway.battle.sortie.reportedCarriers,
+  }));
+  assert.equal(reconObjective.objective, "achieved", JSON.stringify(reconObjective));
+  assert.ok(reconObjective.reportedCarriers >= 1, JSON.stringify(reconObjective));
+  log("recon objective", reconObjective);
+
+  await page.keyboard.press("h");
+  await seconds(1);
+  const approachCues = await page.evaluate(() => document.querySelector("#approach-cues")?.textContent ?? "");
+  assert.ok(approachCues.length > 0, "the approach line is filled on the way home");
+  assert.ok(
+    approachCues.includes("KT AIRSPEED"),
+    `the approach line names real numbers: ${JSON.stringify(approachCues)}`,
+  );
+  log("approach cues", approachCues);
+
+  await page.evaluate(() => {
+    const b = window.midway.battle;
+    b.recover(b.ships.find((s) => s.id === b.player.home));
+  });
+  forced.push("recovery driven directly on the simulation");
+  await page.waitForTimeout(300);
+  const debrief = await page.evaluate(() => ({
+    status: window.midway.battle.status,
+    outcome: window.midway.battle.sortie.result?.outcome ?? null,
+    objective: window.midway.battle.sortie.result?.objective ?? null,
+    hidden: document.querySelector("#debrief")?.classList.contains("hidden") ?? null,
+    title: document.querySelector("#debrief-title")?.textContent ?? "",
+  }));
+  assert.equal(debrief.status, "debrief", JSON.stringify(debrief));
+  assert.equal(debrief.outcome, "recovered", JSON.stringify(debrief));
+  assert.equal(debrief.objective, true, JSON.stringify(debrief));
+  assert.equal(debrief.hidden, false, JSON.stringify(debrief));
+  assert.ok(debrief.title.length > 0, JSON.stringify(debrief));
+  log("short sortie debrief", debrief);
 
   assert.deepEqual(errors, []);
   console.log(`\nforced states: ${forced.length ? forced.join("; ") : "none"}`);

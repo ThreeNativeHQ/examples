@@ -115,9 +115,10 @@ export function hitQualifies(
 }
 
 /**
- * Record a qualifying hit. It advances the objective immediately when the target was actually seen
- * at impact; otherwise it waits, because the simulation knowing a deck is burning is not the crew
- * having observed it.
+ * Advance the objective on a qualifying hit. It completes immediately when the target was actually
+ * seen at impact; otherwise the hit waits, because the simulation knowing a deck is burning is not
+ * the crew having observed it. Contribution counters are kept separately, by `Battle`, so a second
+ * hit still shows up in the debrief after the assignment is already satisfied.
  */
 export function recordObjectiveHit(
   s: ISortie,
@@ -127,8 +128,7 @@ export function recordObjectiveHit(
   contact: Any,
   time: number,
 ): void {
-  if (ordered) s.wingHits += 1;
-  else s.personalHits += 1;
+  if (s.objective !== "pending") return;
   if (contact && time - contact.time <= CONFIRM_WINDOW) s.objective = "achieved";
   else s.pending.push({ target: ship.id, time, weapon, ordered });
 }

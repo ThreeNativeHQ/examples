@@ -9,6 +9,32 @@ Controls: `W`/`S` throttle · arrow keys steer (`Down` raises the nose) · `Spac
 brakes · `G` gear · `N` flaps · `C` camera · `T` course hold · `M` intel map · `Q` squadron orders
 · `H` home · `P`/`Esc` pause.
 
+## Assignments
+
+The briefing offers three assignments. Pick one before pressing either start button; the choice
+survives a restart.
+
+**Carrier strike** is the default short sortie. Designate a known enemy carrier with `TAB`, land one
+bomb or armed-torpedo direct hit on it — yourself, or with a wing you explicitly ordered onto it
+with `2` — and recover alive. Strafing and near misses do not count. A hit the crew never saw is
+held as unconfirmed until the target is sighted again or a fresh report comes in.
+
+**Scout and report** is the other short sortie: get one fresh enemy-carrier contact, transmit it
+with `R`, and recover alive. Reporting an escort does not satisfy it.
+
+**Open Pacific** is the original, longer battle, unchanged: neutralize all four enemy flight decks
+and recover.
+
+A short sortie ends at the first successful recovery and gets its own debrief — elapsed time, your
+own credited hits, ordered-wing hits, carriers reported, and the fuel and airframe you actually
+landed with. A safe return without the assignment reads *Returned — objective incomplete*: neither
+a defeat nor a victory.
+
+`H` changed with them. It now routes to an astern setup point that moves with the carrier and then
+up the groove, showing airspeed, descent rate, lineup corrections and a fuel-reserve estimate,
+instead of pointing at the carrier's centre. `L` still flies the assisted final, and still needs the
+same gate it always did.
+
 ## What the engine owns
 
 `@threenative/core`'s `FlightModel` owns lift, drag, thrust, stall, control authority and the

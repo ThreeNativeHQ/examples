@@ -165,6 +165,58 @@ try {
   });
   await releaseCamera();
 
+  // Close views of every crew motion. The wide deck shot hides broken hands and skin seams.
+  if (process.env.MIDWAY_CREW_CLOSEUPS === "1") {
+    const skinTriangles = await page.evaluate(() => {
+      let triangles = 0;
+      window.midway.world.crew.sailors[0].player.root.traverse((node) => {
+        if (node.isSkinnedMesh) triangles += node.geometry.index.count / 3;
+      });
+      return triangles;
+    });
+    assert(skinTriangles >= 75000, `stale sailor mesh loaded: ${skinTriangles} triangles`);
+    console.log("rebuilt sailor loaded", { skinTriangles });
+    await freezeCamera();
+    await page.evaluate(() => {
+      for (const id of ["briefing", "hud"]) {
+        const el = document.getElementById(id);
+        if (el) el.style.visibility = "hidden";
+      }
+    });
+    // The forward handler gives the idle clip an unobstructed view, away from the island wall.
+    for (const index of [0, 1, 3, 5, 7, 9]) {
+      for (const phase of [0.25, 0.75]) {
+        const clip = await page.evaluate(({ index, phase }) => {
+          const w = window.midway.world;
+          const sailor = w.crew.sailors[index];
+          const root = sailor.player.root;
+          sailor.player.mixer.setTime(sailor.player.clip(sailor.station.clip).duration * phase);
+          sailor.player.update(0);
+          root.updateMatrixWorld(true);
+          const at = root.getWorldPosition(w.camera.position.clone());
+          const rotation = root.getWorldQuaternion(w.camera.quaternion.clone());
+          const offset = at.clone().set(1.4, 1.2, 2.8).applyQuaternion(rotation);
+          w.camera.position.copy(at).add(offset);
+          w.camera.lookAt(at.x, at.y + 0.9, at.z);
+          w.camera.up.set(0, 1, 0);
+          w.camera.fov = 40;
+          w.camera.updateProjectionMatrix();
+          w.camera.updateMatrixWorld();
+          return sailor.station.clip;
+        }, { index, phase });
+        await page.waitForTimeout(420);
+        await page.screenshot({ path: `${OUT}/${clip}-${phase}.png` });
+      }
+    }
+    await page.evaluate(() => {
+      for (const id of ["briefing", "hud"]) {
+        const el = document.getElementById(id);
+        if (el) el.style.visibility = "";
+      }
+    });
+    await releaseCamera();
+  }
+
   // Fly, then measure the imported-airframe swap on live AI aircraft.
   await page.click("#start-air");
   const seconds = async (n) => {

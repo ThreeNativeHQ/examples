@@ -91,11 +91,10 @@ export async function loadDeckCrew(ctx: Pick<ICtx, "assets" | "renderer">): Prom
  *
  * The mesh already wears period headgear, so a helmet shell on top of it read as two hats with the
  * cap poking out above and the shell across the eyes. A band leaves the head as modelled and still
- * marks the trade. Radii are measured off the cap in the rigged GLB: it tapers from 0.14m at the
- * brim, 0.16m above the Head bone, to 0.095m at the crown.
+ * marks the trade. The rebuilt original cap is about 0.208m across at 1.762m above the soles.
  */
 function makeCapBand(colour: number): T.Mesh {
-  bandRing ??= new T.TorusGeometry(0.116, 0.012, 6, 20);
+  bandRing ??= new T.TorusGeometry(0.103, 0.005, 6, 32);
   const band = new T.Mesh(bandRing, mat(colour, { roughness: 0.88, metalness: 0.02 }));
   band.rotation.x = -Math.PI / 2;
   band.castShadow = true;
@@ -160,9 +159,9 @@ export class DeckCrew {
     // The rig carries the normalising scale, so undo it before adding metre-authored geometry.
     const scale = head.getWorldScale(new T.Vector3()).x || 1;
     band.scale.setScalar(1 / scale);
-    // Bone +Y runs up through the skull; 0.196m above it the cap has narrowed to 0.12m, just over
-    // the brim, so a 0.116m band hugs it instead of hovering off it like a halo.
-    band.position.set(0, 0.196 / scale, 0.004 / scale);
+    // Local coordinates of the rebuilt cap's 1.762m cross-section; the old band's radius floated
+    // beyond this source mesh. Keep the thin trade marking on the cap cloth.
+    band.position.set(0, 0.1935 / scale, 0.0155 / scale);
     head.add(band);
   }
 

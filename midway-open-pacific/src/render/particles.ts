@@ -214,8 +214,12 @@ export class CombatParticles {
     for (const s of b.ships) {
       if (s.fire < 0.06 || s.sink > 0.55 || distance3(s, camera) > 18000) continue;
       const detail = distance3(s, camera) < 4000 ? 1 : 0.3;
-      for (let j = 0; j < 3; j += 1) {
-        const pos = aircraftWorld({ ...s, y: s.y || 0, pitch: 0, roll: 0 }, { x: j === 1 ? 5 : -3, y: s.kind === "carrier" ? 21 : 9, z: (j - 1) * 38 });
+      const hits = (s.impacts || []).filter((h: any) => h.nearMiss !== true).sort((a: any, c: any) => c.time - a.time).slice(0, 3);
+      const origins = hits.length
+        ? hits.map((h: any) => ({ x: h.right, y: h.height, z: -h.forward }))
+        : [0, 1, 2].map((k) => ({ x: k === 1 ? 5 : -3, y: s.kind === "carrier" ? 21 : 9, z: (k - 1) * 38 }));
+      for (let j = 0; j < origins.length; j += 1) {
+        const pos = aircraftWorld({ ...s, y: s.y || 0, pitch: 0, roll: 0 }, origins[j]);
         const f = Math.min(s.fire, 1.4);
         this.continuous(s.id + j + "smoke", pos, 8 * detail, dt, (p) => this.emit(this.smoke, p, { vx: 0, vy: 6 + f * 5, vz: 0, drag: 0.18, buoyancy: 0.1, life: 18 + this.random() * 5, size: 6 + f * 5, growth: 3 + f * 2, alpha: 0.48, color: [0.025, 0.028, 0.029] }));
         this.continuous(s.id + j + "flame", pos, 10 * detail, dt, (p) => this.emit(this.glow, { x: p.x + this.spread(6), y: p.y + 2, z: p.z + this.spread(8) }, { vy: 12, life: 0.45 + this.random() * 0.4, size: 8 + f * 7, aspect: 1.5, kind: 1, alpha: 0.6, color: [1.2, 0.3, 0.025], drag: 0.9 }));

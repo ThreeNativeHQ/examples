@@ -4,7 +4,7 @@ import { box, canvasTexture, ellipsoid, mat } from "./assets.js";
 
 let scorchMap: T.CanvasTexture | undefined;
 
-export function addDamageVisuals(root: any): void {
+function ensureScorchMap(): void {
   if (!scorchMap)
     scorchMap = canvasTexture(256, 256, (c) => {
       const g = c.createRadialGradient(128, 128, 10, 128, 128, 116);
@@ -25,6 +25,10 @@ export function addDamageVisuals(root: any): void {
         c.fill();
       }
     });
+}
+
+export function addDamageVisuals(root: any): void {
+  ensureScorchMap();
   const stains: Record<string, T.Mesh> = {};
   for (const [key, x, y, z] of [
     ["leftWing", -2.7, 0.0, -0.1],
@@ -63,6 +67,69 @@ export function updateDamageVisuals(root: any, a: any): void {
   const d = root.userData;
   if (d.wings)
     for (const w of d.wings) w.mesh.visible = (a.damage?.[w.sign < 0 ? "leftWing" : "rightWing"].integrity ?? 1) > 0.025;
+}
+
+/**
+ * Height of the walkable top surface above a hull's origin. These are the same numbers the
+ * simulation uses to decide that a falling bomb has struck the ship (`updateWeapons`), so a mark
+ * lands on the deck the weapon actually hit rather than three metres inside it.
+ */
+const DECK_SURFACE: Record<string, number> = { carrier: 20, cruiser: 9, destroyer: 9, sub: 0.5 };
+const MAX_SCARS = 8;
+
+/**
+ * Persistent scorch marks where a ship was actually hit. The marks live in the hull's own frame, so
+ * they ride the moving ship, and they are rebuilt from `ship.impacts` every frame: a restart hands
+ * over a battle with no impacts and every mark simply hides itself.
+ *
+ * A near miss detonates in the water and never earns a deck scar, and an impact below the deck
+ * surface — a torpedo at the waterline — is left to the fire and spray effects instead.
+ */
+export function updateShipScars(root: any, s: any, distance = 0, quality = "balanced"): void {
+  const deck = DECK_SURFACE[s.kind] ?? 7;
+  // Transparent overdraw the player cannot read at range: keep the marks near enough to see, and
+  // fewer of them at low quality. The fires stay in every case, so a burning deck still reads.
+  const budget = quality === "low" ? 3 : quality === "high" ? MAX_SCARS : 5;
+  const visible = distance < (quality === "low" ? 3500 : 7000);
+  const marks = visible
+    ? ((s.impacts ?? []) as any[]).filter((m) => !m.nearMiss && m.height >= deck - 3).slice(-budget)
+    : [];
+  ensureScorchMap();
+  let pool = root.userData.shipScars as T.Mesh[] | undefined;
+  if (!marks.length && !pool) return;
+  if (!pool) {
+    pool = [];
+    for (let i = 0; i < MAX_SCARS; i += 1) {
+      const mesh = new T.Mesh(
+        new T.PlaneGeometry(1, 1),
+        new T.MeshBasicMaterial({
+          map: scorchMap,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          side: T.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -4,
+        }),
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.visible = false;
+      root.add(mesh);
+      pool.push(mesh);
+    }
+    root.userData.shipScars = pool;
+  }
+  for (const [i, mesh] of pool.entries()) {
+    const m = marks[i];
+    mesh.visible = !!m;
+    if (!m) continue;
+    // The hull group is rotated by -heading, so a ship-frame offset maps to (right, height, -forward).
+    const size = Math.min(26, 7 + (m.damage ?? 80) * 0.085);
+    mesh.scale.set(size, size, 1);
+    mesh.position.set(m.right, deck + 0.35, -m.forward);
+    mesh.rotation.z = (m.time % 6.28) || 0;
+    (mesh.material as T.MeshBasicMaterial).opacity = Math.min(0.94, 0.45 + (m.damage ?? 80) / 320);
+  }
 }
 
 export function makeTorpedoModel(): T.Group {

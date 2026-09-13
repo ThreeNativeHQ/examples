@@ -1,5 +1,6 @@
 <!-- Generated mirror of AGENTS.md. Do not edit; edit AGENTS.md. -->
 
+
 A ThreeNative port of the standalone `Midway — Open Pacific` WebGL game. Framework rules live in
 `/AGENTS.md`; this file covers only what is different here.
 
@@ -16,6 +17,26 @@ The flight model is the engine capability this game exists to exercise. Read
 `src/sim/flight.ts` first: it is the only place airframe constants enter the engine. If a change
 needs a new force, control or deck behaviour, add it to `@threenative/core`'s `FlightModel` and
 reuse it here — do not grow a second flight model in this repo.
+
+## Sorties and recovery
+
+`src/sim/sortie.ts` holds one record: which of the three briefing assignments is being flown, its
+designated target, its objective state and the frozen result. It is pure data plus pure functions —
+`Battle` owns every mutation, and the HUD, the map orders and the debrief all read that same record.
+Two rules that are not obvious from the code:
+
+- A weapon is **stamped at release** with the sortie id, the designated target and whether the
+  attacker was an explicitly ordered wing aircraft. A later recall or retask can neither revoke nor
+  grant that weapon's credit, and an unstamped allied weapon damages the ship without scoring the
+  sortie.
+- A hit the crew did not see does not complete anything. It waits in `sortie.pending` until a
+  visual or reconnaissance report dated at or after the impact arrives. The simulation knowing a
+  deck is burning is not the same as having observed it.
+
+`src/sim/recovery.ts` owns the way home: the astern setup point in the carrier's moving frame, the
+transit/setup/groove/final phases, the glide path, and `finalReady` — the **single** gate that both
+`assistRecovery` and the HUD's "READY FOR L" cue call, so the cue can never promise an approach the
+game will refuse. Change the envelope there and both move together.
 
 ## Platform
 
@@ -54,12 +75,36 @@ Eastern Island. Every orientation and scale constant there was **measured** (wit
 
 ## Asset pipeline
 
-`tools/blender/rig-deck-crew.py` builds `public/assets/deck-crew.glb` by binding the supplied
-unrigged WWII sailor mesh to the CC0 Quaternius Universal Animation Library skeleton. The one
-non-obvious step: the library's rest pose is a T-pose while the sailor's arms hang down, so the
-script swings the upper arms into the mesh's stance, applies that as the new rest pose, and then
-re-bases every action by the inverse of the same delta (with rest R' = R.D a stored basis B becomes
-D^-1.B) so the clips still play as authored.
+`tools/blender/rig-deck-crew.py` calls the reusable `rig_humanoid.py` with the measured
+`navy-sailor.json` anatomy. It starts from the supplied original `navy sailor 3d model.glb`,
+a textured, unrigged T-pose. It welds coincident vertices, reduces the mesh to 80k triangles,
+and fits the CC0 Quaternius UAL skeleton's joint origins to the sailor's shorter arms and wider
+stance while preserving bone axes and the authored clips. Continuous anatomical weights keep
+scan islands and UV seams together. A narrow bridge between the original middle/ring fingers
+is separated before binding. Do not restore automatic bone-heat binding: it assigned
+whole hands to thumb bones and left both hand bones with zero influence. Each finger has fitted
+knuckles and phalanges, with its flexion axis aligned to its length. Continuous segment weights
+keep neighboring digits independent. The UAL finger motions are softened into relaxed curls;
+binding the entire hand rigidly loses those motions and makes the sailor look robotic.
+`crew.wait` uses `Idle_No_Loop`: the folded-arm clip was rejected because its hand/forearm contact
+positions intersect this shorter-armed mesh. Retaining clip names does not require retaining an
+incompatible source motion.
+
+Run in a private Blender build session (the script clears that session's objects and actions):
+
+```sh
+blender -b -P tools/blender/rig-deck-crew.py -- <UAL1_Standard.glb> <UAL2_Standard.glb> \
+  '/home/joao/Downloads/navy sailor 3d model.glb' /tmp/deck-crew.glb
+pnpm exec gltf-transform webp /tmp/deck-crew.glb public/assets/deck-crew.glb \
+  --quality 90 --vertex-layout separate
+node tools/check-fleet.mjs
+```
+
+`check-fleet` verifies each hand/finger influence, samples thirteen poses per clip, and closes
+both fists to catch opening seams, rigid digits and excessive triangle stretching. Set `MIDWAY_CREW_CLOSEUPS=1` on `capture-fleet.mjs` to capture
+all six clips at two phases on the live deck; inspect those images before accepting a rebuild.
+For another T-pose model, use [the fitting/reuse guide](tools/blender/HUMANOID-RIGGING.md) and a
+new measurement file. The shared `tools/check-humanoid.mjs <file.glb>` runs independently of Midway.
 
 ## Geometry tools
 
@@ -76,6 +121,12 @@ D^-1.B) so the clips still play as authored.
   Zero, the destroyer and Midway, with assertions a screenshot cannot make.
 - `bash tools/capture-lock.sh node tools/capture-deck.mjs` — raycasts the carrier's own geometry to
   measure deck width at each station and captures the launch.
+- `bash tools/capture-lock.sh node tools/capture-sortie.mjs` — walks the briefing choice, a real
+  attack on a designated carrier, the approach guidance and the short debrief, asserting impact
+  placement and leaving a frame of each for a person to look at.
+- `bash tools/capture-lock.sh node tools/capture-sortie-runs.mjs` — flies one recon and one carrier
+  strike from the airborne start to a recovered debrief with keys only and nothing injected, and
+  fails if either takes more than twelve simulated minutes.
 
 ## Verify
 
@@ -96,6 +147,8 @@ node tools/probe-ocean.mjs
 bash tools/capture-lock.sh node tools/check-repair.mjs
 bash tools/capture-lock.sh node tools/capture-deck.mjs
 bash tools/capture-lock.sh node tools/capture-fleet.mjs
+bash tools/capture-lock.sh node tools/capture-sortie.mjs
+bash tools/capture-lock.sh node tools/capture-sortie-runs.mjs
 bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/cli.js \
   --scenario playtests/launch.playtest.json --url http://127.0.0.1:5199 --browser-recipe webgpu --headed --timeout 45000
 ```
@@ -103,3 +156,9 @@ bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/c
 `playtests/launch.playtest.json` boots the briefing, clicks **Take the deck**, runs the throttle
 and rotation, and fails on any console error or runtime diagnostic. A visible change also needs an
 eye on the frame — the automated gates are blind to how it looks.
+
+Browser gates are flaky against the shared checkout while another lane is editing it: its edits
+hot-reload the page mid-run. Serve an isolated copy instead — `git worktree add .worktrees/<slug>`,
+`pnpm install`, `rsync -a --delete src/` your tree in, `pnpm exec vite --port 53xx` — and point
+`MIDWAY_URL` at that port. Two such copies differing only in the files under test also give an
+honest before/after for `capture-performance.mjs`.

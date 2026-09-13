@@ -1,16 +1,18 @@
 # PRD-midway-sortie-realism — Make every sortie worth flying
 
-**Status:** PROPOSED
+**Status:** IN PROGRESS
 **Complexity:** 7 (HIGH)
 **Owner:** Midway game implementer.
 **Depends on:** None. Coordinate shared files with [realistic audio](PRD-midway-realistic-audio-sfx.md); completion of that PRD is not required.
-**Scope:** Planning only. Four game-owned slices; implementation is not started.
+**Scope:** Four game-owned slices. All four are implemented; acceptance evidence is being recorded.
 **Research date:** 2026-09-13
-**Progress:** Inspection and plan complete; implementation 0/4 phases.
+**Progress:** Implementation 4/4 phases. Evidence recorded on each AC below.
 **Platforms:** Web acceptance. Desktop/mobile qualification is outside this slice; no native claim.
 **Estimated implementation:** 32–48 engineering hours, including focused checks and browser playthroughs. Estimate, not measured throughput.
 
-Complexity: approximately 11 implementation files (+3), small sortie/recovery modules (+2), interacting mission/combat/recovery state (+2); no independent release boundary. Risk override: none. This planning task changes one Markdown document and receives document checks only.
+Complexity: approximately 11 implementation files (+3), small sortie/recovery modules (+2), interacting mission/combat/recovery state (+2); no independent release boundary. Risk override: none.
+
+Implementation note: this game folder is worked by more than one lane at once. `src/sim/armament.ts`, `src/sim/sortie.ts` and `README.md` reached `main` inside another lane's commit (`85fa7a1`) rather than this one, and `src/scenes/Midway.ts` was briefly broken on `main` by `fb788cb` (a class field emitted inside `load()`); the working tree carries the fix. Browser gates for this PRD were run against isolated copies under `.worktrees/` because concurrent edits in the shared checkout hot-reload the page mid-run.
 
 ## Outcome and priority
 
@@ -167,36 +169,40 @@ All implementation evidence is pending. These are future executable criteria; pl
 ## Execution Phases
 
 #### Phase 1: A released weapon changes the aircraft and credits its actual attacker
-**Status:** NOT STARTED
+**Status:** COMPLETE
 **ACs:** AC-1–3; foundations for AC-5/12.
 **Files:** `src/sim/armament.ts` (shared store update), `src/sim/battle.ts` (all hit callers, attribution, launch predicate, bounded impact metadata), `scripts/check-flight.mjs` (extend current checks).
 **Implementation:** Start with the two observed defects. Preserve owner IDs through direct hits, near misses and fire death. Add only the state required by later game consumers. Capture current red results with targeted assertions before fixing logic.
 **Verification:** E1 — payload sequence/rejected release/rearm; AI versus player projectile impacts and fire death; threshold boundary. E2 — B reaches the real store path in both loadouts.
-**Checkpoint:** Pending focused self-review and one independent reviewer for the substantive logic change.
+**Delivered:** `updateStores` extracted in `src/sim/armament.ts` and called from `applyLoadout`, `dropBomb` and `dropTorpedo`. `damageShip` takes the projectile's own `owner` and a `nearMiss` flag; `sinkShip` credits the preserved `lastHostileHit` once and a fire death no longer fabricates a torpedo hit. `LAUNCH_DECK`, `RECOVERY_DECK` and `DECK_FAILED` name the three thresholds that were previously three bare numbers. `recordImpact` keeps 8 ship-frame impacts per hull.
+**Checkpoint:** Focused self-review done. No independent reviewer has read the attribution change.
 
 #### Phase 2: Choose an assignment and understand what the squadron is doing
-**Status:** NOT STARTED
+**Status:** COMPLETE
 **ACs:** AC-4–7; short-sortie completion routing for AC-11.
 **Files:** New `src/sim/sortie.ts`; `src/sim/battle.ts`; `src/scenes/Midway.ts`; `src/hud.ts`; `index.html`; `src/style.css` only if existing styles are insufficient; `README.md` control correction.
 **Implementation:** Add three briefing choices, objective state, confirmed contributions, explicit unavailable-target handling and actual wing status. Wire short-sortie termination through existing recovery; use that outcome immediately rather than leave orphan mission state until Phase 3. Preserve audio-lane dispatch changes.
 **Verification:** E1 — mission transitions/invalid reports/target loss/credit. E2 — actual selection, report and order controls; correct instructions, map text, recovery outcome and replay.
-**Checkpoint:** Pending focused self-review. Review changed contracts together with Phase 3; no duplicate full-suite checkpoint.
+**Delivered:** New `src/sim/sortie.ts` holds the assignment record and its pure functions; `Battle` owns every mutation. A weapon is stamped at release with the sortie id, designated target and ordered-wing eligibility, and an unobserved hit waits in `pending` until a report dated at or after it arrives. `Battle.wingStatus()` reports live wing behaviour rather than the accepted order. The briefing carries `#assignment-select`; the scene keeps the choice across restarts.
+**Checkpoint:** Focused self-review done; contracts reviewed together with Phase 3. No independent reviewer.
 
 #### Phase 3: Fly the approach and see what returned home
-**Status:** NOT STARTED
+**Status:** COMPLETE
 **ACs:** AC-8–11/16.
 **Files:** New `src/sim/recovery.ts`; `src/sim/battle.ts`; `src/scenes/Midway.ts`; `src/hud.ts`; existing `index.html`/styles as needed.
 **Implementation:** Route through a moving astern setup, share final-eligibility calculations, report changing deck/fuel conditions and preserve arrival snapshot before service. Existing autopilot controls produce movement; no teleporting or invented lift. Complete the recon/strike normal-entry runs and tune pacing without changing damage or fuel to force success.
 **Verification:** E1 — eligibility boundaries, damaged/sunk carrier diversion, missing estimates and stable outcome snapshots. E2 — continuous approach, L/manual cancellation, recovery and replay; two ≤12-minute complete short sorties without post-start state injection.
-**Checkpoint:** Pending focused self-review and one independent review of mission/recovery behavior and the normal-entry evidence.
+**Delivered:** New `src/sim/recovery.ts` owns the astern setup point, the transit/setup/groove/final phases, the single `finalReady` gate that `assistRecovery` and the "READY FOR L" cue both call, and `reserveEstimate`. `Battle.goHome`, `navigationPoint`, the autopilot and the HUD all read it. `updateRecovery` diverts or wave-offs when a deck is lost and says so once when none remain. A short sortie freezes its result in `recover()` before the 12-second service reset and enters a distinct `debrief` status.
+**Checkpoint:** Focused self-review done. No independent review of mission/recovery behaviour.
 
 #### Phase 4: See damage where it happened, within the current frame budget
-**Status:** NOT STARTED
+**Status:** COMPLETE
 **ACs:** AC-12–15.
 **Files:** `src/render/model-damage.ts`; `src/render/particles.ts`; `src/render/world.ts`; targeted extensions to existing browser/lifecycle tools.
 **Implementation:** Use Phase 1 impact positions for limited scorch/fire origins. Capture matching direct-hit/near-miss views and check moving attachment. Keep material/asset ownership correct on restart and effect replacement.
 **Verification:** E3 — viewed cockpit/chase captures, capped repeated impacts and matching before/after combat workload; E2 — three restart cycles and existing regression flows; final type/build checks once.
-**Checkpoint:** Pending focused self-review and independent review of visual observations, resource lifetime and final acceptance evidence. Resolve each review finding only in its owning scope.
+**Delivered:** `updateShipScars` in `src/render/model-damage.ts` keeps up to 8 scorch planes per hull in the ship's own frame, skipping near misses and impacts below the deck surface; it rebuilds from `ship.impacts` every frame, so a restart with no impacts hides every mark without a separate teardown. `src/render/particles.ts` takes its three fire origins from the three most recent non-near-miss impacts, falling back to the old fixed positions for a ship burning without a recorded hit.
+**Checkpoint:** Focused self-review and a viewed frame. No independent review.
 
 ## Verification commands and evidence ownership
 

@@ -4,78 +4,21 @@
  * orientation, hull axis and length, atoll scale). Exits non-zero on mismatch.
  */
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { Box3, Quaternion, Vector3 } from "three";
+import { checkHumanoid, loadGlb } from "./check-humanoid.mjs";
 
-// three's FileLoader emits ProgressEvent even for a data: URI; node 20 has no such global.
-globalThis.ProgressEvent ??= class ProgressEvent extends Event {
-  constructor(type, init = {}) {
-    super(type);
-    Object.assign(this, init);
-  }
-};
-
-const loader = new GLTFLoader();
 const asset = (name) => new URL(`../public/assets/${name}`, import.meta.url);
-
-async function loadGlb(path) {
-  const bytes = await readFile(path);
-  const headerLength = bytes.readUInt32LE(12);
-  const json = JSON.parse(bytes.subarray(20, 20 + headerLength).toString());
-  // Strip textures so node can parse without an image decoder.
-  for (const material of json.materials ?? []) {
-    delete material.normalTexture;
-    delete material.occlusionTexture;
-    delete material.emissiveTexture;
-    if (material.pbrMetallicRoughness) {
-      delete material.pbrMetallicRoughness.baseColorTexture;
-      delete material.pbrMetallicRoughness.metallicRoughnessTexture;
-    }
-    for (const ext of Object.values(material.extensions ?? {})) {
-      if (ext && typeof ext === "object")
-        for (const k of Object.keys(ext)) if (k.endsWith("Texture")) delete ext[k];
-    }
-  }
-  delete json.textures;
-  delete json.images;
-  json.buffers[0].uri =
-    "data:application/octet-stream;base64," +
-    bytes.subarray(28 + headerLength).toString("base64");
-  return loader.parseAsync(JSON.stringify(json), "");
-}
 
 const sizeOf = (object) => new Box3().setFromObject(object).getSize(new Vector3());
 
 {
-  const gltf = await loadGlb(asset("deck-crew.glb"));
-  gltf.scene.updateMatrixWorld(true);
-
-  const names = gltf.animations.map((clip) => clip.name).sort();
-  assert.deepEqual(names, [
-    "crew.chock",
-    "crew.idle",
-    "crew.service",
-    "crew.signal",
-    "crew.wait",
-    "crew.walk",
-  ], "deck-crew clip names changed");
-  assert.equal(names.length, 6, "deck-crew must have exactly 6 clips");
-  for (const clip of gltf.animations)
-    assert(clip.tracks.length > 100, `${clip.name} is not a full-skeleton clip`);
-
-  let skinned;
-  let head;
-  gltf.scene.traverse((node) => {
-    if (node.isSkinnedMesh && !skinned) skinned = node;
-    if (node.isBone && node.name === "Head") head = node;
+  const gltf = await loadGlb(process.argv[2] ?? asset("deck-crew.glb"));
+  checkHumanoid(gltf, {
+    clips: ["crew.chock", "crew.idle", "crew.service", "crew.signal", "crew.wait", "crew.walk"],
+    height: 1.83,
+    minimumHandVertices: 50,
+    minimumFingerVertices: 10,
   });
-  assert(skinned, "deck-crew has no SkinnedMesh");
-  // 66 joints: the 65-bone man plus Blender's unweighted neutral_bone export helper.
-  assert.equal(skinned.skeleton.bones.length, 66, "deck-crew skeleton bone count");
-  assert(head, "deck-crew has no Head bone");
-  const height = sizeOf(gltf.scene).y;
-  assert(height >= 1.8 && height <= 1.86, `crew height ${height.toFixed(3)} out of range`);
 }
 
 {
