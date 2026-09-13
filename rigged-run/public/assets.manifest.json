@@ -2,66 +2,46 @@
   "version": 1,
   "entries": {
     "aether-rigged.glb": {
-      "bytes": 571108,
+      "bytes": 1597028,
       "kind": "model",
-      "output": "aether-rigged.a32b5bf0.glb",
+      "output": "aether-rigged.a8fe588c.glb",
       "passes": [
         "audio",
-        "ktx2",
         "model"
       ],
       "sharedImages": [
         {
           "codec": "none",
-          "key": "7caa474ff47bf9f9",
+          "key": "3f1184f67376ac65",
+          "bytes": 1597214,
+          "output": "shared/images/3f1184f67376ac65.none.png"
+        },
+        {
+          "codec": "none",
+          "key": "7dc0ccfa22804c88",
+          "bytes": 756534,
+          "output": "shared/images/7dc0ccfa22804c88.none.jpg"
+        },
+        {
+          "codec": "none",
+          "key": "e288649dfdea1234",
+          "bytes": 132480,
+          "output": "shared/images/e288649dfdea1234.none.png"
+        },
+        {
+          "codec": "none",
+          "key": "e5fb24f85651f0a6",
           "bytes": 440827,
-          "output": "shared/images/7caa474ff47bf9f9.none.jpg"
-        },
-        {
-          "codec": "etc1s",
-          "key": "803563fdd69d7085",
-          "bytes": 657521,
-          "output": "shared/images/803563fdd69d7085.etc1s.ktx2"
-        },
-        {
-          "codec": "etc1s",
-          "key": "83e1010612751a6c",
-          "bytes": 32716,
-          "output": "shared/images/83e1010612751a6c.etc1s.ktx2"
-        },
-        {
-          "codec": "etc1s",
-          "key": "8c49024576deae02",
-          "bytes": 187977,
-          "output": "shared/images/8c49024576deae02.etc1s.ktx2"
+          "output": "shared/images/e5fb24f85651f0a6.none.jpg"
         }
       ],
       "extensions": [
-        "EXT_meshopt_compression",
         "KHR_materials_clearcoat",
         "KHR_materials_emissive_strength",
-        "KHR_mesh_quantization",
-        "KHR_texture_basisu"
+        "KHR_mesh_quantization"
       ],
-      "bytesAfter": 571108,
+      "bytesAfter": 1597028,
       "bytesBefore": 5763448,
-      "embeddedTextures": {
-        "bytesAfter": 1319041,
-        "bytesBefore": 2927055,
-        "count": 4,
-        "formats": {
-          "Aether_Emission": "etc1s",
-          "Aether_Normal": "none",
-          "Aether_BaseColor": "etc1s",
-          "Aether_ORM": "etc1s"
-        },
-        "skippedCompression": {
-          "Aether_Normal": "not-smaller"
-        },
-        "gpuBytesAfter": 11883862,
-        "gpuBytesBefore": 55924052,
-        "resized": 0
-      },
       "triangles": 24310,
       "vertices": 33655
     }
