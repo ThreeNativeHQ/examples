@@ -557,6 +557,11 @@ mix/native proof and the owner listening sequence (Phase 4). `playtests/audio-re
 now runs the web deck/camera/cutoff/release/pause/rear sequence; it asserts clean diagnostics (a
 playtest cannot capture acoustic quality, which is why E3/E4 stay open).
 
+E3 evidence gap recorded 2026-09-13: `pnpm build:desktop` fails with `TN_NATIVE_WEB_ONLY_UI` because
+the game's HUD and scene use `document.getElementById`; the desktop bundle is not yet portable. This
+is a web-only-UI limitation owned by PRD-051, not a defect in the audio path, and no native audio
+output can be captured until it is resolved. E3 remains unverified and no desktop claim is made.
+
 ## Planning verification
 
 At the time this document was written only the PRD existed. Source/API references and real integration locations were researched; no SFX, voices, gameplay code or engine packages were generated or modified by the planning task itself. Document checks passed: two JSON request examples parse; four phases, ten unique unchecked ACs, 30 unique speech IDs and 50 unique SFX IDs; every specified SFX duration is within the documented API range; local Markdown links resolve. Self-review checked historical/reconstruction labels and consumer/trigger alignment. The implementation notes above record what later landed; the implementation ACs remain unchecked and phase 4 remains NOT STARTED.
