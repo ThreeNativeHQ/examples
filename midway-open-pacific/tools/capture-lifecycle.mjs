@@ -166,16 +166,45 @@ try {
   await page.screenshot({ path: `${OUT}/life-contact.png` });
 
   // ---- 5. Bombs, and a hit that actually registers ------------------------------------------
+  // Near-vertical, close above, and led along the ship's own course, so the weapon has little
+  // time and little distance in which to drift off a moving deck.
+  // A released bomb inherits the aircraft's velocity vector, not its `speed` field, so the dive
+  // has to be set in vx/vy/vz. Matching the carrier's own horizontal velocity makes the weapon
+  // track the moving deck all the way down, which is what a real dive bomber is doing.
   const attack = await page.evaluate(() => {
     const s = window.midway;
     const target = s.battle.ships.find((x) => x.team === "jp" && x.kind === "carrier");
-    Object.assign(s.battle.player, { x: target.x, y: 420, z: target.z + 120, pitch: -0.7 });
-    return { name: target.name, hp: target.hp, maxHp: target.maxHp };
+    const vx = Math.sin(target.heading) * target.speed;
+    const vz = -Math.cos(target.heading) * target.speed;
+    Object.assign(s.battle.player, {
+      x: target.x,
+      z: target.z,
+      y: 210,
+      heading: target.heading,
+      pitch: -1.2,
+      roll: 0,
+      vx,
+      vy: -70,
+      vz,
+      speed: Math.hypot(vx, 70, vz),
+    });
+    if (s.battle.player.flight?.setAttitude)
+      s.battle.player.flight.setAttitude(target.heading, -1.2, 0);
+    return { name: target.name, hp: target.hp, maxHp: target.maxHp, deck: target.deck };
   });
-  forced.push("player placed in a dive over the target");
-  await seconds(0.6);
+  forced.push("player placed in a vertical dive over the target, tracking its course");
+  await seconds(0.4);
   await page.keyboard.press("KeyB");
-  await seconds(7);
+  // Pull off the target once the weapon is away, or the dive flies the aircraft into the sea and
+  // the battle ends before the bomb has finished falling.
+  await seconds(0.3);
+  await page.evaluate(() => {
+    const p = window.midway.battle.player;
+    Object.assign(p, { y: 1400, pitch: 0.05, vx: 0, vy: 0, vz: -95, speed: 95 });
+    if (p.flight?.setAttitude) p.flight.setAttitude(p.heading, 0.05, 0);
+  });
+  forced.push("player recovered out of the dive so the battle survives the attack");
+  await seconds(9);
   const struck = await page.evaluate((name) => {
     const s = window.midway;
     const ship = s.battle.ships.find((x) => x.name === name);
@@ -183,8 +212,8 @@ try {
   }, attack.name);
   log("bomb attack", { before: attack, after: struck });
   assert.ok(
-    struck.hp < attack.hp || struck.fire > 0 || struck.effects > 0,
-    `the attack produced damage or effects: ${JSON.stringify({ attack, struck })}`,
+    struck.hp < attack.hp,
+    `the player's own bomb damaged the carrier: ${JSON.stringify({ attack, struck })}`,
   );
   await page.screenshot({ path: `${OUT}/life-attack.png` });
 
