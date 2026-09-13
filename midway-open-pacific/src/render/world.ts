@@ -65,13 +65,13 @@ export class WorldView {
     this.renderer = host.renderer.raw as T.WebGLRenderer;
     this.renderer.outputColorSpace = T.SRGBColorSpace;
     this.renderer.toneMapping = T.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.95;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = false;
     this.renderer.shadowMap.type = T.BasicShadowMap;
-    this.scene.fog = new T.FogExp2(0x8fa9b4, 0.000028);
-    const hemi = new T.HemisphereLight(0xc6dbe4, 0x34545f, 0.7);
+    this.scene.fog = new T.FogExp2(0xb9d2dc, 0.000012);
+    const hemi = new T.HemisphereLight(0xdcecf4, 0x4a6670, 0.95);
     this.scene.add(hemi);
-    this.sun = new T.DirectionalLight(0xffddb8, 1.65);
+    this.sun = new T.DirectionalLight(0xfff6e6, 2.15);
     this.sun.position.set(-200, 140, -240);
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
@@ -105,7 +105,7 @@ export class WorldView {
     const sun = normalize(vec3(-0.62, 0.23, -0.75));
     const facing = dot(direction, sun).max(0);
     const gradient = mix(horizon, zenith, pow(height, float(0.46)));
-    const glow = vec3(0.5, 0.28, 0.11).mul(pow(facing, float(9)).mul(0.75));
+    const glow = vec3(0.52, 0.4, 0.26).mul(pow(facing, float(9)).mul(0.5));
     const disk = vec3(4, 2.9, 1.8).mul(pow(facing, float(2100)));
     const sky = gradient.add(glow).add(disk);
     const belowMix = float(1).sub(smoothstep(float(-0.12), float(0), direction.y));
@@ -125,7 +125,7 @@ export class WorldView {
 
   makeClouds(): void {
     const random = rng(1842);
-    const material = new T.SpriteMaterial({ map: this.cloudTex, color: 0xf8efe0, transparent: true, opacity: 0.3, depthWrite: false, fog: true });
+    const material = new T.SpriteMaterial({ map: this.cloudTex, color: 0xf8efe0, transparent: true, opacity: 0.12, depthWrite: false, fog: true });
     for (let i = 0; i < 65; i += 1) {
       const s = new T.Sprite(material);
       s.position.set((random() - 0.5) * 46000, 1300 + random() * 1600, (random() - 0.5) * 45000);
@@ -392,7 +392,7 @@ export class WorldView {
     for (const a of b.bullets) {
       if (i >= 1000) break;
       const k = i * 6;
-      const length = a.type === "flak" ? 0.035 : 0.045;
+      const length = a.type === "flak" ? 0.02 : 0.012;
       this.tracerPositions.set([a.x, a.y, a.z, a.x - a.vx * length, a.y - a.vy * length, a.z - a.vz * length], k);
       const color = a.team === "us" ? [1, 0.83, 0.4] : [1, 0.42, 0.18];
       this.tracerColors.set([...color, ...color.map((x) => x * 0.4)], k);

@@ -130,7 +130,7 @@ export class Battle {
       flaps: 0.33,
       assist: true,
       deckOffset: -105,
-      deckLateral: -2.5,
+      deckLateral: 0,
       deckSpeed: 0,
       chocks: true,
       pitch: 0.22,
@@ -427,12 +427,21 @@ export class Battle {
       f = { x: tx / n, y: ty / n, z: tz / n };
     }
     const spread = a === this.player ? 0.003 : 0.012;
-    for (const side of [-1, 1])
+    // The player's guns are in the wings: offset along the body's own right axis so the tracers
+    // leave the wing leading edge rather than the fuselage. AI aircraft keep the generic offset.
+    const axes = a === this.player && a.attitude ? attitudeAxes(a) : null;
+    const right = axes ? axes.r : { x: Math.cos(a.heading), y: 0, z: Math.sin(a.heading) };
+    const up = axes ? axes.u : { x: 0, y: 1, z: 0 };
+    const lateral = a === this.player ? 3.0 : 1.7;
+    for (const side of [-1, 1]) {
+      const ox = a.x + right.x * side * lateral + f.x * 5 + up.x * 0.05;
+      const oy = a.y + right.y * side * lateral + f.y * 5 + up.y * 0.05;
+      const oz = a.z + right.z * side * lateral + f.z * 5 + up.z * 0.05;
       this.bullets.push({
         id: this.id("bullet"),
-        x: a.x + Math.cos(a.heading) * side * 1.7 + f.x * 5,
-        y: a.y + f.y * 5,
-        z: a.z + Math.sin(a.heading) * side * 1.7 + f.z * 5,
+        x: ox,
+        y: oy,
+        z: oz,
         vx: (f.x + (this.random() - 0.5) * spread) * 950,
         vy: (f.y + (this.random() - 0.5) * spread) * 950,
         vz: (f.z + (this.random() - 0.5) * spread) * 950,
@@ -441,6 +450,13 @@ export class Battle {
         ttl: 2.0,
         type: "gun",
       });
+      if (a === this.player)
+        this.fx("muzzle", {
+          x: a.x + right.x * side * lateral + f.x * 1.7,
+          y: a.y + right.y * side * lateral + f.y * 1.7,
+          z: a.z + right.z * side * lateral + f.z * 1.7,
+        }, 0.55);
+    }
     if (a === this.player) {
       a.heat = 1;
       this.event("gun");
@@ -724,7 +740,7 @@ export class Battle {
           bombs: 3,
           mode: "deck",
           deckOffset: -105,
-          deckLateral: -2.5,
+          deckLateral: 0,
           deckSpeed: 0,
           chocks: true,
           throttle: 0.18,
@@ -851,6 +867,14 @@ export class Battle {
         controls.rudder = 0;
         controls.autopilot = true;
       }
+    }
+    if (!controls.autopilot) {
+      // Arcade stick feel: soften the raw demand, bleed it off with airspeed, and unpull when the
+      // wing is already past the stall so a held stick cannot park the aircraft at 21° of AoA.
+      const authority = clamp((p.ias ?? p.speed) / 95, 0.4, 1);
+      controls.turn = (controls.turn ?? 0) * 0.6;
+      controls.pitch = (controls.pitch ?? 0) * 0.6 * authority;
+      if ((p.stall ?? 0) > 0.3 || (p.aoa ?? 0) > 0.26) controls.pitch = Math.min(controls.pitch, -0.04);
     }
     const previousY = p.y;
     this.playerFlight.step(dt, controls);

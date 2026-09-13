@@ -219,9 +219,11 @@ export class Midway extends Scene<GameState, undefined> {
     let speed = 1;
     if (inFlight) {
       let turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
-      let pitch = (this.keys.has("ArrowUp") ? 1 : 0) - (this.keys.has("ArrowDown") ? 1 : 0);
+      // Inverted pitch, as a flight-sim stick: pulling back (Down, or the mouse pulled down)
+      // raises the nose.
+      let pitch = (this.keys.has("ArrowDown") ? 1 : 0) - (this.keys.has("ArrowUp") ? 1 : 0);
       if (!turn && this.mouse.active) turn = this.mouse.x;
-      if (!pitch && this.mouse.active) pitch = this.mouse.y;
+      if (!pitch && this.mouse.active) pitch = -this.mouse.y;
       const input = {
         turn,
         pitch,
