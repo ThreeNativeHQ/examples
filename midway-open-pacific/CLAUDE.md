@@ -80,6 +80,10 @@ D^-1.B) so the clips still play as authored.
 ## Verify
 
 ```sh
+# Everything the handoff specifies, extracted from the document and run:
+bash tools/run-handoff.sh
+
+# Or piecemeal:
 pnpm typecheck
 pnpm exec vite build
 node scripts/check-flight.mjs

@@ -346,6 +346,19 @@ at every range rather than wearing another aircraft's silhouette — `importedAi
 `world.ts` says so in a comment. This is the largest remaining gap and it needs either a Sketchfab
 token or purchased assets.
 
+### Executing this handoff
+
+The command blocks in this document are the gates, and retyping them by hand is how a gate quietly
+stops being run. `bash tools/run-handoff.sh` extracts every fenced `sh` block from this file and
+runs it, in order, starting the dev server if one is not already up. Add a command to this document
+and it runs; `--list` shows what would run without running it. Two blocks are skipped with the
+reason printed, never silently: the `claude --resume` line starts another agent rather than
+checking anything, and `pnpm dev` is the long-running server the script manages itself.
+
+Last executed on the real tree: **9 passed, 0 failed, 2 skipped**, exit 0 — typecheck, vite build,
+check-flight, check-aircraft, check-carrier-assets, check-audio, playtest doctor (nvidia turing,
+bridge answered in 6.6s), check-repair, and the launch and flight scenarios.
+
 ### Gates actually executed this session, on the real tree
 
 | Gate | Result |
