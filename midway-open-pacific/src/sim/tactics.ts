@@ -4,7 +4,6 @@ import {
   bearing,
   bombImpact,
   clamp,
-  contactEstimate,
   distance2,
   distance3,
   forward,
@@ -15,18 +14,123 @@ import {
 } from "./math.js";
 import { damageModifiers, initDamage, stepDamage } from "./damage.js";
 import { torpedoEnvelope, torpedoIntercept } from "./armament.js";
+import { estimatePosition, isStale, STALE_SECONDS } from "./intel.js";
 
 type Any = any;
+
+/** Classifications an aircraft or a boat will spend a weapon on. Not "small", and not "unknown". */
+const STRIKE_CLASSES: ReadonlySet<string> = new Set(["carrier", "cruiser"]);
+
+/** How far a deck will send a strike at a reported contact. */
+const STRIKE_RADIUS = 30000;
+
+/**
+ * The rectangle an attacker judges a release against, by what it believes the contact to *be*. An
+ * attacking crew has no access to the ship's measured geometry — and a contact record deliberately
+ * carries none — so the aiming rectangle comes from the classification instead.
+ */
+const CLASS_HULL: Readonly<Record<string, { length: number; width: number }>> = Object.freeze({
+  carrier: { length: 250, width: 30 },
+  cruiser: { length: 190, width: 20 },
+  escort: { length: 115, width: 12 },
+  submarine: { length: 95, width: 9 },
+  small: { length: 95, width: 11 },
+  unknown: { length: 120, width: 14 },
+});
+
+/**
+ * One believed target, dead-reckoned from the report that created it. Everything downstream steers,
+ * leads and releases against this estimate, so a stale or mistaken report actually sends the attack
+ * to the wrong patch of sea rather than quietly reading the ship's true position.
+ */
+function believedTarget(b: Any, c: Any): Any {
+  const e = estimatePosition(c, b.time);
+  const hull = CLASS_HULL[c.classification] ?? CLASS_HULL.unknown;
+  return {
+    ...c,
+    x: e.x,
+    z: e.z,
+    y: 0,
+    uncertainty: e.radius,
+    age: b.time - c.observedAt,
+    deckLength: hull.length,
+    deckWidth: hull.width,
+    hullLength: hull.length,
+    hullBeam: hull.width,
+    id: c.id,
+  };
+}
+
+/**
+ * The contact a ship or a boat would commit to: the closest fresh, reasonably certain report of
+ * something worth a torpedo, inside strike range. Reads only delivered reports — with none, a
+ * submarine or a carrier has nothing to attack, however close the enemy actually is.
+ */
+export function strikeContact(b: Any, s: Any): Any {
+  const known = b.teamIntel[s.team];
+  if (!known) return null;
+  let best: Any = null;
+  let score = Infinity;
+  for (const c of known.values()) {
+    if (c.lost || isStale(c, b.time, STALE_SECONDS) || !STRIKE_CLASSES.has(c.classification)) continue;
+    const e = estimatePosition(c, b.time);
+    const d = distance2(s, e);
+    if (d > STRIKE_RADIUS) continue;
+    const rank = d + e.radius * 4 + (c.classification === "cruiser" ? 8000 : 0);
+    if (rank < score) {
+      score = rank;
+      best = c;
+    }
+  }
+  return best;
+}
+
+/**
+ * What a deck should be doing, from what it can see and what it can arm. There is no launch cadence
+ * and no ship name anywhere in it: the inputs are the team's *delivered* contacts, the air threat
+ * over this ship, and the aircraft this ship has ready with stores left to arm them. `ready` is
+ * counted by the caller, which owns the airframe and store tables.
+ */
+export function chooseCarrierMission(
+  b: Any,
+  s: Any,
+  ready: Record<string, number>,
+  commitSeconds: number,
+): { kind: string; target: string | null; want: Record<string, number>; until: number } {
+  const threat = b.aircraft.filter(
+    (a: Any) => a.team !== s.team && a.hp > 0 && a.kind !== "recon" && distance2(a, s) < 9000,
+  ).length;
+  const contact = strikeContact(b, s);
+  const want: Record<string, number> = {};
+  // Local defence first: fighters held back over the group are fighters not escorting a strike, which
+  // is the whole of the CAP-versus-escort choice.
+  if (threat > 0) want.fighter = Math.min(ready.fighter, 2 + Math.min(4, threat));
+  if (contact) {
+    want.torpedo = Math.min(ready.torpedo, 3);
+    want.bomber = Math.min(ready.bomber, 3);
+    if (want.torpedo + want.bomber > 0) want.fighter = Math.min(ready.fighter, (want.fighter ?? 0) + 2);
+  } else {
+    want.fighter = Math.max(want.fighter ?? 0, Math.min(ready.fighter, 2));
+    // Nothing found: put a search leg up, because a fleet with no contacts has to go looking.
+    want.recon = Math.min(ready.recon, 1);
+  }
+  return {
+    kind: contact ? "strike" : threat ? "intercept" : "patrol",
+    target: contact?.id ?? null,
+    want,
+    until: b.time + commitSeconds,
+  };
+}
 
 export function selectNavalTarget(b: Any, a: Any): Any {
   const known = b.teamIntel[a.team];
   if (!known) return null;
   const candidates = [...known.values()].filter(
-    (c: Any) => c.kind === "carrier" && !c.sunk && b.time - c.time < 240,
+    (c: Any) => !c.lost && !isStale(c, b.time, STALE_SECONDS) && STRIKE_CLASSES.has(c.classification),
   );
   if (a.wing && b.command === "strike" && b.target) {
     const c = candidates.find((c: Any) => c.id === b.target);
-    if (c) return { ...contactEstimate(c, b.time), id: c.id };
+    if (c) return believedTarget(b, c);
   }
   if (!a.target && a.section !== undefined) {
     const mate = b.aircraft.find(
@@ -36,7 +140,7 @@ export function selectNavalTarget(b: Any, a: Any): Any {
   }
   if (a.target) {
     const c = candidates.find((c: Any) => c.id === a.target);
-    if (c) return { ...contactEstimate(c, b.time), id: c.id };
+    if (c) return believedTarget(b, c);
   }
   let best: Any = null;
   let score = Infinity;
@@ -44,7 +148,10 @@ export function selectNavalTarget(b: Any, a: Any): Any {
     const pressure = b.aircraft.filter(
       (other: Any) => other.id !== a.id && other.team === a.team && other.target === c.id && other.bombs + other.torpedo > 0,
     ).length;
-    const rank = distance2(a, c) + pressure * 1150 + (c.deck < 0.25 ? 4800 : 0);
+    const e = estimatePosition(c, b.time);
+    // An uncertain, poorly identified report is worth attacking less than a tight one. The target's
+    // own damage state is deliberately absent: nobody outside that ship knows it.
+    const rank = distance2(a, e) + pressure * 1150 + e.radius * 3 + (1 - c.confidence) * 3000;
     if (rank < score) {
       score = rank;
       best = c;
@@ -52,7 +159,7 @@ export function selectNavalTarget(b: Any, a: Any): Any {
   }
   if (best) {
     a.target = best.id;
-    return { ...contactEstimate(best, b.time), id: best.id };
+    return believedTarget(b, best);
   }
   return null;
 }
@@ -178,6 +285,7 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
     a.tactic = "ditching";
     steerAircraft(a, { x: a.x + Math.sin(a.heading) * 1000, z: a.z - Math.cos(a.heading) * 1000 }, 3, 48, dt);
     if (a.y < 4) {
+      b.recordLoss(a);
       a.removed = true;
       b.fx("splash", a, 1.6);
     }
@@ -186,7 +294,9 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
   a.home = h.id || "midway";
   const f = forward(h.heading || 0);
   const astern = { x: h.x - f.x * 520, z: h.z - f.z * 520 };
-  const busy = (h.recoveryUntil || 0) > b.time || (h.evadeUntil || 0) > b.time;
+  // The straight deck: a launch or another recovery in progress, or any suspended condition, keeps
+  // this aircraft in the pattern. `Battle.recoverAircraft` is the same test at the moment of contact.
+  const busy = (h.deckState?.occupiedUntil ?? 0) > b.time || h.deckState?.suspended != null || (h.evadeUntil || 0) > b.time;
   if (a.tactic !== "landing" && (distance2(a, astern) > 350 || Math.abs(angleDelta(bearing(a, h), h.heading || 0)) > 0.65 || busy)) {
     a.tactic = "rtb";
     steerAircraft(
@@ -202,10 +312,12 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
   const along = (a.x - h.x) * f.x + (a.z - h.z) * f.z;
   steerAircraft(a, { x: h.x + f.x * 140, z: h.z + f.z * 140 }, h.id ? 22 + Math.max(0, -along - 65) * 0.08 : 10, 51, dt);
   if ((distance2(a, h) < 150 && a.y < 42) || (!h.id && distance2(a, h) < 200 && a.y < 50)) {
-    a.recovered = true;
-    a.removed = true;
-    if (h.reserve !== undefined) h.reserve += 1;
-    h.recoveryUntil = b.time + 8;
+    // The airframe goes back into that ship's inventory — counted again, unready, and carrying no
+    // store. A deck that cannot take it refuses, and the aircraft goes round again.
+    if (b.recoverAircraft(h, a)) {
+      a.recovered = true;
+      a.removed = true;
+    }
   }
   if (along > 190 && a.y < 60) {
     a.tactic = "rtb";
@@ -285,7 +397,9 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       b.time < (a.musterUntil || 0) &&
       !(a.wing && b.player.mode === "flight") &&
       home &&
-      ![...b.teamIntel[a.team].values()].some((c: Any) => !c.sunk && b.time - c.time < 240 && distance2(a, c) < 4600)
+      ![...b.teamIntel[a.team].values()].some(
+        (c: Any) => !isStale(c, b.time, STALE_SECONDS) && distance2(a, estimatePosition(c, b.time)) < 4600,
+      )
     ) {
       const f = forward(home.heading);
       a.tactic = "muster";

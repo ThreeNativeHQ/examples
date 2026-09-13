@@ -1,6 +1,6 @@
 /** Pure deterministic game state. Rendering, audio and browser APIs stay outside this module. */
 import { updateGunnery, updateEvasion } from "./gunnery.js";
-import { rearGunner, updateTacticalAircraft } from "./tactics.js";
+import { chooseCarrierMission, rearGunner, strikeContact, updateTacticalAircraft } from "./tactics.js";
 import {
   aircraftHit,
   aircraftWorld,
@@ -44,6 +44,29 @@ import {
   type IReserve,
 } from "./recovery.js";
 import { SPEAKERS, SPEECH, radioShipName, type ISpeechRequest } from "./radio-script.js";
+import {
+  applyLaunch,
+  applyRecovery,
+  canLaunch,
+  stepService,
+  suspendReason,
+  totalAircraft,
+  type CarrierAir,
+  type DeckState,
+  type ITimes,
+} from "./carrier-ops.js";
+import {
+  canObserve,
+  classify,
+  estimatePosition,
+  isDelivered,
+  makeContact,
+  mergeContact,
+  STALE_SECONDS,
+  type Classification,
+  type Contact,
+  type Team,
+} from "./intel.js";
 import { shipClass } from "./catalog.js";
 import {
   AircraftFlight,
@@ -176,6 +199,154 @@ export function shipGeometry(name: string, kind: string): IHull & IDeck {
   return { ...hull, ...deck };
 }
 
+/** The live-aircraft ceiling. A launch at the cap is queued, not charged; nothing is consumed. */
+export const ACTIVE_CAP = 68;
+
+/**
+ * Deck work, in seconds of simulated time. Explicit game tuning in the order and relative cost the
+ * design asks for. `carrier-ops` uses each interval as the time the straight deck is *fouled*, so
+ * `launchInterval` is how long one aircraft takes to roll and clear — not a launch cadence, which
+ * comes from what the mission actually wants — and a recovery holds the deck for longer because the
+ * wires and the landing area have to be cleared. Striking a returned aircraft below to refuel and
+ * rearm it takes minutes, and repairing a damaged one takes longer again.
+ */
+const TIMES: ITimes = Object.freeze({
+  launchInterval: 6,
+  recoveryInterval: 20,
+  serviceSeconds: 300,
+  repairSeconds: 900,
+});
+
+/** Aviation gasoline one sortie costs its carrier, in the units of `CarrierAir.fuel`. */
+const FUEL_PER_LAUNCH = 1;
+
+/** How long a carrier stays with a chosen mission before re-evaluating it. */
+const COMMIT_SECONDS = 120;
+
+/** Operational re-evaluation cadence, in seconds. Movement and weapons keep the fixed step. */
+const OPS_INTERVAL = 1;
+
+/** One track update per target per this many seconds; a fleet does not re-file the same sighting. */
+const TRACK_SECONDS = 25;
+
+/**
+ * Dawn over the Pacific, 1942: clear but hazy. `intel.canObserve` treats `visibility` as an on/off
+ * gate rather than scaling with it, so the haze is applied here as a shortened `rangeLimit` and the
+ * flag is passed as well — a later scaling implementation in the module needs no change here.
+ */
+const VISIBILITY = 0.85;
+
+/** Metres of water an observer can see a hull through. A boat deeper than this is unobserved. */
+const SIGHT_DEPTH = 20;
+
+/** Seconds between an aircrew's sighting and the fleet holding the report, and a ship's by lamp/TBS. */
+const AIR_REPORT_DELAY = 30;
+const SHIP_REPORT_DELAY = 8;
+
+/**
+ * A flown airframe by role and team. The launch role never picks a *kind* of aircraft out of thin
+ * air: it names the airframe a deck actually has, and the store family that arms it follows from the
+ * airframe. A carrier search leg is flown by the dive bomber the ship carries — the cruiser
+ * floatplanes are a separate, unbuilt airframe and are deliberately not faked here.
+ */
+const ROLE_AIRFRAMES: Readonly<Record<string, Readonly<Record<string, string>>>> = Object.freeze({
+  fighter: { us: "wildcat", jp: "zero" },
+  bomber: { us: "sbd", jp: "val" },
+  torpedo: { us: "tbd", jp: "kate" },
+  recon: { us: "sbd", jp: "val" },
+});
+
+/**
+ * The ordnance family an airframe re-arms with. `carrier-ops.ts` keeps the same table privately for
+ * `stepService`, and does not export it, so the launch side has to name it again; the two must agree.
+ */
+function storeFamilyOf(airframe: string): string {
+  if (airframe === "tbd" || airframe === "kate") return "torpedo";
+  if (airframe === "sbd" || airframe === "val") return "bomb";
+  return "ammo";
+}
+
+/** What a hull truly is, in the intel module's vocabulary. Degradation is `classify`'s business. */
+function classOf(ship: Any): Classification {
+  if (ship.kind === "carrier") return "carrier";
+  if (ship.kind === "cruiser") return "cruiser";
+  if (ship.kind === "sub") return "submarine";
+  return "escort";
+}
+
+/** What a contact is called before anybody has identified it. Never a ship's name. */
+const CLASS_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  unknown: "UNIDENTIFIED CONTACT",
+  aircraft: "AIRCRAFT",
+  small: "SMALL VESSEL",
+  escort: "ESCORT VESSEL",
+  cruiser: "HEAVY WARSHIP",
+  carrier: "LARGE FLAT-DECK SHIP",
+  submarine: "SUBMARINE",
+});
+
+/**
+ * One air group, with the finite stores that arm it. Numbers are deliberately a playable roster, not
+ * the historical order of battle: they differ per ship so that two decks facing the same contact make
+ * different choices, and they total more than `ACTIVE_CAP` so the cap is a real constraint.
+ */
+interface IAirGroup {
+  airframes: Record<string, number>;
+  stores: Record<string, number>;
+  fuel: number;
+}
+
+const AIR_GROUPS: Readonly<Record<string, IAirGroup>> = Object.freeze({
+  "USS Enterprise": { airframes: { wildcat: 9, sbd: 11, tbd: 6 }, stores: { ammo: 30, bomb: 24, torpedo: 10 }, fuel: 120 },
+  "USS Hornet": { airframes: { wildcat: 8, sbd: 10, tbd: 6 }, stores: { ammo: 26, bomb: 22, torpedo: 10 }, fuel: 110 },
+  "USS Yorktown": { airframes: { wildcat: 7, sbd: 9, tbd: 5 }, stores: { ammo: 22, bomb: 18, torpedo: 8 }, fuel: 95 },
+  Akagi: { airframes: { zero: 6, val: 6, kate: 7 }, stores: { ammo: 20, bomb: 16, torpedo: 12 }, fuel: 100 },
+  Kaga: { airframes: { zero: 7, val: 7, kate: 9 }, stores: { ammo: 24, bomb: 18, torpedo: 14 }, fuel: 110 },
+  Soryu: { airframes: { zero: 6, val: 6, kate: 6 }, stores: { ammo: 18, bomb: 14, torpedo: 10 }, fuel: 90 },
+  Hiryu: { airframes: { zero: 6, val: 6, kate: 6 }, stores: { ammo: 18, bomb: 14, torpedo: 10 }, fuel: 90 },
+});
+
+/** The air group a carrier sails with. A carrier with no entry is a programming error, not a default. */
+function airGroupFor(name: string): CarrierAir {
+  const group = AIR_GROUPS[name];
+  if (!group) throw new Error(`no air group for carrier: ${name}`);
+  return {
+    airframes: { ...group.airframes },
+    // Every aircraft aboard starts armed and available; the stores are what repeat sorties spend.
+    ready: { ...group.airframes },
+    damaged: {},
+    servicing: {},
+    stores: { ...group.stores },
+    fuel: group.fuel,
+  };
+}
+
+function countOf(rec: Record<string, number>): number {
+  let n = 0;
+  for (const key in rec) n += rec[key];
+  return n;
+}
+
+/** Is there anything on the deck for the crew to finish? Service and repair only run when there is. */
+function deckHasWork(air: CarrierAir): boolean {
+  return countOf(air.servicing) > 0 || countOf(air.damaged) > 0;
+}
+
+/**
+ * One contact report: the intel module's record, plus the four display fields the HUD, the map and
+ * `math.contactEstimate` have always read. `time` is `observedAt` under the name those consumers use,
+ * and `kind` is the *classification* unless somebody actually identified the ship.
+ */
+export interface IReport extends Contact {
+  name: string;
+  kind: string;
+  time: number;
+  /** True once a crew has identified the hull; an identification is never unlearned by a vaguer one. */
+  identified: boolean;
+  source: string;
+  reported: boolean;
+}
+
 export { LOADOUTS };
 export type { ILoadout };
 
@@ -192,7 +363,10 @@ export class Battle {
   torpedoes: Any[] = [];
   airTorpedoes: Any[] = [];
   effects: Any[] = [];
-  contacts = new Map<string, Any>();
+  /** What the player's own crew knows: their sightings, and the reports the fleet has passed them. */
+  contacts = new Map<string, IReport>();
+  /** Transmitted and not yet delivered. Killing the observer cannot recall what it already sent. */
+  reports: IReport[] = [];
   radio: Any[] = [];
   events: Any[] = [];
   reported = 0;
@@ -209,10 +383,13 @@ export class Battle {
     wingShipHits: 0,
     wingShipsSunk: 0,
   };
-  teamIntel: Record<string, Map<string, Any>> = { us: new Map(), jp: new Map() };
+  /** Each side's delivered reports. Beliefs, not ships: no exact position and no deck health. */
+  teamIntel: Record<string, Map<string, IReport>> = { us: new Map(), jp: new Map() };
   command = "cover";
   target: string | null = null;
   intelTick = 0;
+  /** Countdown to the next operational re-evaluation: deck work, missions, observation, delivery. */
+  opsTick = 0;
   reconNotice = false;
   threatNotice = false;
   island = { x: 9500, y: 0, z: 1500 };
@@ -341,8 +518,23 @@ export class Battle {
         engine: 1,
         aa: 1,
         fire: 0,
-        reserve: cv ? 12 : 0,
-        nextLaunch: 22 + this.random() * 20,
+        /** Flooding, as a fraction of the heavy-list threshold the deck gate reads. */
+        list: 0,
+        /**
+         * Conserved air inventory and the one straight-deck schedule, resolved here so a `Battle`
+         * knows what its decks can fly before any renderer exists. Carriers only.
+         */
+        air: cv ? airGroupFor(name) : null,
+        deckState: cv ? ({ mode: "available", since: 0, occupiedUntil: 0, suspended: null } as DeckState) : null,
+        /** The mission this deck is committed to, and until when. Re-chosen at the ops cadence. */
+        mission: null as Any,
+        /** Why the last launch was refused, for the HUD. Null when the deck can work. */
+        launchBlocked: null as string | null,
+        /** Airframes that will never come home, and airframes a failed repair wrote off. */
+        lostAircraft: 0,
+        writtenOff: 0,
+        /** Derived every ops tick from `air.ready`: the deck park draws this, never its own count. */
+        reserve: 0,
         launchCount: 0,
         aaTimer: 1 + this.random() * 4,
         torpTimer: 40 + this.random() * 35,
@@ -656,9 +848,60 @@ export class Battle {
     this.say("SCOUT TWO", texts[cmd] || cmd);
   }
 
-  launch(s: Any, kind = "fighter"): Any {
-    if (!s || s.sunk || (s.evadeUntil || 0) > this.time || s.deck < LAUNCH_DECK || s.reserve < 1 || this.aircraft.filter((a) => a.hp > 0).length >= 68) return null;
-    s.reserve -= 1;
+  /** Live aircraft, which is what the active cap is measured against. */
+  get activeAircraft(): number {
+    return this.aircraft.filter((a: Any) => a.hp > 0).length;
+  }
+
+  /**
+   * Refresh the three derived fields the deck gate reads, then ask `carrier-ops.suspendReason` for
+   * the one readable reason. Nothing else anywhere decides whether a deck can work, and the parked
+   * aircraft the renderer draws are this same inventory rather than a second count.
+   */
+  refreshDeck(s: Any): void {
+    if (!s?.deckState) return;
+    // `carrier-ops` returns a deck to `available` only when a service or repair completes, but the
+    // deck itself is clear the moment the interval a launch or recovery charged has elapsed: the
+    // aircraft still waiting are below in the hangar. Releasing the mode here is what lets one deck
+    // launch and service at the same time while a launch and a recovery still conflict on the wires.
+    if (s.deckState.mode !== "available" && s.deckState.occupiedUntil <= this.time) s.deckState.mode = "available";
+    s.evading = (s.evadeUntil || 0) > this.time;
+    s.corridorFire = s.fire > 0.6;
+    s.deckState.suspended = suspendReason(s);
+    s.reserve = countOf(s.air.ready);
+  }
+
+  /** The single suspension gate, for the HUD as much as for the simulation. */
+  deckSuspension(s: Any): string | null {
+    this.refreshDeck(s);
+    return s.deckState?.suspended ?? null;
+  }
+
+  /**
+   * Fly one aircraft off a deck. `role` names what the mission wants; the airframe, the store it
+   * burns and the aircraft's kind all follow from the deck's own inventory. Every refusal — the
+   * active cap, an occupied deck, a suspended deck, an empty rack, no ready airframe, no aviation
+   * fuel — leaves the aircraft, its store and its fuel aboard, so a queued launch costs nothing and
+   * happens later when a slot frees.
+   */
+  launch(s: Any, role = "fighter"): Any {
+    if (!s || s.sunk || !s.air || !s.deckState) return null;
+    this.refreshDeck(s);
+    const airframe = ROLE_AIRFRAMES[role]?.[s.team];
+    if (!airframe) return null;
+    const store = storeFamilyOf(airframe);
+    const check = canLaunch(s.air, s.deckState, airframe, store, this.time, this.activeAircraft, ACTIVE_CAP);
+    if (!check.ok || s.air.fuel < FUEL_PER_LAUNCH) {
+      s.launchBlocked = check.ok ? "no aviation fuel" : check.reason;
+      return null;
+    }
+    s.launchBlocked = null;
+    const applied = applyLaunch(s.air, s.deckState, airframe, store, this.time, TIMES);
+    s.air = applied.air;
+    s.air.fuel -= FUEL_PER_LAUNCH;
+    s.deckState = applied.deck;
+    this.refreshDeck(s);
+    const kind = role;
     s.launchCount += 1;
     const f = forward(s.heading);
     const a: Any = {
@@ -697,7 +940,7 @@ export class Battle {
     s.waveTimes[a.section] ??= this.time;
     a.musterUntil = s.waveTimes[a.section] + 85;
     a.fuelCapacity = a.fuel;
-    a.airframe = kind === "torpedo" ? (s.team === "us" ? "tbd" : "kate") : kind === "fighter" ? (s.team === "us" ? "wildcat" : "zero") : s.team === "us" ? "sbd" : "val";
+    a.airframe = airframe;
     a.rearAmmo = kind === "fighter" ? 0 : 240;
     a.rearTimer = 0;
     this.aircraft.push(a);
@@ -737,6 +980,227 @@ export class Battle {
       vy: 0,
       vz: 0,
     });
+  }
+
+  /**
+   * Take one aircraft back aboard, or refuse because the deck is not free. `carrier-ops` has a
+   * `canLaunch` but no `canRecover`, so the occupancy and suspension test for the recovery side lives
+   * here; `navigateHome` holds the aircraft in the pattern until it passes. A recovered aircraft is
+   * counted again immediately but is *not* ready and carries no store: it waits for the crew.
+   */
+  recoverAircraft(s: Any, a: Any): boolean {
+    if (!s?.air || !s.deckState) return true;
+    this.refreshDeck(s);
+    if (s.deckState.suspended || s.deckState.occupiedUntil > this.time) return false;
+    const damaged = a.hp < (a.maxHp || 100) * 0.5 || (a.damage?.engine?.integrity ?? 1) < 0.6;
+    const applied = applyRecovery(s.air, s.deckState, a.airframe, this.time, TIMES, damaged);
+    s.air = applied.air;
+    s.deckState = applied.deck;
+    this.refreshDeck(s);
+    return true;
+  }
+
+  /**
+   * Move up to `n` aircraft on deck out of the ready line and into the damaged line. They are still
+   * this ship's airframes — a repair may return them, and a failed repair is where one is finally
+   * written off — so nothing here invents or destroys an identity.
+   */
+  wreckAircraft(s: Any, n: number): void {
+    if (!s.air) return;
+    const air = s.air;
+    for (let i = 0; i < n; i += 1) {
+      let pick: string | null = null;
+      for (const airframe in air.ready) if (air.ready[airframe] > 0 && (!pick || air.ready[airframe] > air.ready[pick])) pick = airframe;
+      if (!pick) return;
+      air.ready[pick] -= 1;
+      air.damaged[pick] = (air.damaged[pick] ?? 0) + 1;
+    }
+    this.refreshDeck(s);
+  }
+
+  /** Ordnance and aviation fuel destroyed outright. Nothing replaces these for the rest of the day. */
+  burnStores(s: Any, rounds: number, fuel: number): void {
+    if (!s.air) return;
+    const stores = s.air.stores;
+    for (let i = 0; i < rounds; i += 1) {
+      let pick: string | null = null;
+      for (const family in stores) if (stores[family] > 0 && (!pick || stores[family] > stores[pick])) pick = family;
+      if (!pick) break;
+      stores[pick] -= 1;
+    }
+    s.air.fuel = Math.max(0, s.air.fuel - fuel);
+  }
+
+  /** One airframe that will never come home, charged to the deck that launched it. */
+  recordLoss(a: Any): void {
+    if (!a || a === this.player || a.lossCounted) return;
+    a.lossCounted = true;
+    const h = this.ships.find((s: Any) => s.id === a.home);
+    if (h) h.lostAircraft = (h.lostAircraft || 0) + 1;
+  }
+
+  /**
+   * One carrier's cycle at the operational cadence: finish deck work, re-evaluate the mission when
+   * its commitment window has run out, then put up at most one aircraft — the role the mission is
+   * furthest short of. There is no launch timer and no type sequence; a deck that wants nothing
+   * launches nothing.
+   */
+  updateCarrier(s: Any): void {
+    this.refreshDeck(s);
+    if (deckHasWork(s.air)) {
+      const before = totalAircraft(s.air);
+      const stepped = stepService(s.air, s.deckState, this.time, TIMES, this.random());
+      s.air = stepped.air;
+      s.deckState = stepped.deck;
+      s.writtenOff += before - totalAircraft(s.air);
+      this.refreshDeck(s);
+    }
+    if (s.deckState.suspended) return;
+    if (!s.mission || this.time >= s.mission.until) {
+      const ready: Record<string, number> = {};
+      for (const role in ROLE_AIRFRAMES) {
+        const airframe = ROLE_AIRFRAMES[role][s.team];
+        const store = storeFamilyOf(airframe);
+        ready[role] = (s.air.stores[store] ?? 0) > 0 ? (s.air.ready[airframe] ?? 0) : 0;
+      }
+      s.mission = chooseCarrierMission(this, s, ready, COMMIT_SECONDS);
+    }
+    const want: Record<string, number> = s.mission?.want ?? {};
+    let role: string | null = null;
+    let shortest = 0;
+    for (const key in want) {
+      const flying = this.aircraft.filter((a: Any) => a.hp > 0 && a.home === s.id && a.kind === key).length;
+      const deficit = want[key] - flying;
+      if (deficit > shortest) {
+        shortest = deficit;
+        role = key;
+      }
+    }
+    if (role) this.launch(s, role);
+  }
+
+  /** Every observer of one side that could see anything at all, with its own height and reach. */
+  observersFor(team: string): Any[] {
+    const out: Any[] = [];
+    for (const a of this.aircraft)
+      if (a.team === team && a.hp > 0 && a.mode !== "crashing" && a.mode !== "launch")
+        out.push({
+          id: a.id,
+          x: a.x,
+          z: a.z,
+          altitude: Math.max(0, a.y),
+          range: (a.kind === "recon" ? 7200 : 6000) * VISIBILITY,
+          delay: AIR_REPORT_DELAY,
+        });
+    for (const s of this.ships)
+      if (s.team === team && !s.sunk && (s.kind !== "sub" || s.surfaced))
+        out.push({
+          id: s.id,
+          x: s.x,
+          z: s.z,
+          // A masthead lookout, or a boat's bridge with its deck awash.
+          altitude: s.kind === "sub" ? 5 : s.deckHeight,
+          range: 6000 * VISIBILITY,
+          delay: SHIP_REPORT_DELAY,
+        });
+    return out;
+  }
+
+  /**
+   * One observation sweep per side. What a sweep produces is a *report* — dated, classified by range,
+   * delayed by its transmission and carrying an error radius — never a copy of a live ship record.
+   * A target already tracked recently is left alone, so the seeded draws stay proportional to real
+   * reports rather than to the frame rate.
+   */
+  observeFleet(): void {
+    for (const team of ["us", "jp"]) {
+      const observers = this.observersFor(team);
+      if (!observers.length) continue;
+      for (const target of this.ships) {
+        if (target.team === team || target.sunk) continue;
+        const held = this.teamIntel[team].get(target.id);
+        if (held && this.time - held.observedAt < TRACK_SECONDS) continue;
+        const targetAltitude = target.kind === "sub" ? (target.surfaced ? 2 : -40) : target.deckHeight;
+        for (const o of observers) {
+          if (
+            !canObserve({
+              observer: o,
+              target,
+              observerAltitude: o.altitude,
+              targetAltitude,
+              rangeLimit: o.range,
+              visibility: VISIBILITY,
+              sightDepth: SIGHT_DEPTH,
+            })
+          )
+            continue;
+          this.fileReport(team, o, target);
+          break;
+        }
+      }
+    }
+  }
+
+  /** Classify what was seen by the range it was seen at, date it, and put it on the air. */
+  fileReport(team: string, observer: Any, target: Any): void {
+    const range = distance2(observer, target);
+    const truth = classOf(target);
+    const { classification, confidence } = classify({ truth, range, random: this.random() });
+    const identified = classification === truth;
+    this.reports.push({
+      ...makeContact({
+        id: target.id,
+        team: team as Team,
+        observerId: observer.id,
+        targetId: target.id,
+        observedAt: this.time,
+        delay: observer.delay,
+        x: target.x,
+        z: target.z,
+        heading: target.heading,
+        speed: target.speed,
+        errorRadius: 60 + range * 0.05,
+        classification,
+        confidence,
+      }),
+      name: identified ? target.name : CLASS_LABELS[classification],
+      kind: classification,
+      time: this.time,
+      identified,
+      source: observer.id.startsWith("air") ? "aircraft report" : "fleet lookout",
+      reported: true,
+    });
+  }
+
+  /**
+   * Hand over every report whose transmission time has come. A report already on the air is
+   * delivered whether or not the observer that filed it is still alive, and the fresher of two
+   * reports on the same hull wins. An identification once made is never lost to a vaguer sighting.
+   */
+  deliverReports(): void {
+    if (!this.reports.length) return;
+    const waiting: IReport[] = [];
+    for (const r of this.reports) {
+      if (!isDelivered(r, this.time)) {
+        waiting.push(r);
+        continue;
+      }
+      const store = this.teamIntel[r.team];
+      const prev = store.get(r.id);
+      const won = prev ? (mergeContact(prev, r) as IReport) : r;
+      store.set(r.id, this.keepIdentity(prev, won));
+      if (r.team === "us") {
+        const shown = this.contacts.get(r.id);
+        if (!shown || shown.time < won.time) this.contacts.set(r.id, this.keepIdentity(shown, won));
+      }
+    }
+    this.reports = waiting;
+  }
+
+  /** A newer, vaguer report improves the position but cannot un-identify a hull already named. */
+  keepIdentity(prev: IReport | undefined, next: IReport): IReport {
+    if (!prev?.identified || next.identified) return next;
+    return { ...next, name: prev.name, kind: prev.kind, identified: true };
   }
 
   dropBomb(a: Any = this.player): boolean {
@@ -911,6 +1375,9 @@ export class Battle {
         if (c.kind === "carrier") carriers += 1;
         this.reported += 1;
         this.score += 75;
+        // Transmitting is what puts the sighting on the air; the task force holds it one radio delay
+        // later, and the strike aircraft can only steer at what the fleet holds.
+        this.reports.push({ ...c, deliveredAt: this.time + SHIP_REPORT_DELAY, source: "own report" });
       }
     if (carriers) {
       this.sortie.reportedCarriers += carriers;
@@ -926,33 +1393,35 @@ export class Battle {
     return count;
   }
 
+  /**
+   * A crew close enough to identify a hull, seeing it: the player's own aircraft, or a scout over the
+   * target. This is an identified, dated observation **held by the crew** — not yet a transmitted
+   * report. `R` is what hands it to the fleet, and only then does the AI know anything about it.
+   */
   recordContact(s: Any, source = "visual"): void {
-    this.teamIntel.us.set(s.id, {
-      id: s.id,
-      name: s.name,
-      kind: s.kind,
-      x: s.x,
-      z: s.z,
-      heading: s.heading,
-      speed: s.speed,
-      hullBeam: s.hullBeam,
-      hullLength: s.hullLength,
-      deck: s.deck,
-      sunk: s.sunk,
-      time: this.time,
-      confidence: 1,
-    });
     const prev = this.contacts.get(s.id);
     this.contacts.set(s.id, {
-      id: s.id,
+      ...makeContact({
+        id: s.id,
+        team: "us",
+        observerId: "player",
+        targetId: s.id,
+        observedAt: this.time,
+        delay: 0,
+        x: s.x,
+        z: s.z,
+        heading: s.heading,
+        speed: s.speed,
+        errorRadius: 60,
+        classification: classOf(s),
+        confidence: source === "visual" ? 1 : 0.83,
+      }),
+      // The true hull kind, because this crew identified it. Every unidentified contact carries the
+      // degraded classification `intel.classify` gave it instead.
       name: s.name,
       kind: s.kind,
-      x: s.x,
-      z: s.z,
-      heading: s.heading,
-      speed: s.speed,
       time: this.time,
-      confidence: source === "visual" ? 1 : 0.83,
+      identified: true,
       source,
       reported: prev?.reported || false,
     });
@@ -990,6 +1459,7 @@ export class Battle {
       this.lose("Aircraft lost to battle damage.");
       return;
     }
+    this.recordLoss(a);
     a.hp = 0;
     a.mode = "crashing";
     a.crashAge = 0;
@@ -1055,7 +1525,10 @@ export class Battle {
       s.deck = Math.max(0, s.deck - amount / 220);
       s.aa = Math.max(0.12, s.aa - amount / 600);
       s.fire = clamp(s.fire + amount / 160, 0, 2);
-      s.reserve = Math.max(0, s.reserve - Math.ceil(amount / 40));
+      // A bomb on a working deck wrecks specific aircraft and burns specific stores, rather than
+      // taking points off one generic reserve. The aircraft are repairable; the stores are gone.
+      this.wreckAircraft(s, Math.ceil(amount / 40));
+      this.burnStores(s, Math.ceil(amount / 60), amount * 0.15);
       s.engine = Math.max(0.12, s.engine - amount / 600);
       this.fx("explosion", point, weapon === "bomb" ? 3.2 : 1);
       this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: s.kind === "carrier" ? "deck" : "steel", outcome: "hit" });
@@ -1080,12 +1553,15 @@ export class Battle {
       } else if (byWing) this.stats.wingShipHits += 1;
       s.engine = Math.max(0.1, s.engine - 0.3);
       s.fire = clamp(s.fire + 0.3, 0, 2);
+      // Flooding. Three hits put the deck past the heavy-list threshold; counter-flooding brings it
+      // back slowly, which reopens limited operations without repairing the hull or the stores.
+      s.list = clamp((s.list ?? 0) + 0.14, 0, 0.7);
       this.fx("explosion", point, 2.8);
       this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: "steel", outcome: "torpedo" });
     } else {
       s.aa = Math.max(0.1, s.aa - 0.005);
       s.deck = Math.max(0, s.deck - 0.0008);
-      if (this.random() < 0.03 && s.reserve > 0) s.reserve -= 1;
+      if (this.random() < 0.03) this.wreckAircraft(s, 1);
       this.fx("hit", point, 0.5);
     }
     // A friendly observer sees an enemy carrier burning; a friendly ship reports its own fire.
@@ -1174,11 +1650,18 @@ export class Battle {
       this.updateSortie();
       this.intelTick = 0.35;
     }
+    // Strategy runs at a coarse cadence of its own; movement, weapons and hits stay on the fixed
+    // step above, so pausing or accelerating time cannot change an inventory or a decision.
+    this.opsTick -= dt;
+    if (this.opsTick <= 0) {
+      this.opsTick = OPS_INTERVAL;
+      this.observeFleet();
+      this.deliverReports();
+      for (const s of this.ships) if (s.kind === "carrier" && !s.sunk && s.air) this.updateCarrier(s);
+    }
     if (this.time > 7 && !this.reconLaunched) {
       this.reconLaunched = true;
       this.launchRecon();
-      const scoutBase = this.ships.find((s) => s.name === "Hiryu");
-      if (scoutBase) this.launch(scoutBase, "recon");
     }
     if (this.time > 35 && !this.reconNotice) {
       this.reconNotice = true;
@@ -1217,22 +1700,24 @@ export class Battle {
         if (s.hp <= 0) this.sinkShip(s);
       }
       if (s.kind === "carrier") {
-        s.nextLaunch -= dt;
-        if (s.nextLaunch <= 0) {
-          const kind = s.launchCount % 4 === 0 ? "fighter" : s.launchCount % 3 === 0 ? "torpedo" : "bomber";
-          this.launch(s, kind);
-          s.nextLaunch = 23 + this.random() * 12;
-        }
+        // Counter-flooding, and the deck gate the HUD reads. The launch cycle itself is decided on
+        // the operational cadence in `updateCarrier`, not on a per-ship timer.
+        if ((s.list ?? 0) > 0) s.list = Math.max(0, s.list - dt * 0.004);
+        this.refreshDeck(s);
       }
       if (s.kind === "sub") {
         s.surfaced = Math.sin(this.time / 70 + s.baseX) > 0.1;
         s.torpTimer -= dt;
-        const targets = this.ships.filter((t) => t.team !== s.team && !t.sunk && t.kind === "carrier").sort((a, b) => distance2(s, a) - distance2(s, b));
-        const t = targets[0];
-        if (t) {
-          s.heading = wrap(s.heading + clamp(angleDelta(bearing(s, t), s.heading), -0.06 * dt, 0.06 * dt));
-          if (s.torpTimer <= 0 && distance2(s, t) < 4800) {
-            for (const off of [-0.025, 0, 0.025]) this.spawnTorpedo(s, bearing(s, t) + off);
+        // A boat attacks what it has been told about, through the same delivered contacts every other
+        // attacker uses. With no report it has nothing to steer at, and a stale one puts the spread
+        // where the ship was going rather than where it is.
+        const contact = strikeContact(this, s);
+        if (contact) {
+          const e = estimatePosition(contact, this.time);
+          s.heading = wrap(s.heading + clamp(angleDelta(bearing(s, e), s.heading), -0.06 * dt, 0.06 * dt));
+          if (s.torpTimer <= 0 && distance2(s, e) < 4800) {
+            const aim = bearing(s, e);
+            for (const off of [-0.025, 0, 0.025]) this.spawnTorpedo(s, aim + off);
             s.torpTimer = 78;
             if (s.team === "jp" && distance2(s, this.player) < 3000) this.say("LOOKOUT", "Torpedo wakes! Submarine attack near the task force!", true);
           }
@@ -1295,6 +1780,20 @@ export class Battle {
           landingAssist: null,
         });
         applyLoadout(p, p.loadout || "bomb");
+        // The player rearms out of the same finite stores as every other aircraft on the ship. With
+        // the racks empty the aircraft still flies; it just has nothing to drop.
+        const family = storeFamilyOf(p.airframe);
+        if (h.air) {
+          if ((h.air.stores[family] ?? 0) > 0) {
+            h.air.stores[family] -= 1;
+            h.air.fuel = Math.max(0, h.air.fuel - FUEL_PER_LAUNCH);
+          } else {
+            p.bombs = 0;
+            p.torpedo = 0;
+            updateStores(p);
+            this.say("DECK CREW", `No ${family === "torpedo" ? "torpedoes" : "bombs"} left aboard. You are going up empty.`, true);
+          }
+        }
         this.playerFlight.setAirframe(p.airframe);
         initDamage(p);
         p.killCredited = false;
@@ -1544,6 +2043,9 @@ export class Battle {
   }
 
   recover(s: Any): void {
+    // The player's aircraft fouls the straight deck exactly as an AI recovery does, so nothing else
+    // launches or lands across it while the crew clears the wires.
+    if (s.deckState) s.deckState = { ...s.deckState, mode: "servicing", since: this.time, occupiedUntil: this.time + TIMES.recoveryInterval };
     Object.assign(this.player, {
       home: s.id,
       mode: "service",
@@ -1809,32 +2311,14 @@ export class Battle {
     this.torpedoes = this.torpedoes.filter((t) => t.ttl > 0);
   }
 
+  /**
+   * The player's own eyes, and a scout close enough over a hull to identify it. Detection by radius
+   * that copied a live ship's name, course and exact deck health into both sides' knowledge is gone:
+   * every other observer files a dated, range-classified, delayed report in `observeFleet`, and the
+   * AI reads nothing else.
+   */
   updateIntel(): void {
     const p = this.player;
-    for (const team of ["us", "jp"])
-      for (const target of this.ships) {
-        if (target.team === team || (target.kind === "sub" && !target.surfaced)) continue;
-        const seen =
-          this.aircraft.some((a) => a.team === team && a.hp > 0 && distance2(a, target) < (a.kind === "recon" ? 7200 : 6000)) ||
-          this.ships.some((s) => s.team === team && !s.sunk && distance2(s, target) < 6000) ||
-          (team === "us" && p.mode === "flight" && distance2(p, target) < 5000);
-        if (seen)
-          this.teamIntel[team].set(target.id, {
-            id: target.id,
-            name: target.name,
-            kind: target.kind,
-            x: target.x,
-            z: target.z,
-            heading: target.heading,
-            speed: target.speed,
-            hullBeam: target.hullBeam,
-            hullLength: target.hullLength,
-            deck: target.deck,
-            sunk: target.sunk,
-            time: this.time,
-            confidence: 1,
-          });
-      }
     for (const s of this.ships) {
       if (s.team === "us" || s.sunk || (s.kind === "sub" && !s.surfaced)) continue;
       const d = distance2(s, p);

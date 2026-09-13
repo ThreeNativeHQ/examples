@@ -3,9 +3,9 @@ import * as T from "three";
 import { attitudeAxes } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { ellipsoid, mat, wakeTexture, makeAircraft, makeShip } from "./assets.js";
-import { createCarrier, createIjnCarrier, createMitchell, DECKS } from "./imported-ships.js";
-import { createDouglas, animateDouglas, disposeDouglas } from "./imported-aircraft.js";
-import { createMidwayAtoll, createSamidare, createZero } from "./imported-fleet.js";
+import { createCarrier, createIjnCarrier, DECKS, shipModelFor } from "./imported-ships.js";
+import { createAirframe, createDouglas, animateDouglas, disposeDouglas, spinPropeller } from "./imported-aircraft.js";
+import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
 import { animateDauntless, makeDauntless } from "./dauntless.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScars } from "./model-damage.js";
@@ -46,6 +46,53 @@ function carrierModelId(ship: any): keyof typeof DECKS {
   if (ship.name === "USS Yorktown") return "yorktown";
   return "hornet";
 }
+
+/**
+ * The catalog class each non-carrier ship belongs to, so the imported hull can stand in for the
+ * procedural silhouette at close range. Carriers are absent because the branch below already
+ * resolves their own models, which reach the same catalog hulls through `createCarrier` and
+ * `createIjnCarrier` — and only a carrier has a deck park and a `DECKS` corridor to key off.
+ *
+ * Northampton, Phelps and Balch are absent on purpose: no class and no model was supplied for
+ * either ship, and lending one a sister's hull would draw a ship this battle does not contain.
+ *
+ * Arashi and Nowaki were Kagero class and `src/sim/catalog.ts` sizes them as Kagero, so they take
+ * that hull rather than the Shiratsuyu-class Samidare the view used to draw for any IJN
+ * destroyer: the Samidare measures 111 m against the 118.5 m the simulation gives these two, so
+ * the substitution also drew a hull 7.5 m shorter than its own collision volume.
+ */
+const HULL_CLASS_BY_NAME: Readonly<Record<string, string>> = {
+  Tone: "tone",
+  Chikuma: "tone", // Tone class; the two sisters were near-identical at Midway
+  Arashi: "kagero",
+  Nowaki: "kagero",
+  "USS Hammann": "hammann",
+  "I-168": "i168",
+  "USS Nautilus": "nautilus",
+};
+
+/**
+ * Metres at which each imported hull hands back to the procedural silhouette.
+ *
+ * The two numbers already here are the carriers at 1200 m and the IJN destroyer at 2600 m, and
+ * that ordering is a triangle bill rather than a size one: a carrier carries up to 200k triangles
+ * (Yorktown, src/sim/catalog.ts) and there are seven of them in the battle, a destroyer 23k.
+ *
+ * - `cruiser` 2200 m: 201.6 m of hull, within 20% of a carrier's length, so the silhouette stays
+ *   worth drawing a long way out — but ~48k triangles against Yorktown's 200k, so two of them cost
+ *   a quarter of one carrier and can be carried well past the carriers' 1200 m.
+ * - `destroyer` 2600 m: the same 106-118 m hull and the same ~23k triangles as the IJN destroyer
+ *   this view already held to 2600 m, so the number is inherited rather than invented.
+ * - `sub` 1300 m: a destroyer's triangle count, but 13.5-15 m of masthead above the sea against a
+ *   destroyer's 28 m. Half the visible silhouette reaches a destroyer's switch-point apparent size
+ *   at half its range, and a surfaced boat is mostly conning tower — there is no superstructure
+ *   left to resolve further out.
+ */
+const HULL_LOD_RANGE: Readonly<Record<string, number>> = {
+  cruiser: 2200,
+  destroyer: 2600,
+  sub: 1300,
+};
 
 export interface IWorldHost {
   scene: T.Scene;
@@ -144,11 +191,18 @@ export class WorldView {
     const b = this.battle;
     for (const s of b.ships) {
       let mesh: T.Group = makeShip(s);
-      if (s.kind === "destroyer" && s.team === "jp") {
-        // Detailed IJN destroyer near the player, the procedural silhouette beyond visual range.
+      const classId = HULL_CLASS_BY_NAME[s.name];
+      if (classId) {
+        // The ship's own imported hull near the player, the procedural silhouette beyond it.
+        const far = HULL_LOD_RANGE[s.kind];
+        if (far === undefined)
+          throw new Error(`no imported-hull LOD range for a ${s.kind}: ${s.name}`);
+        const detailed = shipModelFor(classId);
+        // The class creators name their lead ship; this is the sister actually being built.
+        detailed.name = s.name;
         const lod = new T.LOD();
-        lod.addLevel(createSamidare(), 0);
-        lod.addLevel(mesh, 2600);
+        lod.addLevel(detailed, 0);
+        lod.addLevel(mesh, far);
         mesh = new T.Group();
         mesh.add(lod);
         mesh.userData.importedShip = true;
@@ -163,19 +217,30 @@ export class WorldView {
         mesh.add(lod);
         mesh.userData.importedShip = true;
         mesh.userData.parked = [];
-        // The deck park is spotted aft, behind the launch spot, because it has to be: the deck
-        // is 32m across and an SBD spans 12.66m with no folding wings, so a machine parked
-        // abeam the launch lane must hang its outboard wing over the sea. Measured edges at
-        // these stations are port -12.8 and starboard +12.6, which a wingtip at -10.8 clears.
+        // The park is Devastators. VT-6, VT-8 and VT-3 flew TBD-1s off these three decks on the
+        // morning of 4 June; the B-25s that used to stand on Hornet had been flown off her for
+        // Tokyo two months earlier and never came back aboard, so they were scenery, not a strike
+        // type. `ai` is the reduced-detail build of the same airframe, 11,640 triangles against
+        // the hero's 42k, which is what it exists for.
+        //
+        // The park is spotted aft, behind the launch spot, because it has to be: the deck is 32 m
+        // across at its widest and none of these aircraft is drawn with its wings folded, so a
+        // machine parked abeam the launch lane hangs a wingtip over the sea. The clearance is
+        // against the surveyed edges at these stations, port -12.80 m and starboard +12.60 m
+        // (tools/capture-deck.mjs), not against the nominal 32 m:
+        //
+        //   TBD-1 span 15.24 m (public/assets/aircraft.tbd-devastator.ai.glb, tools/inspect-glb.mjs)
+        //   half-span 7.62 m, wider than the SBD's 6.33 m, so the old x = -4.5 station left this
+        //   wing only 12.80 - (4.5 + 7.62) = 0.68 m of deck and is abandoned.
+        //   At x = -1: port tip -8.62 m, 4.18 m clear; starboard tip +6.62 m, 5.98 m clear.
+        //
+        // The import lands the TBD's wheels on y = 0, so a station is the deck datum with nothing
+        // added. The +1.82 m and the 0.22 rad nose-up were corrections for the gear-up Douglas
+        // source, and only Enterprise applied them — which left Yorktown's park sunk 1.82 m into
+        // its own flight deck.
         for (let i = 0; i < (s.team === "us" ? (id === "enterprise" ? 2 : 3) : 0); i++) {
-          const plane = id === "hornet" ? createMitchell() : createDouglas();
-          plane.userData.parkedDouglas = id !== "hornet";
-          plane.position.set(
-            id === "enterprise" ? -4.5 : -1,
-            s.deckHeight + (id === "enterprise" ? 1.82 : 0),
-            72 + i * 16,
-          );
-          if (id === "enterprise") plane.rotation.x = .22;
+          const plane = createAirframe("tbd1", "ai");
+          plane.position.set(-1, s.deckHeight, 72 + i * 16);
           detailed.add(plane);
           mesh.userData.parked.push(plane);
         }
@@ -268,12 +333,8 @@ export class WorldView {
       updateShipScars(m, s, d, this.quality);
       for (const [i, a] of ((m.userData.parked ?? []) as T.Object3D[]).entries()) {
         a.visible = d < 1900 && i < Math.ceil(s.reserve / 2);
-        const child = a as T.Group;
-        if (child.userData.parkedDouglas) animateDouglas(child, { rpm: .12, gearPos: 1 }, dt);
-        else if (child.userData.prop) {
-          (child.userData.prop as T.Object3D).rotation.z = time * 14;
-          (child.userData.gear as T.Object3D).visible = true;
-        }
+        // Turning over on the spot, waiting for the flag. One airframe, one animator.
+        spinPropeller(a as T.Group, 0.12, dt);
       }
       if (m.userData.elevator) (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
 
