@@ -215,6 +215,9 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
 /** A simple engineering starting point for acoustic travel time; temperature changes it. */
 const SOUND_SPEED = 343;
 
+/** Ceiling on simultaneous continuous world emitters; the quietest are culled first. */
+const EMITTER_BUDGET = 12;
+
 /** Audio falloff range in metres; past it an event contributes nothing. */
 const FALLOFF: Record<string, number> = {
   gun50: 1400,
@@ -522,14 +525,17 @@ export class Soundscape {
    */
   syncEmitters(specs: readonly IEmitterSpec[]): void {
     if (this.#disposed) return;
+    // At most 12 continuous world emitters (PRD mix target). Cull the quietest, which are the
+    // farthest; the player's own engine is a layer, not an emitter, and is never culled here.
+    const wanted = specs.length > EMITTER_BUDGET ? [...specs].sort((a, b) => b.volume - a.volume).slice(0, EMITTER_BUDGET) : specs;
     const now = this.bus.listener.context.currentTime;
-    const wanted = new Set(specs.map((s) => s.id));
+    const keep = new Set(wanted.map((s) => s.id));
     for (const [id, entry] of [...this.#emitters]) {
-      if (wanted.has(id)) continue;
+      if (keep.has(id)) continue;
       this.bus.stopVoice(entry.voice);
       this.#emitters.delete(id);
     }
-    for (const spec of specs) {
+    for (const spec of wanted) {
       const buffer = this.buffers.get(spec.key);
       if (!buffer) continue;
       const existing = this.#emitters.get(spec.id);

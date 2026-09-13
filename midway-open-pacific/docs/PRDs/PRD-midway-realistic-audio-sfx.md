@@ -574,6 +574,10 @@ Wildcat, Catalina, Zero, Val, Kate) at idle/cruise/power by position, so nothing
 speech clips resolves to a manifest row whose recorded SHA-256 equals the shipped Ogg, and it reports
 any packaged cue with no code path (currently zero).
 
+Mix limits now include the 12-continuous-emitter ceiling: `Soundscape.syncEmitters` sorts the
+wanted world loops by audibility and culls the quietest, so a fleet of aircraft and a burning task
+force cannot open an unbounded number of looping voices.
+
 ## Planning verification
 
 At the time this document was written only the PRD existed. Source/API references and real integration locations were researched; no SFX, voices, gameplay code or engine packages were generated or modified by the planning task itself. Document checks passed: two JSON request examples parse; four phases, ten unique unchecked ACs, 30 unique speech IDs and 50 unique SFX IDs; every specified SFX duration is within the documented API range; local Markdown links resolve. Self-review checked historical/reconstruction labels and consumer/trigger alignment. The implementation notes above record what later landed; the implementation ACs remain unchecked and phase 4 remains NOT STARTED.

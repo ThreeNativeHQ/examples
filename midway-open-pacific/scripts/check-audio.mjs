@@ -457,6 +457,16 @@ const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1)
   assert.ok((bus.stopped ?? 0) >= 1, "a no-longer-wanted emitter kept playing");
 }
 
+// 24 — the continuous-emitter budget culls the quietest, never starting more than twelve.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0);
+  const many = Array.from({ length: 20 }, (_, i) => ({ id: `e${i}`, key: "fuelFire", source: {}, volume: 1 - i * 0.04 }));
+  s.syncEmitters(many);
+  assert.equal(bus.playAtCalls.filter((c) => c.key === "fuelFire").length, 12, "the 12-emitter budget was not enforced");
+}
+
 function listener(over = {}) {
   return { cockpit: false, onDeck: false, engineCut: false, damage: 0, rpm: 0.5, throttle: 0.5, ias: 120, ...over };
 }
@@ -477,4 +487,4 @@ function speechBuffers(entries) {
   return new Map(Object.entries(entries).map(([slug, duration]) => [`speech:${slug}`, { duration, __key: `speech:${slug}` }]));
 }
 
-console.log("check-audio: 24 checks passed");
+console.log("check-audio: 25 checks passed");
