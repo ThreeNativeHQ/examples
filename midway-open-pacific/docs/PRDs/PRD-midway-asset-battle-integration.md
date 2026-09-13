@@ -422,6 +422,14 @@ Adopt explicit airframe/model identity and one animation/disposal path per famil
   `node scripts/check-geometry.mjs` reports 17 hulls sized before any render, five distinct deck
   datums, and that no render module assigns a geometry field.
 
+The game still boots and flies on all of this: `playtests/launch.playtest.json` passes on the
+committed tree against a real WebGPU adapter — startup ready at 7.1 s, zero runtime diagnostics,
+`"pass": true` — which is the first end-to-end confirmation that the new hulls, the geometry rename
+and the airframe identity change have not broken the running game. Note that the dev server must be
+started with `--host 127.0.0.1`: Vite binds IPv6 only by default and the runner's
+`http://127.0.0.1:<port>` is then refused with `TN_PLAYTEST_PAGE_UNREACHABLE`, which reads as a
+broken game and is not one.
+
 Not done: the carrier cycle itself (AC-7 to AC-9). `carrier-ops.ts` exists, is checked and is
 committed, but `Battle.launch` still draws on the generic reserve of twelve and `updateShips` still
 picks types by the modulo sequence. AI flight has not moved onto the engine `FlightModel` (AC-5).
