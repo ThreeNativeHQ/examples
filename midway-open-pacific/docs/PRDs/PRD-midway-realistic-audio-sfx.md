@@ -476,7 +476,7 @@ No runtime wiring changes in this planning task. Future implementation must clos
 
 ### Phase 4: Deck detail, remaining aircraft and final listening
 
-**Status:** NOT STARTED
+**Status:** PARTIAL — `playtests/audio-realism.playtest.json` runs the real deck/camera/cutoff/release/pause/rear sequence on WebGPU with clean diagnostics; sustained positional fire loops, the remaining conditional cues, native desktop E3 and the owner listening E4 remain.
 **ACs:** AC-7, AC-8, AC-9, AC-10; reconcile AC-1 across the shipped catalog.
 **Files:** `src/audio.ts`, cue data, existing deck-crew rendering only for a needed visible-action cue, `public/assets/audio/`, the consumed manifest, `scripts/check-audio.mjs`; proposed `playtests/audio-realism.playtest.json` and a desktop equivalent using the existing runners.
 
@@ -553,7 +553,9 @@ Implementation has begun under this PRD (the plan above is no longer unexecuted)
   `scripts/check-audio.mjs` prove 686 m ⇒ 2.0 s, 12 km culling, Doppler sign and no pause backlog.
 
 Open: the remaining aircraft/deck/Pacific production, sustained positional fire loops, the final
-mix/native proof and the owner listening sequence (Phase 4).
+mix/native proof and the owner listening sequence (Phase 4). `playtests/audio-realism.playtest.json`
+now runs the web deck/camera/cutoff/release/pause/rear sequence; it asserts clean diagnostics (a
+playtest cannot capture acoustic quality, which is why E3/E4 stay open).
 
 ## Planning verification
 

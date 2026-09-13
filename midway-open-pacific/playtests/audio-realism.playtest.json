@@ -1,0 +1,134 @@
+{
+  "name": "midway-audio-realism",
+  "schemaVersion": 1,
+  "target": "web",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 30,
+  "steps": [
+    {
+      "kind": "click",
+      "label": "take-the-deck",
+      "at": { "x": 183, "y": 542 },
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "deck-roll-accelerate",
+      "press": "KeyW",
+      "holdTicks": 900,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "rotate-and-climb",
+      "press": "ArrowDown",
+      "holdTicks": 45,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "airborne",
+      "waitTicks": 900,
+      "release": true,
+      "screenshot": "audio-exterior.png"
+    },
+    {
+      "kind": "input",
+      "label": "cockpit-perspective",
+      "press": "KeyC",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "cockpit-crossfade",
+      "waitTicks": 60,
+      "release": true,
+      "screenshot": "audio-cockpit.png"
+    },
+    {
+      "kind": "input",
+      "label": "engine-cutoff",
+      "press": "KeyI",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "dead-stick-wind",
+      "waitTicks": 90,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "engine-restart",
+      "press": "KeyI",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "guns",
+      "press": "Space",
+      "holdTicks": 90,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "bomb-release",
+      "press": "KeyB",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "release-caption",
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "pause",
+      "press": "Escape",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "paused-voices-freeze",
+      "waitTicks": 45,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "resume",
+      "press": "Escape",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "rear-view",
+      "press": "KeyV",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "rear-arc",
+      "waitTicks": 60,
+      "release": true,
+      "screenshot": "audio-rear.png"
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    }
+  }
+}
