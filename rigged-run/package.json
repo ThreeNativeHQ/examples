@@ -1,0 +1,64 @@
+{
+  "name": "rigged-run",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "studio": "threenative-studio",
+    "build": "threenative build",
+    "build:web": "threenative build --target web",
+    "build:desktop": "threenative build --target desktop",
+    "build:android": "threenative build --target android",
+    "build:ios": "threenative build --target ios",
+    "pretest": "playwright install chromium",
+    "test": "vite build && threenative-playtest --scenario \"playtests/*.playtest.json\" --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port $PORT --strictPort\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@threenative/core": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz",
+    "@threenative/physics": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2.tgz",
+    "three": "0.185.1",
+    "threenative-blender-mcp": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2.tgz",
+    "@threenative/raw-unreal": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2.tgz",
+    "@threenative/ueformat": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2.tgz",
+    "@threenative/ui": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2.tgz"
+  },
+  "devDependencies": {
+    "@threenative/assets": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz",
+    "@threenative/playtest": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz",
+    "@types/three": "0.185.3",
+    "create-threenative": "file:/tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5.tgz",
+    "esbuild": "0.27.0",
+    "playwright": "1.62.1",
+    "typescript": "5.9.3",
+    "vite": "8.2.0",
+    "@gltf-transform/cli": "4.4.2",
+    "threenative-engine-mcp": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2.tgz"
+  },
+  "optionalDependencies": {
+    "@threenative/runtime-native": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2.tgz"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@threenative/core",
+      "@threenative/runtime-native"
+    ],
+    "patchedDependencies": {
+      "three@0.185.1": "patches/three@0.185.1.patch"
+    },
+    "overrides": {
+      "create-threenative": "file:/tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5.tgz",
+      "@threenative/assets": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz",
+      "threenative-blender-mcp": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2.tgz",
+      "@threenative/core": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz",
+      "threenative-engine-mcp": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2.tgz",
+      "@threenative/physics": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2.tgz",
+      "@threenative/playtest": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz",
+      "@threenative/raw-unreal": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2.tgz",
+      "@threenative/runtime-native": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2.tgz",
+      "@threenative/ueformat": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2.tgz",
+      "@threenative/ui": "file:/tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2.tgz"
+    }
+  }
+}

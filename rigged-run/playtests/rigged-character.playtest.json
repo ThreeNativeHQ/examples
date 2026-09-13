@@ -1,0 +1,99 @@
+{
+  "name": "rigged-character",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 120,
+  "subject": "character",
+  "steps": [
+    { "kind": "wait", "label": "play and switch clips", "waitTicks": 240, "release": true }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": false,
+      "networkErrorsOptOutReason": "Desktop device transport has no CDP network observer; the browser offline/no-download check is asserted separately.",
+      "runtimeReady": true
+    },
+    "components": [
+      {
+        "allowTrivial": "The AETHER export ships an 18-bone skeleton; a lower count is a load failure, not a scene difference.",
+        "component": "boneCount",
+        "entity": "character",
+        "gte": 18
+      },
+      {
+        "allowTrivial": "The retargeted walk moves the limb bones; a still pose is the regression this catches.",
+        "component": "poseDelta",
+        "entity": "character",
+        "gte": 0.05
+      },
+      {
+        "allowTrivial": "AETHER's rigid segment lengths are preserved by construction; any drift is a skinning regression.",
+        "component": "boneLengthDrift",
+        "entity": "character",
+        "lte": 0.0001
+      },
+      {
+        "allowTrivial": "attachToBone holds the weapon in the runtime hand bone (handR); relative drift proves the bind does not slide.",
+        "component": "attachmentDrift",
+        "entity": "character",
+        "lte": 0.0001
+      },
+      {
+        "allowTrivial": "The reported attachment bone is the runtime value, not the authored constant.",
+        "component": "attachmentBone",
+        "entity": "character",
+        "equals": "handR"
+      },
+      {
+        "allowTrivial": "A zero scale would mean the attachment collapsed the weapon.",
+        "component": "weaponScale",
+        "entity": "character",
+        "gte": 0.01
+      },
+      {
+        "allowTrivial": "The six-clip export keeps namespaced ids and drops AETHER's originals.",
+        "component": "namespacedClips",
+        "entity": "character",
+        "gte": 6
+      },
+      {
+        "allowTrivial": "AETHER's preexisting clips must not survive the game-minimal export.",
+        "component": "legacyClips",
+        "entity": "character",
+        "equals": 0
+      },
+      {
+        "allowTrivial": "An 18-bone rotation bake emits at least one track per joint.",
+        "component": "trackCount",
+        "entity": "character",
+        "gte": 18
+      },
+      {
+        "allowTrivial": "Two distinct retargeted clips must actually play in the run.",
+        "component": "clipsPlayed",
+        "entity": "character",
+        "gte": 2
+      },
+      {
+        "allowTrivial": "The source 14-unit AETHER size is retained unless the sample overrides it.",
+        "component": "characterHeight",
+        "entity": "character",
+        "gte": 1
+      }
+    ],
+    "visual": [
+      {
+        "frameDiff": { "minChangedPixelRatio": 0.0005 },
+        "region": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "minNonblankPixelRatio": 0.01
+        }
+      }
+    ]
+  }
+}
