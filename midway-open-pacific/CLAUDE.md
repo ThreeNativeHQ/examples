@@ -89,13 +89,15 @@ pnpm exec vite build
 node scripts/check-flight.mjs
 node scripts/check-aircraft.mjs
 node scripts/check-audio.mjs
+# Project and platform health, including whether a native target can build at all:
+node node_modules/create-threenative/dist/threenative.js doctor
 node tools/check-fleet.mjs
 node tools/probe-ocean.mjs
 bash tools/capture-lock.sh node tools/check-repair.mjs
 bash tools/capture-lock.sh node tools/capture-deck.mjs
 bash tools/capture-lock.sh node tools/capture-fleet.mjs
 bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/cli.js \
-  --scenario playtests/launch.playtest.json --url http://127.0.0.1:5199 --browser-recipe webgpu --headed
+  --scenario playtests/launch.playtest.json --url http://127.0.0.1:5199 --browser-recipe webgpu --headed --timeout 45000
 ```
 
 `playtests/launch.playtest.json` boots the briefing, clicks **Take the deck**, runs the throttle

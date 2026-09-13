@@ -32,10 +32,14 @@ try {
  await page.screenshot({path:'screenshots/repair-cockpit.png'});
  const cockpit=await page.evaluate(()=>{const r=window.midway.world.playerMesh;return {instruments:!!r.getObjectByName("Douglas live cockpit instruments")?.children.length,glass:[]};});assert.ok(cockpit.instruments,'live cockpit instruments');
  await page.keyboard.press('KeyC');await page.keyboard.press('KeyC');
+ // Only the player's own wing guns are under test here. Every ship in the battle also emits a
+ // muzzle flash, and at 0.85 rather than 0.55, so sampling every glow in the scene made this
+ // assertion pass or fail on whether a destroyer happened to be firing at that instant.
+ const nearPlayer='(()=>{const s=window.midway,p=s.battle.player;return s.world.particles.glow.items.filter(g=>g.life<.06&&Math.hypot(g.x-p.x,g.y-p.y,g.z-p.z)<14);})()';
  await page.keyboard.down('Space');
- await page.waitForFunction(()=>window.midway.world.particles.glow.items.some(p=>p.life<.06));
- const flashes=await page.evaluate(()=>window.midway.world.particles.glow.items.filter(p=>p.life<.06).map(p=>({size:p.size,life:p.life})));
- assert.ok(flashes.length && flashes.every(p=>p.size<.5 && p.life<.06),JSON.stringify(flashes));
+ await page.waitForFunction(nearPlayer+'.length>0');
+ const flashes=await page.evaluate(nearPlayer+'.map(g=>({size:g.size,life:g.life}))');
+ assert.ok(flashes.length && flashes.every(p=>p.size<.5 && p.life<.06),'player wing-gun flashes stay small: '+JSON.stringify(flashes));
  await page.screenshot({path:'screenshots/repair-guns.png'});
  await page.keyboard.up('Space');
  console.log('muzzle flashes',JSON.stringify(flashes));
@@ -53,7 +57,7 @@ try {
  // Left button held fires the guns, exactly as Space does.
  await page.evaluate(()=>{window.midway.world.particles.glow.items.length=0;});
  await page.mouse.down();
- await page.waitForFunction(()=>window.midway.world.particles.glow.items.some(p=>p.life<.06),null,{timeout:10000});
+ await page.waitForFunction(nearPlayer+'.length>0',null,{timeout:10000});
  await page.mouse.up();
  assert.equal(await page.evaluate(()=>window.midway.mouse.fire),false,'button release stops the guns');
  // Right-button drag moves the view only.

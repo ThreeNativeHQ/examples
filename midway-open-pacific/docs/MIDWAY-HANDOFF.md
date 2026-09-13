@@ -234,6 +234,7 @@ node scripts/check-flight.mjs
 node scripts/check-aircraft.mjs
 node tools/check-carrier-assets.mjs
 node scripts/check-audio.mjs
+node node_modules/create-threenative/dist/threenative.js doctor
 ```
 
 Use a persistent terminal for the dev server if needed:
@@ -253,7 +254,7 @@ bash tools/capture-lock.sh node tools/check-repair.mjs
 bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/cli.js \
   --scenario playtests/launch.playtest.json \
   --scenario playtests/flight.playtest.json \
-  --url http://127.0.0.1:5199 --browser-recipe webgpu --headed
+  --url http://127.0.0.1:5199 --browser-recipe webgpu --headed --timeout 45000
 ```
 
 Browser-driver lessons (do not repeat the earlier harness mistakes):
@@ -345,6 +346,16 @@ WWII naval types; Poly Haven and ambientCG have no aircraft. Those types therefo
 at every range rather than wearing another aircraft's silhouette — `importedAircraftFor()` in
 `world.ts` says so in a comment. This is the largest remaining gap and it needs either a Sketchfab
 token or purchased assets.
+
+### Why the playtest scenarios carry `--timeout 45000`
+
+The runner's default page-operation budget is 15s, and its `describe` call walks the whole scene
+graph. This scene is 4,772 objects and 3,305 meshes — four Japanese carriers now carry the detailed
+Akagi hull rather than a procedural box, and that hull is roughly a thousand nodes apiece — so
+`describe` sits close enough to 15s that the scenarios pass or fail on machine load. Raising the
+budget is honest about a large scene; it is not hiding a slow frame, because the frame itself is
+3.57ms of GPU time. If the scene grows again, the thing to reduce is the object count per imported
+carrier, not the timeout.
 
 ### Executing this handoff
 
