@@ -2,7 +2,7 @@
 import * as T from "three";
 import { box, canvasTexture, ellipsoid, mat } from "./assets.js";
 
-let scorchMap: T.CanvasTexture | undefined;
+let scorchMap: T.Texture | undefined;
 
 function ensureScorchMap(): void {
   if (!scorchMap)

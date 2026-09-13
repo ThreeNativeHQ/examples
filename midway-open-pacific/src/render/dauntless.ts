@@ -50,7 +50,7 @@ export function createDauntlessGear(under: T.Material = mat(0xb7beb9)) {
 
 
 
-function weatherTexture(): T.CanvasTexture {
+function weatherTexture(): T.Texture {
   return canvasTexture(1024, 512, (c, w, h) => {
     c.fillStyle = "#d8dce0";
     c.fillRect(0, 0, w, h);
@@ -97,7 +97,7 @@ function weatherTexture(): T.CanvasTexture {
   });
 }
 
-function insignia(): T.CanvasTexture {
+function insignia(): T.Texture {
   return canvasTexture(256, 256, (c) => {
     c.fillStyle = "#1d3346";
     c.beginPath();
@@ -115,7 +115,7 @@ function insignia(): T.CanvasTexture {
   });
 }
 
-function textTexture(text: string): T.CanvasTexture {
+function textTexture(text: string): T.Texture {
   return canvasTexture(512, 128, (c) => {
     c.fillStyle = "#d6d9d2";
     c.font = "bold 96px sans-serif";
