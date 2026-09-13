@@ -109,11 +109,11 @@ try {
       };
     };
     // Briefing pose, the launch start, mid deck run and the bow.
-    return [15, -20, -55, -90].map(deckAt);
+    return [15, -20, -55, -90, 55, 78, 100, 118].map(deckAt);
   }, SPAN);
   console.log("deck width by station", JSON.stringify(report));
   const usable = report.filter((r) => r.width !== null);
-  assert.ok(usable.length >= 3, `the deck was found at most stations: ${JSON.stringify(report)}`);
+  assert.ok(usable.length >= 6, `the deck was found at most stations: ${JSON.stringify(report)}`);
   for (const row of usable)
     assert.ok(
       row.spans > 1.6,
