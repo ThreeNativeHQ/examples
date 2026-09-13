@@ -79,6 +79,11 @@ export class SpeechQueue {
     return this.#current !== null;
   }
 
+  /** The bus this queue plays through, exposed so a capture tool can tap the speech output. */
+  get target(): ISpeechBus {
+    return this.#bus;
+  }
+
   get queued(): number {
     return this.#queue.length;
   }
@@ -109,7 +114,7 @@ export class SpeechQueue {
     if (this.#disposed) return;
     this.#nearPA = nearPA;
     const now = this.#bus.listener.context.currentTime;
-    this.#bus.setVolume(paused || muted ? 0 : 0.9, 0.05);
+    this.#bus.setVolume(paused || muted ? 0 : 0.8, 0.05);
     if (paused) return;
     this.#queue = this.#queue.filter((q) => now - q.at < EXPIRY[q.cue.priority]);
     if (this.#current) {

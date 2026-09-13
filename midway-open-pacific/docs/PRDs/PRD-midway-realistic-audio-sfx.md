@@ -476,7 +476,7 @@ No runtime wiring changes in this planning task. Future implementation must clos
 
 ### Phase 4: Deck detail, remaining aircraft and final listening
 
-**Status:** PARTIAL — `playtests/audio-realism.playtest.json` runs the real deck/camera/cutoff/release/pause/rear sequence on WebGPU with clean diagnostics; burning hulls carry a positional `fuel-fire` loop and the atoll carries `reef-surf` plus sparse `albatross`, both synced from the scene; native desktop E3 and the owner listening E4 remain.
+**Status:** PARTIAL — `playtests/audio-realism.playtest.json` runs the real deck/camera/cutoff/release/pause/rear sequence on WebGPU with clean diagnostics; `tools/capture-audio.mjs` taps and records the live WebAudio mix (measured mean −18.1 dB, peak −3.2 dB, headroom inside 1 dB); burning hulls carry a positional `fuel-fire` loop and the atoll carries `reef-surf` plus sparse `albatross`; all AI engine banks are wired; native desktop E3 and the owner listening E4 remain.
 **ACs:** AC-7, AC-8, AC-9, AC-10; reconcile AC-1 across the shipped catalog.
 **Files:** `src/audio.ts`, cue data, existing deck-crew rendering only for a needed visible-action cue, `public/assets/audio/`, the consumed manifest, `scripts/check-audio.mjs`; proposed `playtests/audio-realism.playtest.json` and a desktop equivalent using the existing runners.
 
@@ -554,8 +554,13 @@ Implementation has begun under this PRD (the plan above is no longer unexecuted)
 
 Open: the remaining aircraft/deck/Pacific production, sustained positional fire loops, the final
 mix/native proof and the owner listening sequence (Phase 4). `playtests/audio-realism.playtest.json`
-now runs the web deck/camera/cutoff/release/pause/rear sequence; it asserts clean diagnostics (a
-playtest cannot capture acoustic quality, which is why E3/E4 stay open).
+now runs the web deck/camera/cutoff/release/pause/rear sequence. `tools/capture-audio.mjs` goes
+further: it taps the game's own WebAudio output into a `MediaStreamAudioDestinationNode` (no OS audio
+device, so it works under the capture lock's Xvfb) and records real Opus audio while asserting the
+scene's state. Its first run measures 48 kHz stereo, mean −18.1 dB, sample peak −3.2 dB — inside the
+1 dB headroom target — with cockpit perspective 0.79 against external 0.007, 125 decoded buffers and
+the 12-emitter budget respected. That closes E2's behaviour-plus-capture half and the measurable half
+of AC-9; whether the mix is *believable* remains E4's owner listening.
 
 E3 evidence gap recorded 2026-09-13: `pnpm build:desktop` fails with `TN_NATIVE_WEB_ONLY_UI` because
 the game's HUD and scene use `document.getElementById`; the desktop bundle is not yet portable. This

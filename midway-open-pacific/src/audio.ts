@@ -296,13 +296,42 @@ export class Soundscape {
     return this.speech.speaking;
   }
 
+  /** Live counters for the capture tool and the dev overlay; no voice handles leak out. */
+  debug(): {
+    active: boolean;
+    speaking: boolean;
+    paused: boolean;
+    muted: boolean;
+    spoken: number;
+    queued: number;
+    perspective: number;
+    emitters: number;
+    pending: number;
+    layers: number;
+    buffers: number;
+  } {
+    return {
+      active: this.active,
+      speaking: this.speaking,
+      paused: this.#paused,
+      muted: this.#muted,
+      spoken: this.speech.spoken,
+      queued: this.speech.queued,
+      perspective: this.#perspective,
+      emitters: this.#emitters.size,
+      pending: this.#pending.length,
+      layers: this.#loops.size,
+      buffers: this.buffers.size,
+    };
+  }
+
   get muted(): boolean {
     return this.#muted;
   }
 
   set muted(v: boolean) {
     this.#muted = v;
-    this.bus.setVolume(v || this.#paused ? 0 : 0.85, 0.04);
+    this.bus.setVolume(v || this.#paused ? 0 : 0.6, 0.04);
   }
 
   /** Safe to call on every gesture: the buses unlock themselves, this is only a nudge. */
@@ -343,7 +372,7 @@ export class Soundscape {
     this.#paused = paused;
     if (p.listener) this.#listener = { x: p.listener.x, y: p.listener.y, z: p.listener.z };
     // Duck effects 4 dB under speech so a warning is legible; the speech bus is untouched.
-    const level = this.#muted || paused ? 0 : this.speaking ? 0.54 : 0.85;
+    const level = this.#muted || paused ? 0 : this.speaking ? 0.38 : 0.6;
     this.bus.setVolume(level, 0.08);
     this.speech.update(dt, paused, p.nearPA ?? p.onDeck, this.#muted);
     // A paused world freezes pending cues; shift their clock so resume does not dump a backlog.
