@@ -84,6 +84,9 @@ export function updateGunnery(b: Any, s: Any, dt: number): void {
         type: "flak",
       });
       b.fx("muzzle", origin, 0.85);
+      // A heavy-AA muzzle report at the mount; Japanese heavy caliber is not asserted, so only the
+      // airburst is voiced for it rather than guessing a 12.7 cm identity.
+      b.event("aa", { at: origin, source: s.id, weapon: s.team === "us" ? "aaHeavy" : undefined, kind: "heavy" });
     }
   }
   if (s.lightTimer <= 0 && range < 1350 && target.y > 5) {
@@ -115,5 +118,6 @@ export function updateGunnery(b: Any, s: Any, dt: number): void {
         damage: 4,
       });
     b.fx("muzzle", origin, 0.4);
+    b.event("aa", { at: origin, source: s.id, weapon: s.team === "us" ? "aa20" : "aa25", kind: "light" });
   }
 }

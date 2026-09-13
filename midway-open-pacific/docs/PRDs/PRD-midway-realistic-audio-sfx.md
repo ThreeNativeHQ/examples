@@ -6,7 +6,7 @@
 **Depends on:** Existing flight, combat, camera and mission state; Phase 1 portable audio audit.
 **Scope:** Audio SFX and historically grounded diegetic speech. Planning only; no implementation authorized by this document.
 **Research date:** 2026-09-13
-**Progress:** Phases 1–2 partial — asset pipeline, manifest, the 67 non-conditional SFX and all 56 speech clips are generated; engine perspective/wind/buffeting play through `AudioBus`, and the bounded speech queue with priority, expiry, dedup, PA/headset/intercom paths and captions is wired to the reachable R/P triggers. Weapons/damage enrichment (Phase 3), the final mix/native proof and the owner listening check (Phase 4) remain. Asset records live in `content/audio/midway-audio.json`.
+**Progress:** Phases 1–3 partial — the 67 non-conditional SFX and all 56 speech clips are generated; engine perspective/wind/buffeting play through `AudioBus`; the bounded speech queue is wired to the reachable R/P triggers; and weapon, airburst, water, deck-blast and torpedo events are enriched with position, source, material and outcome and scheduled by acoustic travel time. The final mix/native proof and the owner listening check (Phase 4) remain. Asset records live in `content/audio/midway-audio.json`.
 **AUDIO-LISTENING-REQUIRED:** João reviews the final in-game listening sequence; automated checks cannot approve realism.
 
 Implementation complexity: 6–10 likely implementation files (+2), expanded audio subsystem (+2), event/voice/priority lifecycle (+2), independent engine/game release boundary (+2), offline ElevenLabs API integration (+1); risk override: none. The present task changes one Markdown document only and receives proportionate document checks.
@@ -465,7 +465,7 @@ No runtime wiring changes in this planning task. Future implementation must clos
 
 ### Phase 3: Weapons, damage and the sea battle
 
-**Status:** NOT STARTED
+**Status:** PARTIAL — event enrichment, AI/rear-gunner/ship muzzle producers, weapon/material routing, acoustic travel time, restrained Doppler and culling landed and pass `scripts/check-weapons.mjs` plus the propagation checks in `scripts/check-audio.mjs`; the fixed-scene E2 capture and sustained positional fire loops remain.
 **ACs:** AC-3, AC-4; remaining combat production for AC-1.
 **Files:** `src/sim/battle.ts`, `src/sim/gunnery.ts`, `src/audio.ts`, cue data; `src/sim/damage.ts` only if an existing transition cannot be consumed without ambiguity.
 
@@ -543,9 +543,18 @@ Implementation has begun under this PRD (the plan above is no longer unexecuted)
   active Zero over Enterprise and stays silent for a Zero that broke off, plus the release, damage,
   fuel, break-off and ship-name lines.
 
-Open: event enrichment and weapon banks (Phase 3), the remaining aircraft/deck/Pacific production,
-native desktop proof and the owner listening sequence (Phase 4).
+- Weapon/outcome enrichment landed: `Battle.fire` emits the player's own gun locally and AI guns
+  positionally with a family (`gun50`/`gun77`/`cannon20`), `updateGunnery` emits ship AA muzzle
+  reports at the mount (`aaHeavy`/`aa20`/`aa25`), the rear gunner emits `gun30`, and explosions
+  carry material/outcome (`deck`/`steel`/`water`/`air`, `torpedo`). `src/audio.ts` maps those to the
+  generated bank and schedules each world cue by acoustic travel time (343 m/s, re-derived against
+  listener motion each frame), with restrained radial-velocity Doppler, range culling and pause
+  freeze. `scripts/check-weapons.mjs` proves the producers; the propagation checks in
+  `scripts/check-audio.mjs` prove 686 m ⇒ 2.0 s, 12 km culling, Doppler sign and no pause backlog.
+
+Open: the remaining aircraft/deck/Pacific production, sustained positional fire loops, the final
+mix/native proof and the owner listening sequence (Phase 4).
 
 ## Planning verification
 
-At the time this document was written only the PRD existed. Source/API references and real integration locations were researched; no SFX, voices, gameplay code or engine packages were generated or modified by the planning task itself. Document checks passed: two JSON request examples parse; four phases, ten unique unchecked ACs, 30 unique speech IDs and 50 unique SFX IDs; every specified SFX duration is within the documented API range; local Markdown links resolve. Self-review checked historical/reconstruction labels and consumer/trigger alignment. The implementation notes above record what later landed; the implementation ACs remain unchecked and phases 3–4 remain NOT STARTED.
+At the time this document was written only the PRD existed. Source/API references and real integration locations were researched; no SFX, voices, gameplay code or engine packages were generated or modified by the planning task itself. Document checks passed: two JSON request examples parse; four phases, ten unique unchecked ACs, 30 unique speech IDs and 50 unique SFX IDs; every specified SFX duration is within the documented API range; local Markdown links resolve. Self-review checked historical/reconstruction labels and consumer/trigger alignment. The implementation notes above record what later landed; the implementation ACs remain unchecked and phase 4 remains NOT STARTED.

@@ -1,5 +1,6 @@
 import { Scene } from "@threenative/core";
 import { AudioBus } from "@threenative/core";
+import { Vector3 } from "three";
 import type { ICtx } from "@threenative/core";
 import type * as T from "three";
 import { Battle } from "../sim/battle.js";
@@ -37,6 +38,7 @@ export class Midway extends Scene<GameState, undefined> {
   private cleanups: Array<() => void> = [];
 
   async load(ctx: ICtx<GameState, undefined>): Promise<void> {
+  private camPos = new Vector3();
     const [, , , , , buffers] = await Promise.all([
       loadImportedAircraft(ctx),
       loadImportedShips(ctx),
@@ -267,11 +269,13 @@ export class Midway extends Scene<GameState, undefined> {
         deckSpeed: p.deckSpeed ?? p.speed ?? 0,
         engineCut: p.engineCut,
         damage: 1 - (p.damage?.engine?.integrity ?? 1),
+    this.world.camera.getWorldPosition(this.camPos);
         stall: p.stall ?? 0,
         gforce: p.gforce ?? 1,
         rpm: p.rpm ?? p.throttle ?? 0,
         throttle: p.throttle ?? 0,
         ias: p.ias ?? p.speed ?? 0,
+        listener: { x: this.camPos.x, y: this.camPos.y, z: this.camPos.z },
       },
       this.paused || b.status !== "playing",
       dt,

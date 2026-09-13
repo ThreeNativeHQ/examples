@@ -551,7 +551,7 @@ export class Battle {
     });
     if (a === this.player) {
       this.stats.bombsDropped += 1;
-      this.event("bomb");
+      this.event("bomb", { weapon: "bomb" });
       this.voice("R17");
     }
     return true;
@@ -662,7 +662,24 @@ export class Battle {
     }
     if (a === this.player) {
       a.heat = 1;
-      this.event("gun");
+      this.event("gun", { weapon: this.gunFamily(a) });
+    } else if (distance3(a, this.player) < 2600) {
+      // AI guns are only worth a cue when they can be heard; the family carries the identity.
+      this.event("gun", {
+        at: { x: a.x, y: a.y, z: a.z },
+        vel: { x: a.vx || 0, y: a.vy || 0, z: a.vz || 0 },
+        source: a.id,
+        weapon: this.gunFamily(a),
+      });
+    }
+  }
+
+  /** The weapon identity a firing aircraft emits: player .50, Zero cannon/MG, other Japanese rifle. */
+  gunFamily(a: Any): string {
+    if (a === this.player) return "gun50";
+    if (a.airframe === "zero") {
+      a.cannonToggle = !a.cannonToggle;
+      return a.cannonToggle ? "cannon20" : "gun77";
     }
   }
 
@@ -760,7 +777,7 @@ export class Battle {
     a.crashAge = 0;
     a.vy = Math.min(-7, a.vy || 0);
     this.fx("explosion", a, 1.15);
-    this.event("explosion", { distance: distance3(this.player, a) });
+    this.event("explosion", { distance: distance3(this.player, a), at: { x: a.x, y: a.y, z: a.z }, material: "air" });
     if (a.damage) a.damage.engine.fire = Math.max(0.55, a.damage.engine.fire);
     if (owner === "player" && a.team === "jp") {
       this.score += 150;
@@ -779,6 +796,8 @@ export class Battle {
     amount: number,
     point: Any,
     weapon = "bomb",
+    if (a.team === "jp") return "gun77";
+    return "gun50";
     team = "us",
     opts: { owner?: string | null; nearMiss?: boolean; stamp?: IStamp | null } = {},
   ): void {
@@ -816,7 +835,7 @@ export class Battle {
       s.reserve = Math.max(0, s.reserve - Math.ceil(amount / 40));
       s.engine = Math.max(0.12, s.engine - amount / 600);
       this.fx("explosion", point, weapon === "bomb" ? 3.2 : 1);
-      this.event("explosion", { distance: distance3(this.player, point) });
+      this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: "steel", outcome: "torpedo" });
       if (byPlayer && nearMiss) {
         this.stats.nearMisses += 1;
         this.score += 60;
@@ -839,7 +858,7 @@ export class Battle {
       s.engine = Math.max(0.1, s.engine - 0.3);
       s.fire = clamp(s.fire + 0.3, 0, 2);
       this.fx("explosion", point, 2.8);
-      this.event("explosion", { distance: distance3(this.player, point) });
+      this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: s.kind === "carrier" ? "deck" : "steel", outcome: "hit" });
     } else {
       s.aa = Math.max(0.1, s.aa - 0.005);
       s.deck = Math.max(0, s.deck - 0.0008);
@@ -1329,7 +1348,7 @@ export class Battle {
     });
     if (a === this.player) {
       this.stats.torpedoesDropped += 1;
-      this.event("bomb");
+      this.event("bomb", { weapon: "torpedo" });
       this.event("notice", { text: envelope.safe ? "TORPEDO AWAY — HOLD COURSE, THEN BREAK CLEAR" : `TORPEDO AWAY / BAD ENTRY: ${envelope.problems.join(" · ")}` });
       this.voice("R17");
     }
@@ -1372,7 +1391,7 @@ export class Battle {
       if (b.type === "flak") {
         if (b.ttl <= 0) {
           this.fx("flak", b, 1.5);
-          this.event("flak", { distance: distance3(this.player, b) });
+          this.event("flak", { distance: distance3(this.player, b), at: { x: b.x, y: b.y, z: b.z } });
           for (const a of planes) {
             if (a.hp <= 0) continue;
             const dist = distance3(a, b);
@@ -1443,7 +1462,7 @@ export class Battle {
         b.dead = true;
       } else if (b.y <= 0) {
         this.fx("splash", b, 3.5);
-        this.event("splash", { distance: distance3(this.player, b) });
+        this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: b.y, z: b.z } });
         for (const s of this.ships) {
           const l = localPoint(b, s);
           const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.width / 2), Math.max(0, Math.abs(l.forward) - s.length / 2));

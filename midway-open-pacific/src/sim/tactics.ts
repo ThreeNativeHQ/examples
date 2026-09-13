@@ -146,6 +146,11 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
   const len = Math.hypot(aim.x, aim.y, aim.z) || 1;
   a.rearTimer = 0.28;
   a.rearAmmo -= 1;
+  b.event("gun", {
+    at: { x: a.x - f.x * 4, y: a.y + 0.8, z: a.z - f.z * 4 },
+    source: a.id,
+    weapon: "gun30",
+  });
   b.bullets.push({
     id: b.id("bullet"),
     x: a.x - f.x * 4,

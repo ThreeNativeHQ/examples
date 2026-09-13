@@ -223,6 +223,8 @@ const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1)
   s.event({ type: "alarm" });
   assert.equal(bus.playCalls.filter((c) => c.key === "generalAlarm").length, 1, "the general alarm did not sound");
   s.event({ cue: "aaHeavy", at: { x: 100, y: 0, z: 0 }, distance: 100 });
+  // A world cue waits for its sound to travel: put the listener at the source and it is due now.
+  s.update(listener({ listener: { x: 100, y: 0, z: 0 } }), false, 1 / 60);
   assert.equal(bus.playAtCalls.filter((c) => c.key === "aaHeavy").length, 1, "a positional cue did not pan");
 }
 
@@ -337,6 +339,110 @@ const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1)
 }
 
 
+// 17 — an enriched event carries weapon identity to the right cue.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  const atOrigin = () => s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0);
+  atOrigin();
+  s.event({ type: "gun", weapon: "cannon20", at: { x: 0, y: 0, z: 0 } });
+  s.event({ type: "gun", weapon: "gun77", at: { x: 0, y: 0, z: 0 } });
+  atOrigin();
+  const keys = bus.playAtCalls.map((c) => c.key);
+  assert.ok(keys.includes("cannon20"), "a Zero cannon did not reach its cue");
+  assert.ok(keys.includes("gun77"), "a Japanese MG did not reach its cue");
+  s.event({ type: "bomb", weapon: "torpedo" });
+  assert.ok(bus.playCalls.some((c) => c.key === "torpedoRelease"), "a torpedo release did not sound its latch");
+}
+
+// 18 — release, airburst, water, deck blast and torpedo hit stay distinguishable.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  const here = () => s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0);
+  here();
+  s.event({ type: "explosion", at: { x: 0, y: 0, z: 0 }, material: "water" });
+  s.event({ type: "explosion", at: { x: 0, y: 0, z: 0 }, material: "air" });
+  s.event({ type: "explosion", at: { x: 0, y: 0, z: 0 }, material: "steel", outcome: "torpedo" });
+  s.event({ type: "explosion", at: { x: 0, y: 0, z: 0 }, material: "deck" });
+  s.event({ type: "flak", at: { x: 0, y: 0, z: 0 } });
+  here();
+  const keys = new Set(bus.playAtCalls.map((c) => c.key));
+  for (const key of ["bombWater", "aircraftCrash", "torpedoHit", "bombDeck", "flakAirburst"]) {
+    assert.ok(keys.has(key), `explosion family missing cue ${key}`);
+  }
+}
+
+// 19 — a stationary explosion 686 m away begins at 2.0 s, not before.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  const at = (t) => {
+    bus.listener.context.currentTime = t;
+    s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0.1);
+  };
+  at(0);
+  s.event({ type: "explosion", at: { x: 686, y: 0, z: 0 }, material: "steel" });
+  at(1.9);
+  assert.equal(bus.playAtCalls.length, 0, "a 686 m explosion sounded before 2 s");
+  at(2.05);
+  assert.equal(bus.playAtCalls.length, 1, "a 686 m explosion never arrived");
+}
+
+// 20 — an event past its falloff range is culled even after its travel time.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  bus.listener.context.currentTime = 0;
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0);
+  s.event({ type: "explosion", at: { x: 12000, y: 0, z: 0 }, material: "steel" });
+  bus.listener.context.currentTime = 40;
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0.1);
+  assert.equal(bus.playAtCalls.length, 0, "an inaudible 12 km explosion still sounded");
+}
+
+// 21 — Doppler follows the radial velocity: receding source drops, approaching source rises.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  bus.listener.context.currentTime = 0;
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0);
+  s.event({ type: "gun", weapon: "gun50", at: { x: 300, y: 0, z: 0 }, vel: { x: 80, y: 0, z: 0 } });
+  bus.listener.context.currentTime = 1;
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0.1);
+  const receding = bus.playAtCalls.at(-1).options.detune;
+  assert.ok(receding < 0, `a receding aircraft should drop pitch, got ${receding}`);
+
+  const bus2 = new FakeBus();
+  const s2 = new Soundscape(allBuffers(), bus2);
+  bus2.listener.context.currentTime = 0;
+  s2.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0);
+  s2.event({ type: "gun", weapon: "gun50", at: { x: 300, y: 0, z: 0 }, vel: { x: -80, y: 0, z: 0 } });
+  bus2.listener.context.currentTime = 1;
+  s2.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0.1);
+  assert.ok(bus2.playAtCalls.at(-1).options.detune > 0, "an approaching aircraft should rise in pitch");
+}
+
+// 22 — a paused world freezes pending cues and resume does not dump a backlog.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  bus.listener.context.currentTime = 0;
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0);
+  s.event({ type: "explosion", at: { x: 686, y: 0, z: 0 }, material: "steel" });
+  for (let i = 0; i < 5; i += 1) {
+    bus.listener.context.currentTime += 1;
+    s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), true, 1);
+  }
+  assert.equal(bus.playAtCalls.length, 0, "a pending cue fired while paused");
+  bus.listener.context.currentTime += 0.1;
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0.1);
+  assert.equal(bus.playAtCalls.length, 0, "resume dumped the paused backlog");
+  bus.listener.context.currentTime += 2.1;
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0.1);
+  assert.equal(bus.playAtCalls.length, 1, "the frozen cue never resumed after the pause");
+}
+
 function listener(over = {}) {
   return { cockpit: false, onDeck: false, engineCut: false, damage: 0, rpm: 0.5, throttle: 0.5, ias: 120, ...over };
 }
@@ -357,4 +463,4 @@ function speechBuffers(entries) {
   return new Map(Object.entries(entries).map(([slug, duration]) => [`speech:${slug}`, { duration, __key: `speech:${slug}` }]));
 }
 
-console.log("check-audio: 17 checks passed");
+console.log("check-audio: 23 checks passed");

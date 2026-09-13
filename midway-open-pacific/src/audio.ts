@@ -115,6 +115,8 @@ export interface IListenerState {
   onDeck: boolean;
   /** Within shipboard PA range; gates the `pa` channel only. */
   nearPA?: boolean;
+  /** Listener world position, used to schedule acoustic travel time. */
+  listener?: { x: number; y: number; z: number };
   deckSpeed?: number;
   engineCut?: boolean;
   damage?: number;
@@ -124,6 +126,24 @@ export interface IListenerState {
   rpm: number;
   throttle: number;
   ias: number;
+}
+
+/**
+ * A battle/airframe sound event. Enriched by the simulation with where and what it was, so audio can
+ * schedule it by travel time, pan it and choose the right weapon/material identity.
+ */
+export interface ISoundEvent {
+  readonly type?: string;
+  /** Explicit cue override; a weapon family key (`gun50`, `aa25`) or asset key. */
+  readonly cue?: string;
+  readonly weapon?: string;
+  readonly material?: "deck" | "water" | "air" | "steel";
+  readonly outcome?: string;
+  readonly source?: string;
+  readonly at?: { x: number; y: number; z: number };
+  readonly vel?: { x: number; y: number; z: number };
+  readonly distance?: number;
+  readonly request?: ISpeechRequest;
 }
 
 /** One-shot volume and cooldown by cue family; distance is applied per event. */
@@ -159,6 +179,9 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
   radioKey: { volume: 0.25, cooldown: 0.2 },
   generalAlarm: { volume: 0.8, cooldown: 3 },
 };
+
+/** A simple engineering starting point for acoustic travel time; temperature changes it. */
+const SOUND_SPEED = 343;
 
 /** Audio falloff range in metres; past it an event contributes nothing. */
 const FALLOFF: Record<string, number> = {
@@ -217,6 +240,9 @@ export class Soundscape {
   #reported = 0;
   #perspective = 0;
   #lastT = 0;
+  /** World cues awaiting acoustic arrival, and the listener position they are measured against. */
+  #pending: Array<{ cue: string; at: { x: number; y: number; z: number }; emitAt: number; detune: number }> = [];
+  #listener = { x: 0, y: 0, z: 0 };
 
   constructor(buffers: Buffers, bus: IAudioTarget, speechBus?: ISpeechBus) {
     this.buffers = buffers;
@@ -275,10 +301,14 @@ export class Soundscape {
     const now = this.bus.listener.context.currentTime;
     this.#lastT = now;
     this.#paused = paused;
+    if (p.listener) this.#listener = { x: p.listener.x, y: p.listener.y, z: p.listener.z };
     // Duck effects 4 dB under speech so a warning is legible; the speech bus is untouched.
     const level = this.#muted || paused ? 0 : this.speaking ? 0.54 : 0.85;
     this.bus.setVolume(level, 0.08);
     this.speech.update(dt, paused, p.nearPA ?? p.onDeck, this.#muted);
+    // A paused world freezes pending cues; shift their clock so resume does not dump a backlog.
+    if (paused) for (const q of this.#pending) q.emitAt += dt;
+    else this.#flush();
     // Perspective ramps over ~150 ms; the same engine phase keeps running underneath.
     const target = p.cockpit ? 1 : 0;
     this.#perspective += (target - this.#perspective) * (1 - Math.exp(-dt / 0.15));
@@ -341,69 +371,106 @@ export class Soundscape {
   }
 
   /** A one-shot at a world point: the panner carries the distance and direction. */
-  #playAt(key: string, at: { x: number; y: number; z: number }, volume = 1): boolean {
+  #playAt(key: string, at: { x: number; y: number; z: number }, detune = 0): boolean {
     if (this.#disposed || this.#muted || this.#paused) return false;
     const buffer = this.buffers.get(key);
     const tune = ONE_SHOT[key];
     if (!buffer || !tune) return false;
+    const attenuation = Math.max(0, 1 - this.#distance(at) / (FALLOFF[key] ?? 1));
+    if (attenuation <= 0.01) return false;
+    const now = this.bus.listener.context.currentTime;
+    if (now - (this.#lastAt.get(key) ?? -Infinity) < tune.cooldown) return true;
+    this.#lastAt.set(key, now);
     this.bus.playAt(buffer, { x: at.x, y: at.y, z: at.z } as never, {
-      volume: tune.volume * volume,
+      volume: tune.volume * attenuation,
       refDistance: 60,
       rolloffFactor: 0.7,
+      detune,
     });
     return true;
   }
 
+  /** The cue a sound event maps to, or undefined when it has no shipped sample. */
+  #cueFor(e: ISoundEvent): string | undefined {
+    switch (e.type) {
+      case "gun":
+        return e.weapon ?? "gun50";
+      case "aa":
+        return e.weapon || undefined;
+      case "flak":
+        return "flakAirburst";
+      case "explosion":
+        if (e.material === "water") return "bombWater";
+        if (e.material === "air") return "aircraftCrash";
+        if (e.outcome === "torpedo") return "torpedoHit";
+        return "bombDeck";
+      case "splash":
+        return "bombWater";
+      case "bomb":
+        return e.weapon === "torpedo" ? "torpedoRelease" : "bombShackle";
+      case "damage":
+        return "airframeHit";
+      case "radio":
+        return "radioKey";
+      case "land":
+        return "deckTouchdown";
+      case "alarm":
+        return "generalAlarm";
+      default:
+        return e.cue;
+    }
+  }
+
+  #distance(at: { x: number; y: number; z: number }): number {
+    const l = this.#listener;
+    return Math.hypot(at.x - l.x, at.y - l.y, at.z - l.z);
+  }
+
   /**
-   * One battle/airframe event. Enriched events (source ID, position, weapon family, outcome) are
-   * added by the later phases; today the existing distance field is an honest attenuation input.
+   * Restrained Doppler from the source's real radial velocity. The pilot never hears their own
+   * engine or headset shifted, so only world events with a velocity carry it. A few dozen cents is
+   * a passing aeroplane; the full ±1200 is a laboratory siren.
    */
-  event(e: { type?: string; distance?: number; at?: { x: number; y: number; z: number }; cue?: string; request?: ISpeechRequest }): void {
-    const d = typeof e.distance === "number" ? e.distance : 0;
-    const near = (key: string) => Math.max(0, 1 - d / (FALLOFF[key] ?? 1));
+  #doppler(e: ISoundEvent, at: { x: number; y: number; z: number }): number {
+    if (!e.vel) return 0;
+    const dx = at.x - this.#listener.x;
+    const dy = at.y - this.#listener.y;
+    const dz = at.z - this.#listener.z;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const radial = (e.vel.x * dx + e.vel.y * dy + e.vel.z * dz) / len;
+    return Math.max(-60, Math.min(60, (-radial / SOUND_SPEED) * 1200 * 0.3));
+  }
+
+  /**
+   * One battle/airframe event. A world event is scheduled by acoustic travel time from its position
+   * and re-evaluated against the listener's motion each frame; a local/headset cue sounds at once.
+   */
+  event(e: ISoundEvent): void {
     if (e.type === "speech") {
       if (e.request) this.speak(e.request);
       return;
     }
-    if (e.cue && e.at) {
-      this.#playAt(e.cue, e.at, near(e.cue));
+    const cue = this.#cueFor(e);
+    if (!cue) return;
+    if (!e.at) {
+      const d = typeof e.distance === "number" ? e.distance : 0;
+      this.#play(cue, Math.max(0, 1 - d / (FALLOFF[cue] ?? 1)));
       return;
     }
-    switch (e.type) {
-      case "gun":
-        this.#play("gun50");
-        break;
-      case "explosion": {
-        const a = near("bombWater");
-        if (a > 0) this.#play("bombWater", a);
-        break;
-      }
-      case "flak": {
-        const a = near("flakAirburst");
-        if (a > 0) this.#play("flakAirburst", a);
-        break;
-      }
-      case "splash": {
-        const a = near("torpedoEntry");
-        if (a > 0) this.#play("torpedoEntry", a);
-        break;
-      }
-      case "bomb":
-        this.#play("bombShackle");
-        break;
-      case "damage":
-        this.#play("airframeHit");
-        break;
-      case "radio":
-        this.#play("radioKey");
-        break;
-      case "land":
-        this.#play("deckTouchdown");
-        break;
-      case "alarm":
-        this.#play("generalAlarm");
-        break;
-    }
+    const at = { x: e.at.x, y: e.at.y, z: e.at.z };
+    this.#pending.push({ cue, at, emitAt: this.bus.listener.context.currentTime, detune: this.#doppler(e, at) });
+    if (this.#pending.length > 96) this.#pending.shift();
+  }
+
+  /** Sound every pending world cue whose travel time has elapsed at the listener's current range. */
+  #flush(): void {
+    if (!this.#pending.length) return;
+    const now = this.bus.listener.context.currentTime;
+    this.#pending = this.#pending.filter((p) => {
+      if (now - p.emitAt < this.#distance(p.at) / SOUND_SPEED) return true;
+      this.#playAt(p.cue, p.at, p.detune);
+      return false;
+    });
   }
 
   /** Offer a friendly line to the bounded speech queue. */
@@ -418,6 +485,7 @@ export class Soundscape {
     this.active = false;
     this.#loops.clear();
     this.#lastAt.clear();
+    this.#pending = [];
     this.speech.dispose();
     if (this.#speechBus && (this.#speechBus as unknown) !== (this.bus as unknown)) this.#speechBus.dispose();
     this.bus.dispose();
