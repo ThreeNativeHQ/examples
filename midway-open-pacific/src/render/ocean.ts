@@ -37,7 +37,11 @@ export function createOcean() {
   });
 
   // Logarithmic rings keep metre-scale triangles beside the carrier and reach the horizon.
-  const segments = 224, rings = 156, positions = [0, 0, 0], indices: number[] = [];
+  // Ring count sets how finely the swell is sampled at range, and the ships sit at range: at
+  // 156 rings the spacing out at 300m was 21m, so a 45m wave got two vertices and the sea
+  // flattened into ripples exactly where a destroyer is being looked at. Doubling the rings
+  // halves that spacing and costs only vertices, not another wave evaluation per pixel.
+  const segments = 288, rings = 312, positions = [0, 0, 0], indices: number[] = [];
   const growth = Math.log(1 + 100000 / 1.6) / rings;
   for (let r = 0; r < rings; r++) {
     const radius = 1.6 * (Math.exp((r + 1) * growth) - 1);

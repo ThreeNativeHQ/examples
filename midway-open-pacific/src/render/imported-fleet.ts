@@ -35,11 +35,12 @@ const SAMIDARE_DRAUGHT = -1.35;
 const ATOLL_WIDTH = 8000;
 const ATOLL_RELIEF = 12;
 /**
- * Sunk until the islands stand proud but the reef flat and lagoon still sit at the surface. At
- * -3 the whole ring went under and Midway read as two unrelated islands in open ocean, which is
- * the one thing an atoll is not.
+ * Sea-level datum for the disc. Sunk far (-3) the whole reef went under and Midway read as two
+ * unrelated islands in open ocean; at the surface it fought the ocean plane. It now sits at zero
+ * and everything genuinely below the waterline is trimmed away instead, so the reef ring shows
+ * as the shallow shelf it is and nothing is drawn where the sea already covers it.
  */
-const ATOLL_DATUM = -1;
+const ATOLL_DATUM = 0;
 
 let zero: GLTF;
 let samidare: GLTF;
@@ -144,17 +145,56 @@ export function createSamidare(): T.Group {
 }
 
 /**
+ * Drop every triangle that lies wholly under the sea.
+ *
+ * The atoll is a nearly flat disc, so its submerged reef and lagoon floor sit within a metre of
+ * the ocean plane over a wide area and the two surfaces interleave — the jagged cyan and white
+ * speckle that made Midway look broken from the air. There is nothing to be gained by drawing
+ * geometry the opaque ocean covers anyway, so it is removed and the fight goes with it. The
+ * shoreline band is kept: a triangle that breaks the surface at any corner still draws.
+ */
+function trimBelowSea(model: T.Object3D, cutWorldY: number, scaleY: number, offsetY: number): void {
+  const cut = (cutWorldY - offsetY) / scaleY;
+  model.traverse((node) => {
+    if (!(node instanceof T.Mesh)) return;
+    const geometry = node.geometry as T.BufferGeometry;
+    const position = geometry.getAttribute("position");
+    const index = geometry.getIndex();
+    const count = index ? index.count : position.count;
+    const at = (i: number) => (index ? index.getX(i) : i);
+    const kept: number[] = [];
+    for (let i = 0; i < count; i += 3) {
+      const a = at(i);
+      const b = at(i + 1);
+      const c = at(i + 2);
+      if (Math.max(position.getY(a), position.getY(b), position.getY(c)) > cut)
+        kept.push(a, b, c);
+    }
+    geometry.setIndex(kept);
+    geometry.computeBoundingSphere();
+    geometry.computeBoundingBox();
+  });
+}
+
+/**
  * Midway Atoll, with the garrison and the radar mast standing on Eastern Island, whose triangle
  * of 1942 runways is already in the atoll's own texture.
  */
 export function createMidwayAtoll(): T.Group {
   const root = new T.Group();
   root.name = "Midway Atoll";
+  // There is one Midway, so this instance owns its geometry outright and may reshape it.
   const model = clone(atoll, "Midway Atoll");
   const size = new T.Box3().setFromObject(model).getSize(new T.Vector3());
   const horizontal = ATOLL_WIDTH / size.x;
-  model.scale.set(horizontal, ATOLL_RELIEF / (size.y / 2), horizontal);
+  const vertical = ATOLL_RELIEF / (size.y / 2);
+  model.scale.set(horizontal, vertical, horizontal);
   model.position.y = ATOLL_DATUM;
+  // Clone before reshaping: the loader's geometry is shared and must survive a scene restart.
+  model.traverse((child) => {
+    if (child instanceof T.Mesh) child.geometry = child.geometry.clone();
+  });
+  trimBelowSea(model, 0.35, vertical, ATOLL_DATUM);
   root.add(model);
 
   // Eastern Island's centre, read off the top-down render in model units and carried to metres.

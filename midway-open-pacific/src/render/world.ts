@@ -153,10 +153,18 @@ export class WorldView {
         s.length = DECKS[id].length;
         s.width = DECKS[id].width;
         s.visualLength = DECKS[id].visualLength;
+        // The deck park is spotted aft, behind the launch spot, because it has to be: the deck
+        // is 32m across and an SBD spans 12.66m with no folding wings, so a machine parked
+        // abeam the launch lane must hang its outboard wing over the sea. Measured edges at
+        // these stations are port -12.8 and starboard +12.6, which a wingtip at -10.8 clears.
         for (let i = 0; i < (s.team === "us" ? (id === "enterprise" ? 2 : 3) : 0); i++) {
           const plane = id === "hornet" ? createMitchell() : createDouglas();
           plane.userData.parkedDouglas = id !== "hornet";
-          plane.position.set(id === "enterprise" ? -13 : 10, 20.06 + (id === "enterprise" ? 1.82 : 0), -30 + i * 30);
+          plane.position.set(
+            id === "enterprise" ? -4.5 : -1,
+            20.06 + (id === "enterprise" ? 1.82 : 0),
+            72 + i * 16,
+          );
           if (id === "enterprise") plane.rotation.x = .22;
           detailed.add(plane);
           mesh.userData.parked.push(plane);
@@ -180,7 +188,6 @@ export class WorldView {
     if (this.playerMesh?.userData.airframe === type) return;
     if (this.playerMesh) {
       this.playerMesh.removeFromParent();
-      this.playerMesh.userData.instruments?.texture.dispose();
       if (this.playerMesh.userData.importedAircraft) disposeDouglas(this.playerMesh);
       else this.disposeModel(this.playerMesh);
     }
@@ -555,6 +562,7 @@ export class WorldView {
       branch.traverse((o) => (o as T.Mesh).geometry?.dispose());
     const torpedo = group.userData.torpedoLoad as T.Object3D | undefined;
     torpedo?.traverse((o) => (o as T.Mesh).geometry?.dispose());
+    (group.userData.interior as { dispose?: () => void } | undefined)?.dispose?.();
     if (group.userData.detailed || group.userData.importedAircraft || group.userData.importedShip)
       return;
     group.traverse((o) => {
