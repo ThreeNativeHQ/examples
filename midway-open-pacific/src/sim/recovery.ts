@@ -48,11 +48,19 @@ export interface IApproach {
   descent: number;
 }
 
+/** A point on the deck's extended centreline, `along` metres from the ship, in its moving frame. */
+export function centrelinePoint(s: Any, along: number): { x: number; z: number } {
+  const f = forward(s.heading);
+  return { x: s.x + f.x * along, z: s.z + f.z * along };
+}
+
 /** The astern setup point in the carrier's frame, so it moves with the ship. */
 export function setupPoint(s: Any): { x: number; z: number } {
-  const f = forward(s.heading);
-  return { x: s.x - f.x * SETUP.astern, z: s.z - f.z * SETUP.astern };
+  return centrelinePoint(s, -SETUP.astern);
 }
+
+/** How far ahead of the aircraft the groove is chased. A fixed point gets passed; a lead does not. */
+export const GROOVE_LEAD = 400;
 
 /** Nearest friendly deck that can still take an aircraft. `null` when none can. */
 export function recoveryDeck(ships: Any[], p: Any, minDeck: number): Any {
@@ -133,7 +141,12 @@ export function approach(p: Any, s: Any): IApproach {
   return {
     carrier: s,
     phase,
-    point: phase === "final" || phase === "groove" ? { x: s.x, z: s.z } : setup,
+    // Chase a lead point down the centreline rather than the deck itself: aiming at the ship turns
+    // the approach into a pursuit curve that arrives off centreline and then oscillates.
+    point:
+      phase === "final" || phase === "groove"
+        ? centrelinePoint(s, local.forward + GROOVE_LEAD)
+        : setup,
     altitude:
       phase === "transit"
         ? SETUP.transitAltitude

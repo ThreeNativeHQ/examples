@@ -79,9 +79,9 @@ export class Hud {
       $(`${id}-value`).textContent = `${Math.round(value)}%`;
     }
     $("hull-bar").style.background = p.hp < 35 ? "#e79a76" : "#92c8c5";
+    ($("hull-bar").closest(".meter") as HTMLElement).classList.toggle("hidden", p.hp > 99.5);
     $("bomb-count").textContent = p.loadout === "torpedo" ? (p.torpedo ? "◆" : "◇") : "◆ ".repeat(p.bombs) + "◇ ".repeat(3 - p.bombs);
     $("ordnance-label").textContent = p.loadout === "torpedo" ? "TORPEDO" : "BOMBS";
-    $("btn-bomb").textContent = p.loadout === "torpedo" ? "TORPEDO ↓" : "BOMB ↓";
     $("btn-camera").textContent = viewCameraLabel(this.view.cameraMode);
     $("ammo").textContent = String(p.ammo);
     for (const [id, on] of [
@@ -99,10 +99,23 @@ export class Hud {
     $("torpedo-guide").textContent = envelope.safe ? "RELEASE ENVELOPE ✓ / 180 M ARMING RUN" : `TORPEDO: ${envelope.problems.join(" · ")}`;
     $("aero-readout").textContent = `G ${(p.gforce ?? 1).toFixed(1)} · AOA ${((p.aoa || 0) * 57.3).toFixed(0)}° · VSI ${Math.round(((p.vy || 0) * 196.85) / 50) * 50} FT/M`;
     $("flag-flaps").textContent = p.flapPos < 0.1 ? "FLAPS UP" : p.flapPos < 0.6 ? "FLAPS T/O" : "FLAPS LAND";
-    $("flight-label").textContent = speed > 1 ? "TRANSIT / 3×" : `SQUADRON / ${b.command.toUpperCase()}`;
+    $("flight-label").textContent = speed > 1 ? "TRANSIT 3×" : `${p.loadout === "torpedo" ? "TBD" : "SBD"} / ${b.command.toUpperCase()}`;
     const nav = b.navigationPoint;
     const dist = distance2(p, nav);
-    $("nav-detail").textContent = `${p.nav === "home" ? "HOME" : b.target ? "CONTACT" : "SEARCH"} ${heading(bearing(p, nav))}° / ${(dist / 1000).toFixed(1)} KM`;
+    const designated = b.contacts.get(b.target);
+    // The contact line already gives its course and range, so the nav line only speaks when it
+    // is steering somewhere else: home, or a search sector with nothing designated.
+    $("nav-detail").textContent =
+      designated && p.nav !== "home" ? "" : `${p.nav === "home" ? "HOME" : "SEARCH"} ${heading(bearing(p, nav))}° / ${(dist / 1000).toFixed(1)} KM`;
+    const contactLine = $$("contact-detail");
+    if (contactLine) {
+      if (designated) {
+        const e = contactEstimate(designated, b.time);
+        const ship = b.ships.find((s: any) => s.id === designated.id);
+        const state = e.age < 2 ? (ship.sunk ? "SINKING" : `DECK ${ship.deck < 0.35 ? "OUT" : "ACTIVE"}${ship.fire > 0.3 ? " / BURNING" : ""}`) : `${Math.floor(e.age)}s OLD · ${Math.round(e.confidence * 100)}%`;
+        contactLine.textContent = `◈ ${designated.name.toUpperCase()} ${heading(bearing(p, e))}° / ${(distance2(p, e) / 1000).toFixed(1)} KM · ${state}`;
+      } else contactLine.textContent = "";
+    }
     let phase = "02 / SEARCH";
     let title = "Find the enemy carriers";
     let desc = "Search northwest. Report visual contacts with R.";
@@ -173,23 +186,13 @@ export class Hud {
       this.lastRadio = key;
       $("radio-log").innerHTML = recent.map((r: any) => `<div class="radio-msg ${r.priority ? "priority" : ""}"><b>⌁ ${escapeHTML(r.from)}</b><p>${escapeHTML(r.text)}</p></div>`).join("");
     }
-    const c = b.contacts.get(b.target);
-    $("target-card").classList.toggle("hidden", !c);
-    if (c) {
-      const e = contactEstimate(c, b.time);
-      const s = b.ships.find((s: any) => s.id === c.id);
-      $("target-name").textContent = c.name;
-      $("target-range").textContent = `${(distance2(p, e) / 1000).toFixed(1)} KM · BRG ${heading(bearing(p, e))}°`;
-      $("target-info").textContent = e.age < 2 ? "VISUAL CONTACT" : `LAST SEEN ${Math.floor(e.age)}s · ${Math.round(e.confidence * 100)}% CONFIDENCE`;
-      $("target-systems").textContent = e.age < 2 ? (s.sunk ? "SINKING" : `DECK ${s.deck < 0.35 ? "DISABLED" : "ACTIVE"} / ${s.fire > 0.3 ? "BURNING" : "NO FIRES OBSERVED"}`) : "POSITION EXTRAPOLATED";
-    }
     $("toast").style.opacity = performance.now() < this.toastUntil ? "1" : "0";
     let tip = "";
-    if (p.mode === "deck") tip = "<strong>HOLD W TO LAUNCH</strong><br>At 90–100 kt, gently hold ↓ (Down) to raise the nose. G raises gear; N cycles flaps.";
-    else if (p.autopilot) tip = `<strong>COURSE HOLD · ${p.nav === "home" ? "RETURNING HOME" : "EN ROUTE"}</strong><br>${b.canAccelerate() ? "Hold SHIFT for 3× transit." : "Combat proximity — normal time."}`;
-    else if (p.mode === "flight" && b.time < 100) tip = "<strong>← → BANK · ↓ RAISES THE NOSE</strong><br>A / D also bank. T holds course to the search sector.";
-    else if (p.brakes && p.pitch < -0.25) tip = "<strong>DIVE BRAKES EXTENDED</strong><br>Amber circle predicts impact. B releases a bomb.";
-    else if (p.nav === "home") tip = "<strong>RECOVERY: APPROACH FROM BEHIND THE CARRIER</strong><br>Gear down · below 600 ft · under 140 kt · L within 700 m";
+    if (p.mode === "deck") tip = "<strong>HOLD W TO LAUNCH</strong> · at 90–100 kt ease ↓ back · G gear · N flaps · <strong>?</strong> opens the flight manual";
+    else if (p.autopilot) tip = `<strong>COURSE HOLD · ${p.nav === "home" ? "RETURNING HOME" : "EN ROUTE"}</strong> · ${b.canAccelerate() ? "hold SHIFT for 3× transit" : "combat proximity — normal time"}`;
+    else if (p.mode === "flight" && b.time < 100) tip = "<strong>← → BANK · ↓ RAISES THE NOSE</strong> · T holds course · <strong>?</strong> opens the flight manual";
+    else if (p.brakes && p.pitch < -0.25) tip = "<strong>DIVE BRAKES EXTENDED</strong> · the amber circle predicts impact · B releases a bomb";
+    else if (p.nav === "home") tip = "<strong>RECOVERY — APPROACH FROM ASTERN</strong> · gear down · below 600 ft · under 140 kt · L within 700 m";
     $("center-tip").innerHTML = tip;
     const cueLine = $$("approach-cues");
     if (cueLine) {
@@ -207,7 +210,7 @@ export class Hud {
       orders.textContent = `ASSIGNMENT ${ASSIGNMENTS[sortie.assignment as Assignment].name} · TARGET ${designated ? designated.name.toUpperCase() : "NONE DESIGNATED"} · ${b.wingStatus()}`;
     }
     const wingLine = $$("wing-status");
-    if (wingLine) wingLine.textContent = p.mode === "flight" ? `WING / ${b.command.toUpperCase()} — ${b.wingStatus()}` : "";
+    if (wingLine) wingLine.textContent = p.mode === "flight" ? b.wingStatus() : "";
     $("service").classList.toggle("hidden", p.mode !== "service");
     if (p.mode === "service") {
       $("service-carrier").textContent = `${(b.home?.name || "FRIENDLY CARRIER").toUpperCase()} / DECK OPERATIONS`;

@@ -107,14 +107,10 @@ export class Midway extends Scene<GameState, undefined> {
       "btn-camera": () => this.action("KeyC"),
       "btn-pause": () => this.showOverlay("pause-overlay"),
       "btn-map": () => this.showOverlay("map-overlay"),
-      "btn-command": () => this.showOverlay("command-overlay"),
       "close-pause": () => this.hideOverlays(),
       "close-map": () => this.hideOverlays(),
       "close-command": () => this.hideOverlays(),
       resume: () => this.hideOverlays(),
-      "btn-report": () => this.action("KeyR"),
-      "btn-bomb": () => this.action("KeyB"),
-      "btn-next-target": () => this.cycleTarget(),
       "restart-deck": () => this.begin(false, true),
       "restart-air": () => this.begin(true, true),
       "restart-pause": () => this.restartToBriefing(),
@@ -489,7 +485,7 @@ export class Midway extends Scene<GameState, undefined> {
   }
 
   private action(code: string): void {
-    if (code === "Escape" || code === "KeyP") {
+    if (code === "Escape" || code === "KeyP" || code === "Slash") {
       if (this.overlay) this.hideOverlays();
       else this.showOverlay("pause-overlay");
       return;
