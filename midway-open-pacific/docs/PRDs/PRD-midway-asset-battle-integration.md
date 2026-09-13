@@ -284,7 +284,33 @@ Unchecked items below are **future implementation acceptance**, not missing plan
 ### Geometry and airframes
 
 - [x] **AC-1 [local; actor: implementation agent]:** Every GLB inventory row has an explicit corrected/imported/deduplicated disposition and recorded source/rights. Tone and Mogami display genuinely different June 1942 layouts; Kagerō candidate identity is resolved; all supplied roles remain covered. Evidence: `docs/asset-provenance.md` (13 GLBs and 8 PNGs with full SHA-256, generator, triangle counts, the byte-identical cruiser pair, and an explicit UNVERIFIED rights section); `tools/blender/fleet.json` (disposition and measured repair per hull); `tools/blender/derive-mogami.py` plus the Tone/Mogami side-by-side render showing the added quarterdeck turrets; `destroyer.kagero` imported at 118.5 m with the filename recorded as wrong.
-- [ ] **AC-2 [local; actor: implementation agent]:** Imported models use validated reference endpoints; principal length/span and beam are within 2% of adopted reference values, with documented local repair for proportion defects. Gear contact, waterline, deck corridor and weapon collision locations agree within 0.1 m at inspected stations. Visual inspection verifies class silhouette/markings/rigging; a bounding-box pass alone is insufficient. Evidence: PARTIAL. Length within 0.050% worst case and beam, height, keel datum and bow direction asserted by `node tools/check-catalog.mjs` and `node tools/check-fleet.mjs` against the shipped bytes; repairs documented per class in `src/sim/catalog.ts` and cited in `docs/reference-dimensions.md`; silhouettes, island sides, screws and markings inspected in orthographic renders, including the VT-6 `6-T-6` Devastator and the AI-301 Kate. NOT YET PROVEN: the 0.1 m agreement at gear contact, deck corridor and weapon collision stations, which needs `tools/capture-deck.mjs` extended to the new hulls.
+- [ ] **AC-2 [local; actor: implementation agent]:** Imported models use validated reference endpoints; principal length/span and beam are within 2% of adopted reference values, with documented local repair for proportion defects. Gear contact, waterline, deck corridor and weapon collision locations agree within 0.1 m at inspected stations. Visual inspection verifies class silhouette/markings/rigging; a bounding-box pass alone is insufficient. Evidence: **NOT MET, and measured.** `bash tools/capture-lock.sh node tools/capture-deck.mjs` now raycasts every imported carrier at five centreline stations and walks to both corridor edges, and it reports **29 disagreements**, identical from an isolated worktree copy and from the shared checkout. Three distinct causes, none of them tuned away:
+
+  1. **The drawn deck overhangs the hittable volume (18 of 29).** `overHull` tests one rectangle of
+     `hullBeam`, the class waterline beam, but a carrier's flight deck legitimately overhangs its
+     hull: Kaga's volume reaches 19.25 m from the centreline with its 3 m margin while the drawn
+     deck edge is at 24.78 m, so 5.5 m of deck each side is unhittable. Soryu 13.65 against 16.74,
+     Hiryu 14.15 against 17.86. Yorktown is clean, its deck being narrower than its volume. One
+     beam outboard misses on every hull, so the negative half of the test holds. The fix is a
+     two-box volume — the deck rectangle at deck height, the hull rectangle at and below the
+     waterline — not a wider single box.
+  2. **One datum cannot describe a sloped deck (11 of 29).** Hiryu rises from 20.10 m aft to
+     21.365 m forward against a 20.6 m datum, worst error 0.765 m; Yorktown 20.671/20.592/20.258
+     against 20.45; Soryu 20.32 to 20.598 against 20.42; Kaga is flat to 0.01 m over four stations
+     then drops 0.226 m at the bow. A single per-carrier datum is an improvement on the old global
+     20.06 m but it cannot hold 0.1 m across a deck that really slopes.
+  3. **The launch corridor is the whole hull.** `battle.ts:deckOf` sets `deckLength` to the class
+     hull length and `deckWidth` to the class waterline beam, so Kaga's launch and recovery
+     rectangle is 247.65 x 32.5 m — the entire ship, bow overhang and island included — where
+     Enterprise, Hornet and Akagi use a surveyed, conservative 220 x 20 m. Naming the three
+     rectangles apart was right; sourcing the corridor from the hull was not.
+
+  The waterline half passes as the game currently defines it — every hull's keel is exactly 0 in the
+  model and lands exactly on the ocean mesh's mean plane — but that definition is itself wrong, and a
+  frame shows it: the imported hulls float with their whole anti-fouling band above the sea. The
+  previously shipped assets bake the waterline at y = 0 and put the keel below it (`akagi.glb`
+  measures `min.y = -7.55`, `hornet.glb` `-4.14`), while the new imports put the keel at y = 0 and
+  nothing lowers them by their draught. Frames per carrier are in `screenshots/deck-*.png`. Length within 0.050% worst case and beam, height, keel datum and bow direction asserted by `node tools/check-catalog.mjs` and `node tools/check-fleet.mjs` against the shipped bytes; repairs documented per class in `src/sim/catalog.ts` and cited in `docs/reference-dimensions.md`; silhouettes, island sides, screws and markings inspected in orthographic renders, including the VT-6 `6-T-6` Devastator and the AI-301 Kate. NOT YET PROVEN: the 0.1 m agreement at gear contact, deck corridor and weapon collision stations, which needs `tools/capture-deck.mjs` extended to the new hulls.
 - [ ] **AC-3 [local; actor: implementation agent]:** Choosing TBD from the real briefing produces a TBD in deck, chase and cockpit views. AI TBD/Kate and parked examples use their correct airframes across LOD; no Dauntless fallback or stale animation/disposal dispatch. Evidence: pending.
 - [ ] **AC-4 [local; actor: implementation agent]:** Each new aircraft demonstrates startup/cruise/cut prop states, correct gear/hook/surface motion and independent instance state. A real release removes one visible store, creates one weapon and changes payload once. Inspect close captures through the full moving-part range. Evidence: pending.
 - [ ] **AC-5 [local; actor: implementation agent]:** Through `Battle.step`, loaded TBD and Kate execute stable engine-driven ingress, legal torpedo release and recovery; Kate also executes level bombing. Power/control damage changes flight, no universal minimum-speed flight survives engine loss, and AI no longer uses the old motion integrator. Evidence: pending.
