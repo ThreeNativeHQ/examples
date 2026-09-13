@@ -260,6 +260,15 @@ Apply the charter by rule: the engine owns platform seams and flight dynamics; g
 
 ## Integration ledger
 
+Status as of 2026-09-13, so the table below is read as a plan with a position rather than as a plan
+alone: the Dauntless fallback is gone and airframe identity is explicit (AC-3); renderer-written sim
+bounds are gone and hull, deck corridor and per-carrier deck datum are three separate things
+initialised before any render (AC-6); torpedo variants and per-airframe guns are distinct in
+`armament.ts` and the new assignment kinds are in `sortie.ts`, both still awaiting their `Battle`
+consumers. The modulo launch sequence, the generic reserve of twelve, the radius-detect intelligence,
+the straight-line fleet and the sine-timer submarines are all still in `battle.ts`.
+
+
 | Capability | Reachable consumer / files | Replacement and acceptance |
 |---|---|---|
 | Correct aircraft and moving parts | Briefing loadout → `Midway.selectLoadout` → `Battle.selectLoadout` → `WorldView.setAirframe/buildAircraft/update`; `imported-aircraft.ts`, `model-damage.ts` | Remove non-SBD player Dauntless fallback, team/kind-only identity assumptions and duplicate torpedo geometry for imported types. AC-1–5. |
