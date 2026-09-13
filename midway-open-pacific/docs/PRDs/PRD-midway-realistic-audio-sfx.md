@@ -568,6 +568,12 @@ wired; `reef-surf` was already generated and is now wired. `deck-handling`, `dec
 crew performs visible motion but no per-action event reaches audio yet, and there is no damage-control
 or signal event — and are recorded as not applicable rather than shipped as generic noise.
 
+Every packaged cue is now consumed: AI aircraft are heard on their own airframe bank (SBD, TBD,
+Wildcat, Catalina, Zero, Val, Kate) at idle/cruise/power by position, so nothing ships unwired.
+`scripts/check-catalog.mjs` proves the other direction of AC-1 — each of the 125 consumed SFX and
+speech clips resolves to a manifest row whose recorded SHA-256 equals the shipped Ogg, and it reports
+any packaged cue with no code path (currently zero).
+
 ## Planning verification
 
 At the time this document was written only the PRD existed. Source/API references and real integration locations were researched; no SFX, voices, gameplay code or engine packages were generated or modified by the planning task itself. Document checks passed: two JSON request examples parse; four phases, ten unique unchecked ACs, 30 unique speech IDs and 50 unique SFX IDs; every specified SFX duration is within the documented API range; local Markdown links resolve. Self-review checked historical/reconstruction labels and consumer/trigger alignment. The implementation notes above record what later landed; the implementation ACs remain unchecked and phase 4 remains NOT STARTED.

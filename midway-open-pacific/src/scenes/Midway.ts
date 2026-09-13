@@ -294,6 +294,28 @@ export class Midway extends Scene<GameState, undefined> {
       const range = Math.sqrt(distance2(island, p));
       if (range < 4000) emitters.push({ id: "reef", key: "reefSurf", source: { x: island.x, y: 0, z: island.z }, volume: Math.min(0.5, 0.5 * (1 - range / 4000)) });
     }
+    // AI aircraft engines carry their airframe identity: a TBD, Wildcat, Catalina, Zero, Val or
+    // Kate is heard as itself, at its own state band, not as the player's Dauntless.
+    const AI_ENGINE: Record<string, { idle: string; cruise: string; power: string }> = {
+      sbd: { idle: "engineExtIdle", cruise: "engineExtCruise", power: "engineExtPower" },
+      tbd: { idle: "tbdEngineExtIdle", cruise: "tbdEngineExtCruise", power: "tbdEngineExtPower" },
+      wildcat: { idle: "wildcatEngineExtIdle", cruise: "wildcatEngineExtCruise", power: "wildcatEngineExtPower" },
+      catalina: { idle: "catalinaEngineExtIdle", cruise: "catalinaEngineExtCruise", power: "catalinaEngineExtPower" },
+      zero: { idle: "zeroEngineExtIdle", cruise: "zeroEngineExtCruise", power: "zeroEngineExtPower" },
+      val: { idle: "valEngineExtIdle", cruise: "valEngineExtCruise", power: "valEngineExtPower" },
+      kate: { idle: "kateEngineExtIdle", cruise: "kateEngineExtCruise", power: "kateEngineExtPower" },
+    };
+    for (const a of b.aircraft) {
+      if (a.hp <= 0 || a.mode === "crashing") continue;
+      const banks = AI_ENGINE[a.airframe];
+      const mesh = this.world.meshes.get(a.id);
+      if (!banks || !mesh) continue;
+      const range = Math.sqrt(distance2(a, p));
+      if (range > 2600) continue;
+      const rpm = a.rpm ?? 0.7;
+      const key = rpm < 0.4 ? banks.idle : rpm < 0.72 ? banks.cruise : banks.power;
+      emitters.push({ id: `eng-${a.id}`, key, source: mesh, volume: Math.min(0.5, 0.5 * (1 - range / 2600)) });
+    }
     this.audio.syncEmitters(emitters);
     if (island && Math.sqrt(distance2(island, p)) < 3000 && this.wall > this.nextAlbatross) {
       this.nextAlbatross = this.wall + 9 + Math.random() * 12;
