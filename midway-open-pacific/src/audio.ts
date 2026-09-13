@@ -37,6 +37,8 @@ export interface IAudioTarget {
   playAt(buffer: AudioBuffer, source: unknown, options?: Record<string, unknown>): IVoice;
   music(buffer: AudioBuffer, options?: Record<string, unknown>): IVoice;
   stopVoice(voice: unknown): boolean;
+  readonly voices?: number;
+  readonly pooled?: number;
   unlock(): Promise<void>;
   dispose(): void;
 }
@@ -309,7 +311,12 @@ export class Soundscape {
     pending: number;
     layers: number;
     buffers: number;
+    voices: number;
+    pooled: number;
+    layerGains: Record<string, number>;
   } {
+    const layerGains: Record<string, number> = {};
+    for (const [key, voice] of this.#loops) layerGains[key] = Number(voice.gain.gain.value.toFixed(4));
     return {
       active: this.active,
       speaking: this.speaking,
@@ -322,6 +329,9 @@ export class Soundscape {
       pending: this.#pending.length,
       layers: this.#loops.size,
       buffers: this.buffers.size,
+      voices: this.bus.voices ?? 0,
+      pooled: this.bus.pooled ?? 0,
+      layerGains,
     };
   }
 

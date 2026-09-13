@@ -555,12 +555,16 @@ Implementation has begun under this PRD (the plan above is no longer unexecuted)
 Open: the remaining aircraft/deck/Pacific production, sustained positional fire loops, the final
 mix/native proof and the owner listening sequence (Phase 4). `playtests/audio-realism.playtest.json`
 now runs the web deck/camera/cutoff/release/pause/rear sequence. `tools/capture-audio.mjs` goes
-further: it taps the game's own WebAudio output into a `MediaStreamAudioDestinationNode` (no OS audio
-device, so it works under the capture lock's Xvfb) and records real Opus audio while asserting the
-scene's state. Its first run measures 48 kHz stereo, mean −18.1 dB, sample peak −3.2 dB — inside the
-1 dB headroom target — with cockpit perspective 0.79 against external 0.007, 125 decoded buffers and
-the 12-emitter budget respected. That closes E2's behaviour-plus-capture half and the measurable half
-of AC-9; whether the mix is *believable* remains E4's owner listening.
+further: it drives deck→launch→combat→3× transit→restart, reads the live layer gains and voice
+counts, and taps the game's own WebAudio output into a `MediaStreamAudioDestinationNode` (no OS audio
+device, so it works under the capture lock's Xvfb) and records real Opus. Its measured run: 125
+decoded buffers, 16 continuous layers unchanged from deck to air (no doubled engine), deck-roll and
+ship-machinery gains falling to 0 at liftoff, cockpit perspective 0.79 against external 0.01, voices
+26 in combat and 17 after restart with 33 pooled, and a 48 kHz stereo capture at mean −16.4 dB,
+sample peak −2.9 dB (inside the 1 dB headroom target). `scripts/check-loops.mjs` separately proves
+all 38 packaged loops wrap below the seam threshold (worst 0.86×). That closes E2's behaviour-plus-
+capture half and the measurable half of AC-2, AC-7 and AC-9; whether the mix is *believable* remains
+E4's owner listening.
 
 E3 evidence gap recorded 2026-09-13: `pnpm build:desktop` fails with `TN_NATIVE_WEB_ONLY_UI` because
 the game's HUD and scene use `document.getElementById`; the desktop bundle is not yet portable. This
