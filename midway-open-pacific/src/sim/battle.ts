@@ -364,6 +364,7 @@ export class Battle {
       id: this.id("air"),
       team: "us",
       kind: "recon",
+      airframe: "catalina",
       home: "midway",
       x: s.x,
       y: 25,

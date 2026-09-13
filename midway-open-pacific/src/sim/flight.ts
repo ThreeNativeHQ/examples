@@ -38,6 +38,22 @@ const AIRFRAMES: Record<string, IAircraftAirframe> = Object.freeze({
     wingArea: 30.19,
     yawInertia: 17500,
   },
+  // Consolidated PBY-5 Catalina, the flying boat the radio already calls a Catalina. It had no
+  // airframe id, so it was silently flying on Dauntless constants until now.
+  catalina: {
+    chord: 4.1,
+    deckHeight: DECK_HEIGHT,
+    dryMass: 9485,
+    fuelMass: 2500,
+    pitchInertia: 145000,
+    power: 1789680,
+    propEfficiency: 0.8,
+    rollInertia: 320000,
+    span: 31.7,
+    staticThrust: 24000,
+    wingArea: 130.0,
+    yawInertia: 420000,
+  },
   tbd: {
     chord: 2.38,
     deckHeight: DECK_HEIGHT,
