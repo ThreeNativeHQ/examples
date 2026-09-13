@@ -1,0 +1,173 @@
+/**
+ * Imported aircraft, escorts and geography that were supplied with the project but never wired in.
+ *
+ * Every model here is measured, not guessed: orientation and scale come from Blender renders and
+ * per-node world bounds (tools/probe-glb.mjs, tools/blender/preview.py), and each constant below
+ * records what was measured. The game's convention is metres, nose and bow along -Z.
+ */
+import type { ICtx } from "@threenative/core";
+import * as T from "three";
+import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
+import type { WebGPURenderer } from "three/webgpu";
+import { cylinder, mat, rod } from "./assets.js";
+
+/** Measured A6M3 wingspan in the supplied file; the real aircraft spans 11.0m, so it ships to scale. */
+const ZERO_SPAN = 11.13;
+
+/**
+ * Samidare is a Shiratsuyu-class destroyer. Arashi and Nowaki were Kagero-class, so this is a
+ * class substitution, not those ships: a comparable IJN destroyer silhouette at the ranges the
+ * player ever sees one. The supplied hull measures 143.92m bow to stern and its bow is +X.
+ */
+const SAMIDARE_HULL = 143.92;
+const SAMIDARE_LENGTH = 111;
+/** The model floats about a metre and a half high; measured against its own boot topping. */
+const SAMIDARE_DRAUGHT = -1.35;
+
+/**
+ * The supplied atoll is a flat photogrammetry disc two units across, with Midway's islands,
+ * lagoon and 1942 runways in its texture rather than its geometry. Nothing in the file states a
+ * metre scale, so the horizontal scale is set from the real barrier reef, about 8km across, and
+ * the vertical is set separately so Sand Island's high dune lands near its real 12m rather than
+ * the 200m a uniform scale would give. The disc is then sunk until the painted lagoon sits level
+ * with the sea and only the islands stand proud.
+ */
+const ATOLL_WIDTH = 8000;
+const ATOLL_RELIEF = 12;
+/**
+ * Sunk until the islands stand proud but the reef flat and lagoon still sit at the surface. At
+ * -3 the whole ring went under and Midway read as two unrelated islands in open ocean, which is
+ * the one thing an atoll is not.
+ */
+const ATOLL_DATUM = -1;
+
+let zero: GLTF;
+let samidare: GLTF;
+let atoll: GLTF;
+let garrison: GLTF;
+let radar: GLTF;
+
+export async function loadImportedFleet(ctx: Pick<ICtx, "assets" | "renderer">): Promise<void> {
+  [zero, samidare, atoll, garrison, radar] = await Promise.all([
+    ctx.assets.model<GLTF>("/assets/aircraft.mitsubishi-a6m3.glb"),
+    ctx.assets.model<GLTF>("/assets/destroyer.samidare.glb"),
+    ctx.assets.model<GLTF>("/assets/midway-atoll.glb"),
+    ctx.assets.model<GLTF>("/assets/structures.garrison-camp.glb"),
+    ctx.assets.model<GLTF>("/assets/structures.radar-station.glb"),
+  ]);
+  const anisotropy = (ctx.renderer.raw as WebGPURenderer).getMaxAnisotropy();
+  for (const source of [zero, samidare, atoll, garrison, radar]) {
+    source.scene.traverse((node) => {
+      if (!(node instanceof T.Mesh)) return;
+      for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+        for (const value of Object.values(material)) {
+          if (value instanceof T.Texture) {
+            value.anisotropy = anisotropy;
+            value.needsUpdate = true;
+          }
+        }
+      }
+    });
+  }
+}
+
+function clone(source: GLTF | undefined, what: string): T.Group {
+  if (!source) throw new Error(`Load the imported fleet before constructing ${what}.`);
+  // Static hierarchies share geometry, materials and textures owned by ctx.assets.
+  const model = source.scene.clone(true);
+  model.traverse((node) => {
+    if (node instanceof T.Mesh) {
+      node.castShadow = true;
+      node.receiveShadow = true;
+    }
+  });
+  return model;
+}
+
+/**
+ * A Mitsubishi A6M3. Supplies the prop, gear and stores handles the world view animates on every
+ * aircraft, so an imported Zero drops straight into the generic aircraft path.
+ */
+export function createZero(): T.Group {
+  const root = new T.Group();
+  root.name = "Mitsubishi A6M3";
+  const model = clone(zero, "the Zero");
+  const span = new T.Box3().setFromObject(model).getSize(new T.Vector3()).x;
+  if (!Number.isFinite(span) || span <= 0) throw new Error("The Zero has no measurable wingspan.");
+  model.scale.multiplyScalar(ZERO_SPAN / span);
+  root.add(model);
+
+  // `flight.cruise` turns this pivot; the world view spins it directly, like every other aircraft.
+  const prop = model.getObjectByName("VINTThreeNativePivot");
+  if (!prop) throw new Error("The Zero is missing its propeller pivot.");
+
+  // The supplied model is clean in flight, with no undercarriage. The A6M retracted its mains
+  // inboard into the wing centre section and had a retractable tailwheel.
+  const metal = mat(0x7c8481, { metalness: 0.72, roughness: 0.34 });
+  const tyre = mat(0x23282a, { roughness: 0.82, metalness: 0.04 });
+  const gear = new T.Group();
+  for (const x of [-1.65, 1.65]) {
+    rod(gear, [x, -0.32, -0.55], [x * 1.04, -1.42, -0.62], 0.072, metal);
+    const wheel = cylinder(gear, 0.32, 0.32, 0.2, x * 1.04, -1.55, -0.62, tyre, 14);
+    wheel.rotation.z = Math.PI / 2;
+    const hub = cylinder(gear, 0.13, 0.13, 0.22, x * 1.04, -1.55, -0.62, metal, 10);
+    hub.rotation.z = Math.PI / 2;
+  }
+  const tail = cylinder(gear, 0.13, 0.13, 0.1, 0, -0.78, 3.62, tyre, 10);
+  tail.rotation.z = Math.PI / 2;
+  rod(gear, [0, -0.3, 3.62], [0, -0.72, 3.62], 0.045, metal);
+  gear.traverse((node) => {
+    if (node instanceof T.Mesh) node.castShadow = true;
+  });
+  root.add(gear);
+
+  // A fighter carries no bombs in this battle, but the world view always toggles a stores group.
+  const load = new T.Group();
+  root.add(load);
+  // The airframe's geometry is shared with every other Zero; only the gear was built for this one.
+  root.userData = { prop, gear, load, owned: [gear], importedAircraft: true, airframe: "zero" };
+  return root;
+}
+
+/** An IJN destroyer, bow -Z, scaled to a real hull length. */
+export function createSamidare(): T.Group {
+  const root = new T.Group();
+  root.name = "IJN destroyer";
+  const model = clone(samidare, "the destroyer");
+  model.scale.multiplyScalar(SAMIDARE_LENGTH / SAMIDARE_HULL);
+  // The supplied hull runs bow-first along +X; the game sails every ship bow-first along -Z.
+  model.rotation.y = Math.PI / 2;
+  model.position.y = SAMIDARE_DRAUGHT;
+  root.add(model);
+  root.userData.importedShip = true;
+  return root;
+}
+
+/**
+ * Midway Atoll, with the garrison and the radar mast standing on Eastern Island, whose triangle
+ * of 1942 runways is already in the atoll's own texture.
+ */
+export function createMidwayAtoll(): T.Group {
+  const root = new T.Group();
+  root.name = "Midway Atoll";
+  const model = clone(atoll, "Midway Atoll");
+  const size = new T.Box3().setFromObject(model).getSize(new T.Vector3());
+  const horizontal = ATOLL_WIDTH / size.x;
+  model.scale.set(horizontal, ATOLL_RELIEF / (size.y / 2), horizontal);
+  model.position.y = ATOLL_DATUM;
+  root.add(model);
+
+  // Eastern Island's centre, read off the top-down render in model units and carried to metres.
+  const eastern = new T.Vector3(0.36 * ATOLL_WIDTH, 0, -0.05 * ATOLL_WIDTH);
+  const camp = clone(garrison, "the garrison camp");
+  camp.position.set(eastern.x - 210, 4, eastern.z + 190);
+  camp.rotation.y = 0.42;
+  camp.scale.setScalar(1.6);
+  root.add(camp);
+  const mast = clone(radar, "the radar station");
+  mast.position.set(eastern.x + 260, 4, eastern.z - 240);
+  mast.rotation.y = -0.8;
+  mast.scale.setScalar(1.4);
+  root.add(mast);
+  return root;
+}

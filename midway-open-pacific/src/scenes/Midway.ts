@@ -7,6 +7,8 @@ import { clamp, distance2 } from "../sim/math.js";
 import { loadImportedShips } from "../render/imported-ships.js";
 import { loadEnvironment } from "../render/environment.js";
 import { loadImportedAircraft } from "../render/imported-aircraft.js";
+import { loadImportedFleet } from "../render/imported-fleet.js";
+import { loadDeckCrew } from "../render/deck-crew.js";
 import { WorldView } from "../render/world.js";
 import { Hud } from "../hud.js";
 import { Soundscape } from "../audio.js";
@@ -33,7 +35,13 @@ export class Midway extends Scene<GameState, undefined> {
   private cleanups: Array<() => void> = [];
 
   async load(ctx: ICtx<GameState, undefined>): Promise<void> {
-    await Promise.all([loadImportedAircraft(ctx), loadImportedShips(ctx), loadEnvironment(ctx)]);
+    await Promise.all([
+      loadImportedAircraft(ctx),
+      loadImportedShips(ctx),
+      loadImportedFleet(ctx),
+      loadDeckCrew(ctx),
+      loadEnvironment(ctx),
+    ]);
     // Keep the opaque loading layer up until the first update has built the world and placed the
     // camera; hiding it here showed a few frames of an unlit, half-built scene.
   }
@@ -56,6 +64,7 @@ export class Midway extends Scene<GameState, undefined> {
 
   exit(): void {
     this.audio.dispose();
+    this.world.crew.dispose();
     for (const off of this.cleanups) off();
     this.cleanups = [];
     this.keys.clear();
@@ -67,6 +76,11 @@ export class Midway extends Scene<GameState, undefined> {
   }
 
   private onElement(target: HTMLElement, type: string, handler: (event: Event) => void): void {
+    this.onTarget(target, type, handler);
+  }
+
+  /** Every listener the scene takes out has to come back on exit, document ones included. */
+  private onTarget(target: EventTarget, type: string, handler: (event: Event) => void): void {
     target.addEventListener(type, handler);
     this.cleanups.push(() => target.removeEventListener(type, handler));
   }
@@ -164,7 +178,7 @@ export class Midway extends Scene<GameState, undefined> {
       this.clearInput();
       if (this.battle.status === "playing" && !this.paused) this.showOverlay("pause-overlay");
     });
-    document.addEventListener("visibilitychange", () => {
+    this.onTarget(document, "visibilitychange", () => {
       if (document.hidden) {
         this.clearInput();
         if (this.battle.status === "playing" && !this.paused) this.showOverlay("pause-overlay");

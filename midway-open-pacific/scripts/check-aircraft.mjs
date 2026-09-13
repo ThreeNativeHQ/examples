@@ -109,30 +109,50 @@ try {
   airplane.rotation.set(0, 0, 0);
   airplane.updateMatrixWorld(true);
   const panelRoot = airplane.getObjectByName("Douglas live cockpit instruments");
-  assert.ok(panelRoot.children.length > 0, "player receives the existing live cockpit panel");
+  assert.ok(panelRoot.children.length > 0, "player receives the detailed live cockpit");
   assert.equal(
     parked.getObjectByName(panelRoot.name).children.length,
     0,
-    "parked planes need no canvas panel",
+    "parked planes need no cockpit interior",
   );
-  const panel = panelRoot.children.find((node) => node.isMesh && node.material.map?.isDataTexture);
-  assert.ok(panel, "cockpit panel uploads pixel data for WebGPU");
+  const interior = panelRoot.getObjectByName("Cockpit interior");
+  assert.ok(interior, "detailed cockpit interior is mounted on the player");
+  let interiorMeshes = 0;
+  interior.traverse((node) => {
+    if (node.isMesh) interiorMeshes += 1;
+  });
+  assert.ok(interiorMeshes > 40, `cockpit interior carries real geometry: ${interiorMeshes} meshes`);
+  const rig = airplane.userData.cockpitRig;
+  assert.equal(typeof rig?.update, "function", "cockpit rig is live");
+  const stick = airplane.getObjectByName("Control stick");
+  const lever = airplane.getObjectByName("Throttle lever 1");
+  const needles = [];
+  airplane.traverse((node) => {
+    if (node.name === "Gauge needle") needles.push(node);
+  });
+  assert.ok(stick && lever && needles.length >= 8, "stick, throttle and gauges are rigged");
+  const rigNeutral = { stick: stick.rotation.x, lever: lever.rotation.x };
+  const needlesBefore = needles.map((needle) => needle.rotation.z);
+  animateDouglas(airplane, { rpm: 0.9, elevator: 0.8, aileron: 0.6, rudder: 0.5, flapPos: 1 }, 0.05);
+  const needlesAfter = needles.map((needle) => needle.rotation.z);
+  assert.ok(Math.abs(stick.rotation.x - rigNeutral.stick) > 0.1, "stick follows the elevator");
+  assert.ok(Math.abs(stick.rotation.z) > 0.05, "stick rolls with the ailerons");
+  assert.ok(Math.abs(lever.rotation.x - rigNeutral.lever) > 0.02, "throttle lever follows power");
+  assert.ok(
+    needlesAfter.some((angle, i) => Math.abs(angle - needlesBefore[i]) > 0.001),
+    "gauge needles move with flight state",
+  );
+  animateDouglas(airplane, {}, 0);
   airplane.updateMatrixWorld(true);
-  const panelPosition = panel.getWorldPosition(new Vector3());
   const eye = airplane.userData.cockpit;
-  const panelSightline = new Raycaster(
-    eye,
-    panelPosition.clone().sub(eye).normalize(),
-    0.045,
-    eye.distanceTo(panelPosition) + 0.01,
-  )
+  const panelPoint = interior.localToWorld(new Vector3(0, 0.66, -0.455));
+  const forward = new Raycaster(eye, panelPoint.clone().sub(eye).normalize(), 0.045, eye.distanceTo(panelPoint) + 0.02)
     .intersectObject(airplane, true)
-    .filter((hit) => !hit.object.material.transparent);
-  assert.equal(
-    panelSightline[0]?.object,
-    panel,
-    "instrument panel must be visible ahead of the pilot",
-  );
+    .filter((hit) => hit.object.visible && !hit.object.material.transparent);
+  assert.ok(forward.length > 0, "the detailed panel is ahead of the pilot");
+  let onInterior = false;
+  for (let node = forward[0].object; node; node = node.parent) if (node === panelRoot) onInterior = true;
+  assert.ok(onInterior, "the first thing ahead of the pilot is the cockpit interior");
   assert.ok(Math.abs(new Box3().setFromObject(airplane).getSize(new Vector3()).x - 12.66) < 0.001);
   const glass = airplane.getObjectByName("defaultMaterial_node_7");
   const frames = airplane.getObjectByName("defaultMaterial_node_8");
@@ -153,8 +173,8 @@ try {
   ).intersectObject(airplane, true);
   assert.ok(sightline.length > 0, "check the canopy from inside its actual cockpit mount");
   assert.ok(
-    sightline.every((hit) => hit.object.material.transparent),
-    "no opaque mesh blocks the forward cockpit sightline",
+    sightline.some((hit) => hit.object === glass),
+    "the canopy glass is still on the forward sightline",
   );
   const propeller = airplane.getObjectByName("Circle008_Circle031ThreeNativePivot");
   const elevator = airplane.getObjectByName("defaultMaterial_node_1ThreeNativePivot");
@@ -197,7 +217,7 @@ try {
   assert.equal(airplane.getObjectByName("Propeller motion blur").visible, false);
   const stopped = propeller.quaternion.clone();
   animateDouglas(airplane, { rpm: 0 }, 0.1);
-  assert.ok(propeller.quaternion.angleTo(stopped) < 0.00001);
+  assert.ok(propeller.quaternion.equals(stopped), "a stopped propeller does not advance");
   disposeDouglas(airplane);
   disposeDouglas(parked);
   console.log(

@@ -80,6 +80,22 @@ const AIRFRAMES: Record<string, IAircraftAirframe> = Object.freeze({
     wingArea: 22.44,
     yawInertia: 6800,
   },
+  // Aichi D3A1. The Japanese dive bombers were flying with the Douglas's airframe until now,
+  // which gave them American span, mass and power while the radio called them Vals.
+  val: {
+    chord: 2.43,
+    deckHeight: DECK_HEIGHT,
+    dryMass: 2408,
+    fuelMass: 470,
+    pitchInertia: 9200,
+    power: 798000,
+    propEfficiency: 0.8,
+    rollInertia: 15600,
+    span: 14.365,
+    staticThrust: 10400,
+    wingArea: 34.9,
+    yawInertia: 17800,
+  },
   kate: {
     chord: 2.4,
     deckHeight: DECK_HEIGHT,

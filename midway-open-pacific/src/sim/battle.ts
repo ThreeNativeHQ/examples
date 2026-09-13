@@ -351,7 +351,7 @@ export class Battle {
     s.waveTimes[a.section] ??= this.time;
     a.musterUntil = s.waveTimes[a.section] + 85;
     a.fuelCapacity = a.fuel;
-    a.airframe = kind === "torpedo" ? (s.team === "us" ? "tbd" : "kate") : kind === "fighter" ? (s.team === "us" ? "wildcat" : "zero") : "sbd";
+    a.airframe = kind === "torpedo" ? (s.team === "us" ? "tbd" : "kate") : kind === "fighter" ? (s.team === "us" ? "wildcat" : "zero") : s.team === "us" ? "sbd" : "val";
     a.rearAmmo = kind === "fighter" ? 0 : 240;
     a.rearTimer = 0;
     this.aircraft.push(a);

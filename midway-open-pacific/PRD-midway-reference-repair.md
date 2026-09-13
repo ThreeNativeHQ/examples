@@ -1,6 +1,6 @@
 # PRD — Midway reference repair
 
-Status: implementation · Phase 2 of 3; cockpit reference upgrade and mouse-input simplification delegated to Claude Opus 5 high
+Status: paused at user handoff · Phase 2 of 3. See [MIDWAY-HANDOFF.md](./MIDWAY-HANDOFF.md) for the complete remaining game/model inventory and resumable cockpit session.
 Complexity: 6 → MEDIUM; risk override: none. Engine flight and Three shadow patch cross the installed package boundary; supplied animated models add asset integration.
 
 ## Objective and scope

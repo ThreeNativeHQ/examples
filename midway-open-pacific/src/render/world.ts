@@ -1,15 +1,39 @@
 /** The battle's Three.js world, built into the scene the framework owns. */
 import * as T from "three";
-import { attitudeAxes } from "../sim/flight.js";
-import { clamp, distance2, forward, localPoint } from "../sim/math.js";
-import { ellipsoid, mat, wakeTexture, makeAircraft, makeCrew, makeIsland, makeShip } from "./assets.js";
+import { attitudeAxes, DECK_HEIGHT } from "../sim/flight.js";
+import { distance2, forward, localPoint } from "../sim/math.js";
+import { ellipsoid, mat, wakeTexture, makeAircraft, makeShip } from "./assets.js";
 import { createCarrier, createMitchell, DECKS } from "./imported-ships.js";
 import { createDouglas, animateDouglas, disposeDouglas } from "./imported-aircraft.js";
+import { createMidwayAtoll, createSamidare, createZero } from "./imported-fleet.js";
+import { DeckCrew } from "./deck-crew.js";
 import { animateDauntless, makeDauntless } from "./dauntless.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals } from "./model-damage.js";
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
 import { createOcean } from "./ocean.js";
 import { CombatParticles } from "./particles.js";
+
+/**
+ * The imported airframe for an AI aircraft, where the game has one.
+ *
+ * Only two of the battle's types have a real model: the Douglas the player flies, and the Zero
+ * supplied with the project. Everything else — Wildcat, Devastator, Val, Kate, Catalina — has no
+ * source asset available, so it stays procedural at every range rather than wearing another
+ * type's silhouette and claiming to be itself.
+ */
+function importedAircraftFor(a: { team: string; kind: string }): (() => T.Group) | undefined {
+  if (a.team === "jp" && a.kind === "fighter") return createZero;
+  if (a.team === "us" && a.kind === "bomber")
+    return () => {
+      const douglas = createDouglas();
+      douglas.userData.douglas = true;
+      return douglas;
+    };
+  return undefined;
+}
+
+/** Reused so the per-frame camera orbit allocates nothing. */
+const WORLD_UP = new T.Vector3(0, 1, 0);
 
 export interface IWorldHost {
   scene: T.Scene;
@@ -39,7 +63,7 @@ export class WorldView {
   wakeTex: T.Texture;
   ocean!: ReturnType<typeof createOcean>;
   sea!: T.Mesh;
-  crew!: T.Group;
+  crew!: DeckCrew;
   playerMesh!: T.Group;
   tracers!: T.LineSegments;
   tracerPositions = new Float32Array(1000 * 6);
@@ -48,6 +72,9 @@ export class WorldView {
   lookYaw = 0;
   lookPitch = 0;
   lookActive = false;
+  crewAnchor = 15;
+  private orbit = new T.Vector3();
+  private orbitAxis = new T.Vector3();
   private tmp = new T.Vector3();
   private look = new T.Vector3();
   private targetCamera = new T.Vector3();
@@ -105,7 +132,15 @@ export class WorldView {
     const b = this.battle;
     for (const s of b.ships) {
       let mesh: T.Group = makeShip(s);
-      if (s.kind === "carrier" && (s.team === "us" || s.name === "Akagi")) {
+      if (s.kind === "destroyer" && s.team === "jp") {
+        // Detailed IJN destroyer near the player, the procedural silhouette beyond visual range.
+        const lod = new T.LOD();
+        lod.addLevel(createSamidare(), 0);
+        lod.addLevel(mesh, 2600);
+        mesh = new T.Group();
+        mesh.add(lod);
+        mesh.userData.importedShip = true;
+      } else if (s.kind === "carrier" && (s.team === "us" || s.name === "Akagi")) {
         const id = s.team !== "us" ? "akagi" : s.name === "USS Enterprise" ? "enterprise" : "hornet";
         const detailed = createCarrier(id);
         const lod = new T.LOD();
@@ -132,9 +167,9 @@ export class WorldView {
 
     }
     const h = this.meshes.get(b.player.home);
-    this.crew = makeCrew();
-    h?.add(this.crew);
-    const island = makeIsland();
+    this.crew = new DeckCrew();
+    h?.add(this.crew.group);
+    const island = createMidwayAtoll();
     island.position.set(b.island.x, 0, b.island.z);
     this.scene.add(island);
     this.setAirframe();
@@ -232,39 +267,57 @@ export class WorldView {
       if (m.userData.elevator) (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
 
     }
-    this.crew.visible = p.mode === "deck" || p.mode === "service" || p.mode === "arrest" || briefing;
-    this.crew.position.z = (briefing ? -90 : 0) + Math.sin(time * 0.9) * 0.4;
+    // The deck party works the launch spot, so it is anchored where the aircraft was standing and
+    // does not taxi away with it once the deck run starts.
+    const onDeck = p.mode === "deck" || p.mode === "service" || p.mode === "arrest";
+    this.crew.group.visible = onDeck || briefing;
+    if (this.crew.group.visible) {
+      const home = b.home;
+      if (briefing) this.crewAnchor = 15;
+      else if (home && (p.mode !== "deck" || (p.speed ?? 0) < 2))
+        this.crewAnchor = -localPoint(p, home).forward;
+      this.crew.group.position.set(0, DECK_HEIGHT, this.crewAnchor);
+      this.crew.update(dt);
+    }
     const live = new Set<string>();
+    let detailed = 0;
     for (const a of b.aircraft) {
       live.add(a.id);
+      const range = distance2(a, p);
       let m = this.meshes.get(a.id) as T.Group | undefined;
+      const want = this.wantsDetail(a, range, m?.userData.detailed === true, detailed);
+      if (m && (m.userData.detailed === true) !== want) {
+        this.scene.remove(m);
+        this.releaseAircraft(m);
+        this.meshes.delete(a.id);
+        m = undefined;
+      }
       if (!m) {
-        m = makeAircraft(a.team, a.kind, false);
-        m.scale.multiplyScalar(1.15);
-        addDamageVisuals(m);
-        if (a.kind === "torpedo") {
-          (m.userData.load as T.Object3D).visible = false;
-          const torpedo = makeTorpedoModel();
-          torpedo.position.set(0, -1.03, -0.1);
-          m.add(torpedo);
-          m.userData.torpedoLoad = torpedo;
-        }
-        m.userData.kind = a.kind;
+        m = this.buildAircraft(a, want);
         this.scene.add(m);
         this.meshes.set(a.id, m);
       }
+      if (m.userData.detailed) detailed += 1;
       m.position.set(a.x, a.y, a.z);
       m.rotation.set(a.pitch, -a.heading, a.roll, "YXZ");
-      (m.userData.prop as T.Object3D).rotation.z += dt * (a.engineCut ? 8 : 55);
-      (m.userData.gear as T.Object3D).visible = (a.mode === "launch" && a.age < 4) || (a.mode === "rtb" && a.y < 80);
-      (m.userData.load as T.Object3D).visible = a.bombs > 0;
+      const gearDown = (a.mode === "launch" && a.age < 4) || (a.mode === "rtb" && a.y < 80);
+      if (m.userData.douglas) {
+        // The imported Douglas drives its propeller, gear and control surfaces through its own
+        // clips rather than the generic prop/gear handles.
+        animateDouglas(m, { rpm: a.engineCut ? 0.1 : 0.82, gearPos: gearDown ? 1 : 0 }, dt);
+      } else {
+        (m.userData.prop as T.Object3D).rotation.z += dt * (a.engineCut ? 8 : 55);
+        (m.userData.gear as T.Object3D).visible = gearDown;
+      }
+      const load = m.userData.load as T.Object3D | undefined;
+      if (load) load.visible = a.bombs > 0;
       if (m.userData.torpedoLoad) (m.userData.torpedoLoad as T.Object3D).visible = a.torpedo > 0;
       updateDamageVisuals(m, a);
-      m.visible = distance2(a, p) < 18000;
+      m.visible = range < 18000;
     }
     for (const [id, m] of this.meshes) if (id.startsWith("air-") && !live.has(id)) {
       this.scene.remove(m);
-      this.disposeModel(m);
+      this.releaseAircraft(m);
       this.meshes.delete(id);
     }
     // While the wheels are down the aircraft rides the carrier: parent it to the ship mesh and
@@ -333,16 +386,36 @@ export class WorldView {
         this.targetCamera.y + (f.y * cy * cp + r.y * sy * cp + u.y * sp) * 1000,
         this.targetCamera.z + (f.z * cy * cp + r.z * sy * cp + u.z * sp) * 1000,
       );
-      this.camera.fov = 79;
+      this.camera.fov = 70;
     } else {
       const distance = this.cameraMode === 2 ? 58 : 18;
       const sign = this.rear ? 1 : -1;
       const up = this.cameraMode === 2 ? 12 : 4.2;
-      this.targetCamera.set(p.x + f.x * distance * sign, p.y + f.y * distance * sign + up, p.z + f.z * distance * sign);
-      this.look.set(p.x + f.x * (this.rear ? -35 : 40), p.y + f.y * (this.rear ? -35 : 40) + 1.5, p.z + f.z * (this.rear ? -35 : 40));
+      if (!this.lookActive) {
+        this.lookYaw *= Math.exp(-dt * 7);
+        this.lookPitch *= Math.exp(-dt * 7);
+      }
+      // Free-look outside the cockpit orbits the viewpoint around the aircraft instead of turning
+      // a head. Without this the chase views simply ignored right-drag, which the controls claimed
+      // to support; the look target slides onto the aircraft as the orbit opens so the framing
+      // stays on the machine rather than on empty sky ahead of it.
+      this.orbit.set(f.x * distance * sign, f.y * distance * sign + up, f.z * distance * sign);
+      this.orbit.applyAxisAngle(WORLD_UP, -this.lookYaw);
+      this.orbitAxis.set(this.orbit.z, 0, -this.orbit.x);
+      if (this.orbitAxis.lengthSq() > 1e-6)
+        this.orbit.applyAxisAngle(this.orbitAxis.normalize(), -this.lookPitch);
+      this.targetCamera.set(p.x + this.orbit.x, p.y + this.orbit.y, p.z + this.orbit.z);
+      const framing = 1 - Math.min(1, (Math.abs(this.lookYaw) + Math.abs(this.lookPitch)) * 2.2);
+      const lead = (this.rear ? -35 : 40) * framing;
+      this.look.set(p.x + f.x * lead, p.y + f.y * lead + 1.5, p.z + f.z * lead);
       this.camera.fov = this.cameraMode === 2 ? 60 : 56;
     }
     if (this.playerMesh.userData.crew) this.playerMesh.userData.crew[0].visible = !cockpit;
+    // The detailed interior and the supplied canopy shell are alternatives: show the interior in
+    // the pilot view, the exterior canopy every other time.
+    if (this.playerMesh.userData.cockpitInterior) this.playerMesh.userData.cockpitInterior.visible = cockpit;
+    if (this.playerMesh.userData.cockpitShell)
+      for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit;
     document.body.classList.toggle("cockpit-view", cockpit);
     if (this.snap || briefing || cockpit) {
       this.camera.position.copy(this.targetCamera);
@@ -423,8 +496,69 @@ export class WorldView {
     }
   }
 
+  /**
+   * Which AI aircraft get their imported airframe instead of the procedural one.
+   *
+   * Detail is a loan, not a property: it is granted inside `near`, kept until the aircraft falls
+   * past `far` so a machine weaving around that boundary does not rebuild every frame, and capped
+   * so a whole strike arriving together cannot put sixty full airframes in the scene at once.
+   */
+  private wantsDetail(a: any, range: number, had: boolean, granted: number): boolean {
+    if (!importedAircraftFor(a)) return false;
+    if (had) return range < 1500;
+    return range < 1100 && granted < 10;
+  }
+
+  private buildAircraft(a: any, detail: boolean): T.Group {
+    const imported = detail ? importedAircraftFor(a) : undefined;
+    const m = imported ? imported() : makeAircraft(a.team, a.kind, false);
+    if (!imported) {
+      // The procedural airframe is modelled a little under size; the imported ones are metre-true.
+      m.scale.multiplyScalar(1.15);
+    }
+    m.userData.detailed = !!imported;
+    addDamageVisuals(m);
+    if (a.kind === "torpedo") {
+      const load = m.userData.load as T.Object3D | undefined;
+      if (load) load.visible = false;
+      const torpedo = makeTorpedoModel();
+      torpedo.position.set(0, -1.03, -0.1);
+      m.add(torpedo);
+      m.userData.torpedoLoad = torpedo;
+    }
+    m.userData.kind = a.kind;
+    return m;
+  }
+
+  /** Give up one aircraft's mesh without touching geometry another instance still shares. */
+  private releaseAircraft(m: T.Object3D): void {
+    if (m.userData.douglas) disposeDouglas(m as T.Group);
+    this.disposeModel(m);
+  }
+
+  /**
+   * Dispose what this object alone owns, and nothing else.
+   *
+   * Imported models are cloned from one shared GLTF scene: their geometry, materials and textures
+   * belong to `ctx.assets` and outlive every instance. Disposing those here would take the
+   * geometry out from under every other aircraft and ship still drawing it, so a clone only ever
+   * gives back the parts built for it — its scorch decals, its stores, and any procedural branch
+   * it declared as its own.
+   */
   disposeModel(group: T.Object3D): void {
+    const stains = group.userData.damageVisuals as Record<string, T.Mesh> | undefined;
+    for (const mesh of Object.values(stains ?? {})) {
+      mesh.geometry.dispose();
+      (mesh.material as T.Material).dispose();
+    }
+    for (const branch of (group.userData.owned ?? []) as T.Object3D[])
+      branch.traverse((o) => (o as T.Mesh).geometry?.dispose());
+    const torpedo = group.userData.torpedoLoad as T.Object3D | undefined;
+    torpedo?.traverse((o) => (o as T.Mesh).geometry?.dispose());
+    if (group.userData.detailed || group.userData.importedAircraft || group.userData.importedShip)
+      return;
     group.traverse((o) => {
+      if (o.userData.importedAircraft || o.userData.importedShip) return;
       const mesh = o as T.Mesh;
       if (mesh.geometry) mesh.geometry.dispose();
     });

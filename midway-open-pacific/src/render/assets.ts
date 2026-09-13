@@ -405,12 +405,46 @@ function hullGeometry(length: number, width: number, depth: number, deck = false
   return g;
 }
 
+/**
+ * Recognition features for the procedural carrier hulls, keyed by ship name. These are
+ * silhouette cues the player can read at range, not random variation:
+ *   Akagi    — port island and a single starboard funnel: the class's signature layout.
+ *   Kaga     — port island, a single long downturned starboard funnel, longest/beamier hull.
+ *   Soryu    — starboard island, two downturned funnels, compact hull.
+ *   Hiryu    — amidships port island, two downturned funnels, compact hull.
+ *   Yorktown — starboard island, a single straight funnel, full-length hull.
+ *   Hornet   — as Yorktown, but a lighter island and marginally shorter hull.
+ * funnels holds the funnel z offsets (its length is the funnel count). Hull/beam scale the
+ * drawn geometry only: ship.length and ship.width stay the simulation's collision numbers.
+ */
+type CarrierProfile = {
+  side: number;
+  funnelSide: number;
+  hull: number;
+  beam: number;
+  island: number;
+  islandHeight: number;
+  funnels: number[];
+  funnelTilt: number;
+};
+
+const CARRIER_FALLBACK: CarrierProfile = { side: 1, funnelSide: 1, hull: 1, beam: 1, island: 1, islandHeight: 1, funnels: [-15], funnelTilt: 0 };
+const CARRIER_PROFILES: Record<string, CarrierProfile> = {
+  Akagi: { side: -1, funnelSide: 1, hull: 1.06, beam: 1.05, island: 1, islandHeight: 1, funnels: [-15], funnelTilt: 0.3 },
+  Kaga: { side: -1, funnelSide: 1, hull: 1.1, beam: 1.08, island: 1.05, islandHeight: 1.03, funnels: [-17], funnelTilt: 0.42 },
+  Soryu: { side: 1, funnelSide: 1, hull: 0.92, beam: 0.94, island: 0.9, islandHeight: 0.95, funnels: [-24, -10], funnelTilt: 0.34 },
+  Hiryu: { side: -1, funnelSide: -1, hull: 0.94, beam: 0.95, island: 0.92, islandHeight: 0.96, funnels: [-26, -11], funnelTilt: 0.38 },
+  "USS Yorktown": { side: 1, funnelSide: 1, hull: 1, beam: 1, island: 1, islandHeight: 1, funnels: [-15], funnelTilt: 0 },
+  "USS Hornet": { side: 1, funnelSide: 1, hull: 0.99, beam: 0.99, island: 0.97, islandHeight: 0.98, funnels: [-15], funnelTilt: 0 },
+};
+
 export function makeShip(ship: any): THREE.Group {
   const root = new THREE.Group();
   const body = new THREE.Group();
   const cv = ship.kind === "carrier";
   const sub = ship.kind === "sub";
   const jp = ship.team === "jp";
+  const profile = CARRIER_PROFILES[ship.name] ?? { ...CARRIER_FALLBACK, side: jp ? -1 : 1, funnelSide: jp ? -1 : 1 };
   const grey = mat(jp ? 0x666e69 : 0x5b6b73);
   const dark = mat(0x35444b);
   const light = mat(0x96a39f);
@@ -437,21 +471,30 @@ export function makeShip(ship: any): THREE.Group {
       box(body, 0.65, 1.1, 160, x, 16.5, 4, grey);
       for (let i = 0; i < 12; i += 1) rod(body, [x, 16.5, -75 + i * 14], [x * 0.8, 7, -72 + i * 14], 0.25, grey);
     }
-    const side = jp ? -1 : 1;
-    box(body, 8, 5, 34, side * 13, 22.5, -28, grey);
-    box(body, 10, 4, 21, side * 13, 27, -34, grey);
-    box(body, 11, 2.3, 15, side * 13, 30.1, -38, light);
-    box(body, 11.15, 1.12, 15.1, side * 13, 30.35, -38, black);
-    box(body, 11.5, 0.65, 15.7, side * 13, 31.85, -38, grey);
-    box(body, 6.4, 4.7, 9, side * 13, 34.6, -39, grey);
-    box(body, 6.6, 0.9, 9.2, side * 13, 35, -39, black);
-    box(body, 7, 0.6, 9.7, side * 13, 37.2, -39, light);
-    cylinder(body, 3.5, 4.2, 14, side * 13, 29, -15, dark);
-    cylinder(body, 3.7, 3.7, 0.7, side * 13, 36.4, -15, black);
-    rod(body, [side * 13, 36, -32], [side * 13, 52, -32], 0.21, metal);
-    rod(body, [side * 7, 45, -32], [side * 19, 45, -32], 0.13, metal);
-    box(body, 5.8, 2.8, 0.3, side * 13, 50, -32, black);
-    for (let i = 0; i < 6; i += 1) rod(body, [side * 10.5 + i, 48.6, -32.3], [side * 10.5 + i, 51.4, -32.3], 0.055, light);
+    const side = profile.side;
+    const island = new THREE.Group();
+    box(island, 8, 5, 34, side * 13, 22.5, -28, grey);
+    box(island, 10, 4, 21, side * 13, 27, -34, grey);
+    box(island, 11, 2.3, 15, side * 13, 30.1, -38, light);
+    box(island, 11.15, 1.12, 15.1, side * 13, 30.35, -38, black);
+    box(island, 11.5, 0.65, 15.7, side * 13, 31.85, -38, grey);
+    box(island, 6.4, 4.7, 9, side * 13, 34.6, -39, grey);
+    box(island, 6.6, 0.9, 9.2, side * 13, 35, -39, black);
+    box(island, 7, 0.6, 9.7, side * 13, 37.2, -39, light);
+    rod(island, [side * 13, 36, -32], [side * 13, 52, -32], 0.21, metal);
+    rod(island, [side * 7, 45, -32], [side * 19, 45, -32], 0.13, metal);
+    box(island, 5.8, 2.8, 0.3, side * 13, 50, -32, black);
+    for (let i = 0; i < 6; i += 1) rod(island, [side * 10.5 + i, 48.6, -32.3], [side * 10.5 + i, 51.4, -32.3], 0.055, light);
+    const islandBase = new THREE.Vector3(side * 13, 20, -33);
+    for (const part of island.children) part.position.sub(islandBase);
+    island.position.copy(islandBase);
+    island.scale.set(profile.island, profile.islandHeight, profile.island);
+    body.add(island);
+    for (const fz of profile.funnels) {
+      const funnel = cylinder(body, 3.5, 4.2, 14, profile.funnelSide * 13, 29, fz, dark);
+      cylinder(funnel, 3.7, 3.7, 0.7, 0, 7.4, 0, black);
+      funnel.rotation.z = -profile.funnelSide * profile.funnelTilt;
+    }
     for (const x of [-18.5, 18.5])
       for (const z of [-95, -52, 32, 96]) {
         cylinder(body, 2.8, 2.4, 0.8, x, 14, z, grey);
@@ -477,6 +520,7 @@ export function makeShip(ship: any): THREE.Group {
       }
       rod(body, [x * 1.1, 18, -118], [x * 1.1, 18, 110], 0.055, light);
     }
+    body.scale.set(profile.beam, 1, profile.hull);
   } else if (sub) {
     box(body, 3.6, 6.5, 11, 0, 6.4, 1, dark);
     rod(body, [0, 9.5, 0], [0, 14.5, 0], 0.12, black);

@@ -4,8 +4,19 @@ import * as T from "three";
 import type { WebGPURenderer } from "three/webgpu";
 import { mat, rod } from "./assets.js";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
-import { makeInstrumentPanel, updateInstrumentPanel } from "./cockpit.js";
+import {
+  createCockpitInterior,
+  loadCockpitMaterials,
+  type CockpitInterior,
+  type CockpitMaterials,
+} from "./cockpit-detail.js";
 import { createDauntlessGear } from "./dauntless.js";
+
+/** The detailed interior is a real-metre cockpit, scaled into the Douglas canopy opening. */
+const COCKPIT_SCALE = 0.52;
+const COCKPIT_POSITION: [number, number, number] = [0, 0.342, -2.482];
+
+let materials: CockpitMaterials;
 
 const surfaceClips = [
   "flight.pitch-up",
@@ -25,15 +36,21 @@ const instances = new WeakMap<
     blades: T.Object3D[];
     blur: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>;
     instrumentRoot: T.Group;
-    instruments: ReturnType<typeof makeInstrumentPanel> | undefined;
+    interior: CockpitInterior | undefined;
     actions: Map<string, T.AnimationAction>;
     gear: ReturnType<typeof createDauntlessGear>;
   }
 >();
 
 export async function loadImportedAircraft(ctx: Pick<ICtx, "assets" | "renderer">): Promise<void> {
-  source = await ctx.assets.model<GLTF>("/assets/aircraft.douglas-sbd3.glb");
   const anisotropy = (ctx.renderer.raw as WebGPURenderer).getMaxAnisotropy();
+  const [sourceModel] = await Promise.all([
+    ctx.assets.model<GLTF>("/assets/aircraft.douglas-sbd3.glb"),
+    loadCockpitMaterials("/assets/cockpit/", anisotropy).then((loaded) => {
+      materials = loaded;
+    }),
+  ]);
+  source = sourceModel;
   source.scene.traverse((node) => {
     if (!(node instanceof T.Mesh)) return;
     for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
@@ -101,6 +118,12 @@ export function createDouglas(withCockpit = false): T.Group {
   canopyMaterial.forceSinglePass = true;
   canopy.material = canopyMaterial;
   canopy.castShadow = false;
+  const canopyFrame = model.getObjectByName("defaultMaterial_node_8");
+  // Fuselage shells that share the cockpit's space and peek around the detailed interior.
+  const cockpitFuselage = ["defaultMaterial_node_12", "defaultMaterial_node_18"]
+    .map((name) => model.getObjectByName(name))
+    .filter((node): node is T.Object3D => Boolean(node));
+  const cockpitShell = [canopy, ...(canopyFrame ? [canopyFrame] : []), ...cockpitFuselage];
   const blades = ["defaultMaterial_node_15", "defaultMaterial_node_16"].map((name) => {
     const mesh = model.getObjectByName(name);
     if (!(mesh instanceof T.Mesh))
@@ -138,9 +161,17 @@ export function createDouglas(withCockpit = false): T.Group {
   propellerPivot.add(blur);
   const instrumentRoot = new T.Group();
   instrumentRoot.name = "Douglas live cockpit instruments";
-  instrumentRoot.scale.setScalar(0.7);
-  instrumentRoot.position.set(0, 0.144, -1.15);
-  const instruments = withCockpit ? makeInstrumentPanel(instrumentRoot) : undefined;
+  const interior = withCockpit ? createCockpitInterior(materials) : undefined;
+  if (interior) {
+    interior.root.scale.setScalar(COCKPIT_SCALE);
+    interior.root.position.set(...COCKPIT_POSITION);
+    instrumentRoot.add(interior.root);
+    root.userData.cockpit = new T.Vector3(
+      COCKPIT_POSITION[0] + interior.eye[0] * COCKPIT_SCALE,
+      COCKPIT_POSITION[1] + interior.eye[1] * COCKPIT_SCALE,
+      COCKPIT_POSITION[2] + interior.eye[2] * COCKPIT_SCALE,
+    );
+  }
   root.add(instrumentRoot);
   const propeller = source.animations.find((clip) => clip.name === "propeller.spin");
   if (!propeller) throw new Error("Douglas aircraft is missing propeller.spin.");
@@ -175,7 +206,9 @@ export function createDouglas(withCockpit = false): T.Group {
     }),
   );
   root.userData.importedAircraft = true;
-  root.userData.cockpit = new T.Vector3(0, 1.08, -1.65);
+  root.userData.cockpitInterior = instrumentRoot;
+  root.userData.cockpitShell = cockpitShell;
+  root.userData.cockpitRig = interior;
   instances.set(root, {
     player,
     actions,
@@ -184,7 +217,7 @@ export function createDouglas(withCockpit = false): T.Group {
     blades,
     blur,
     instrumentRoot,
-    instruments,
+    interior,
   });
   animateDouglas(root, {}, 0);
   return root;
@@ -206,11 +239,11 @@ interface IDouglasControls {
 export function animateDouglas(root: T.Group, p: IDouglasControls, dt: number): void {
   const instance = instances.get(root);
   if (!instance) throw new Error("This object is not an imported Douglas aircraft.");
-  const { actions, player, gear, blades, blur, instruments } = instance;
+  const { actions, player, gear, blades, blur, interior } = instance;
   const rpm = Math.max(0, p.rpm ?? p.throttle ?? 0.18);
   for (const blade of blades) blade.visible = rpm < 0.24;
   blur.visible = rpm >= 0.24;
-  if (instruments) updateInstrumentPanel(instruments, p);
+  if (interior) interior.update(p);
   actions.get("propeller.spin")!.setEffectiveTimeScale(rpm * 26);
   for (const [positive, negative, value] of [
     ["flight.pitch-up", "flight.pitch-down", p.elevator ?? 0],
@@ -239,8 +272,7 @@ export function disposeDouglas(root: T.Group): void {
   instance.blur.geometry.dispose();
   instance.blur.material.map?.dispose();
   instance.blur.material.dispose();
-  instance.instruments?.texture.dispose();
-  instance.instruments?.panel.material.dispose();
+  instance.interior?.dispose();
   instance.instrumentRoot.traverse((node) => {
     if (!(node instanceof T.Mesh)) return;
     node.geometry.dispose();
