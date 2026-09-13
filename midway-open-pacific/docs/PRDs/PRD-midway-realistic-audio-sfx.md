@@ -6,7 +6,7 @@
 **Depends on:** Existing flight, combat, camera and mission state; Phase 1 portable audio audit.
 **Scope:** Audio SFX and historically grounded diegetic speech. Planning only; no implementation authorized by this document.
 **Research date:** 2026-09-13
-**Progress:** Phase 1 partial — asset pipeline, manifest, non-conditional SFX bank, engine perspective, wind, buffeting and AudioBus migration done and green under the handoff; radio queue, weapons/damage enrichment and the owner listening check remain. Asset records live in `content/audio/midway-audio.json`.
+**Progress:** Phases 1–2 partial — asset pipeline, manifest, the 67 non-conditional SFX and all 56 speech clips are generated; engine perspective/wind/buffeting play through `AudioBus`, and the bounded speech queue with priority, expiry, dedup, PA/headset/intercom paths and captions is wired to the reachable R/P triggers. Weapons/damage enrichment (Phase 3), the final mix/native proof and the owner listening check (Phase 4) remain. Asset records live in `content/audio/midway-audio.json`.
 **AUDIO-LISTENING-REQUIRED:** João reviews the final in-game listening sequence; automated checks cannot approve realism.
 
 Implementation complexity: 6–10 likely implementation files (+2), expanded audio subsystem (+2), event/voice/priority lifecycle (+2), independent engine/game release boundary (+2), offline ElevenLabs API integration (+1); risk override: none. The present task changes one Markdown document only and receives proportionate document checks.
@@ -454,7 +454,7 @@ No runtime wiring changes in this planning task. Future implementation must clos
 
 ### Phase 2: Friendly radio and Enterprise alerts
 
-**Status:** PARTIAL — the `control` voice and `R06` are generated and in the manifest; the bounded speech queue and caption wiring are NOT STARTED.
+**Status:** PARTIAL — the four voices, all 56 speech clips, the script table, the bounded queue (one voice, priority/expiry/dedup/cap, 4 dB duck), the radio/intercom/PA split, captions and the reachable triggers landed and pass `scripts/check-radio.mjs` headlessly; the real-scene E2 listening run and the departure-range PA check remain.
 **ACs:** AC-5, AC-6; communication portions of AC-1/AC-7.
 **Files:** `src/sim/battle.ts`, `src/scenes/Midway.ts`, `src/audio.ts`; proposed `src/audio-cues.ts` only if keeping the finite script table separate improves readability; existing caption/HUD code only where needed; asset manifest and generated clips.
 
@@ -534,9 +534,18 @@ Implementation has begun under this PRD (the plan above is no longer unexecuted)
   airspeed wind, cutoff windmill, deck roll, cooldowns, positional cues, mute/pause suppression and
   dispose. `bash tools/run-handoff.sh` is green (9 passed, 0 failed).
 
-Open: the radio speech queue (Phase 2), event enrichment and weapon banks (Phase 3), the remaining
-aircraft/deck/Pacific production, native desktop proof and the owner listening sequence (Phase 4).
+- `src/speech.ts` and `src/sim/radio-script.ts` add the four voices, all 56 generated speech clips,
+  the exact 30-row script table and a bounded queue: one sentence at a time, immediate alerts
+  interrupt routine traffic, 30/45 s dedup, 5/15/20 s expiry, a four-entry cap, a 3 s routine gap,
+  PA/headset/intercom paths and a caption on the same words. `Battle.updateRadio` voices the
+  reachable triggers (R06/R07/R08/R10/R11/R12/R13/R14/R15/R17/R18/R19/R21/R22/P01/P04), each on a
+  transition with a predicate the queue rechecks; `scripts/check-radio.mjs` proves R06 fires on an
+  active Zero over Enterprise and stays silent for a Zero that broke off, plus the release, damage,
+  fuel, break-off and ship-name lines.
+
+Open: event enrichment and weapon banks (Phase 3), the remaining aircraft/deck/Pacific production,
+native desktop proof and the owner listening sequence (Phase 4).
 
 ## Planning verification
 
-At the time this document was written only the PRD existed. Source/API references and real integration locations were researched; no SFX, voices, gameplay code or engine packages were generated or modified by the planning task itself. Document checks passed: two JSON request examples parse; four phases, ten unique unchecked ACs, 30 unique speech IDs and 50 unique SFX IDs; every specified SFX duration is within the documented API range; local Markdown links resolve. Self-review checked historical/reconstruction labels and consumer/trigger alignment. The implementation notes above record what later landed; the implementation ACs remain unchecked and phases 2–4 remain NOT STARTED.
+At the time this document was written only the PRD existed. Source/API references and real integration locations were researched; no SFX, voices, gameplay code or engine packages were generated or modified by the planning task itself. Document checks passed: two JSON request examples parse; four phases, ten unique unchecked ACs, 30 unique speech IDs and 50 unique SFX IDs; every specified SFX duration is within the documented API range; local Markdown links resolve. Self-review checked historical/reconstruction labels and consumer/trigger alignment. The implementation notes above record what later landed; the implementation ACs remain unchecked and phases 3–4 remain NOT STARTED.
