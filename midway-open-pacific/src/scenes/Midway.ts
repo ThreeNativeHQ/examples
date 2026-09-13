@@ -35,10 +35,10 @@ export class Midway extends Scene<GameState, undefined> {
   keys = new Set<string>();
   mouse = { fire: false, looking: false, lx: 0, ly: 0 };
   private audioBuffers: ReadonlyMap<string, AudioBuffer> = new Map();
+  private camPos = new Vector3();
   private cleanups: Array<() => void> = [];
 
   async load(ctx: ICtx<GameState, undefined>): Promise<void> {
-  private camPos = new Vector3();
     const [, , , , , buffers] = await Promise.all([
       loadImportedAircraft(ctx),
       loadImportedShips(ctx),
@@ -261,21 +261,21 @@ export class Midway extends Scene<GameState, undefined> {
     const p = b.player;
     const onShip = p.mode === "deck" || p.mode === "launch" || p.mode === "arrest" || p.mode === "service";
     const nearShip = onShip || b.ships.some((s: any) => s.team === "us" && s.kind === "carrier" && !s.sunk && distance2(s, p) < 1800 * 1800);
+    this.world.camera.getWorldPosition(this.camPos);
     this.audio.update(
       {
         cockpit: this.world.cameraMode === 1 && !this.world.followBomb,
         onDeck: onShip,
         nearPA: nearShip,
+        listener: { x: this.camPos.x, y: this.camPos.y, z: this.camPos.z },
         deckSpeed: p.deckSpeed ?? p.speed ?? 0,
         engineCut: p.engineCut,
         damage: 1 - (p.damage?.engine?.integrity ?? 1),
-    this.world.camera.getWorldPosition(this.camPos);
         stall: p.stall ?? 0,
         gforce: p.gforce ?? 1,
         rpm: p.rpm ?? p.throttle ?? 0,
         throttle: p.throttle ?? 0,
         ias: p.ias ?? p.speed ?? 0,
-        listener: { x: this.camPos.x, y: this.camPos.y, z: this.camPos.z },
       },
       this.paused || b.status !== "playing",
       dt,

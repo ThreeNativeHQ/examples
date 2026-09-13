@@ -681,6 +681,8 @@ export class Battle {
       a.cannonToggle = !a.cannonToggle;
       return a.cannonToggle ? "cannon20" : "gun77";
     }
+    if (a.team === "jp") return "gun77";
+    return "gun50";
   }
 
   report(): number {
@@ -796,8 +798,6 @@ export class Battle {
     amount: number,
     point: Any,
     weapon = "bomb",
-    if (a.team === "jp") return "gun77";
-    return "gun50";
     team = "us",
     opts: { owner?: string | null; nearMiss?: boolean; stamp?: IStamp | null } = {},
   ): void {
@@ -835,7 +835,7 @@ export class Battle {
       s.reserve = Math.max(0, s.reserve - Math.ceil(amount / 40));
       s.engine = Math.max(0.12, s.engine - amount / 600);
       this.fx("explosion", point, weapon === "bomb" ? 3.2 : 1);
-      this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: "steel", outcome: "torpedo" });
+      this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: s.kind === "carrier" ? "deck" : "steel", outcome: "hit" });
       if (byPlayer && nearMiss) {
         this.stats.nearMisses += 1;
         this.score += 60;
@@ -858,7 +858,7 @@ export class Battle {
       s.engine = Math.max(0.1, s.engine - 0.3);
       s.fire = clamp(s.fire + 0.3, 0, 2);
       this.fx("explosion", point, 2.8);
-      this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: s.kind === "carrier" ? "deck" : "steel", outcome: "hit" });
+      this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: "steel", outcome: "torpedo" });
     } else {
       s.aa = Math.max(0.1, s.aa - 0.005);
       s.deck = Math.max(0, s.deck - 0.0008);
