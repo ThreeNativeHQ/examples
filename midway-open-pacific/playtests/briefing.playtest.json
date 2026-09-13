@@ -1,0 +1,13 @@
+{
+  "name": "midway-briefing",
+  "schemaVersion": 1,
+  "target": "web",
+  "viewport": { "width": 1280, "height": 720 },
+  "warmupFrames": 90,
+  "steps": [
+    { "kind": "wait", "label": "briefing", "waitTicks": 120, "release": true, "screenshot": "briefing.png" }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "runtimeReady": true }
+  }
+}

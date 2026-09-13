@@ -1,7 +1,7 @@
 /** The battle's Three.js world, built into the scene the framework owns. */
 import * as T from "three";
 import { attitudeAxes } from "../sim/flight.js";
-import { clamp, distance2, forward, rng } from "../sim/math.js";
+import { clamp, distance2, forward, localPoint, rng } from "../sim/math.js";
 import { ellipsoid, makeAircraft, makeCrew, makeIsland, makeShip, mat, cloudTexture, smokeTexture, wakeTexture } from "./assets.js";
 import { animateDauntless, makeDauntless } from "./dauntless.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals } from "./model-damage.js";
@@ -287,9 +287,22 @@ export class WorldView {
       this.disposeModel(m);
       this.meshes.delete(id);
     }
-    this.playerMesh.position.set(p.x, p.y, p.z);
-    if (p.attitude) this.playerMesh.quaternion.set(p.attitude.x, p.attitude.y, p.attitude.z, p.attitude.w);
-    else this.playerMesh.rotation.set(p.pitch, -p.heading, p.roll, "YXZ");
+    // While the wheels are down the aircraft rides the carrier: parent it to the ship mesh and
+    // place it in the ship's own frame, so it inherits the hull's bob and stays on the deck.
+    const homeShip = b.home;
+    const homeMesh = homeShip ? (this.meshes.get(homeShip.id) as T.Object3D | undefined) : undefined;
+    const wheelsDown = briefing || p.mode === "deck" || p.mode === "arrest" || p.mode === "service";
+    if (wheelsDown && homeMesh) {
+      if (this.playerMesh.parent !== homeMesh) homeMesh.add(this.playerMesh);
+      const local = localPoint(p, homeShip);
+      this.playerMesh.position.set(local.right, p.y - homeShip.y, -local.forward);
+      this.playerMesh.rotation.set(p.pitch, 0, 0, "YXZ");
+    } else {
+      if (this.playerMesh.parent !== this.scene) this.scene.add(this.playerMesh);
+      this.playerMesh.position.set(p.x, p.y, p.z);
+      if (p.attitude) this.playerMesh.quaternion.set(p.attitude.x, p.attitude.y, p.attitude.z, p.attitude.w);
+      else this.playerMesh.rotation.set(p.pitch, -p.heading, p.roll, "YXZ");
+    }
     animateDauntless(this.playerMesh, p, dt);
     updateDamageVisuals(this.playerMesh, p);
     this.playerMesh.visible = b.status !== "lost";

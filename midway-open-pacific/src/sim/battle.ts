@@ -783,8 +783,19 @@ export class Battle {
         return;
       }
       const departure = this.playerFlight.stepDeck(h, dt, input);
-      if (departure === "liftoff") this.say("ENTERPRISE TOWER", "Positive climb, Scout Two. G raises the gear; N cycles flap settings. Build speed before turning.");
-      else if (departure === "overrun") this.say("SCOUT THREE", "Off the deck. Watch your airspeed — do not haul back on the stick.", true);
+      if (departure !== null) {
+        // Leave the wheels-on-deck regime. `stepDeck` returns the departure but the game owns
+        // `mode`, so without this the aircraft stays pinned to the deck and never climbs.
+        p.mode = "flight";
+        p.takeoffGrace = 2;
+        p.departureTime = p.flightTime;
+        p.rollRate = 0;
+        p.pitchRate = 0;
+        p.yawRate = 0;
+        p.launchAssist = departure === "liftoff" && p.assist ? 9 : 0;
+        if (departure === "liftoff") this.say("ENTERPRISE TOWER", "Positive climb, Scout Two. G raises the gear; N cycles flap settings. Build speed before turning.");
+        else this.say("SCOUT THREE", "Off the deck. Watch your airspeed — do not haul back on the stick.", true);
+      }
       return;
     }
     if (p.mode !== "flight") return;

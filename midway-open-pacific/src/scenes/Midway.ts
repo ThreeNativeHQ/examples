@@ -24,12 +24,14 @@ export class Midway extends Scene<GameState, undefined> {
   overlay: string | null = null;
   wall = 0;
   ended = false;
+  started = false;
   keys = new Set<string>();
   mouse = { x: 0, y: 0, active: false, fire: false, cx: innerWidth / 2, cy: innerHeight / 2, looking: false, lx: 0, ly: 0 };
   private cleanups: Array<() => void> = [];
 
   load(): void {
-    $("loading").classList.add("hidden");
+    // Keep the opaque loading layer up until the first update has built the world and placed the
+    // camera; hiding it here showed a few frames of an unlit, half-built scene.
   }
 
   enter(ctx: ICtx<GameState, undefined>): void {
@@ -40,8 +42,6 @@ export class Midway extends Scene<GameState, undefined> {
     this.audio = new Soundscape();
     this.attachInput();
     this.updateLoadoutUI();
-    $("loading").classList.add("hidden");
-    $("briefing").classList.remove("hidden");
     $("flight-ui").classList.add("hidden");
   }
 
@@ -208,6 +208,13 @@ export class Midway extends Scene<GameState, undefined> {
   update(_ctx: ICtx<GameState, undefined>, dt: number): void {
     this.wall += dt;
     const b = this.battle;
+    if (!this.started) {
+      // The world is built and the camera placed by the time the first update runs; reveal the
+      // briefing now instead of showing the still-unlit scene behind the loading layer.
+      this.started = true;
+      $("loading").classList.add("hidden");
+      if (b.status === "briefing") $("briefing").classList.remove("hidden");
+    }
     const inFlight = b.status === "playing" && !this.paused;
     let speed = 1;
     if (inFlight) {
