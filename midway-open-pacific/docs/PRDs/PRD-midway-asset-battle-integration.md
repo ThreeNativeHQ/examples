@@ -1,12 +1,12 @@
 # PRD-midway-asset-battle-integration — A fleet with jobs to do
 
-**Status:** PROPOSED
+**Status:** IN PROGRESS
 **Complexity:** 7 (HIGH); risk override: none.
 **Owner:** Midway game implementation lane.
 **Depends on:** Current sortie/recovery behavior; asset corrections in Phase 1.
-**Progress:** Planning complete; implementation 0/5 phases.
+**Progress:** Phase 1 complete with two recorded gaps; Phases 3-5 have their pure simulation modules written and checked but not yet wired into `Battle`; Phase 2 render wiring in flight.
 **Platforms:** WebGPU web acceptance. Desktop/Android/iOS remain unverified unless their target playtests run.
-**Estimate:** 90–140 engineering hours, including asset preparation, AI tuning and playthroughs. Significant remodelling can exceed this estimate; reassess after Phase 1.
+**Estimate:** 95–150 engineering hours, including asset preparation, AI tuning and playthroughs. Significant remodelling can exceed this estimate; reassess after Phase 1.
 
 Planning only. No game source or supplied assets were changed. Use this repository's existing `docs/PRDs/` convention and keep acceptance here; no parallel task ledger. Complexity comprises 11+ implementation files (+3), new naval/intelligence behavior (+2), and interacting operational state (+2). No engine package release is currently assumed.
 
@@ -52,7 +52,7 @@ Source assets: `/home/joao/Downloads/midway-missing-models`. GLB headers and `no
 | Navigation/targets | Ships move independently; torpedo evasion exists, formation keeping does not. AI naval targeting, HUD contact selection and sortie hit eligibility favor carriers. Manual weapons can already hit other surface ships. | Wire all target consumers together so escorts/cruisers become deliberate assignments; preserve carrier-strike credit rules. |
 | Recovery/geometry | `world.ts:sizeCarrier` mutates sim dimensions during rendering; `length/width` mean launch corridor on the home carrier and damage bounds elsewhere. A global deck height feeds approach and crew placement. | Initialize pure ship dimensions before any render. Separate hull, deck and launch/recovery geometry, including per-carrier deck height. |
 | Submarines/island | Submarines surface on a sine timer and fire repeat spreads; no meaningful ASW response. Midway is a location plus rendered facilities. | Add depth, ammunition, observation-driven attacks, escort ASW and useful infrastructure. |
-| Presentation/budgets | Ten-detail-aircraft admission with hysteresis, ship LODs, shared GLTF resources, 68 live AI aircraft and 20 ocean wake slots already exist. Hornet parks B-25s. | Keep bounded rendering, correct the Midway deck park, and audit capacities when adding the cruiser group. |
+| Presentation/budgets | Ten-detail-aircraft admission with hysteresis, ship LODs, shared GLTF resources, 68 live AI aircraft and 20 ocean wake slots already exist. Hornet and Yorktown both park B-25s through the shared non-Enterprise rendering branch. | Keep bounded rendering, correct the Midway deck park, and audit capacities when adding the cruiser group. |
 
 All simulation lengths are metres, time seconds and speeds m/s. Existing torpedo speeds 17.25/21/24 and release maxima 57/88 are **m/s, not knots**. Convert only at the HUD boundary and label units.
 
@@ -144,7 +144,7 @@ All carriers can launch, recover, fight fires, maneuver and become disabled or s
 
 | Asset/group | Agenda | Meaningful player effect |
 |---|---|---|
-| Enterprise/Hornet | Operate together in the U.S. striking group; choose CAP, launch strike packages, receive returning/diverting aircraft and preserve sea room. | Home operations depend on surviving decks and stores. Replace Hornet's decorative B-25 park with actual carrier aircraft; B-25s are not a Midway carrier strike type. |
+| Enterprise/Hornet | Operate together in the U.S. striking group; choose CAP, launch strike packages, receive returning/diverting aircraft and preserve sea room. | Home operations depend on surviving decks and stores. Replace the decorative B-25 parks on **both Hornet and Yorktown** with actual carrier aircraft; B-25s are not a Midway carrier strike type. |
 | Yorktown with Hammann | Separate U.S. carrier group, mutually supporting the main force. Repair recoverable damage and accept diverted aircraft when capable. | Defending Yorktown preserves another launch/recovery option. If damaged, its salvage is an opportunity; it can survive, sink earlier or never require salvage. |
 | Akagi/Kaga | Strike Midway when suppression is still required and no higher-value fresh carrier contact changes priorities. Conserve CAP and avoid launching into unsafe deck conditions. | Kaga adds real sortie capacity; damaging it removes specific ready aircraft/stores or work capacity, not just generic hit points. |
 | Sōryū/Hiryū | Same operational rules in the other Japanese carrier division. Any operational carrier with information and resources can lead a follow-up strike. | Hiryū is neither invulnerable nor guaranteed to be last. Sōryū can survive and counterattack instead. |
@@ -161,6 +161,7 @@ Make preparation/recovery times explicit game tuning, preserving their order and
 | Mogami/Mikuma; same class for Kumano/Suzuya | Add a **separate supporting cruiser group**, with an approach/hold/withdraw route. Approach bombardment range only under orders and acceptable air threat; otherwise preserve the group. When damaged, slow/withdraw and assign an escort. | Gives recon and subsequent anti-shipping sorties a real target. A damaged cruiser can escape; enemy withdrawal does not teleport it off-map. |
 | Kagerō-class candidates, including Arashi/Nowaki | Screen, plane-guard, investigate submarine reports, conduct finite ASW attacks, rescue survivors, then rejoin. | An escort leaving to hunt or rescue opens a real gap. Its return course can be visually followed, without spawning a clue or directing the player to it automatically. |
 | Hammann | Screen/plane-guard near Yorktown; rescue viable survivors; provide firefighting/power alongside a crippled friendly carrier when locally safe. | Assistance slows flooding/fire at a cost in escort coverage and maneuverability. Abort alongside operations on a detected torpedo threat. It is not forced to die or to tow an entire carrier. |
+| Existing Northampton, Phelps and Balch | Retain their distinct cruiser/destroyer identities and existing/procedural visuals; assign screen, AA, plane-guard and applicable rescue/ASW capabilities by their own configuration. | They share the new targeting and formation consumers. Do not delete them or turn them into Hammann clones when adding the new naval models. |
 
 Use formation offsets in a moving group frame, attainable speed/turn limits and predicted closest approach for separation. Evasion temporarily outranks station-keeping; the ship rejoins smoothly rather than snapping back. Route around the atoll/reef and leave water for turns. Ships cannot independently overwrite each other's course authority. If collision handling is enabled, damage follows physical proximity and relative motion; **no Mogami–Mikuma collision is required**. Scuttling, if needed for irrecoverable vessels, is a conditional crew/command decision after rescue, not a named-ship trigger.
 
@@ -223,9 +224,9 @@ Priority order: immediate survival/evasion → safe recovery and local defense �
 
 ### Flight and damage integration
 
-Replace AI's force-like integration in `steerAircraft` with a controller producing engine controls for one `AircraftFlight` per airborne aircraft. Reuse tactical state transitions; remove the old velocity/bank integrator after parity checks. Validate loaded TBD takeoff and low-level release before tuning fleet waves. A bomber must lose speed/altitude when power or control authority is lost; don't retain the current universal speed floor. Initialize every field required by engine flight, standardize normalized fuel versus fuel mass, and count stores once. This is the largest tuning risk in the plan.
+Replace AI's force-like integration in `steerAircraft` with a controller producing engine controls for one `AircraftFlight` per airborne aircraft. Reuse tactical state transitions; remove the old velocity/bank integrator after parity checks. Validate loaded TBD takeoff and low-level release before tuning fleet waves. A bomber must lose speed/altitude when power or control authority is lost; don't retain the current universal speed floor. Initialize every required `IFlightState` field with finite values, standardize normalized fuel versus fuel mass, and count stores once. The controller writes throttle/configuration to aircraft state and passes the installed `IFlightControls` fields (turn/pitch/rudder/autopilot); do not assume a throttle control argument. Carrier AI departures must also leave the existing synthetic launch motion and enter through a queued `stepDeck` run before switching to airborne engine flight. This is the largest tuning risk in the plan; measure the full supported population before treating the migration as complete.
 
-Per-deck launch uses the installed `FlightModel` environment's `deckHeight` override and `IFlightDeck` dimensions; the local wrapper must supply the selected deck's numeric geometry. Recovery, `finalReady`, touchdown, visuals and deck crew use that same datum/corridor, rather than introducing parallel eligibility checks. Rebinding a deck must preserve aircraft state. If this needs new engine force/contact behavior, stop game-side implementation of that mechanism and use the engine change route below.
+Per-deck launch uses the installed `FlightModel` environment's `deckHeight` override and `IFlightDeck` dimensions; the local wrapper must supply the selected deck's numeric geometry. Recovery, `finalReady`, touchdown, visuals and deck crew use that same datum/corridor, rather than introducing parallel eligibility checks. The override is a construction-time environment option: rebuild/rebind that aircraft’s engine wrapper only when its deck binding changes, retain the same state object, and never mutate shared frozen airframe definitions. The installed `IFlightDeck.y` can represent deck position; it does not itself define the flight-deck height or rolled contact plane. AC-2’s 0.1 m geometry checks are in the measured ship-local/static datum. Dynamic rolled/heaving-deck contact fidelity is not claimed by a static clearance check; any required extension follows the engine route below. If this needs new engine force/contact behavior, stop game-side implementation of that mechanism and use the engine change route below.
 
 AI scout catapult departure and water pickup can be bounded operational transitions with finite positions, time and capacity; airborne motion still uses engine flight. Define a feasible low-speed water-contact envelope, then a short pickup alongside the stopped/slow cruiser. This does not claim a player-flyable seaplane hydrodynamics model. A generic new catapult force or water-flight model, if necessary, belongs in the engine.
 
@@ -273,8 +274,8 @@ Unchecked items below are **future implementation acceptance**, not missing plan
 
 ### Geometry and airframes
 
-- [ ] **AC-1 [local; actor: implementation agent]:** Every GLB inventory row has an explicit corrected/imported/deduplicated disposition and recorded source/rights. Tone and Mogami display genuinely different June 1942 layouts; Kagerō candidate identity is resolved; all supplied roles remain covered. Evidence: pending.
-- [ ] **AC-2 [local; actor: implementation agent]:** Imported models use validated reference endpoints; principal length/span and beam are within 2% of adopted reference values, with documented local repair for proportion defects. Gear contact, waterline, deck corridor and weapon collision locations agree within 0.1 m at inspected stations. Visual inspection verifies class silhouette/markings/rigging; a bounding-box pass alone is insufficient. Evidence: pending.
+- [x] **AC-1 [local; actor: implementation agent]:** Every GLB inventory row has an explicit corrected/imported/deduplicated disposition and recorded source/rights. Tone and Mogami display genuinely different June 1942 layouts; Kagerō candidate identity is resolved; all supplied roles remain covered. Evidence: `docs/asset-provenance.md` (13 GLBs and 8 PNGs with full SHA-256, generator, triangle counts, the byte-identical cruiser pair, and an explicit UNVERIFIED rights section); `tools/blender/fleet.json` (disposition and measured repair per hull); `tools/blender/derive-mogami.py` plus the Tone/Mogami side-by-side render showing the added quarterdeck turrets; `destroyer.kagero` imported at 118.5 m with the filename recorded as wrong.
+- [ ] **AC-2 [local; actor: implementation agent]:** Imported models use validated reference endpoints; principal length/span and beam are within 2% of adopted reference values, with documented local repair for proportion defects. Gear contact, waterline, deck corridor and weapon collision locations agree within 0.1 m at inspected stations. Visual inspection verifies class silhouette/markings/rigging; a bounding-box pass alone is insufficient. Evidence: PARTIAL. Length within 0.050% worst case and beam, height, keel datum and bow direction asserted by `node tools/check-catalog.mjs` and `node tools/check-fleet.mjs` against the shipped bytes; repairs documented per class in `src/sim/catalog.ts` and cited in `docs/reference-dimensions.md`; silhouettes, island sides, screws and markings inspected in orthographic renders, including the VT-6 `6-T-6` Devastator and the AI-301 Kate. NOT YET PROVEN: the 0.1 m agreement at gear contact, deck corridor and weapon collision stations, which needs `tools/capture-deck.mjs` extended to the new hulls.
 - [ ] **AC-3 [local; actor: implementation agent]:** Choosing TBD from the real briefing produces a TBD in deck, chase and cockpit views. AI TBD/Kate and parked examples use their correct airframes across LOD; no Dauntless fallback or stale animation/disposal dispatch. Evidence: pending.
 - [ ] **AC-4 [local; actor: implementation agent]:** Each new aircraft demonstrates startup/cruise/cut prop states, correct gear/hook/surface motion and independent instance state. A real release removes one visible store, creates one weapon and changes payload once. Inspect close captures through the full moving-part range. Evidence: pending.
 - [ ] **AC-5 [local; actor: implementation agent]:** Through `Battle.step`, loaded TBD and Kate execute stable engine-driven ingress, legal torpedo release and recovery; Kate also executes level bombing. Power/control damage changes flight, no universal minimum-speed flight survives engine loss, and AI no longer uses the old motion integrator. Evidence: pending.
@@ -307,7 +308,7 @@ Unchecked items below are **future implementation acceptance**, not missing plan
 - [ ] **AC-20 [local; actor: implementation agent]:** Open Pacific can continue through withdrawal/salvage opportunities; successful conclusion and base/fleet failure follow the declared conditions. A fourth disabled deck does not silently stop an ongoing attack or rescue. Evidence: pending.
 ### Combined battle proof
 
-- [ ] **AC-21 [local; actor: implementation agent]:** Across seeds 19420604–19420608, normal Battle entry and fixed-step simulation expose every required role in at least one run without injecting task transitions. Repeating a seed/input trace repeats state. Paired scout/escort/protection interventions change the corresponding outcome; do not require exact historical losses or generalize five runs into a balance guarantee. Evidence: pending.
+- [ ] **AC-21 [local; actor: implementation agent]:** Run natural battles for seeds 19420604–19420608 and report which roles occur, without requiring rare events in those arbitrary runs. Prove each remaining role reachable through a bounded scenario using feasible initial conditions and player/sensor events through normal Battle entry: no direct assignment to task/AI-transition fields. Paired scout/escort/protection interventions change the corresponding outcome. Repeating a seed/input trace repeats state. Keep isolated injected branch tests distinct from reachable-role proof; do not require historical losses or generalize the sample into a balance guarantee. Evidence: pending.
 - [ ] **AC-22 [local; actor: implementation agent]:** Inspect real WebGPU captures of player TBD, a Kate release, all new hull classes, floatplane cycle, ASW and salvage at engagement and close ranges. Textures, shadows, LOD, wake slots, weapon mounts and audiovisual cues agree with simulation. No blank/missing frame counts as evidence. Evidence: pending.
 - [ ] **AC-23 [local; actor: implementation agent]:** At 1920×1080 on the same named non-software adapter as baseline, after warm-up, a fixed 60-second crowded battle sample meets GPU p95 ≤16.7 ms and Battle fixed-step CPU p95 ≤4 ms at the supported active population, with no >10% regression against the matched baseline. Instrument fixed-step CPU duration in the capture harness; do not call requestAnimationFrame wall intervals CPU time. Record wall-frame p95 separately (virtual-display timing is not physical presentation proof), triangles/draw calls/memory and active counts; no layers disabled. A failing absolute target remains an explicit performance gap, not a pass from the relative comparison. Evidence: pending.
 - [ ] **AC-24 [local; actor: implementation agent]:** Required type/build and affected existing simulation/browser checks pass on the integrated candidate; repeated restart/LOD churn has no runtime diagnostics or destroyed shared resources. Web qualification is explicit; any new engine portability mechanism has its required native proof before adoption. Evidence: pending.
@@ -316,22 +317,89 @@ Unchecked items below are **future implementation acceptance**, not missing plan
 
 ### Phase 1 — Correct, measurable source assets (18–30 hours)
 
-**Status:** NOT STARTED
+**Status:** DONE (2026-09-13), with the two gaps recorded in the checkpoint below.
 **ACs:** AC-1–2; prepare AC-4/22/23.
 **Files:** `tools/blender/` conversion source, existing GLB checks, `public/assets/` derivatives, new `src/sim/catalog.ts`, asset credits.
 
 Resolve duplicate/mislabeled cruisers and the Kagerō candidate first. Adopt documented dimensions and June 1942 configurations. Split aircraft/ship motion pivots, clear baked ordnance/aircraft where operations own them, produce LODs and retain provenance. Keep the rest of the fleet loaded from existing assets while a corrected individual asset is being prepared; no silent permanent fallback.
 
 **Verification E1:** Extend `node scripts/check-aircraft.mjs`, `node tools/check-fleet.mjs` and `node tools/check-carrier-assets.mjs` to parse actual prepared models, required pivots, dimensions, shared resource contracts and budgets. Use `node tools/probe-glb.mjs <file>` and private Blender orthographic views for unresolved measurements. Inspect geometry/texture appearance; no full-game gate is needed for a source-only intermediate step.
-**Checkpoint:** pending.
 
-### Phase 2 — Flyable aircraft and working carrier decks (24–36 hours)
+**Checkpoint (2026-09-13).** Eleven hulls, one weapon body and three aircraft files now ship in
+`public/assets/`, reproducibly, from `bash tools/import-fleet.sh` and `bash tools/import-aircraft.sh`
+driven by the measured table in `tools/blender/fleet.json`. `node tools/check-catalog.mjs` reports
+ten hulls and one weapon body matching the shipped bytes with a worst length error of 0.050%
+(`cruiser.mogami`, which inherits the Tone hull's 201.6 m against a 201.5 m class reference).
+Provenance with full SHA-256 for all thirteen supplied GLBs and eight PNGs is in
+`docs/asset-provenance.md`; the adopted class references and their citations are in
+`docs/reference-dimensions.md`.
+
+What the supplied geometry actually required, and what was decided:
+
+- **Every supplied hull is roughly twice as fat and two to three times as tall for its length as the
+  class it names.** No uniform scale satisfies both length and beam. Each hull is therefore
+  uniformly scaled to its reference length and then given a **declared beam and height repair**,
+  measured at the waterline band rather than across sponsons and yardarms, with both factors printed
+  by the importer and recorded per class in `src/sim/catalog.ts`. Kaga, for example, is beam x0.683
+  and height x0.406. The repaired hulls were inspected in orthographic renders before acceptance.
+- **Bow direction cannot be inferred.** A taper heuristic read the bow backwards on five of seven
+  hulls and a stern-depth probe on nine of ten. Every `flip` in `tools/blender/fleet.json` was
+  decided by looking at a render of each end for the screws and rudder, and `tools/check-fleet.mjs`
+  now asserts the resulting orientation.
+- **The duplicate cruiser is resolved.** `mogami-class-cruiser.glb` is byte-identical to
+  `tone-class-cruiser.glb` and the geometry is a Tone: turrets all forward, aviation deck aft. The
+  hull serves Tone and Chikuma as supplied, and `tools/blender/derive-mogami.py` produces a genuine
+  second class by copying the after pair of forward turrets, mirroring them to face aft and setting
+  them on the quarterdeck. The two silhouettes differ.
+- **The Kagero candidate is resolved.** `japan-mikuma-and-mogami.glb` is a two-funnel Japanese
+  destroyer with three twin mounts and quadruple torpedo tubes, not a cruiser. It is imported as
+  `destroyer.kagero` at 118.5 m. The filename is wrong and is recorded as wrong.
+- **Nautilus is SS-168, not SSN-571** — a diesel boat with deck guns, confirmed by render.
+- **The first import shipped every hull bow-aft, and it was caught by measuring the shipped bytes.**
+  Blender's +Y-up glTF exporter maps Blender +Y to glTF -Z, and the importer was sending the bow to
+  Blender -Y, so all eleven hulls and both aircraft arrived pointing backwards. Neither a Blender
+  render nor a width-taper assertion caught it, because both were reasoning in the pre-export frame.
+  The fix is one sign in `tools/blender/align-ship.py` and one in `align-aircraft.py`; the whole
+  fleet was re-imported and re-verified by measuring the narrow end of each hull in glTF space
+  directly, with the two hulls the width test cannot judge — Yorktown's near-rectangular flight deck
+  and I-168's bow diving planes — confirmed by inspecting renders of both ends. This is why
+  `tools/check-fleet.mjs` asserts orientation on the shipped bytes rather than trusting the importer.
+
+Two deviations from the plan, both deliberate:
+
+- **The triangle budgets in this document are an order of magnitude too high for this game.** The
+  Dauntless it would park beside is 10,416 triangles and the A6M3 is 14,540. The hero Devastator
+  therefore ships at 38,800 rather than 120,000, its AI copy at 11,640, and the Kate at its full
+  supplied 9,793. Hull budgets were left as planned because the supplied hulls already fall inside
+  them. Welding before decimation is what made this possible: collapsing the unwelded Tripo mesh
+  tore the skin into visible shards at any ratio, and merging by distance first removed that
+  entirely.
+
+**Shared-checkout note.** A second lane (a Codex session, owner of `docs/PRDs/PRD-aircraft-polish.md`)
+is working in this same game folder and was observed running `tools/blender/align-aircraft.py`
+concurrently against the same sources and outputs. The aircraft half of the asset pipeline is
+therefore contended: the axis and weld fixes above are in the shared script and benefit both lanes,
+but `public/assets/aircraft.*.glb` should be treated as that lane's to finish. Anyone re-running
+`tools/import-aircraft.sh` must check for a competing Blender process first.
+
+**Gaps carried forward, not closed:**
+
+1. **Only the propeller is separated on the aircraft.** Gear, hook, flaps, ailerons, elevator,
+   rudder and the rear-gun mount are still fused. A geometric selection takes the wheel and the
+   lower strut but leaves the upper leg in the body, which would retract wrong; that is worse than
+   no pivot, so it was not shipped. `tools/blender/align-aircraft.py --gear` keeps the experiment.
+   AC-4 cannot close until these are cut by hand.
+2. **AC-2's 0.1 m station agreement is unproven.** Length, beam, height, keel datum and bow
+   direction are asserted; gear contact, deck corridor and weapon collision stations still need the
+   raycasting pass in `tools/capture-deck.mjs` extended to the new hulls.
+
+### Phase 2 — Flyable aircraft and working carrier decks (28–44 hours)
 
 **Status:** NOT STARTED
 **ACs:** AC-3–9.
 **Files:** `flight.ts`, `armament.ts`, `battle.ts`, `tactics.ts`, `recovery.ts`; existing imported render loaders, `world.ts`, `model-damage.ts`, relevant HUD/camera wiring.
 
-Adopt explicit airframe/model identity and one animation/disposal path per family. Correct player TBD cockpit/exterior and Kate performance/loadouts. Move AI onto engine flight with existing tactical decisions. Initialize pure hull/deck geometry and use it for recovery/collision/render placement. Introduce finite per-type carrier cycles and an honest deck park; remove B-25 parking. This is one integration slice despite crossing more than five files.
+Adopt explicit airframe/model identity and one animation/disposal path per family. Correct player TBD cockpit/exterior and Kate performance/loadouts. Move AI onto engine flight with existing tactical decisions, full state initialization, consistent fuel representation and queued deck departures. Initialize pure hull/deck geometry and use it for recovery/collision/render placement. Introduce finite per-type carrier cycles and an honest deck park; remove B-25 parking. This is one integration slice despite crossing more than five files.
 
 **Verification E2:** Extend existing `scripts/check-flight.mjs`, `scripts/check-weapons.mjs` and `scripts/check-loops.mjs` through real Battle calls for AI flight, payload and carrier inventory. Extend `capture-deck.mjs`, `capture-sortie.mjs` and `capture-sortie-runs.mjs` for TBD launch/release/diversion/recovery. Preserve existing sortie completion expectations, including the current twelve-simulated-minute short-run guard; longer new Open Pacific runs have separate limits.
 **Checkpoint:** pending.
@@ -392,6 +460,6 @@ Use the installed `git-worktree` manager if implementation needs isolation. Reso
 
 ## Planning check and next action
 
-The attachment, all thirteen GLBs/eight PNGs, current consumer paths, engine capabilities and primary/museum historical references are accounted for. Source probes and private model renders completed; the duplicate cruiser and class/variant uncertainties are recorded as explicit preparation work. All implementation criteria remain unchecked, with named owners and runnable future proof. No game build or playtest was run merely to validate prose.
+The attachment, all thirteen GLBs/eight PNGs, current consumer paths, engine capabilities and primary/museum historical references are accounted for. Source probes and private model renders completed; the duplicate cruiser and class/variant uncertainties are recorded as explicit preparation work. All implementation criteria remain unchecked, with named owners and runnable future proof. An OpenCode DeepSeek v4.1 Flash review identified the missing Hammann PNG, additional existing escorts, shared B-25 parking and migration risks; corrections are incorporated. Review suggestions about controls/deck fields were reconciled against the installed declarations rather than copied. Document checks passed for inventory coverage, criterion/phase IDs, status, fences and whitespace. No game build or playtest was run merely to validate prose.
 
 Review the five decisions at the top. Approval plus an instruction to implement starts Phase 1; changing the playable side, geographic scale or realism scope should happen before asset/AI work begins.
