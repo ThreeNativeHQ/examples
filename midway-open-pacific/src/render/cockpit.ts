@@ -1,11 +1,15 @@
 /** Functional cockpit instrument texture; values come from the live flight state. */
 import * as T from "three";
-import { box, canvasTexture, mat, rod } from "./assets.js";
+import { box, mat, rod } from "./assets.js";
 import { clamp } from "../sim/math.js";
 
 export function makeInstrumentPanel(root: T.Object3D): any {
-  const texture = canvasTexture(1024, 512, () => {});
-  const canvas = texture.image as HTMLCanvasElement;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+  const texture = new T.DataTexture(new Uint8Array(1024 * 512 * 4), 1024, 512);
+  texture.colorSpace = T.SRGBColorSpace;
+  texture.flipY = true;
   const context = canvas.getContext("2d") as CanvasRenderingContext2D;
   box(root, 1.0, 0.4, 0.09, 0, 0.88, -1.56, mat(0x182521, { roughness: 0.96 }));
   const panel = new T.Mesh(
@@ -162,5 +166,6 @@ export function updateInstrumentPanel(s: any, p: any): void {
     c.arc(x, y, 4, 0, 6.28);
     c.fill();
   }
+  s.texture.image.data.set(c.getImageData(0, 0, 1024, 512).data);
   s.texture.needsUpdate = true;
 }

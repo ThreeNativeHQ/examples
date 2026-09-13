@@ -22,7 +22,6 @@ export class Hud {
   toastUntil = 0;
   hitFlash = 0;
   mapOpen = false;
-  mouse = { x: 0, y: 0, active: false };
   tick = 0;
   mapItems: any[] = [];
   dpr = 1;
@@ -50,8 +49,7 @@ export class Hud {
     this.toastUntil = performance.now() + 3800;
   }
 
-  update(dt: number, mouse: any, speed = 1): void {
-    this.mouse = mouse;
+  update(dt: number, speed = 1): void {
     const b = this.b;
     const p = b.player;
     void speed;
@@ -105,7 +103,7 @@ export class Hud {
     if (p.mode === "deck") {
       phase = "01 / LAUNCH";
       title = "Clear the flight deck";
-      desc = "Advance W. Stay straight. At 90–100 kt, ease UP. G for gear; N cycles flaps.";
+      desc = "Advance W. Stay straight. At 90–100 kt, ease the stick back. G for gear; N cycles flaps.";
     } else if (p.mode === "service") {
       phase = "05 / RECOVERY";
       title = "Back aboard the carrier";
@@ -161,7 +159,7 @@ export class Hud {
     let tip = "";
     if (p.mode === "deck") tip = "<strong>HOLD W TO LAUNCH</strong><br>At 90–100 kt, gently hold ↑. G raises gear; N cycles flaps.";
     else if (p.autopilot) tip = `<strong>COURSE HOLD · ${p.nav === "home" ? "RETURNING HOME" : "EN ROUTE"}</strong><br>${b.canAccelerate() ? "Hold SHIFT for 3× transit." : "Combat proximity — normal time."}`;
-    else if (p.mode === "flight" && b.time < 100 && !mouse.active) tip = "<strong>CLICK THE SKY TO STEER</strong><br>Or use the arrow keys. T holds course to the search sector.";
+    else if (p.mode === "flight" && b.time < 100) tip = "<strong>STEER WITH ← → AND ↑ ↓</strong><br>A / D also bank. T holds course to the search sector.";
     else if (p.brakes && p.pitch < -0.25) tip = "<strong>DIVE BRAKES EXTENDED</strong><br>Amber circle predicts impact. B releases a bomb.";
     else if (p.nav === "home") tip = "<strong>RECOVERY: APPROACH FROM BEHIND THE CARRIER</strong><br>Gear down · below 600 ft · under 140 kt · L within 700 m";
     $("center-tip").innerHTML = tip;
@@ -338,14 +336,6 @@ export class Hud {
         c.fill();
         c.font = "9px ui-monospace,monospace";
         c.fillText(`${p.nav === "home" ? "HOME" : "SECTOR"} ${heading(bearing(p, nav))}°`, x, y - 9);
-      }
-      if (this.mouse.active) {
-        c.strokeStyle = "rgba(218,231,221,.35)";
-        const x = w / 2 + this.mouse.x * 75;
-        const y = h * 0.54 - this.mouse.y * 60;
-        c.beginPath();
-        c.arc(x, y, 5, 0, Math.PI * 2);
-        c.stroke();
       }
     }
     c.restore();

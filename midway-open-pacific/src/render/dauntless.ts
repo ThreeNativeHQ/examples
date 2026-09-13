@@ -6,6 +6,46 @@ import { makeTorpedoModel } from "./model-damage.js";
 
 const TAU = Math.PI * 2;
 
+/** Existing gear geometry shared by the procedural and imported SBD. */
+export function createDauntlessGear(under: T.Material = mat(0xb7beb9)) {
+  const rubber = mat(0x192129, { roughness: 0.94, metalness: 0 });
+  const steel = mat(0x84939b, { metalness: 0.85, roughness: 0.26 });
+  const darkSteel = mat(0x26333c, { metalness: 0.7, roughness: 0.35 });
+  const staticParts = new T.Group();
+  const gear = new T.Group();
+  const gearLegs: any[] = [];
+  for (const sign of [-1, 1]) {
+    const leg = new T.Group();
+    leg.position.set(sign * 1.51, -0.3, -0.65);
+    rod(leg, [0, 0, 0], [0, -1.22, 0], 0.064, steel);
+    rod(leg, [sign * 0.1, -0.1, 0.04], [sign * 0.16, -1.2, -0.06], 0.034, darkSteel);
+    rod(leg, [sign * 0.1, -0.45, 0], [sign * 0.36, -0.95, 0], 0.034, steel);
+    rod(leg, [sign * 0.36, -0.95, 0], [sign * 0.12, -1.22, 0], 0.034, steel);
+    const wheel = cylinder(leg, 0.35, 0.35, 0.22, sign * 0.1, -1.19, 0, rubber, 28);
+    wheel.geometry.rotateZ(Math.PI / 2);
+    wheel.rotation.set(0, 0, 0);
+    const axle = cylinder(leg, 0.14, 0.14, 0.24, sign * 0.1, -1.19, 0, steel, 20);
+    axle.rotation.z = Math.PI / 2;
+    box(leg, 0.26, 0.62, 0.07, sign * 0.03, -0.54, -0.1, under);
+    gear.add(leg);
+    gearLegs.push({ group: leg, wheel, sign });
+    const well = new T.Mesh(new T.CircleGeometry(0.39, 24), rubber);
+    well.rotation.x = Math.PI / 2;
+    well.position.set(sign * 0.81, -0.47, -0.63);
+    staticParts.add(well);
+  }
+  const tail = new T.Group();
+  rod(tail, [0, -0.29, 4.19], [0, -0.52, 4.39], 0.043, steel);
+  const tailwheel = cylinder(tail, 0.17, 0.17, 0.12, 0, -0.55, 4.45, rubber, 16);
+  tailwheel.geometry.rotateZ(Math.PI / 2);
+  tailwheel.rotation.set(0, 0, 0);
+
+  gear.add(staticParts, tail);
+  return { gear, gearLegs, tail };
+}
+
+
+
 function weatherTexture(): T.CanvasTexture {
   return canvasTexture(1024, 512, (c, w, h) => {
     c.fillStyle = "#d8dce0";
@@ -99,8 +139,8 @@ function fuselageGeometry(): T.BufferGeometry {
       pos.push(Math.cos(a) * r, y, z);
       uv.push(i / n, (z + 4.4) / 9.28);
       const k = Math.max(0, Math.min(1, (Math.sin(a) + 0.12) * 3 + 0.5));
-      const top = new T.Color(0x4c7187);
-      const under = new T.Color(0xb2b9b5);
+      const top = new T.Color(0x4c7187).convertLinearToSRGB();
+      const under = new T.Color(0xb2b9b5).convertLinearToSRGB();
       under.lerp(top, k);
       colors.push(under.r, under.g, under.b);
     }
@@ -198,8 +238,8 @@ function brakePanel(width: number, depth: number, top: boolean, blue: T.Material
   }
   geo.computeVertexNormals();
   const g = new T.Group();
-  g.add(new T.Mesh(geo, new T.MeshStandardMaterial({ color: top ? 0x6c899c : 0xb6bbb4, metalness: 0.18, roughness: 0.63, side: top ? T.BackSide : T.FrontSide })));
-  g.add(new T.Mesh(geo, new T.MeshStandardMaterial({ color: 0xa74737, roughness: 0.7, metalness: 0.09, side: top ? T.FrontSide : T.BackSide })));
+  g.add(new T.Mesh(geo, new T.MeshStandardMaterial({ color: new T.Color(top ? 0x6c899c : 0xb6bbb4).convertLinearToSRGB(), metalness: 0.18, roughness: 0.63, side: top ? T.BackSide : T.FrontSide })));
+  g.add(new T.Mesh(geo, new T.MeshStandardMaterial({ color: new T.Color(0xa74737).convertLinearToSRGB(), roughness: 0.7, metalness: 0.09, side: top ? T.FrontSide : T.BackSide })));
   void blue;
   void under;
   return g;
@@ -210,15 +250,15 @@ export function makeDauntless(torpedo = false): T.Group {
   const staticParts = new T.Group();
   const weather = weatherTexture();
   root.name = torpedo ? "TBD-inspired Devastator / detailed player model" : "SBD Dauntless / detailed player model";
-  const blue = new T.MeshStandardMaterial({ color: 0x496e87, map: weather, roughness: 0.57, metalness: 0.21 });
-  const under = new T.MeshStandardMaterial({ color: 0xb7beb9, map: weather, roughness: 0.67, metalness: 0.11 });
+  const blue = new T.MeshStandardMaterial({ color: new T.Color(0x496e87).convertLinearToSRGB(), map: weather, roughness: 0.57, metalness: 0.21 });
+  const under = new T.MeshStandardMaterial({ color: new T.Color(0xb7beb9).convertLinearToSRGB(), map: weather, roughness: 0.67, metalness: 0.11 });
   const navy = mat(0x354c60);
   const rubber = mat(0x192129, { roughness: 0.94, metalness: 0 });
   const steel = mat(0x84939b, { metalness: 0.85, roughness: 0.26 });
   const darkSteel = mat(0x35424b, { metalness: 0.75, roughness: 0.42 });
   const interior = mat(0x657363, { roughness: 0.9 });
   const leather = mat(0x574c3e);
-  root.add(new T.Mesh(fuselageGeometry(), new T.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, map: weather, roughness: 0.64, metalness: 0.18 })));
+  root.add(new T.Mesh(fuselageGeometry(), new T.MeshStandardMaterial({ color: new T.Color(0xffffff).convertLinearToSRGB(), vertexColors: true, map: weather, roughness: 0.64, metalness: 0.18 })));
   const cowProfile = [new T.Vector2(0.76, -4.43), new T.Vector2(0.81, -4.34), new T.Vector2(0.835, -4.1), new T.Vector2(0.825, -3.65), new T.Vector2(0.77, -3.45)];
   const cow = new T.Mesh(new T.LatheGeometry(cowProfile, 48), blue);
   cow.rotation.x = Math.PI / 2;
@@ -340,7 +380,7 @@ export function makeDauntless(torpedo = false): T.Group {
     box(staticParts, 0.12, 0.11, 0.4, x, 0.92, 1.64, rubber);
     rod(staticParts, [x, 0.94, 1.6], [x, 1.07, 2.7], 0.026, darkSteel);
   }
-  const glassMat = new T.MeshPhongMaterial({ color: 0x6c9aac, transparent: true, opacity: 0.12, shininess: 90, specular: 0xd5edff, side: T.DoubleSide, depthWrite: false });
+  const glassMat = new T.MeshPhongMaterial({ color: new T.Color(0x6c9aac).convertLinearToSRGB(), transparent: true, opacity: 0.12, shininess: 90, specular: 0xd5edff, side: T.DoubleSide, depthWrite: false });
   const stations: [number, number, number][] = torpedo
     ? [[-1.82, 0.3, 0.97], [-1.36, 0.46, 1.45], [-0.4, 0.49, 1.49], [0.54, 0.47, 1.44], [1.45, 0.43, 1.35], [2.25, 0.32, 1.1], [2.65, 0.18, 0.71]]
     : [[-1.82, 0.3, 0.97], [-1.36, 0.46, 1.45], [-0.4, 0.49, 1.49], [0.54, 0.47, 1.44], [1.32, 0.37, 1.31], [1.7, 0.25, 0.99]];
@@ -413,32 +453,7 @@ export function makeDauntless(torpedo = false): T.Group {
   const blur = new T.Mesh(new T.PlaneGeometry(3.3, 3.3), new T.MeshBasicMaterial({ map: blurTex, transparent: true, side: T.DoubleSide, depthWrite: false }));
   prop.add(blur);
   root.add(prop);
-  const gear = new T.Group();
-  const gearLegs: any[] = [];
-  for (const sign of [-1, 1]) {
-    const leg = new T.Group();
-    leg.position.set(sign * 1.51, -0.3, -0.65);
-    rod(leg, [0, 0, 0], [0, -1.22, 0], 0.064, steel);
-    rod(leg, [sign * 0.1, -0.1, 0.04], [sign * 0.16, -1.2, -0.06], 0.034, darkSteel);
-    rod(leg, [sign * 0.1, -0.45, 0], [sign * 0.36, -0.95, 0], 0.034, steel);
-    rod(leg, [sign * 0.36, -0.95, 0], [sign * 0.12, -1.22, 0], 0.034, steel);
-    const wheel = cylinder(leg, 0.35, 0.35, 0.22, sign * 0.1, -1.19, 0, rubber, 28);
-    wheel.geometry.rotateZ(Math.PI / 2);
-    wheel.rotation.set(0, 0, 0);
-    const axle = cylinder(leg, 0.14, 0.14, 0.24, sign * 0.1, -1.19, 0, steel, 20);
-    axle.rotation.z = Math.PI / 2;
-    box(leg, 0.26, 0.62, 0.07, sign * 0.03, -0.54, -0.1, under);
-    gear.add(leg);
-    gearLegs.push({ group: leg, wheel, sign });
-    const well = new T.Mesh(new T.CircleGeometry(0.39, 24), rubber);
-    well.rotation.x = Math.PI / 2;
-    well.position.set(sign * 0.81, -0.47, -0.63);
-    staticParts.add(well);
-  }
-  rod(staticParts, [0, -0.29, 4.19], [0, -0.52, 4.39], 0.043, steel);
-  const tailwheel = cylinder(staticParts, 0.17, 0.17, 0.12, 0, -0.55, 4.45, rubber, 16);
-  tailwheel.geometry.rotateZ(Math.PI / 2);
-  tailwheel.rotation.set(0, 0, 0);
+  const { gear, gearLegs } = createDauntlessGear(under);
   root.add(gear);
   const hook = new T.Group();
   hook.position.set(0, -0.36, 3.14);

@@ -7,7 +7,7 @@ export function mat(color: number, opts: Record<string, unknown> = {}): THREE.Me
   const key = String(color) + JSON.stringify(opts);
   let m = materialCache.get(key);
   if (!m) {
-    m = new THREE.MeshStandardMaterial({ color, roughness: 0.68, metalness: 0.18, ...opts });
+    m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).convertLinearToSRGB(), roughness: 0.68, metalness: 0.18, ...opts });
     materialCache.set(key, m);
   }
   return m;

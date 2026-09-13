@@ -19,20 +19,26 @@ reuse it here — do not grow a second flight model in this repo.
 
 ## Platform
 
-The game runs on core's default **WebGPU** backend. Its ocean, sky and combat-particle effects are
-TSL node materials (`src/render/ocean.ts`, `src/render/particles.ts`, and the sky in
-`src/render/world.ts`), so the same source is the web and native rendering path. **Shadow maps are
-off**: three r185's WebGPU shadow pass raised a `bindingBuffer ... used in submit while destroyed`
-validation error for this scene, so lighting is the hemisphere and directional lights only. Do not
-claim desktop, Android or iOS until a `--target` playtest has run.
+The game runs on core's default **WebGPU** backend. Its analytic WaveField ocean and combat
+particles use TSL node materials. Dawn HDR supplies the background and filtered water reflections.
+Shadow maps are enabled: the installed Three patch keys shadow variants by source material,
+preventing multi-material meshes from disposing GPU bindings during submission. Keep appearance in
+`src/render/`. The hero Douglas and nearby carriers retain their supplied geometry; distant ships
+use LOD. `public/assets/enterprise.glb` is the unused modern CVN-80 source; the visible WWII
+Enterprise uses the detailed sister-ship geometry in `hornet.glb`.
+Do not claim desktop, Android or iOS until a `--target` playtest has run.
 
 ## Verify
 
 ```sh
 pnpm typecheck
 pnpm exec vite build
-node node_modules/@threenative/playtest/dist/runner/cli.js \
-  --scenario playtests/launch.playtest.json --url http://127.0.0.1:5199
+node scripts/check-flight.mjs
+node scripts/check-aircraft.mjs
+node scripts/check-audio.mjs
+bash tools/capture-lock.sh node tools/check-repair.mjs
+bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/cli.js \
+  --scenario playtests/launch.playtest.json --url http://127.0.0.1:5199 --browser-recipe webgpu --headed
 ```
 
 `playtests/launch.playtest.json` boots the briefing, clicks **Take the deck**, runs the throttle

@@ -4,6 +4,9 @@ import type * as T from "three";
 import { Battle } from "../sim/battle.js";
 import { LOADOUTS } from "../sim/armament.js";
 import { clamp, distance2 } from "../sim/math.js";
+import { loadImportedShips } from "../render/imported-ships.js";
+import { loadEnvironment } from "../render/environment.js";
+import { loadImportedAircraft } from "../render/imported-aircraft.js";
 import { WorldView } from "../render/world.js";
 import { Hud } from "../hud.js";
 import { Soundscape } from "../audio.js";
@@ -26,10 +29,11 @@ export class Midway extends Scene<GameState, undefined> {
   ended = false;
   started = false;
   keys = new Set<string>();
-  mouse = { x: 0, y: 0, active: false, fire: false, cx: innerWidth / 2, cy: innerHeight / 2, looking: false, lx: 0, ly: 0 };
+  mouse = { fire: false, looking: false, lx: 0, ly: 0 };
   private cleanups: Array<() => void> = [];
 
-  load(): void {
+  async load(ctx: ICtx<GameState, undefined>): Promise<void> {
+    await Promise.all([loadImportedAircraft(ctx), loadImportedShips(ctx), loadEnvironment(ctx)]);
     // Keep the opaque loading layer up until the first update has built the world and placed the
     // camera; hiding it here showed a few frames of an unlit, half-built scene.
   }
@@ -43,9 +47,15 @@ export class Midway extends Scene<GameState, undefined> {
     this.attachInput();
     this.updateLoadoutUI();
     $("flight-ui").classList.add("hidden");
+    void ctx.startup.whenReady().then(() => {
+      this.started = true;
+      $("loading").classList.add("hidden");
+      if (this.battle.status === "briefing") $("briefing").classList.remove("hidden");
+    });
   }
 
   exit(): void {
+    this.audio.dispose();
     for (const off of this.cleanups) off();
     this.cleanups = [];
     this.keys.clear();
@@ -172,13 +182,6 @@ export class Midway extends Scene<GameState, undefined> {
       if (e.button !== 0 || this.mouse.looking) return;
       this.audio.start();
       this.mouse.fire = true;
-      if (!this.mouse.active) {
-        this.mouse.active = true;
-        this.mouse.cx = e.clientX;
-        this.mouse.cy = e.clientY;
-        this.mouse.x = this.mouse.y = 0;
-        this.hud.toast("MOUSE STEERING ENGAGED — X TO RELEASE");
-      }
     });
     this.on(window, "pointerup", (e) => {
       if (e.button === 0) this.mouse.fire = false;
@@ -194,11 +197,7 @@ export class Midway extends Scene<GameState, undefined> {
         this.world.lookPitch = clamp((this.world.lookPitch || 0) - (e.clientY - this.mouse.ly) * 0.004, -0.8, 0.95);
         this.mouse.lx = e.clientX;
         this.mouse.ly = e.clientY;
-        return;
       }
-      if (!this.mouse.active || (e.target as HTMLElement).closest("button,select,.dialog")) return;
-      this.mouse.x = clamp((e.clientX - this.mouse.cx) / (innerWidth * 0.31), -1, 1);
-      this.mouse.y = clamp((this.mouse.cy - e.clientY) / (innerHeight * 0.31), -1, 1);
     });
     this.on(window, "contextmenu", (e) => {
       if (this.battle.status === "playing") e.preventDefault();
@@ -208,22 +207,13 @@ export class Midway extends Scene<GameState, undefined> {
   update(_ctx: ICtx<GameState, undefined>, dt: number): void {
     this.wall += dt;
     const b = this.battle;
-    if (!this.started) {
-      // The world is built and the camera placed by the time the first update runs; reveal the
-      // briefing now instead of showing the still-unlit scene behind the loading layer.
-      this.started = true;
-      $("loading").classList.add("hidden");
-      if (b.status === "briefing") $("briefing").classList.remove("hidden");
-    }
     const inFlight = b.status === "playing" && !this.paused;
     let speed = 1;
     if (inFlight) {
       let turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
-      // Inverted pitch, as a flight-sim stick: pulling back (Down, or the mouse pulled down)
-      // raises the nose.
-      let pitch = (this.keys.has("ArrowDown") ? 1 : 0) - (this.keys.has("ArrowUp") ? 1 : 0);
-      if (!turn && this.mouse.active) turn = this.mouse.x;
-      if (!pitch && this.mouse.active) pitch = -this.mouse.y;
+      // Inverted pitch, as a flight-sim stick: pulling back (Down) raises the nose. The mouse
+      // never commands pitch or roll — it fires the guns and, held right, moves the view.
+      const pitch = (this.keys.has("ArrowDown") ? 1 : 0) - (this.keys.has("ArrowUp") ? 1 : 0);
       const input = {
         turn,
         pitch,
@@ -243,7 +233,7 @@ export class Midway extends Scene<GameState, undefined> {
       }
     }
     this.world.update(this.paused ? 0 : dt, this.wall, b.status === "briefing");
-    this.hud.update(dt, this.mouse, speed);
+    this.hud.update(dt, speed);
     this.audio.update(b.player, this.paused || b.status !== "playing");
     if ((b.status === "lost" || b.status === "won") && !this.ended) {
       this.ended = true;
@@ -255,8 +245,6 @@ export class Midway extends Scene<GameState, undefined> {
   private clearInput(): void {
     this.keys.clear();
     this.mouse.fire = false;
-    this.mouse.x = this.mouse.y = 0;
-    this.mouse.active = false;
     this.mouse.looking = false;
     this.world.lookActive = false;
   }
@@ -372,8 +360,6 @@ export class Midway extends Scene<GameState, undefined> {
     this.battle.player.home = home.id;
     this.battle.player.nav = "home";
     this.battle.player.autopilot = true;
-    this.mouse.x = this.mouse.y = 0;
-    this.mouse.active = false;
     this.hud.toast(`RETURN COURSE — ${home.name.toUpperCase()}`);
   }
 
@@ -433,7 +419,7 @@ export class Midway extends Scene<GameState, undefined> {
           this.hud.toast("GEAR LOCKED WHILE ON DECK");
           break;
         }
-        p.gear = !p.gear;
+        this.battle.toggleGear();
         this.hud.toast(`LANDING GEAR ${p.gear ? "DOWN" : "UP"}`);
         break;
       case "KeyN":
@@ -475,8 +461,6 @@ export class Midway extends Scene<GameState, undefined> {
         p.autopilot = !p.autopilot;
         if (p.autopilot) {
           p.nav = "search";
-          this.mouse.x = this.mouse.y = 0;
-          this.mouse.active = false;
         }
         this.hud.toast(`COURSE HOLD ${p.autopilot ? "ENGAGED" : "OFF"}`);
         break;
@@ -490,11 +474,6 @@ export class Midway extends Scene<GameState, undefined> {
         this.world.followBomb = !this.world.followBomb;
         this.world.snap = true;
         this.hud.toast(this.world.followBomb ? "WEAPON FOLLOW CAMERA" : "AIRCRAFT CAMERA");
-        break;
-      case "KeyX":
-        this.mouse.active = false;
-        this.mouse.x = this.mouse.y = 0;
-        this.hud.toast("MOUSE RELEASED — CLICK SKY TO RE-ENGAGE");
         break;
       case "Tab":
         this.cycleTarget();

@@ -113,7 +113,7 @@ export class CombatParticles {
     const muzzle = e.type === "muzzle";
     const size = e.size;
     if (muzzle) {
-      this.emit(this.glow, e, { life: 0.1, size: size * 5, kind: 1, color: [2.4, 1.4, 0.52], alpha: 0.9, drag: 3 });
+      this.emit(this.glow, e, { life: 0.045, size: size * 0.7, kind: 1, color: [1.5, 0.85, 0.32], alpha: 0.65, drag: 0 });
       return;
     }
     const smokeCount = hit ? 2 : flak ? 23 : water ? 12 : 34;

@@ -1,15 +1,15 @@
 /** The battle's Three.js world, built into the scene the framework owns. */
 import * as T from "three";
 import { attitudeAxes } from "../sim/flight.js";
-import { clamp, distance2, forward, localPoint, rng } from "../sim/math.js";
-import { ellipsoid, makeAircraft, makeCrew, makeIsland, makeShip, mat, cloudTexture, smokeTexture, wakeTexture } from "./assets.js";
+import { clamp, distance2, forward, localPoint } from "../sim/math.js";
+import { ellipsoid, mat, wakeTexture, makeAircraft, makeCrew, makeIsland, makeShip } from "./assets.js";
+import { createCarrier, createMitchell, DECKS } from "./imported-ships.js";
+import { createDouglas, animateDouglas, disposeDouglas } from "./imported-aircraft.js";
 import { animateDauntless, makeDauntless } from "./dauntless.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals } from "./model-damage.js";
-import { createOcean, createWaterMesh } from "./ocean.js";
+import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
+import { createOcean } from "./ocean.js";
 import { CombatParticles } from "./particles.js";
-import type { SpectralOcean } from "@threenative/core";
-import { color, dot, float, mix, normalize, positionLocal, pow, smoothstep, vec3 } from "three/tsl";
-import { MeshBasicNodeMaterial } from "three/webgpu";
 
 export interface IWorldHost {
   scene: T.Scene;
@@ -36,16 +36,11 @@ export class WorldView {
   camera: T.PerspectiveCamera;
   sun: T.DirectionalLight;
   sunDir: T.Vector3;
-  smokeTex: T.Texture;
-  cloudTex: T.Texture;
   wakeTex: T.Texture;
-  ocean!: SpectralOcean;
+  ocean!: ReturnType<typeof createOcean>;
   sea!: T.Mesh;
-  sky!: T.Mesh;
-  clouds: T.Sprite[] = [];
   crew!: T.Group;
   playerMesh!: T.Group;
-  flash!: T.Sprite;
   tracers!: T.LineSegments;
   tracerPositions = new Float32Array(1000 * 6);
   tracerColors = new Float32Array(1000 * 6);
@@ -65,92 +60,76 @@ export class WorldView {
     this.renderer = host.renderer.raw as T.WebGLRenderer;
     this.renderer.outputColorSpace = T.SRGBColorSpace;
     this.renderer.toneMapping = T.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
-    this.renderer.shadowMap.enabled = false;
-    this.renderer.shadowMap.type = T.BasicShadowMap;
-    this.scene.fog = new T.FogExp2(0xb9d2dc, 0.000012);
-    const hemi = new T.HemisphereLight(0xdcecf4, 0x4a6670, 0.95);
+    this.renderer.toneMappingExposure = 0.95;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = T.PCFShadowMap;
+    this.scene.fog = new T.FogExp2(new T.Color(0x8fa9b4).convertLinearToSRGB(), 0.000028);
+    // The reference used r140 legacy light units (PI brighter) and linear hex colours.
+    const hemi = new T.HemisphereLight(0xb5cedd, 0x243745, 0.9);
     this.scene.add(hemi);
-    this.sun = new T.DirectionalLight(0xfff6e6, 2.15);
+    this.sun = new T.DirectionalLight(SUN_COLOR, 2.6);
     this.sun.position.set(-200, 140, -240);
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
-    this.sun.castShadow = false;
+    this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 1, far: 850 });
     this.sun.shadow.bias = -0.000035;
     this.sun.shadow.normalBias = 0.018;
-    this.sunDir = new T.Vector3(-0.62, 0.23, -0.75).normalize();
-    this.smokeTex = smokeTexture();
-    this.cloudTex = cloudTexture();
+    this.sunDir = SUN_DIRECTION.clone();
     this.wakeTex = wakeTexture();
     this.makeSky();
     this.makeOcean();
-    this.makeClouds();
     this.makeWorld();
     this.makeTracers();
     this.particles = new CombatParticles(this.scene);
   }
 
   makeSky(): void {
-    // A TSL node material, so the same sky runs on the WebGPU backend as on web. The sphere is
-    // centred on the camera each frame; `positionLocal` is therefore the view direction.
-    const material = new MeshBasicNodeMaterial({ side: T.BackSide, depthWrite: false, fog: false });
-    const direction = normalize(positionLocal);
-    const height = direction.y.max(0);
-    // Linear values, copied from the standalone build's sky shader. `color(hex)` would convert
-    // them from sRGB first and darken the whole sky.
-    const horizon = vec3(0.34, 0.49, 0.57);
-    const zenith = vec3(0.055, 0.2, 0.36);
-    const sun = normalize(vec3(-0.62, 0.23, -0.75));
-    const facing = dot(direction, sun).max(0);
-    const gradient = mix(horizon, zenith, pow(height, float(0.46)));
-    const glow = vec3(0.52, 0.4, 0.26).mul(pow(facing, float(9)).mul(0.5));
-    const disk = vec3(4, 2.9, 1.8).mul(pow(facing, float(2100)));
-    const sky = gradient.add(glow).add(disk);
-    const belowMix = float(1).sub(smoothstep(float(-0.12), float(0), direction.y));
-    material.colorNode = mix(sky, vec3(0.3, 0.43, 0.46), belowMix);
-    this.sky = new T.Mesh(new T.SphereGeometry(70000, 32, 16), material);
-    this.sky.frustumCulled = false;
-    this.sky.renderOrder = -10;
-    this.scene.add(this.sky);
+    const sky = dawnEnvironment();
+    this.scene.background = sky;
+    this.scene.environment = sky;
+    this.scene.backgroundRotation.copy(SKY_ROTATION);
+    this.scene.environmentRotation.copy(SKY_ROTATION);
+    this.scene.backgroundIntensity = 0.65;
+    this.scene.environmentIntensity = 0.65;
   }
 
   makeOcean(): void {
-    // `ctx.add` hands the compute-driven SpectralOcean to the renderer so its cascades run.
-    this.ocean = this.host.add(createOcean()) as SpectralOcean;
-    this.sea = createWaterMesh(this.ocean);
+    this.ocean = createOcean();
+    this.sea = this.ocean.mesh;
     this.scene.add(this.sea);
-  }
-
-  makeClouds(): void {
-    const random = rng(1842);
-    const material = new T.SpriteMaterial({ map: this.cloudTex, color: 0xf8efe0, transparent: true, opacity: 0.12, depthWrite: false, fog: true });
-    for (let i = 0; i < 65; i += 1) {
-      const s = new T.Sprite(material);
-      s.position.set((random() - 0.5) * 46000, 1300 + random() * 1600, (random() - 0.5) * 45000);
-      const k = 850 + random() * 1900;
-      s.scale.set(k, k * 0.47, 1);
-      s.userData.origin = s.position.x;
-      this.scene.add(s);
-      this.clouds.push(s);
-    }
   }
 
   makeWorld(): void {
     const b = this.battle;
     for (const s of b.ships) {
-      const mesh = makeShip(s);
+      let mesh: T.Group = makeShip(s);
+      if (s.kind === "carrier" && (s.team === "us" || s.name === "Akagi")) {
+        const id = s.team !== "us" ? "akagi" : s.name === "USS Enterprise" ? "enterprise" : "hornet";
+        const detailed = createCarrier(id);
+        const lod = new T.LOD();
+        lod.addLevel(detailed, 0);
+        lod.addLevel(mesh, 1200);
+        mesh = new T.Group();
+        mesh.add(lod);
+        mesh.userData.importedShip = true;
+        mesh.userData.parked = [];
+        s.length = DECKS[id].length;
+        s.width = DECKS[id].width;
+        s.visualLength = DECKS[id].visualLength;
+        for (let i = 0; i < (s.team === "us" ? (id === "enterprise" ? 2 : 3) : 0); i++) {
+          const plane = id === "hornet" ? createMitchell() : createDouglas();
+          plane.userData.parkedDouglas = id !== "hornet";
+          plane.position.set(id === "enterprise" ? -13 : 10, 20.06 + (id === "enterprise" ? 1.82 : 0), -30 + i * 30);
+          if (id === "enterprise") plane.rotation.x = .22;
+          detailed.add(plane);
+          mesh.userData.parked.push(plane);
+        }
+      }
       this.scene.add(mesh);
       this.meshes.set(s.id, mesh);
-      const wake = new T.Mesh(
-        new T.PlaneGeometry(s.width * 5, s.length * 2.5),
-        new T.MeshBasicMaterial({ map: this.wakeTex, transparent: true, opacity: 0.52, depthWrite: false, side: T.DoubleSide }),
-      );
-      wake.rotation.x = -Math.PI / 2;
-      wake.position.set(0, 0.65, s.length * 1.55);
-      mesh.add(wake);
-      mesh.userData.wake = wake;
+
     }
     const h = this.meshes.get(b.player.home);
     this.crew = makeCrew();
@@ -165,17 +144,15 @@ export class WorldView {
     const type = this.battle.player.airframe || "sbd";
     if (this.playerMesh?.userData.airframe === type) return;
     if (this.playerMesh) {
-      this.scene.remove(this.playerMesh);
+      this.playerMesh.removeFromParent();
       this.playerMesh.userData.instruments?.texture.dispose();
-      this.disposeModel(this.playerMesh);
+      if (this.playerMesh.userData.importedAircraft) disposeDouglas(this.playerMesh);
+      else this.disposeModel(this.playerMesh);
     }
-    this.playerMesh = makeDauntless(type === "tbd");
+    this.playerMesh = type === "sbd" ? createDouglas(true) : makeDauntless(true);
+    this.playerMesh.userData.airframe = type;
     addDamageVisuals(this.playerMesh);
     this.scene.add(this.playerMesh);
-    this.flash = new T.Sprite(new T.SpriteMaterial({ map: this.smokeTex, color: 0xffe5a4, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending }));
-    this.flash.position.set(0, 0.25, -5.2);
-    this.flash.scale.set(3, 3, 1);
-    this.playerMesh.add(this.flash);
     this.snap = true;
   }
 
@@ -200,12 +177,17 @@ export class WorldView {
   setQuality(q: string): void {
     this.quality = q;
     this.renderer.setPixelRatio(q === "low" ? Math.min(devicePixelRatio, 1) : Math.min(devicePixelRatio, q === "high" ? 2 : 1.5));
-    this.renderer.shadowMap.enabled = false;
-    for (let i = 0; i < this.clouds.length; i += 1) this.clouds[i].visible = q !== "low" || i % 2 === 0;
+    this.renderer.shadowMap.enabled = q !== "low";
   }
 
   reset(b: any): void {
     this.battle = b;
+    for (const ship of b.ships) if (ship.kind === "carrier" && (ship.team === "us" || ship.name === "Akagi")) {
+      const deck = DECKS[ship.team !== "us" ? "akagi" : ship.name === "USS Enterprise" ? "enterprise" : "hornet"];
+      ship.length = deck.length;
+      ship.width = deck.width;
+      ship.visualLength = deck.visualLength;
+    }
     this.snap = true;
     this.followBomb = false;
     this.lookYaw = this.lookPitch = 0;
@@ -231,9 +213,6 @@ export class WorldView {
     this.setAirframe();
     this.wallTime = wallTime;
     const time = briefing ? wallTime : b.time;
-    this.ocean.advance(time);
-    this.sea.position.set(this.camera.position.x, 0, this.camera.position.z);
-    for (const c of this.clouds) c.position.x = c.userData.origin + time * 3;
     for (const s of b.ships) {
       const m = this.meshes.get(s.id);
       if (!m) continue;
@@ -241,19 +220,20 @@ export class WorldView {
       m.rotation.set(Math.sin(time * 0.3 + s.baseZ) * 0.004, -s.heading, s.sunk ? s.sink * 0.35 : Math.sin(time * 0.22 + s.baseX) * 0.004 + (1 - s.hp / s.maxHp) * 0.035);
       m.visible = s.sink < 0.95;
       const d = distance2(s, p);
-      for (const [i, a] of (m.userData.parked as T.Object3D[]).entries()) {
+      for (const [i, a] of ((m.userData.parked ?? []) as T.Object3D[]).entries()) {
         a.visible = d < 1900 && i < Math.ceil(s.reserve / 2);
         const child = a as T.Group;
-        (child.userData.prop as T.Object3D).rotation.z = time * 14;
-        (child.userData.gear as T.Object3D).visible = true;
+        if (child.userData.parkedDouglas) animateDouglas(child, { rpm: .12, gearPos: 1 }, dt);
+        else if (child.userData.prop) {
+          (child.userData.prop as T.Object3D).rotation.z = time * 14;
+          (child.userData.gear as T.Object3D).visible = true;
+        }
       }
-      (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
-      const wake = m.userData.wake as T.Mesh;
-      wake.visible = false;
-      (wake.material as T.MeshBasicMaterial).opacity = s.kind === "sub" ? 0.2 : 0.5;
+      if (m.userData.elevator) (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
+
     }
     this.crew.visible = p.mode === "deck" || p.mode === "service" || p.mode === "arrest" || briefing;
-    this.crew.position.z = Math.sin(time * 0.9) * 0.4;
+    this.crew.position.z = (briefing ? -90 : 0) + Math.sin(time * 0.9) * 0.4;
     const live = new Set<string>();
     for (const a of b.aircraft) {
       live.add(a.id);
@@ -295,7 +275,7 @@ export class WorldView {
     if (wheelsDown && homeMesh) {
       if (this.playerMesh.parent !== homeMesh) homeMesh.add(this.playerMesh);
       const local = localPoint(p, homeShip);
-      this.playerMesh.position.set(local.right, p.y - homeShip.y, -local.forward);
+      this.playerMesh.position.set(local.right, p.y - homeShip.y, briefing ? 15 : -local.forward);
       this.playerMesh.rotation.set(p.pitch, 0, 0, "YXZ");
     } else {
       if (this.playerMesh.parent !== this.scene) this.scene.add(this.playerMesh);
@@ -303,16 +283,16 @@ export class WorldView {
       if (p.attitude) this.playerMesh.quaternion.set(p.attitude.x, p.attitude.y, p.attitude.z, p.attitude.w);
       else this.playerMesh.rotation.set(p.pitch, -p.heading, p.roll, "YXZ");
     }
-    animateDauntless(this.playerMesh, p, dt);
+    if (this.playerMesh.userData.importedAircraft) animateDouglas(this.playerMesh, p, dt);
+    else animateDauntless(this.playerMesh, p, dt);
     updateDamageVisuals(this.playerMesh, p);
     this.playerMesh.visible = b.status !== "lost";
-    this.flash.material.opacity = p.heat * 0.7;
     this.updateProjectiles();
     this.updateCamera(dt, briefing, time);
     this.particles.update(b, this.camera.position);
-    this.sky.position.copy(this.camera.position);
-    this.sun.position.set(p.x - 260, p.y + 220, p.z - 320);
-    this.sun.target.position.set(p.x, p.y, p.z);
+    this.ocean.update(this.camera.position, time, b.ships);
+    this.sun.position.copy(this.sunDir).multiplyScalar(500).add(this.playerMesh.getWorldPosition(this.tmp));
+    this.sun.target.position.copy(this.playerMesh.getWorldPosition(this.tmp));
   }
 
   updateCamera(dt: number, briefing: boolean, time: number): void {
@@ -323,8 +303,9 @@ export class WorldView {
     const ownBomb = [...this.battle.bombs, ...this.battle.airTorpedoes, ...this.battle.torpedoes].filter((a: any) => a.owner === "player").at(-1);
     let cockpit = false;
     if (briefing) {
-      this.targetCamera.set(p.x + 17 + Math.sin(time * 0.055) * 2, p.y + 6.5, p.z + 21);
-      this.look.set(p.x - 5, p.y - 0.1, p.z - 4);
+      const focus = this.playerMesh.getWorldPosition(this.tmp);
+      this.targetCamera.set(focus.x + 17 + Math.sin(time * 0.055) * 2, focus.y + 6.5, focus.z + 21);
+      this.look.set(focus.x - 5, focus.y - 0.1, focus.z - 4);
       this.camera.fov = 49;
     } else if (this.followBomb && ownBomb) {
       this.targetCamera.set(ownBomb.x + 12, ownBomb.y + 16, ownBomb.z + 28);
@@ -333,7 +314,8 @@ export class WorldView {
     } else if (this.cameraMode === 1) {
       cockpit = true;
       this.playerMesh.updateMatrixWorld(true);
-      this.targetCamera.set(0, 1.235, -0.57);
+      if (this.playerMesh.userData.cockpit) this.targetCamera.copy(this.playerMesh.userData.cockpit);
+      else this.targetCamera.set(0, 1.235, -0.57);
       this.playerMesh.localToWorld(this.targetCamera);
       if (!this.lookActive) {
         this.lookYaw *= Math.exp(-dt * 7);
@@ -353,14 +335,14 @@ export class WorldView {
       );
       this.camera.fov = 79;
     } else {
-      const distance = this.cameraMode === 2 ? 58 : 24;
+      const distance = this.cameraMode === 2 ? 58 : 18;
       const sign = this.rear ? 1 : -1;
-      const up = this.cameraMode === 2 ? 12 : 5.2;
+      const up = this.cameraMode === 2 ? 12 : 4.2;
       this.targetCamera.set(p.x + f.x * distance * sign, p.y + f.y * distance * sign + up, p.z + f.z * distance * sign);
       this.look.set(p.x + f.x * (this.rear ? -35 : 40), p.y + f.y * (this.rear ? -35 : 40) + 1.5, p.z + f.z * (this.rear ? -35 : 40));
       this.camera.fov = this.cameraMode === 2 ? 60 : 56;
     }
-    this.playerMesh.userData.crew[0].visible = !cockpit;
+    if (this.playerMesh.userData.crew) this.playerMesh.userData.crew[0].visible = !cockpit;
     document.body.classList.toggle("cockpit-view", cockpit);
     if (this.snap || briefing || cockpit) {
       this.camera.position.copy(this.targetCamera);

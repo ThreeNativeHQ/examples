@@ -111,9 +111,12 @@ export class Battle {
       bombs: 3,
       torpedo: 0,
       gear: true,
+      gearManual: false,
+      autoGearPending: false,
+      gearClimbTime: 0,
       brakes: false,
       mode: "deck",
-      deckOffset: -95,
+      deckOffset: -55,
       vx: 0,
       vy: 0,
       vz: 0,
@@ -129,7 +132,7 @@ export class Battle {
     Object.assign(this.player, {
       flaps: 0.33,
       assist: true,
-      deckOffset: -105,
+      deckOffset: -55,
       deckLateral: 0,
       deckSpeed: 0,
       chocks: true,
@@ -149,6 +152,13 @@ export class Battle {
     const ok = applyLoadout(p, id);
     if (ok) this.playerFlight.setAirframe(p.airframe);
     return ok;
+  }
+
+  toggleGear(): void {
+    const p = this.player;
+    p.gear = !p.gear;
+    p.gearManual = true;
+    p.autoGearPending = false;
   }
 
   releaseOrdnance(): boolean {
@@ -240,7 +250,7 @@ export class Battle {
       this.events = [];
       this.say("SCOUT CONTROL", "Search the northwest sector. No confirmed carrier positions. Scan the horizon; use R to report sightings.");
     } else
-      this.say("ENTERPRISE TOWER", "Scout Two, cleared for launch. Hold W. Chocks release with power. Keep straight; ease UP through 90 knots. Lift, not the bow, gets you flying.");
+      this.say("ENTERPRISE TOWER", "Scout Two, cleared for launch. Hold W. Chocks release with power. Keep straight; ease the stick back (Down) through 90 knots. Lift, not the bow, gets you flying.");
     this.say("SCOUT THREE", "Two, we have your wing. Orders on your command.");
   }
 
@@ -547,7 +557,7 @@ export class Battle {
     a.crashAge = 0;
     a.vy = Math.min(-7, a.vy || 0);
     this.fx("explosion", a, 1.15);
-    this.event("explosion");
+    this.event("explosion", { distance: distance3(this.player, a) });
     if (a.damage) a.damage.engine.fire = Math.max(0.55, a.damage.engine.fire);
     if (owner === "player" && a.team === "jp") {
       this.score += 150;
@@ -566,7 +576,7 @@ export class Battle {
       s.reserve = Math.max(0, s.reserve - Math.ceil(amount / 40));
       s.engine = Math.max(0.12, s.engine - amount / 600);
       this.fx("explosion", point, weapon === "bomb" ? 3.2 : 1);
-      this.event("explosion");
+      this.event("explosion", { distance: distance3(this.player, point) });
       if (team === "us" && s.team === "jp") {
         this.stats.shipHits += 1;
         this.score += 250;
@@ -585,7 +595,7 @@ export class Battle {
       s.engine = Math.max(0.1, s.engine - 0.3);
       s.fire = clamp(s.fire + 0.3, 0, 2);
       this.fx("explosion", point, 2.8);
-      this.event("explosion");
+      this.event("explosion", { distance: distance3(this.player, point) });
     } else {
       s.aa = Math.max(0.1, s.aa - 0.005);
       s.deck = Math.max(0, s.deck - 0.0008);
@@ -739,13 +749,16 @@ export class Battle {
           rearTimer: 0,
           bombs: 3,
           mode: "deck",
-          deckOffset: -105,
+          deckOffset: -55,
           deckLateral: 0,
           deckSpeed: 0,
           chocks: true,
           throttle: 0.18,
           brakes: false,
           gear: true,
+          gearManual: false,
+          autoGearPending: false,
+          gearClimbTime: 0,
           flaps: 0.33,
           landingAssist: null,
         });
@@ -808,8 +821,10 @@ export class Battle {
         p.rollRate = 0;
         p.pitchRate = 0;
         p.yawRate = 0;
-        p.launchAssist = departure === "liftoff" && p.assist ? 9 : 0;
-        if (departure === "liftoff") this.say("ENTERPRISE TOWER", "Positive climb, Scout Two. G raises the gear; N cycles flap settings. Build speed before turning.");
+        p.launchAssist = p.assist ? 9 : 0;
+        p.autoGearPending = !p.gearManual;
+        p.gearClimbTime = 0;
+        if (departure === "liftoff") this.say("ENTERPRISE TOWER", "Positive climb, Scout Two. Gear retracts after a safe climb; G overrides it. N cycles flap settings. Build speed before turning.");
         else this.say("SCOUT THREE", "Off the deck. Watch your airspeed — do not haul back on the stick.", true);
       }
       return;
@@ -823,7 +838,7 @@ export class Battle {
         const climb = 3.5 * clamp(((p.ias || p.speed) - 43) / 9, 0, 1);
         controls.pitch = clamp((climb - p.vy) * 0.032, -0.12, 0.08);
         controls.autopilot = true;
-      } else p.launchAssist = 0;
+      }
     }
     if (p.autopilot && (Math.abs(input.turn || 0) > 0.25 || Math.abs(input.pitch || 0) > 0.25 || Math.abs(input.rudder || 0) > 0.25)) {
       p.autopilot = false;
@@ -869,15 +884,23 @@ export class Battle {
       }
     }
     if (!controls.autopilot) {
-      // Arcade stick feel: soften the raw demand, bleed it off with airspeed, and unpull when the
-      // wing is already past the stall so a held stick cannot park the aircraft at 21° of AoA.
-      const authority = clamp((p.ias ?? p.speed) / 95, 0.4, 1);
+      // Keep low-speed stick authority; limit pulling past stall without commanding a push.
+      const authority = clamp((p.ias ?? p.speed) / 95, 0.75, 1);
       controls.turn = (controls.turn ?? 0) * 0.6;
       controls.pitch = (controls.pitch ?? 0) * 0.6 * authority;
-      if ((p.stall ?? 0) > 0.3 || (p.aoa ?? 0) > 0.26) controls.pitch = Math.min(controls.pitch, -0.04);
+      if ((p.stall ?? 0) > 0.3) controls.pitch = Math.min(controls.pitch, 0);
     }
     const previousY = p.y;
     this.playerFlight.step(dt, controls);
+    if (p.autoGearPending && !p.landingAssist) {
+      const safeClimb = p.y > DECK_HEIGHT + gearClearance(p) + 5 && p.vy > 0.5 && p.stall < 0.1;
+      p.gearClimbTime = safeClimb ? p.gearClimbTime + dt : 0;
+      if (p.gearClimbTime >= 1) {
+        p.gear = false;
+        p.autoGearPending = false;
+        this.event("notice", { text: "POSITIVE CLIMB — GEAR RETRACTING · G FOR MANUAL CONTROL" });
+      }
+    }
     if (p.takeoffGrace > 0) p.takeoffGrace -= dt;
     if (input.fire) {
       const f = attitudeAxes(p).f;
@@ -1122,7 +1145,7 @@ export class Battle {
         b.dead = true;
       } else if (b.y <= 0) {
         this.fx("splash", b, 3.5);
-        this.event("splash");
+        this.event("splash", { distance: distance3(this.player, b) });
         for (const s of this.ships) {
           const l = localPoint(b, s);
           const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.width / 2), Math.max(0, Math.abs(l.forward) - s.length / 2));
