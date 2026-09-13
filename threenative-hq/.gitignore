@@ -17,3 +17,7 @@ public/bake.receipt.json
 assets/fab/
 # The untrimmed 15 MB animation libraries. `tools/trim-clips.mjs` regenerates assets/ from them,
 tools/source-assets/
+
+# Captured frames are local debugging evidence, not shipped source. The folder itself stays.
+screenshots/*
+!screenshots/.gitkeep

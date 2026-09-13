@@ -6,3 +6,7 @@ assets/*.glb
 public/face.*.glb
 public/assets.manifest.json
 artifacts/playtest/capture.json
+
+# Captured frames are local debugging evidence, not shipped source. The folder itself stays.
+screenshots/*
+!screenshots/.gitkeep

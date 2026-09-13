@@ -35,3 +35,7 @@ dist-verify/
 proof-artifacts/gates/
 proof-artifacts/*.log
 proof-artifacts/*.png
+
+# Captured frames are local debugging evidence, not shipped source. The folder itself stays.
+screenshots/*
+!screenshots/.gitkeep

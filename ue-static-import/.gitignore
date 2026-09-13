@@ -14,3 +14,7 @@ notify.log
 # The same call the repository root already makes for Landscape Pro. tools/import-wolf-ab.mjs is
 # committed instead: anyone who owns the pack regenerates both arms in one command.
 public/wolf-ab/
+
+# Captured frames are local debugging evidence, not shipped source. The folder itself stays.
+screenshots/*
+!screenshots/.gitkeep

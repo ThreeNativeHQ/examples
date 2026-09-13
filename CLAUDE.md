@@ -54,9 +54,10 @@ git -C /home/joao/projects/threenative/sandbox push
 ```
 
 A game that only exists on this disk is one `rm -rf` from gone, and an unpushed game cannot be read
-by the next agent, on the next machine, or by anyone judging whether the framework works. Commit the
-screenshots too — they are the record of the visual loop. Do not commit `node_modules/`, `dist/`,
-`.packages/` or `.pnpm-store/`; `.gitignore` already excludes them. Only your own game folder goes in
+by the next agent, on the next machine, or by anyone judging whether the framework works. Do not
+commit `node_modules/`, `dist/`, `.packages/` or `.pnpm-store/`; `.gitignore` excludes them, and it
+ignores `screenshots/*` too — captures are local debugging evidence, not the durable record, so the
+only tracked file there is the `screenshots/.gitkeep` marker. Only your own game folder goes in
 the commit: a sibling folder with uncommitted work belongs to another lane.
 
 ## Working here

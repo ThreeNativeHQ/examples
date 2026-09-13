@@ -13,3 +13,7 @@ assets/fab/
 public/fab/
 # Spectrograms the audio gate writes on every run; the manifest is the durable artefact.
 artifacts/audio/
+
+# Captured frames are local debugging evidence, not shipped source. The folder itself stays.
+screenshots/*
+!screenshots/.gitkeep

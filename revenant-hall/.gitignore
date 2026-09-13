@@ -1,9 +1,3 @@
-# ThreeNative local authoring state and dependency secrets
-.dream-loop/
-node_modules/
-.env
-.env.*
-!.env.example
 
 # Captured frames are local debugging evidence, not shipped source. The folder itself stays.
 screenshots/*

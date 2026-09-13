@@ -12,3 +12,7 @@ assets/models/
 public/basis/
 public/bake.receipt.json
 public/.bake.pending-receipt.json
+
+# Captured frames are local debugging evidence, not shipped source. The folder itself stays.
+screenshots/*
+!screenshots/.gitkeep

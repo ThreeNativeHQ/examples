@@ -9,3 +9,7 @@ artifacts/
 # `threenative-asset-mcp import https://www.fab.com/listings/<uid> --out assets/fab/<name>` — and
 # the bytes themselves are licensed to this account, not redistributable through a public repo.
 assets/fab/
+
+# Captured frames are local debugging evidence, not shipped source. The folder itself stays.
+screenshots/*
+!screenshots/.gitkeep
