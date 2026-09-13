@@ -115,7 +115,20 @@ export function createOcean() {
       const edge = right.abs().sub(aft.mul(.34).add(size.x.mul(.25)));
       const wake = edge.pow(2).negate().div(aft.max(0).mul(.044).add(4)).exp().mul(fade);
       const wash = right.pow(2).negate().div(size.x.pow(2).mul(.2).add(aft.max(0).mul(2)).max(1)).exp().mul(aft.max(0).div(-260).exp()).mul(fade);
-      foam.addAssign(wake.mul(.42).add(wash.mul(.45)).mul(noise.mul(.62).add(.38)));
+      // The hull pushes water aside along its whole waterline, hardest at the bow. Without this
+      // a ship has a wake trailing behind it but never disturbs the sea it is sitting in, and
+      // reads as a cutout laid on the surface rather than a hull in the water.
+      const alongHull = along.div(s.w.max(1));
+      const amidships = float(.5).sub(alongHull.abs()).max(0);
+      const outboard = right.abs().sub(size.x.mul(.5)).max(0);
+      const bowBias = smoothstep(-.12, .46, alongHull).mul(.75).add(.5);
+      const hullWash = smoothstep(0, .1, amidships)
+        .mul(outboard.mul(-.5).exp())
+        .mul(size.z)
+        .mul(bowBias);
+      foam.addAssign(
+        wake.mul(.42).add(wash.mul(.45)).add(hullWash.mul(.5)).mul(noise.mul(.62).add(.38)),
+      );
     }
     result.assign(mix(result, vec3(.52, .65, .66), foam.clamp(0, .72)));
     const distance = cameraPosition.sub(vec3(world.x, worldHeight, world.y)).length();
