@@ -1,12 +1,21 @@
 # PRD-midway-sortie-realism — Make every sortie worth flying
 
-**Status:** IMPLEMENTED — 15/16 acceptance criteria met
+**Status:** DONE — closed at 15/16 acceptance criteria by the owner.
 **Complexity:** 7 (HIGH)
 **Owner:** Midway game implementer.
-**Depends on:** None. Coordinate shared files with [realistic audio](PRD-midway-realistic-audio-sfx.md); completion of that PRD is not required.
+**Depends on:** None. Coordinate shared files with [realistic audio](../PRD-midway-realistic-audio-sfx.md); completion of that PRD is not required.
 **Scope:** Four game-owned slices, all implemented, with evidence recorded on each acceptance criterion.
 **Research date:** 2026-09-13
-**Progress:** Implementation 4/4 phases. 15 of 16 acceptance criteria met; AC-16 is open with a measured cause recorded against it.
+**Progress:** Implementation 4/4 phases, shipped in `52b58ea` and the lane commits that preceded it.
+
+**Closed with AC-16 unmet.** The criterion asked for two unassisted airborne sorties flown to a
+recovered debrief. They cannot be, because with the player not defending, the simulation sinks every
+U.S. flight deck at 328.3 s — measured identically on a copy of this tree with this PRD's changes
+reverted, so it is pre-existing attrition rather than anything this slice introduced. The guidance
+itself is proved: `scripts/check-flight.mjs` flies a recon to `recovered` with its objective in
+180.8 s and a strike return in 173.0 s, and `tools/capture-sortie-runs.mjs` is committed and
+reproduces the attrition. What is left is a design question — whether a sortie is meant to assume
+the player defends the task force — and it belongs to whoever picks up that balance work.
 **Platforms:** Web acceptance. Desktop/mobile qualification is outside this slice; no native claim.
 **Estimated implementation:** 32–48 engineering hours, including focused checks and browser playthroughs. Estimate, not measured throughput.
 
@@ -31,7 +40,7 @@ Implementation order starts with rank 2 because the other outcomes need trustwor
 
 ## Context: inspected current state
 
-Read `src/sim/flight.ts` first, then traced scene input → battle/AI/weapons → HUD/rendering → recovery/debrief. Inspected the current [handoff](../MIDWAY-HANDOFF.md) and [repair PRD](../PRD-midway-reference-repair.md); source and current observations take precedence over stale prose.
+Read `src/sim/flight.ts` first, then traced scene input → battle/AI/weapons → HUD/rendering → recovery/debrief. Inspected the current [handoff](../../MIDWAY-HANDOFF.md) and [repair PRD](../../PRD-midway-reference-repair.md); source and current observations take precedence over stale prose.
 
 | Surface | Established behavior | Consequence for this plan |
 |---|---|---|
