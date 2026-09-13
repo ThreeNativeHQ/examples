@@ -32,9 +32,11 @@ WANTED = [
     ("Walk_Loop", "crew.walk"),
 ]
 
-# Swing measured against the sailor's own arms-down stance; verified from rendered previews.
-UPPERARM_DOWN = math.radians(74.0)
-LOWERARM_DOWN = math.radians(8.0)
+# Arm swing applied to the rig's rest pose before binding, measured against the sailor mesh's own
+# stance. The shipped sailor is itself T-posed, matching the library rest pose, so both are zero and
+# the re-basing below is an identity. Non-zero values are what an arms-down mesh needs.
+UPPERARM_DOWN = math.radians(0.0)
+LOWERARM_DOWN = math.radians(0.0)
 
 
 def log(*a):

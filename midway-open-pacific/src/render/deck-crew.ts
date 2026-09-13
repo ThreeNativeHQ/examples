@@ -3,7 +3,7 @@
  *
  * One rigged sailor is loaded once and instanced per station. A carrier deck is not a crowd of
  * identical figures: every man here has a job, stands where that job puts him relative to the
- * aircraft, wears his trade's helmet colour, and runs his own clip at his own phase and rate, so
+ * aircraft, wears his trade's cap-band colour, and runs his own clip at his own phase and rate, so
  * no two are in step. Roles follow 1942 US carrier practice — plane director ahead of the nose,
  * chockmen at the main wheels, plane captain at the engine, ordnance under the wing, fuel and
  * arresting-gear details standing clear of the launch path.
@@ -30,8 +30,8 @@ interface IStation {
   /** Shown in nothing; it documents why the man is standing there. */
   readonly job: string;
   readonly clip: Clip;
-  /** Cloth-helmet colour, the trade marking a deck hand is actually recognised by. */
-  readonly helmet: number;
+  /** Cap-band colour, the trade marking a deck hand is actually recognised by. */
+  readonly band: number;
   /** Metres in the aircraft's frame: +x starboard, -z ahead of the nose. */
   readonly x: number;
   readonly z: number;
@@ -49,27 +49,26 @@ const WHITE = 0xb9bcb4;
 
 const STATIONS: readonly IStation[] = [
   // The launch spot itself.
-  { job: "plane director", clip: "crew.signal", helmet: YELLOW, x: -4.6, z: -7.2, yaw: Math.PI },
-  { job: "chockman, port main", clip: "crew.chock", helmet: BLUE, x: -2.6, z: -0.2, yaw: 1.9 },
-  { job: "chockman, starboard main", clip: "crew.chock", helmet: BLUE, x: 2.6, z: -0.2, yaw: -1.9 },
-  { job: "plane captain, engine", clip: "crew.service", helmet: BROWN, x: -1.9, z: -3.7, yaw: 1.3 },
-  { job: "ordnanceman, bomb rack", clip: "crew.service", helmet: RED, x: 2.5, z: 0.9, yaw: -1.2 },
+  { job: "plane director", clip: "crew.signal", band: YELLOW, x: -4.6, z: -7.2, yaw: Math.PI },
+  { job: "chockman, port main", clip: "crew.chock", band: BLUE, x: -2.6, z: -0.2, yaw: 1.9 },
+  { job: "chockman, starboard main", clip: "crew.chock", band: BLUE, x: 2.6, z: -0.2, yaw: -1.9 },
+  { job: "plane captain, engine", clip: "crew.service", band: BROWN, x: -1.9, z: -3.7, yaw: 1.3 },
+  { job: "ordnanceman, bomb rack", clip: "crew.service", band: RED, x: 2.5, z: 0.9, yaw: -1.2 },
   // Standing clear of the launch path.
-  { job: "fuel detail", clip: "crew.wait", helmet: PURPLE, x: -8.4, z: 4.6, yaw: 2.5 },
-  { job: "arresting-gear crew", clip: "crew.wait", helmet: GREEN, x: 8.8, z: 9.4, yaw: -2.4 },
-  { job: "deck talker", clip: "crew.walk", helmet: WHITE, x: -10.2, z: -9.5, yaw: 0.25 },
-  { job: "safety observer", clip: "crew.idle", helmet: WHITE, x: 10.1, z: -6.2, yaw: -1.6 },
-  { job: "handler, forward park", clip: "crew.idle", helmet: BLUE, x: -6.8, z: 13.4, yaw: 2.9 },
-  { job: "handler, respot", clip: "crew.signal", helmet: YELLOW, x: 5.4, z: 15.8, yaw: 3.5 },
-  { job: "handler, tail walker", clip: "crew.wait", helmet: BLUE, x: -3.2, z: 18.1, yaw: 3.1 },
+  { job: "fuel detail", clip: "crew.wait", band: PURPLE, x: -8.4, z: 4.6, yaw: 2.5 },
+  { job: "arresting-gear crew", clip: "crew.wait", band: GREEN, x: 8.8, z: 9.4, yaw: -2.4 },
+  { job: "deck talker", clip: "crew.walk", band: WHITE, x: -10.2, z: -9.5, yaw: 0.25 },
+  { job: "safety observer", clip: "crew.idle", band: WHITE, x: 10.1, z: -6.2, yaw: -1.6 },
+  { job: "handler, forward park", clip: "crew.idle", band: BLUE, x: -6.8, z: 13.4, yaw: 2.9 },
+  { job: "handler, respot", clip: "crew.signal", band: YELLOW, x: 5.4, z: 15.8, yaw: 3.5 },
+  { job: "handler, tail walker", clip: "crew.wait", band: BLUE, x: -3.2, z: 18.1, yaw: 3.1 },
 ];
 
 /** Height of the baked rig, set by tools/blender/rig-deck-crew.py and asserted by check-fleet. */
 const SOURCE_HEIGHT = 1.83;
 
 let source: GLTF | undefined;
-let helmetShell: T.SphereGeometry | undefined;
-let helmetGoggles: T.TorusGeometry | undefined;
+let bandRing: T.TorusGeometry | undefined;
 
 export async function loadDeckCrew(ctx: Pick<ICtx, "assets" | "renderer">): Promise<void> {
   source = await ctx.assets.model<GLTF>("/assets/deck-crew.glb");
@@ -87,19 +86,20 @@ export async function loadDeckCrew(ctx: Pick<ICtx, "assets" | "renderer">): Prom
   });
 }
 
-/** A cloth flight-deck helmet with its goggles pushed up, in metres, sized for a 1.8m man. */
-function makeHelmet(colour: number): T.Group {
-  helmetShell ??= new T.SphereGeometry(0.108, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62);
-  helmetGoggles ??= new T.TorusGeometry(0.088, 0.018, 6, 14, Math.PI * 1.15);
-  const group = new T.Group();
-  const shell = new T.Mesh(helmetShell, mat(colour, { roughness: 0.86, metalness: 0.02 }));
-  shell.castShadow = true;
-  group.add(shell);
-  const goggles = new T.Mesh(helmetGoggles, mat(0x2b2f30, { roughness: 0.5, metalness: 0.25 }));
-  goggles.rotation.set(-Math.PI / 2, 0, Math.PI * 0.42);
-  goggles.position.set(0, 0.028, 0.006);
-  group.add(goggles);
-  return group;
+/**
+ * The trade colour, as a cloth band around the sailor's own white cap.
+ *
+ * The mesh already wears period headgear, so a helmet shell on top of it read as two hats with the
+ * cap poking out above and the shell across the eyes. A band leaves the head as modelled and still
+ * marks the trade. Radii are measured off the cap in the rigged GLB: it tapers from 0.14m at the
+ * brim, 0.16m above the Head bone, to 0.095m at the crown.
+ */
+function makeCapBand(colour: number): T.Mesh {
+  bandRing ??= new T.TorusGeometry(0.116, 0.012, 6, 20);
+  const band = new T.Mesh(bandRing, mat(colour, { roughness: 0.88, metalness: 0.02 }));
+  band.rotation.x = -Math.PI / 2;
+  band.castShadow = true;
+  return band;
 }
 
 interface ISailor {
@@ -137,7 +137,7 @@ export class DeckCrew {
           node.receiveShadow = true;
         }
       });
-      this.attachHelmet(player.root, station.helmet);
+      this.attachCapBand(player.root, station.band);
       player.play(station.clip);
       // Two men on the same clip must never move as one. Phase comes from the action's start
       // time; rate is applied to the sailor's own `dt` in update() rather than to the action,
@@ -151,18 +151,19 @@ export class DeckCrew {
     }
   }
 
-  /** Ride the head bone, so a kneeling or crouching man keeps his helmet on. */
-  private attachHelmet(root: T.Object3D, colour: number): void {
+  /** Ride the head bone, so a kneeling or crouching man keeps his band on. */
+  private attachCapBand(root: T.Object3D, colour: number): void {
     root.updateMatrixWorld(true);
     const head = root.getObjectByName("Head");
     if (!head) throw new Error("The deck-crew rig is missing its Head bone.");
-    const helmet = makeHelmet(colour);
+    const band = makeCapBand(colour);
     // The rig carries the normalising scale, so undo it before adding metre-authored geometry.
     const scale = head.getWorldScale(new T.Vector3()).x || 1;
-    helmet.scale.setScalar(1 / scale);
-    // Bone +Y runs up through the skull; the bone's tail stops short of the crown.
-    helmet.position.set(0, 0.1 / scale, 0.004 / scale);
-    head.add(helmet);
+    band.scale.setScalar(1 / scale);
+    // Bone +Y runs up through the skull; 0.196m above it the cap has narrowed to 0.12m, just over
+    // the brim, so a 0.116m band hugs it instead of hovering off it like a halo.
+    band.position.set(0, 0.196 / scale, 0.004 / scale);
+    head.add(band);
   }
 
   update(dt: number): void {

@@ -1,62 +1,20 @@
 /**
- * Soundscape lifecycle check. Runs the real src/audio.ts against a stub WebAudio graph, so the
- * things that only break at runtime — a duplicated loop, a sample that never replaces the
- * oscillator, a held trigger stacking voices, a dispose that leaves the context open — fail here.
+ * Soundscape cue-direction and lifecycle check. Runs the real `src/audio.ts` against a fake
+ * `IAudioTarget`, so the things that only break at runtime — a doubled engine layer, a perspective
+ * that never crosses, wind that ignores airspeed, a one-shot that ignores pause, a dispose that
+ * leaves the bus open — fail here.
  *
- * Uses the esbuild already installed by vite; no dependency is added. Run: node scripts/check-audio.mjs
+ * The engine's real bus mechanics (voice ceiling, recycling, panner, detune) are covered by the
+ * engine's own tests; this file covers the game's choices. Uses the esbuild vite already installs.
+ * Run: node scripts/check-audio.mjs
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
-import { transform } from "esbuild";
+import { build } from "esbuild";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-let ctxCount = 0;
-let created = [];
-/** sources currently sounding; a real context retires them and that is what frees a voice slot. */
-let live = new Set();
-let peakLive = 0;
-
-/**
- * Move the stub clock, firing onended for every one-shot whose buffer has run out. Without this
- * the voice caps never free up and every cap assertion passes for the wrong reason.
- */
-function advance(ctx, seconds) {
-  ctx.currentTime += seconds;
-  for (const n of [...live]) {
-    if (n.loop || n.startedAt === null) continue;
-    // An oscillator ends only at its scheduled stop; a buffer source also ends at buffer end.
-    const ends = Math.min(n.stopAt ?? Infinity, n.buffer ? n.startedAt + n.buffer.duration : Infinity);
-    if (ctx.currentTime >= ends) {
-      n.stopped = true;
-      live.delete(n);
-      n.onended?.();
-    }
-  }
-}
-
-/** Gives a source node the start/stop semantics the Soundscape relies on. */
-function voice(n, ctx) {
-  n.startedAt = null;
-  n.stopAt = null;
-  n.start = (t = ctx.currentTime) => {
-    n.started = true;
-    n.startedAt = t;
-    live.add(n);
-    // Only sampled one-shots; the two synthetic engine oscillators are not under a voice cap.
-    peakLive = Math.max(peakLive, [...live].filter((x) => !x.loop && x.buffer).length);
-  };
-  n.stop = (when) => {
-    if (when !== undefined && when > ctx.currentTime) {
-      n.stopAt = when; // scheduled; advance() retires it and fires onended
-      return;
-    }
-    n.stopped = true;
-    live.delete(n);
-  };
-  return n;
-}
 
 class Param {
   constructor(v = 0) {
@@ -76,262 +34,327 @@ class Param {
   }
 }
 
-class Node {
-  constructor(kind) {
-    this.kind = kind;
-    this.connected = 0;
+class Voice {
+  constructor(key) {
+    this.key = key;
+    this.gain = { gain: new Param(0) };
+    this.source = { playbackRate: new Param(1) };
+    this.isPlaying = true;
     this.stopped = false;
-    this.started = false;
-    created.push(this);
-  }
-  connect() {
-    this.connected += 1;
-    return this;
-  }
-  disconnect() {
-    this.connected -= 1;
-  }
-  start() {
-    this.started = true;
-  }
-  stop() {
-    this.stopped = true;
   }
 }
 
-class StubCtx {
+class FakeBus {
   constructor() {
-    ctxCount += 1;
-    this.state = "suspended";
-    this.currentTime = 0;
-    this.sampleRate = 48000;
-    this.destination = new Node("destination");
-    this.closed = false;
-    this.decoded = 0;
+    this.listener = { context: { currentTime: 0 } };
+    this.volume = 1;
+    this.musicCalls = [];
+    this.playCalls = [];
+    this.playAtCalls = [];
+    this.disposals = 0;
   }
-  resume() {
-    this.state = "running";
+  setVolume(v) {
+    this.volume = v;
+  }
+  music(buffer, options) {
+    const key = buffer?.__key ?? "?";
+    const voice = new Voice(key);
+    this.musicCalls.push({ key, options, voice });
+    return voice;
+  }
+  play(buffer, options) {
+    const voice = new Voice(buffer?.__key);
+    this.playCalls.push({ key: buffer?.__key ?? "?", options, voice });
+    return voice;
+  }
+  playAt(buffer, source, options) {
+    this.playAtCalls.push({ key: buffer?.__key ?? "?", source, options });
+    return new Voice(buffer?.__key);
+  }
+  stopVoice(voice) {
+    voice.stopped = true;
+    voice.isPlaying = false;
+    this.stopped = (this.stopped ?? 0) + 1;
+    return true;
+  }
+  unlock() {
     return Promise.resolve();
   }
-  close() {
-    this.closed = true;
-    return Promise.resolve();
+  dispose() {
+    this.disposals += 1;
   }
-  createGain() {
-    const n = new Node("gain");
-    n.gain = new Param(1);
-    return n;
-  }
-  createOscillator() {
-    const n = new Node("osc");
-    n.frequency = new Param(0);
-    return voice(n, this);
-  }
-  createBiquadFilter() {
-    const n = new Node("filter");
-    n.frequency = new Param(0);
-    return n;
-  }
-  createBufferSource() {
-    const n = new Node("source");
-    n.playbackRate = new Param(1);
-    n.buffer = null;
-    n.loop = false;
-    return voice(n, this);
-  }
-  createBuffer(_ch, len) {
-    return { length: len, getChannelData: () => new Float32Array(len) };
-  }
-  decodeAudioData() {
-    this.decoded += 1;
-    return Promise.resolve({ duration: 1, sampleRate: 48000 });
+  voice(key) {
+    return [...this.musicCalls].reverse().find((c) => c.key === key);
   }
 }
 
-/** Every file audio.ts asks for must exist on disk; a typo'd name is a silent fallback in the game. */
-const shipped = new Set(readdirSync(resolve(root, "public/assets/audio")));
-let requested = [];
-let failNext = new Set();
+// Bundle the real modules (audio.ts imports ./speech.js) so the check runs the shipped source.
+const built = await build({
+  stdin: { contents: 'export * from "./src/audio.ts"; export * from "./src/speech.ts";', loader: "ts", resolveDir: root },
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "node20",
+  write: false,
+  logLevel: "silent",
+});
+const js = built.outputFiles[0].text;
+const { Soundscape, CUE_FILES, SpeechQueue, resolveSpeech, speechSlugList, SPEECH } = await import(`data:text/javascript,${encodeURIComponent(js)}`);
 
-function install() {
-  ctxCount = 0;
-  created = [];
-  requested = [];
-  live = new Set();
-  peakLive = 0;
-  globalThis.window = { AudioContext: StubCtx };
-  globalThis.fetch = async (url) => {
-    const file = String(url).split("/").pop();
-    requested.push(file);
-    if (failNext.has(file)) return { ok: false, status: 404 };
-    assert.ok(shipped.has(file), `audio.ts requests ${file}, which is not in public/assets/audio`);
-    return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) };
+/** A tagged stand-in for a decoded AudioBuffer; only `__key` is read. */
+const bufferFor = (key) => ({ duration: 1, __key: key, sampleRate: 48000 });
+const allBuffers = () => new Map(Object.keys(CUE_FILES).map((key) => [key, bufferFor(key)]));
+const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1);
+
+// 0 — every cue the code names is actually packaged; a typo is silence the game never reports.
+{
+  const missing = Object.entries(CUE_FILES).filter(([, path]) => !existsSync(resolve(root, "public/assets", path)));
+  assert.equal(missing.length, 0, `cue code names an unpackaged file: ${missing.map(([k, p]) => `${k} -> ${p}`).join(", ")}`);
+  const missingSpeech = speechSlugList().filter((slug) => !existsSync(resolve(root, "public/assets/audio/voice", `${slug}.ogg`)));
+  assert.equal(missingSpeech.length, 0, `speech script names an unpackaged clip: ${missingSpeech.join(", ")}`);
+}
+
+// 1 — load() keeps the successes, drops the failures, and never throws on a missing file.
+{
+  const assets = {
+    audio: async (path) => {
+      if (path.includes("airflow-exterior") || path.includes("gun-50")) return bufferFor(path);
+      throw new Error(`404 ${path}`);
+    },
   };
+  const buffers = await Soundscape.load(assets);
+  assert.equal(buffers.size, 2, `expected 2 loaded cues, got ${buffers.size}`);
 }
 
-const src = readFileSync(resolve(root, "src/audio.ts"), "utf8");
-// import.meta.env is Vite's; the stub only needs the base path to resolve.
-const js = (await transform(src, { loader: "ts", format: "esm", target: "node20" })).code.replace(
-  /\(import\.meta\)\.env\?\.BASE_URL/g,
-  '"/"',
-);
-const { Soundscape } = await import(`data:text/javascript,${encodeURIComponent(js)}`);
+// 2 — the game reports a fully missing catalog once, not per frame.
+{
+  const bus = new FakeBus();
+  const infos = [];
+  const real = console.info;
+  console.info = (m) => infos.push(String(m));
+  const s = new Soundscape(new Map(), bus);
+  for (let i = 0; i < 10; i += 1) s.update(listener(), false, 1 / 60);
+  console.info = real;
+  assert.equal(infos.length, 1, `expected one missing-cue report, got ${infos.length}`);
+  assert.equal(bus.musicCalls.length, 0, "a missing catalog still opened a loop");
+}
 
-const settle = () => new Promise((r) => setTimeout(r, 0));
-const loops = () => created.filter((n) => n.kind === "source" && n.loop && n.started && !n.stopped);
-const player = { rpm: 0.8, throttle: 0.8, ias: 120, stall: 0 };
+// 3 — continuous layers start exactly once, however many frames run.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  for (let i = 0; i < 5; i += 1) step(s, bus, { cockpit: false });
+  const keys = bus.musicCalls.map((c) => c.key);
+  assert.equal(keys.length, new Set(keys).size, "a continuous layer was started twice");
+  assert.ok(keys.includes("engineExtCruise"), "the exterior engine layers were not started");
+  assert.ok(keys.includes("airflowExterior"), "the exterior airflow layer was not started");
+}
 
-// 1 — start() under a gesture creates one context, resumes it, and never builds a second graph.
-install();
-let s = new Soundscape();
-s.start();
-s.start();
-s.start();
-assert.equal(ctxCount, 1, "start() built more than one AudioContext");
-assert.equal(s.ctx.state, "running", "start() left a suspended context suspended");
-assert.ok(s.engine?.started, "no synthetic engine while the samples are still loading");
+// 4 — the cockpit perspective crosses the engine balance rather than swapping it.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  for (let i = 0; i < 40; i += 1) step(s, bus, { cockpit: true, rpm: 0.5, ias: 120 });
+  const extGain = gainOf(bus, "engineExtCruise");
+  const intGain = gainOf(bus, "engineIntCruise");
+  assert.ok(intGain > extGain + 0.1, `cockpit should favour the interior engine (int ${intGain}, ext ${extGain})`);
 
-// 2 — the samples replace the oscillator, and loops are started exactly once.
-await settle();
-await settle();
-assert.equal(new Set(requested).size, requested.length, "a sample was fetched twice");
-assert.equal(s.engine, null, "the sawtooth drone survived the real engine loop");
-assert.equal(loops().length, 2, `expected engine + wind loops, got ${loops().length}`);
-s.start(); // a later gesture must not add a second engine loop
-await settle();
-assert.equal(loops().length, 2, "a repeat start() duplicated the sample loops");
+  for (let i = 0; i < 40; i += 1) step(s, bus, { cockpit: false, rpm: 0.5, ias: 120 });
+  const extGain2 = gainOf(bus, "engineExtCruise");
+  const intGain2 = gainOf(bus, "engineIntCruise");
+  assert.ok(extGain2 > intGain2 + 0.1, `external view should favour the exterior engine (ext ${extGain2}, int ${intGain2})`);
+}
 
-// 3a — the cooldown gates a trigger held down inside one cooldown window.
-let before = created.length;
-for (let i = 0; i < 40; i += 1) s.event({ type: "gun" });
-assert.equal(
-  created.slice(before).filter((n) => n.kind === "source").length,
-  1,
-  "40 gun events inside one 0.05 s cooldown opened more than one voice",
-);
+// 5 — wind follows airspeed, not throttle, and rides the cockpit layer inside.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  for (let i = 0; i < 30; i += 1) step(s, bus, { cockpit: true, rpm: 0.5, ias: 0 });
+  assert.ok(gainOf(bus, "airflowCockpit") < 0.02, "airflow sounded with no airspeed");
+  for (let i = 0; i < 30; i += 1) step(s, bus, { cockpit: true, rpm: 0.5, ias: 150 });
+  assert.ok(gainOf(bus, "airflowCockpit") > 0.2, "airflow did not rise with airspeed");
+}
 
-// 3b — past the cooldown the voice cap takes over. The clock must advance, and finished voices
-// must be retired, or the cooldown alone satisfies this and the cap is never exercised.
-const spaced = created.length;
-peakLive = 0;
-for (let i = 0; i < 40; i += 1) {
-  advance(s.ctx, 0.06); // just past the 0.05 s gun cooldown, so the cap is what bites
+// 6 — engine cutoff leaves airspeed-driven wind and starts the windmilling propeller.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  for (let i = 0; i < 30; i += 1) step(s, bus, { cockpit: false, rpm: 0, ias: 120, engineCut: true });
+  assert.ok(gainOf(bus, "engineExtCruise") < 0.02, "a cut engine still sounded");
+  assert.ok(gainOf(bus, "propWindmill") > 0.3, "the windmilling propeller did not start");
+  assert.ok(gainOf(bus, "airflowExterior") > 0.1, "a dead-stick dive lost its slipstream");
+}
+
+// 7 — deck contact drives the wheel roll; leaving the deck stops it.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  for (let i = 0; i < 20; i += 1) step(s, bus, { cockpit: false, onDeck: true, deckSpeed: 40, rpm: 0.5, ias: 30 });
+  assert.ok(gainOf(bus, "deckRoll") > 0.2, "wheels rolling on deck made no sound");
+  for (let i = 0; i < 20; i += 1) step(s, bus, { cockpit: false, onDeck: false, rpm: 0.5, ias: 120 });
+  assert.ok(gainOf(bus, "deckRoll") < 0.05, "deck roll continued after liftoff");
+}
+
+// 8 — one-shots respect the family cooldown and a missing buffer stays silent.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  s.update(listener(), false, 1 / 60);
   s.event({ type: "gun" });
+  s.event({ type: "gun" });
+  const guns = bus.playCalls.filter((c) => c.key === "gun50");
+  assert.equal(guns.length, 1, `40-held fire opened ${guns.length} gun voices inside one cooldown`);
+  bus.listener.context.currentTime += 0.2;
+  s.event({ type: "gun" });
+  assert.equal(bus.playCalls.filter((c) => c.key === "gun50").length, 2, "the gun never left its cooldown");
+  const empty = new Soundscape(new Map(), new FakeBus());
+  const real = console.info;
+  console.info = () => {};
+  empty.update(listener(), false, 1 / 60);
+  empty.event({ type: "alarm" }); // no buffer: silent, no throw
+  console.info = real;
 }
-const guns = created.slice(before).filter((n) => n.kind === "source");
-assert.ok(created.length > spaced, "spaced gun events never reached the buffer path");
-assert.ok(guns.length > 4, `only ${guns.length} voices over 40 spaced events; they never recycled`);
-assert.equal(peakLive, 4, `40 spaced gun events reached ${peakLive} simultaneous voices; the cap is 4`);
-assert.ok(
-  created.slice(before).every((n) => n.kind !== "filter"),
-  "gun fell back to the synthetic burst while its buffer was loaded",
-);
 
-// 4 — distance attenuation: past its falloff an event makes no sound at all, on either path.
-let quiet = created.length;
-for (const [type, beyond] of [["flak", 9000], ["explosion", 4000], ["splash", 2500]]) {
-  s.event({ type, distance: beyond });
-  assert.equal(created.length, quiet, `${type} played from ${beyond} m, past its falloff`);
+// 9 — an alarm emits the reconstructed general alarm; a positional cue uses the panner.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  s.update(listener(), false, 1 / 60);
+  s.event({ type: "alarm" });
+  assert.equal(bus.playCalls.filter((c) => c.key === "generalAlarm").length, 1, "the general alarm did not sound");
+  s.event({ cue: "aaHeavy", at: { x: 100, y: 0, z: 0 }, distance: 100 });
+  assert.equal(bus.playAtCalls.filter((c) => c.key === "aaHeavy").length, 1, "a positional cue did not pan");
 }
-advance(s.ctx, 1);
-s.event({ type: "flak", distance: 100 });
-assert.ok(created.length > quiet, "flak did not play from 100 m");
 
-// 5 — mute applies immediately, not on the next frame, and pause silences the master.
-s.muted = true;
-assert.equal(s.master.gain.value, 0, "muting did not drop the master gain on the same tick");
-const silent = created.length;
-s.event({ type: "gun" });
-assert.equal(created.length, silent, "a muted Soundscape still opened a voice");
-s.muted = false;
-assert.ok(s.master.gain.value > 0, "unmuting did not restore the master gain");
-s.update(player, true);
-assert.equal(s.master.gain.value, 0, "pause did not silence the master");
-
-// 5b — toggling mute while paused must not reopen the master or let an event through.
-quiet = created.length;
-s.muted = true;
-s.muted = false;
-assert.equal(s.master.gain.value, 0, "unmuting while paused reopened the master gain");
-for (const type of ["gun", "explosion", "radio", "damage"]) s.event({ type });
-assert.equal(created.length, quiet, "a paused Soundscape opened a voice");
-s.update(player, false); // back in flight
-assert.ok(s.master.gain.value > 0, "leaving the pause did not restore the master gain");
-
-// 6 — the stall horn is edge-triggered: once per entry into the stall, not once per frame. The
-// clock advances past the horn's 2.5 s cooldown so only the edge trigger can hold it to one.
-s.update(player, false);
-let preStall = created.length;
-for (let i = 0; i < 20; i += 1) {
-  advance(s.ctx, 3);
-  s.update({ ...player, stall: 0.9 }, false);
+// 10 — mute and pause suppress one-shots immediately; unpausing restores the bus level.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  s.update(listener(), false, 1 / 60);
+  s.muted = true;
+  assert.equal(bus.volume, 0, "muting did not drop the bus level on the same tick");
+  const before = bus.playCalls.length;
+  s.event({ type: "alarm" });
+  assert.equal(bus.playCalls.length, before, "a muted Soundscape still opened a voice");
+  s.muted = false;
+  assert.ok(bus.volume > 0, "unmuting did not restore the bus level");
+  s.update(listener(), true, 1 / 60);
+  assert.equal(bus.volume, 0, "pause did not silence the bus");
+  const paused = bus.playCalls.length;
+  s.event({ type: "alarm" });
+  assert.equal(bus.playCalls.length, paused, "a paused Soundscape opened a voice");
 }
-let fired = created.slice(preStall).filter((n) => n.kind === "source").length;
-assert.equal(fired, 1, `the stall horn fired ${fired} times while held in one stall`);
 
-// ...and it re-arms once the wing is flying again, so the next stall is audible.
-preStall = created.length;
-advance(s.ctx, 3);
-s.update({ ...player, stall: 0 }, false);
-s.update({ ...player, stall: 0.9 }, false);
-fired = created.slice(preStall).filter((n) => n.kind === "source").length;
-assert.equal(fired, 1, "the stall horn did not re-arm after the recovery");
+// 11 — dispose() closes the bus once and stays disposed.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  s.update(listener(), false, 1 / 60);
+  s.dispose();
+  s.dispose();
+  assert.equal(bus.disposals, 1, `dispose() called the bus ${bus.disposals} times`);
+  assert.equal(s.active, false, "dispose() left the Soundscape active");
+  const frames = bus.playCalls.length;
+  s.update(listener(), false, 1 / 60);
+  s.event({ type: "gun" });
+  assert.equal(bus.playCalls.length, frames, "a disposed Soundscape opened a voice");
+}
 
-// 7 — dispose() stops every loop AND every sounding one-shot, disconnects, closes the context.
-advance(s.ctx, 5);
-s.event({ type: "gun" }); // a sampled voice...
-s.event({ type: "radio" }); // ...and a synthetic beep, both still sounding
-const sounding = [...live].filter((n) => !n.loop);
-assert.ok(
-  sounding.some((n) => n.kind === "source") && sounding.some((n) => n.kind === "osc"),
-  "expected both a sampled gun voice and a synthetic beep to be sounding",
-);
-assert.ok(sounding.length >= 2, `expected a live gun and beep before dispose, got ${sounding.length}`);
-const ctx = s.ctx;
-s.dispose();
-s.dispose();
-assert.ok(ctx.closed, "dispose() left the AudioContext open");
-assert.equal(s.ctx, null, "dispose() kept a context reference");
-assert.equal(loops().length, 0, "dispose() left a loop running");
-assert.ok(
-  sounding.every((n) => n.stopped),
-  "dispose() left a one-shot sounding",
-);
-assert.ok(
-  sounding.every((n) => n.connected <= 0),
-  "dispose() left a one-shot connected",
-);
-assert.ok(
-  sounding.every((n) => n.onended === null),
-  "dispose() left an onended handler that could refill the voice map",
-);
-assert.ok(
-  created.filter((n) => n.kind === "source" && n.loop).every((n) => n.connected <= 0),
-  "dispose() left a loop node connected",
-);
-assert.equal(s.active, false, "dispose() left the Soundscape active");
+// 12 — the resolver expands the direction/ship variants and keeps the exact script words.
+{
+  const r = resolveSpeech({ id: "R02", direction: "northeast" });
+  assert.equal(r.slug, "r02-northeast", "direction variant slug is wrong");
+  assert.ok(r.text.includes("northeast") && !r.text.includes("{"), `R02 text not substituted: ${r.text}`);
+  assert.equal(resolveSpeech({ id: "P04" }).channel, "pa", "PA channel not inferred");
+  assert.equal(resolveSpeech({ id: "R13" }).channel, "intercom", "gunner channel not inferred");
+  assert.equal(resolveSpeech({ id: "nope" }), null, "an unknown cue should not resolve");
+  assert.ok(Object.keys(SPEECH).length >= 30, "the script table lost rows");
+}
 
-// 8 — a failed fetch reports once and falls back; no unhandled rejection, no missing loop crash.
-install();
-failNext = new Set(["engine-loop.ogg", "wind-loop.mp3"]);
-const infos = [];
-const realInfo = console.info;
-console.info = (m) => infos.push(String(m));
-s = new Soundscape();
-s.start();
-await settle();
-await settle();
-console.info = realInfo;
-assert.equal(infos.length, 1, `expected one failure report, got ${infos.length}`);
-assert.ok(/2 sample\(s\) unavailable/.test(infos[0]), `unexpected report: ${infos[0]}`);
-assert.ok(s.engine && !s.engine.stopped, "the synthetic engine was retired even though the loop failed");
-s.update(player, false);
-s.event({ type: "gun" }); // a loaded sample still works alongside the failed ones
-s.dispose();
+// 13 — one sentence at a time; a second request queues rather than overlapping.
+{
+  const bus = new FakeBus();
+  const q = new SpeechQueue(bus, speechBuffers({ r03: 2, r01: 2 }));
+  q.update(0, false, false);
+  assert.ok(q.request({ id: "R03" }));
+  q.update(0, false, false);
+  assert.ok(q.request({ id: "R01" }));
+  assert.equal(bus.playCalls.length, 1, "two lines sounded at once");
+  bus.listener.context.currentTime += 3;
+  q.update(0, false, false);
+  assert.equal(bus.playCalls.length, 2, "the queued line never started");
+}
 
-// 9 — start() after dispose() stays disposed rather than half-rebuilding.
-const n = ctxCount;
-s.start();
-assert.equal(ctxCount, n, "start() after dispose() built a new context");
+// 14 — an immediate warning interrupts routine radio and fades the old line to zero.
+{
+  const bus = new FakeBus();
+  const q = new SpeechQueue(bus, speechBuffers({ r03: 4, r06: 2 }));
+  q.update(0, false, false);
+  q.request({ id: "R03" });
+  q.update(0, false, false);
+  bus.listener.context.currentTime += 0.1;
+  q.update(0, false, false);
+  q.request({ id: "R06" });
+  assert.equal(bus.playCalls.at(-1).key, "speech:r06", "the urgent line did not take over");
+  assert.equal(bus.playCalls[0].voice.gain.gain.value, 0, "the interrupted line was not faded out");
+}
 
-console.log("check-audio: 12 checks passed");
+// 15 — the same ongoing alert is deduplicated inside its cooldown, then speaks again after it.
+{
+  const bus = new FakeBus();
+  const q = new SpeechQueue(bus, speechBuffers({ r06: 1 }));
+  q.update(0, false, false);
+  assert.ok(q.request({ id: "R06", identity: "cv6" }));
+  bus.listener.context.currentTime += 0.5;
+  q.update(0, false, false);
+  assert.equal(q.request({ id: "R06", identity: "cv6" }), false, "a cooldown repeat was accepted");
+  bus.listener.context.currentTime += 31;
+  q.update(0, false, false);
+  assert.ok(q.request({ id: "R06", identity: "cv6" }), "the alert never spoke again after its cooldown");
+}
+
+// 16 — PA needs the listener in range, a stale queued predicate is rechecked, missing clips stay quiet.
+{
+  const bus = new FakeBus();
+  const q = new SpeechQueue(bus, speechBuffers({ p01: 1 }));
+  q.update(0, false, false);
+  assert.equal(q.request({ id: "P01" }), false, "PA sounded with no ship in range");
+  q.update(0, false, true);
+  assert.ok(q.request({ id: "P01" }), "PA stayed silent alongside the ship");
+
+  const bus2 = new FakeBus();
+  const q2 = new SpeechQueue(bus2, speechBuffers({ r06: 1 }));
+  q2.update(0, false, false);
+  let live = true;
+  q2.request({ id: "R06", valid: () => live });
+  live = false;
+  q2.update(0, false, false);
+  assert.equal(bus2.playCalls.length, 0, "a stale queued alert still sounded");
+
+  const q3 = new SpeechQueue(new FakeBus(), new Map());
+  q3.update(0, false, false);
+  assert.doesNotThrow(() => q3.request({ id: "R17" }), "a missing speech clip threw");
+}
+
+
+function listener(over = {}) {
+  return { cockpit: false, onDeck: false, engineCut: false, damage: 0, rpm: 0.5, throttle: 0.5, ias: 120, ...over };
+}
+
+/** One frame at 60 Hz; advances the bus clock so cooldowns behave as they do at runtime. */
+function step(s, bus, over = {}) {
+  bus.listener.context.currentTime += 1 / 60;
+  s.update(listener(over), false, 1 / 60);
+}
+
+function gainOf(bus, key) {
+  const call = bus.musicCalls.find((c) => c.key === key);
+  return call?.voice?.gain?.gain?.value ?? 0;
+}
+
+/** Speech buffers tagged with their map key, matching how the loader keys decoded clips. */
+function speechBuffers(entries) {
+  return new Map(Object.entries(entries).map(([slug, duration]) => [`speech:${slug}`, { duration, __key: `speech:${slug}` }]));
+}
+
+console.log("check-audio: 17 checks passed");

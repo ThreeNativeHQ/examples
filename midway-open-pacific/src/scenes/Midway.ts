@@ -1,4 +1,5 @@
 import { Scene } from "@threenative/core";
+import { AudioBus } from "@threenative/core";
 import type { ICtx } from "@threenative/core";
 import type * as T from "three";
 import { Battle } from "../sim/battle.js";
@@ -32,16 +33,19 @@ export class Midway extends Scene<GameState, undefined> {
   started = false;
   keys = new Set<string>();
   mouse = { fire: false, looking: false, lx: 0, ly: 0 };
+  private audioBuffers: ReadonlyMap<string, AudioBuffer> = new Map();
   private cleanups: Array<() => void> = [];
 
   async load(ctx: ICtx<GameState, undefined>): Promise<void> {
-    await Promise.all([
+    const [, , , , , buffers] = await Promise.all([
       loadImportedAircraft(ctx),
       loadImportedShips(ctx),
       loadImportedFleet(ctx),
       loadDeckCrew(ctx),
       loadEnvironment(ctx),
+      Soundscape.load(ctx.assets),
     ]);
+    this.audioBuffers = buffers;
     // Keep the opaque loading layer up until the first update has built the world and placed the
     // camera; hiding it here showed a few frames of an unlit, half-built scene.
   }
@@ -51,7 +55,11 @@ export class Midway extends Scene<GameState, undefined> {
     this.battle = new Battle();
     this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer, add: (object) => ctx.add(object) }, this.battle);
     this.hud = new Hud(this.battle, this.world);
-    this.audio = new Soundscape();
+    this.audio = new Soundscape(
+      this.audioBuffers,
+      new AudioBus({ camera: ctx.camera, maxVoices: 48 }),
+      new AudioBus({ camera: ctx.camera, maxVoices: 16 }),
+    );
     this.attachInput();
     this.updateLoadoutUI();
     $("flight-ui").classList.add("hidden");
@@ -248,7 +256,26 @@ export class Midway extends Scene<GameState, undefined> {
     }
     this.world.update(this.paused ? 0 : dt, this.wall, b.status === "briefing");
     this.hud.update(dt, speed);
-    this.audio.update(b.player, this.paused || b.status !== "playing");
+    const p = b.player;
+    const onShip = p.mode === "deck" || p.mode === "launch" || p.mode === "arrest" || p.mode === "service";
+    const nearShip = onShip || b.ships.some((s: any) => s.team === "us" && s.kind === "carrier" && !s.sunk && distance2(s, p) < 1800 * 1800);
+    this.audio.update(
+      {
+        cockpit: this.world.cameraMode === 1 && !this.world.followBomb,
+        onDeck: onShip,
+        nearPA: nearShip,
+        deckSpeed: p.deckSpeed ?? p.speed ?? 0,
+        engineCut: p.engineCut,
+        damage: 1 - (p.damage?.engine?.integrity ?? 1),
+        stall: p.stall ?? 0,
+        gforce: p.gforce ?? 1,
+        rpm: p.rpm ?? p.throttle ?? 0,
+        throttle: p.throttle ?? 0,
+        ias: p.ias ?? p.speed ?? 0,
+      },
+      this.paused || b.status !== "playing",
+      dt,
+    );
     if ((b.status === "lost" || b.status === "won") && !this.ended) {
       this.ended = true;
       this.clearInput();

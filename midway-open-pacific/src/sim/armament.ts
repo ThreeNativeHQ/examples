@@ -48,13 +48,18 @@ export function applyLoadout(p: Any, id: string): boolean {
     p.brakes = false;
     p.brakePos = 0;
   }
-  // Payload mass and drag the flight model reads; recomputed whenever the loadout changes.
-  p.payloadMass = (p.bombs ?? 0) >= 3 ? 454 : 0;
-  p.payloadMass += Math.min(2, p.bombs ?? 0) * 45;
-  p.payloadMass += (p.torpedo ?? 0) * 1000;
-  p.payloadDrag = (p.bombs ?? 0) > 0 ? 0.003 : 0;
-  p.payloadDrag += (p.torpedo ?? 0) > 0 ? 0.014 : 0;
+  updateStores(p);
   return true;
+}
+
+/**
+ * Payload mass and drag the flight model reads, derived from the stores actually left on the racks.
+ * Call this after every successful release; calling `applyLoadout` instead would replenish them.
+ */
+export function updateStores(p: Any): void {
+  p.payloadMass =
+    ((p.bombs ?? 0) >= 3 ? 454 : 0) + Math.min(2, p.bombs ?? 0) * 45 + (p.torpedo ?? 0) * 1000;
+  p.payloadDrag = ((p.bombs ?? 0) > 0 ? 0.003 : 0) + ((p.torpedo ?? 0) > 0 ? 0.014 : 0);
 }
 
 export function torpedoEnvelope(p: Any): {

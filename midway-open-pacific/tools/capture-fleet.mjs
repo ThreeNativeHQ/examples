@@ -35,12 +35,20 @@ try {
   await page.waitForSelector("#briefing:not(.hidden)");
   // Import the module URL the page already loaded; a fresh import builds a second, unstarted game.
   await page.evaluate(async () => {
-    const url = performance
+    const urls = performance
       .getEntriesByType("resource")
       .map((e) => e.name)
-      .findLast((n) => /\/src\/game\.ts(?:\?|$)/.test(n));
-    if (!url) throw new Error("Missing loaded game module");
-    window.midway = (await import(url)).default.scene;
+      .filter((n) => /\/src\/game\.ts(?:\?|$)/.test(n));
+    if (!urls.length) throw new Error("Missing loaded game module");
+    // Vite can leave more than one `game.ts?t=` entry behind, and only the one the page actually
+    // started has a live scene; the newest is not always it. Take the one that does.
+    for (const url of urls.reverse()) {
+      const scene = (await import(url)).default.scene;
+      if (scene) {
+        window.midway = scene;
+        break;
+      }
+    }
     if (!window.midway) throw new Error("Loaded game has no scene");
   });
   const adapter = await page.evaluate(async () => {

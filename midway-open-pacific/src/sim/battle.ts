@@ -13,7 +13,23 @@ import {
   ZONE_POSITIONS,
   type DamageZone,
 } from "./damage.js";
-import { applyLoadout, torpedoEnvelope, type ILoadout, LOADOUTS } from "./armament.js";
+import { applyLoadout, torpedoEnvelope, updateStores, type ILoadout, LOADOUTS } from "./armament.js";
+import {
+  ASSIGNMENTS,
+  confirmPending,
+  hitQualifies,
+  isShort,
+  newSortie,
+  outcomeText,
+  recordObjectiveHit,
+  stamp,
+  type Assignment,
+  type IResult,
+  type ISortie,
+  type IStamp,
+  type Outcome,
+} from "./sortie.js";
+import { SPEAKERS, SPEECH, radioShipName, type ISpeechRequest } from "./radio-script.js";
 import {
   AircraftFlight,
   airDensity,
@@ -40,6 +56,15 @@ import {
 } from "./math.js";
 
 type Any = any;
+
+/** Shared gameplay threshold: a carrier with a flight deck below this cannot launch aircraft. */
+export const LAUNCH_DECK = 0.35;
+/** Separate policy: a deck this damaged can still *recover* aircraft. Never a launch rule. */
+export const RECOVERY_DECK = 0.25;
+/** A deck below this has failed outright; the player's own carrier can neither launch nor land. */
+export const DECK_FAILED = 0.2;
+/** Impact records kept per ship for persistent damage visuals. */
+export const MAX_IMPACTS = 8;
 
 export { LOADOUTS };
 export type { ILoadout };
@@ -70,6 +95,9 @@ export class Battle {
     bombsDropped: 0,
     torpedoesDropped: 0,
     friendlyHits: 0,
+    nearMisses: 0,
+    wingShipHits: 0,
+    wingShipsSunk: 0,
   };
   teamIntel: Record<string, Map<string, Any>> = { us: new Map(), jp: new Map() };
   command = "cover";
@@ -84,6 +112,10 @@ export class Battle {
   search = { x: -4500, y: 1400, z: -9000 };
   reconLaunched = false;
   boundaryNotice = false;
+  /** Edge/cooldown state for voiced alerts, so each speaks on change rather than every tick. */
+  voiceFlags: Record<string, any> = {};
+  /** The assignment the player chose in the briefing, and its progress. */
+  sortie: ISortie = newSortie();
 
   constructor(seed = 19420604) {
     this.random = rng(seed);
@@ -143,6 +175,13 @@ export class Battle {
     this.playerFlight = new AircraftFlight(this.player, "sbd");
     this.playerFlight.reset();
     this.playerFlight.stepDeck(home, 0.001, {});
+  }
+
+  /** Briefing-only: choose which sortie this is. Open Pacific keeps the existing operation. */
+  selectAssignment(id: string): boolean {
+    if (this.status !== "briefing" || !(id in ASSIGNMENTS)) return false;
+    this.sortie = newSortie(id as Assignment, this.time, this.sortie.id);
+    return true;
   }
 
   selectLoadout(id: string): boolean {
@@ -228,6 +267,7 @@ export class Battle {
   start(airborne = false): void {
     if (this.status !== "briefing") return;
     this.status = "playing";
+    this.voiceFlags = {};
     for (const s of this.ships.filter((s) => s.kind === "carrier")) this.launch(s, "fighter");
     if (airborne) {
       this.player.mode = "spectator";
@@ -248,9 +288,12 @@ export class Battle {
       this.playerFlight.reset();
       this.radio = [];
       this.events = [];
+      this.sortie.startTime = this.time;
       this.say("SCOUT CONTROL", "Search the northwest sector. No confirmed carrier positions. Scan the horizon; use R to report sightings.");
-    } else
+    } else {
+      this.sortie.startTime = this.time;
       this.say("ENTERPRISE TOWER", "Scout Two, cleared for launch. Hold W. Chocks release with power. Keep straight; ease the stick back (Down) through 90 knots. Lift, not the bow, gets you flying.");
+    }
     this.say("SCOUT THREE", "Two, we have your wing. Orders on your command.");
   }
 
@@ -263,6 +306,93 @@ export class Battle {
   event(type: string, data: Record<string, unknown> = {}): void {
     this.events.push({ type, ...data });
     if (this.events.length > 80) this.events.shift();
+  }
+
+  /**
+   * Queue a friendly voiced line: push its caption into the radio log and hand the delivery queue a
+   * request. The text is the script's, never a caller's paraphrase, so the caption and voice match.
+   */
+  voice(id: string, opts: { direction?: string; ship?: string; identity?: string; valid?: () => boolean; channel?: ISpeechRequest["channel"] } = {}): void {
+    const row = SPEECH[id];
+    if (!row) return;
+    const text = row.variants === "direction" && opts.direction ? row.text.replace("{direction}", opts.direction) : row.variants === "ship" && opts.ship ? row.text.replace("{ship}", opts.ship) : row.text;
+    this.radio.unshift({ id: this.id("radio"), from: SPEAKERS[row.voice], text, time: this.time, priority: row.priority <= 2 });
+    this.radio.length = Math.min(7, this.radio.length);
+    this.events.push({ type: "speech", request: { id, ...opts } });
+  }
+
+  /**
+   * Voice the alerts the emergent battle actually produces. Each fires on a transition and carries a
+   * predicate the queue rechecks, so an attack that breaks off before its line starts is dropped.
+   */
+  updateRadio(): void {
+    const p = this.player;
+    if (p.mode === "spectator") return;
+    const enterprise = this.ships.find((s: Any) => s.team === "us" && s.kind === "carrier" && radioShipName(s.name) === "Enterprise") ?? this.ships.find((s: Any) => s.team === "us" && s.kind === "carrier");
+    const eid = enterprise?.id;
+    const near = (a: Any) => (enterprise ? distance3(a, enterprise) < 1600 : false);
+    const liveZero = this.aircraft.some((a: Any) => a.team === "jp" && a.kind === "fighter" && a.airframe === "zero" && a.hp > 0 && a.mode === "flight" && a.tactic !== "rtb" && near(a));
+    const liveDive = eid ? this.aircraft.some((a: Any) => a.team === "jp" && a.kind === "bomber" && a.hp > 0 && a.tactic === "dive" && a.target === eid) : false;
+    const liveTorp = eid ? this.aircraft.some((a: Any) => a.team === "jp" && a.kind === "torpedo" && a.hp > 0 && a.tactic === "torpedo-run" && (a.torpedo ?? 0) > 0 && a.target === eid) : false;
+    const flags = this.voiceFlags;
+    const edge = (key: string, condition: boolean, id: string, valid: () => boolean) => {
+      if (condition && !flags[key]) {
+        flags[key] = true;
+        this.voice(id, { valid });
+      } else if (!condition) flags[key] = false;
+    };
+    edge("r06", liveZero, "R06", () => this.aircraft.some((a: Any) => a.team === "jp" && a.kind === "fighter" && a.airframe === "zero" && a.hp > 0 && a.mode === "flight" && near(a)));
+    edge("r07", liveDive, "R07", () => (eid ? this.aircraft.some((a: Any) => a.team === "jp" && a.kind === "bomber" && a.hp > 0 && a.tactic === "dive" && a.target === eid) : false));
+    edge("r08", liveTorp, "R08", () => (eid ? this.aircraft.some((a: Any) => a.team === "jp" && a.kind === "torpedo" && a.hp > 0 && a.tactic === "torpedo-run" && (a.torpedo ?? 0) > 0 && a.target === eid) : false));
+    if (liveZero || liveDive || liveTorp) {
+      flags.lastAttack = this.time;
+      flags.r10 = false;
+    } else if (flags.lastAttack > 0 && this.time - flags.lastAttack > 15 && !flags.r10) {
+      flags.r10 = true;
+      this.voice("R10");
+    }
+    const integrity = p.damage?.engine?.integrity ?? 1;
+    if (!flags.r13 && integrity < 0.55) {
+      flags.r13 = true;
+      this.voice("R13", { valid: () => (this.player.damage?.engine?.integrity ?? 1) < 0.75 });
+    }
+    if (!flags.r14 && p.fuel < 22) {
+      flags.r14 = true;
+      this.voice("R14", { valid: () => this.player.fuel < 30 });
+    }
+    if (this.time > (flags.r19next ?? 0)) {
+      const f = forward(p.heading, p.pitch);
+      const rear = this.aircraft.find((a: Any) => {
+        if (a.team !== "jp" || a.hp <= 0) return false;
+        const d = distance3(a, p);
+        return d < 650 && d > 25 && ((a.x - p.x) * f.x + (a.y - p.y) * f.y + (a.z - p.z) * f.z) / (d || 1) < -0.6;
+      });
+      if (rear) {
+        flags.r19next = this.time + 12;
+        const id = rear.id;
+        this.voice("R19", {
+          valid: () => {
+            const q = this.aircraft.find((a: Any) => a.id === id && a.hp > 0);
+            if (!q) return false;
+            const g = forward(this.player.heading, this.player.pitch);
+            const d = distance3(q, this.player);
+            return d < 900 && ((q.x - this.player.x) * g.x + (q.y - this.player.y) * g.y + (q.z - this.player.z) * g.z) / (d || 1) < -0.4;
+          },
+        });
+      }
+    }
+    if (!flags.p01 && this.time > 3) {
+      flags.p01 = true;
+      this.voice("P01");
+    }
+    if (!flags.p04 && enterprise && enterprise.fire > 0.2) {
+      flags.p04 = true;
+      this.voice("P04", { valid: () => (enterprise.fire ?? 0) > 0.05 });
+    }
+    if (!flags.r11 && enterprise && enterprise.deck < 0.25) {
+      flags.r11 = true;
+      this.voice("R11");
+    }
   }
 
   fx(type: string, p: Any, size = 1): void {
@@ -284,7 +414,7 @@ export class Battle {
   }
 
   get operationalEnemyCarriers(): Any[] {
-    return this.ships.filter((s) => s.team === "jp" && s.kind === "carrier" && !s.sunk && s.deck > 0.22);
+    return this.ships.filter((s) => s.team === "jp" && s.kind === "carrier" && !s.sunk && s.deck >= LAUNCH_DECK);
   }
 
   get navigationPoint(): Any {
@@ -311,7 +441,7 @@ export class Battle {
   }
 
   launch(s: Any, kind = "fighter"): Any {
-    if (!s || s.sunk || (s.evadeUntil || 0) > this.time || s.deck < 0.35 || s.reserve < 1 || this.aircraft.filter((a) => a.hp > 0).length >= 68) return null;
+    if (!s || s.sunk || (s.evadeUntil || 0) > this.time || s.deck < LAUNCH_DECK || s.reserve < 1 || this.aircraft.filter((a) => a.hp > 0).length >= 68) return null;
     s.reserve -= 1;
     s.launchCount += 1;
     const f = forward(s.heading);
@@ -400,6 +530,8 @@ export class Battle {
       return false;
     }
     a.bombs -= 1;
+    updateStores(a);
+    const mark = this.releaseStamp(a);
     const f = forward(a.heading, a.pitch);
     const physical = Number.isFinite(a.vx);
     const heavy = a !== this.player || a.bombs >= 2;
@@ -415,12 +547,72 @@ export class Battle {
       owner: a.id,
       age: 0,
       damage: heavy ? 155 : 55,
+      stamp: mark,
     });
     if (a === this.player) {
       this.stats.bombsDropped += 1;
       this.event("bomb");
+      this.voice("R17");
     }
     return true;
+  }
+
+  /**
+   * Snapshot objective eligibility on the rack, not on impact: a recall or retask after release can
+   * neither revoke nor grant this weapon's credit. Only the player and an actually ordered wing
+   * aircraft carry a stamp; every other allied weapon damages the ship without scoring the sortie.
+   */
+  releaseStamp(a: Any): IStamp | null {
+    const ordered = a !== this.player && a.wing === true && this.command === "strike";
+    if (a !== this.player && !ordered) return null;
+    return stamp(this.sortie, this.sortie.target, ordered);
+  }
+
+  /**
+   * Keep the designated target honest: follow what the player designated while it is a known live
+   * enemy carrier, say so when it is lost, and never silently reveal an unknown replacement.
+   */
+  updateSortie(): void {
+    const s = this.sortie;
+    confirmPending(s, (id: string) => this.contacts.get(id));
+    if (s.assignment !== "strike") return;
+    const live = (id: string | null) => {
+      if (!id || !this.contacts.has(id)) return null;
+      const ship = this.ships.find((x: Any) => x.id === id);
+      return ship && !ship.sunk && ship.kind === "carrier" && ship.team === "jp" ? ship : null;
+    };
+    if (live(this.target)) s.target = this.target;
+    else if (s.target && !live(s.target)) {
+      const lost = this.ships.find((x: Any) => x.id === s.target);
+      s.target = null;
+      if (s.objective === "pending")
+        this.say("STRIKE CONTROL", `${lost?.name ?? "Your target"} is out of the fight. Designate another carrier with TAB.`, true);
+    }
+    if (s.objective !== "pending") return;
+    if (!s.target && !this.ships.some((x: Any) => x.team === "jp" && x.kind === "carrier" && !x.sunk)) {
+      s.objective = "unavailable";
+      this.say("STRIKE CONTROL", "No enemy carrier remains. Return to the task force and report.", true);
+    }
+  }
+
+  /** Freeze what actually came home, before the deck crew resets fuel, damage and stores. */
+  snapshotResult(outcome: Outcome, carrier: Any): IResult {
+    const s = this.sortie;
+    const p = this.player;
+    return {
+      assignment: s.assignment,
+      outcome: outcome === "recovered" && s.objective !== "achieved" ? "incomplete" : outcome,
+      objective: s.objective === "achieved",
+      elapsed: Math.max(0, this.time - s.startTime),
+      personalHits: s.personalHits,
+      wingHits: s.wingHits,
+      nearMisses: this.stats.nearMisses,
+      reportedCarriers: s.reportedCarriers,
+      fuel: p.fuel,
+      hp: p.hp,
+      damage: damageSummary(p),
+      carrier: carrier?.name ?? "",
+    };
   }
 
   fire(a: Any, aim: Any = null): void {
@@ -476,13 +668,22 @@ export class Battle {
 
   report(): number {
     let count = 0;
+    let carriers = 0;
     for (const [, c] of this.contacts)
       if (this.time - c.time < 4 && !c.reported) {
         c.reported = true;
         count += 1;
+        if (c.kind === "carrier") carriers += 1;
         this.reported += 1;
         this.score += 75;
       }
+    if (carriers) {
+      this.sortie.reportedCarriers += carriers;
+      if (this.sortie.assignment === "recon" && this.sortie.objective === "pending") {
+        this.sortie.objective = "achieved";
+        this.say("SCOUT CONTROL", "Carrier contact acknowledged. Assignment complete — return and recover.", true);
+      }
+    }
     if (count) {
       this.say("SCOUT TWO", `Enemy fleet confirmed. ${count} vessels. Transmitting bearing and course to the task force.`, true);
       this.say("ENTERPRISE", "Contact received. Strike groups are launching. Mark your target and press 2 to order the attack.");
@@ -522,6 +723,7 @@ export class Battle {
     });
     if (!prev && source === "visual" && s.kind === "carrier") {
       this.say("REAR GUNNER", `Carrier off the nose! ${s.name}, bearing ${String(Math.round((bearing(this.player, s) * 180) / Math.PI) % 360).padStart(3, "0")}. Press R to send the contact.`, true);
+      this.voice("R04", { identity: s.id });
       if (!this.target) this.target = s.id;
     }
   }
@@ -567,8 +769,45 @@ export class Battle {
     }
   }
 
-  damageShip(s: Any, amount: number, point: Any, weapon = "bomb", team = "us"): void {
+  /**
+   * Resolve a hit on a ship. `owner` is the projectile's own attacker ID, so the player's counters
+   * only move for the player's own weapons: an allied AI hit still damages the ship without
+   * awarding a personal hit. `nearMiss` keeps splash damage from being reported as a direct hit.
+   */
+  damageShip(
+    s: Any,
+    amount: number,
+    point: Any,
+    weapon = "bomb",
+    team = "us",
+    opts: { owner?: string | null; nearMiss?: boolean; stamp?: IStamp | null } = {},
+  ): void {
     if (s.sunk) return;
+    const owner = opts.owner ?? null;
+    const nearMiss = opts.nearMiss === true;
+    const hostile = team !== s.team;
+    const attacker = owner && owner !== "player" ? this.aircraft.find((a: Any) => a.id === owner) : null;
+    const byPlayer = owner === "player" && hostile;
+    const byWing = !!attacker && attacker.wing === true && hostile;
+    // Preserve who last did effective hostile damage, so a fire that finishes the ship later
+    // credits that attacker rather than fabricating a fresh weapon hit.
+    if (hostile && amount > 0) s.lastHostileHit = { owner, team, weapon, time: this.time };
+    if (owner === "player" && !hostile && amount > 0 && weapon !== "strafe") {
+      this.stats.friendlyHits += 1;
+      this.event("notice", { text: `CHECK FIRE — ${s.name.toUpperCase()} IS FRIENDLY` });
+    }
+    if (weapon !== "strafe") this.recordImpact(s, point, { owner, team, weapon, nearMiss, damage: amount });
+    const mark: IStamp | null = opts.stamp ?? null;
+    if (amount > 0 && hitQualifies(this.sortie, mark, s, weapon, nearMiss)) {
+      recordObjectiveHit(this.sortie, s, weapon, mark!.ordered, this.contacts.get(s.id), this.time);
+      this.say(
+        "SCOUT TWO",
+        this.sortie.objective === "achieved"
+          ? `${s.name} hit and burning. Assignment complete — returning to the task force.`
+          : `${s.name} hit. No eyes on the target — confirmation pending.`,
+        true,
+      );
+    }
     s.hp = Math.max(0, s.hp - amount);
     if (weapon === "bomb") {
       s.deck = Math.max(0, s.deck - amount / 220);
@@ -578,21 +817,25 @@ export class Battle {
       s.engine = Math.max(0.12, s.engine - amount / 600);
       this.fx("explosion", point, weapon === "bomb" ? 3.2 : 1);
       this.event("explosion", { distance: distance3(this.player, point) });
-      if (team === "us" && s.team === "jp") {
+      if (byPlayer && nearMiss) {
+        this.stats.nearMisses += 1;
+        this.score += 60;
+        this.event("notice", { text: `NEAR MISS — ${s.name.toUpperCase()}  +60` });
+      } else if (byPlayer) {
         this.stats.shipHits += 1;
         this.score += 250;
         this.event("notice", { text: `DIRECT HIT — ${s.name.toUpperCase()}  +250` });
-      }
-      if (s.kind === "carrier" && s.deck < 0.35 && !s.deckNotified) {
+      } else if (byWing && !nearMiss) this.stats.wingShipHits += 1;
+      if (s.kind === "carrier" && s.deck < LAUNCH_DECK && !s.deckNotified) {
         s.deckNotified = true;
         this.say("BATTLE CONTROL", `${s.name}'s flight deck is out of action. Aircraft launches interrupted.`, true);
       }
     } else if (weapon === "torpedo") {
-      if (team === "us" && s.team === "jp") {
+      if (byPlayer) {
         this.stats.shipHits += 1;
         this.score += 250;
         this.event("notice", { text: `TORPEDO HIT — ${s.name.toUpperCase()} +250` });
-      }
+      } else if (byWing) this.stats.wingShipHits += 1;
       s.engine = Math.max(0.1, s.engine - 0.3);
       s.fire = clamp(s.fire + 0.3, 0, 2);
       this.fx("explosion", point, 2.8);
@@ -603,20 +846,58 @@ export class Battle {
       if (this.random() < 0.03 && s.reserve > 0) s.reserve -= 1;
       this.fx("hit", point, 0.5);
     }
-    if (s.hp <= 0) {
-      s.sunk = true;
-      s.speed = 0;
-      this.fx("explosion", s, 5);
-      this.say("BATTLE CONTROL", `${s.name} is going down.`, true);
-      if (team === "us" && s.team === "jp") {
-        this.score += 700;
-        this.stats.shipsSunk += 1;
-      }
+    // A friendly observer sees an enemy carrier burning; a friendly ship reports its own fire.
+    if (s.team === "jp" && s.kind === "carrier" && s.fire > 0.5 && !s.burnReported) {
+      s.burnReported = true;
+      this.voice("R18", { identity: s.id });
     }
+    if (s.team === "us" && s.fire > 0.3 && !s.fireReported) {
+      s.fireReported = true;
+      this.voice("R12", { ship: radioShipName(s.name), identity: s.id });
+    }
+    if (s.hp <= 0) this.sinkShip(s);
+  }
+
+  /**
+   * Sink a ship once, crediting whoever last did effective hostile damage — including a fire lit
+   * minutes earlier. No weapon hit is invented for a ship that burns down.
+   */
+  sinkShip(s: Any): void {
+    if (s.sunk) return;
+    s.sunk = true;
+    s.speed = 0;
+    this.fx("explosion", s, 5);
+    this.say("BATTLE CONTROL", `${s.name} is going down.`, true);
+    if (s.team === "us") this.voice("R15", { ship: radioShipName(s.name), identity: s.id });
+    const credit = s.lastHostileHit;
+    if (!credit) return;
+    if (credit.owner === "player") {
+      this.score += 700;
+      this.stats.shipsSunk += 1;
+    } else if (this.aircraft.find((a: Any) => a.id === credit.owner)?.wing === true)
+      this.stats.wingShipsSunk += 1;
+  }
+
+  /**
+   * Keep a bounded list of where a ship was actually hit, in the ship's own frame, so persistent
+   * scars and fires can follow the moving hull instead of blooming at its centre.
+   */
+  recordImpact(s: Any, point: Any, meta: Any): void {
+    if (!point || !Number.isFinite(point.x)) return;
+    const local = localPoint(point, s);
+    (s.impacts ??= []).push({
+      forward: local.forward,
+      right: local.right,
+      height: (point.y ?? 0) - (s.y ?? 0),
+      time: this.time,
+      ...meta,
+    });
+    if (s.impacts.length > MAX_IMPACTS) s.impacts.shift();
   }
 
   lose(reason: string): void {
     if (this.status !== "playing") return;
+    if (isShort(this.sortie) && !this.sortie.result) this.sortie.result = this.snapshotResult("lost", this.home);
     this.status = "lost";
     this.reason = reason;
     this.event("explosion");
@@ -642,9 +923,11 @@ export class Battle {
     stepWheels(this.player, dt);
     this.updateAircraft(dt);
     this.updateWeapons(dt);
+    this.updateRadio();
     this.intelTick -= dt;
     if (this.intelTick <= 0) {
       this.updateIntel();
+      this.updateSortie();
       this.intelTick = 0.35;
     }
     if (this.time > 7 && !this.reconLaunched) {
@@ -687,7 +970,7 @@ export class Battle {
         s.fire = Math.max(0, s.fire - dt * 0.0018);
         s.hp = Math.max(0, s.hp - s.fire * 0.35 * dt);
         if (s.fire < 0.35) s.deck = Math.min(1, s.deck + dt * 0.001);
-        if (s.hp <= 0) this.damageShip(s, 1, s, "torpedo", s.team === "us" ? "jp" : "us");
+        if (s.hp <= 0) this.sinkShip(s);
       }
       if (s.kind === "carrier") {
         s.nextLaunch -= dt;
@@ -730,7 +1013,7 @@ export class Battle {
     p.heat = Math.max(0, p.heat - dt * 6);
     const h = this.home;
     if (p.mode === "service") {
-      if (!h || h.sunk || h.deck < 0.2) {
+      if (!h || h.sunk || h.deck < DECK_FAILED) {
         this.lose("The carrier was destroyed during recovery.");
         return;
       }
@@ -778,7 +1061,7 @@ export class Battle {
       return;
     }
     if (p.mode === "arrest") {
-      if (!h || h.sunk || h.deck < 0.2) {
+      if (!h || h.sunk || h.deck < DECK_FAILED) {
         this.lose("The carrier deck failed during arrestment.");
         return;
       }
@@ -808,7 +1091,7 @@ export class Battle {
     if (p.fuel <= 0 || p.engineCut) p.throttle = 0;
     p.fuel = Math.max(0, p.fuel - dt * (0.009 + p.throttle * 0.018));
     if (p.mode === "deck") {
-      if (!h || h.sunk || h.deck < 0.2) {
+      if (!h || h.sunk || h.deck < DECK_FAILED) {
         this.lose("Your carrier can no longer launch aircraft.");
         return;
       }
@@ -851,10 +1134,11 @@ export class Battle {
       let desiredAlt = p.nav === "home" ? 350 : 1800;
       if (p.landingAssist) {
         const s = this.ships.find((s: Any) => s.id === p.landingAssist);
-        if (!s || s.sunk || s.deck < 0.25) {
+        if (!s || s.sunk || s.deck < RECOVERY_DECK) {
           p.landingAssist = null;
           p.autopilot = false;
           this.say("LSO", "Wave off! Deck unavailable.", true);
+          this.voice("R22");
         } else {
           const loc = localPoint(p, s);
           const f = forward(s.heading);
@@ -930,7 +1214,7 @@ export class Battle {
         const relativeSpeed = Math.hypot(p.vx - f.x * s.speed, p.vz - f.z * s.speed);
         const sideSpeed = Math.abs(p.vx * Math.cos(s.heading) + p.vz * Math.sin(s.heading));
         if (p.y <= contactY + 0.12 && previousY >= contactY - 0.6) {
-          if (s.team === "us" && s.deck > 0.25 && p.gearPos > 0.95 && relativeSpeed < 60 && aligned && Math.abs(p.roll) < 0.18 && p.vy > -5 && p.vy <= 1.1 && sideSpeed < 7) {
+          if (s.team === "us" && s.deck > RECOVERY_DECK && p.gearPos > 0.95 && relativeSpeed < 60 && aligned && Math.abs(p.roll) < 0.18 && p.vy > -5 && p.vy <= 1.1 && sideSpeed < 7) {
             this.touchdown(s);
             return;
           }
@@ -987,13 +1271,20 @@ export class Battle {
       landingAssist: null,
     });
     this.score += 200;
+    if (isShort(this.sortie) && !this.sortie.result) {
+      this.sortie.result = this.snapshotResult("recovered", s);
+      this.reason = outcomeText(this.sortie.result);
+      this.status = "debrief";
+      this.say("LANDING SIGNAL OFFICER", "Aboard and safe. That is the sortie.", true);
+      return;
+    }
     this.say("DECK CREW", "Welcome aboard. Fuel, ammunition and repairs are under way.", true);
   }
 
   assistRecovery(): boolean {
     const p = this.player;
     const s = this.ships
-      .filter((s: Any) => s.team === "us" && s.kind === "carrier" && !s.sunk && s.deck > 0.25)
+      .filter((s: Any) => s.team === "us" && s.kind === "carrier" && !s.sunk && s.deck > RECOVERY_DECK)
       .sort((a: Any, b: Any) => distance2(a, p) - distance2(b, p))[0];
     const local = s ? localPoint(p, s) : null;
     if (s && local && p.mode === "flight" && p.gear && distance2(p, s) < 700 && p.y < 180 && p.y > 24 && p.speed < 72 && local.forward < 0 && Math.abs(local.right) < 100 && Math.abs(angleDelta(p.heading, s.heading)) < 0.4) {
@@ -1003,6 +1294,7 @@ export class Battle {
       p.nav = "home";
       p.flaps = 1;
       this.say("LSO", "Final approach assist engaged. Stay ready to take over. Any stick input cancels.");
+      this.voice("R21", { identity: s.id });
       return true;
     }
     this.event("notice", { text: "FINAL ASSIST: GEAR DOWN · ASTERN WITHIN 700 M · BELOW 600 FT · UNDER 140 KT · ALIGNED" });
@@ -1018,6 +1310,8 @@ export class Battle {
     const envelope = torpedoEnvelope(a);
     const f = forward(a.heading, a.pitch);
     a.torpedo -= 1;
+    updateStores(a);
+    const mark = this.releaseStamp(a);
     this.airTorpedoes.push({
       id: this.id("airtorp"),
       x: a.x,
@@ -1031,11 +1325,13 @@ export class Battle {
       owner: a.id,
       age: 0,
       safe: envelope.safe,
+      stamp: mark,
     });
     if (a === this.player) {
       this.stats.torpedoesDropped += 1;
       this.event("bomb");
       this.event("notice", { text: envelope.safe ? "TORPEDO AWAY — HOLD COURSE, THEN BREAK CLEAR" : `TORPEDO AWAY / BAD ENTRY: ${envelope.problems.join(" · ")}` });
+      this.voice("R17");
     }
     return true;
   }
@@ -1055,6 +1351,7 @@ export class Battle {
       speed,
       team: a.team,
       owner: a.owner || a.id,
+      stamp: a.stamp ?? null,
       age: 0,
       ttl: air ? 240 : 200,
       run: 0,
@@ -1107,7 +1404,7 @@ export class Battle {
             at = { x: lerp(prev.x, b.x, u), y: top, z: lerp(prev.z, b.z, u) };
           }
           if (at.y > 0 && at.y <= top + 0.2 && onDeck(at, s, 1)) {
-            this.damageShip(s, 0.7, at, "strafe", b.team);
+            this.damageShip(s, 0.7, at, "strafe", b.team, { owner: b.owner });
             b.ttl = 0;
             break;
           }
@@ -1142,7 +1439,7 @@ export class Battle {
         }
       }
       if (hit) {
-        this.damageShip(hit, b.damage || 155, point, "bomb", b.team);
+        this.damageShip(hit, b.damage || 155, point, "bomb", b.team, { owner: b.owner, stamp: b.stamp });
         b.dead = true;
       } else if (b.y <= 0) {
         this.fx("splash", b, 3.5);
@@ -1150,7 +1447,8 @@ export class Battle {
         for (const s of this.ships) {
           const l = localPoint(b, s);
           const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.width / 2), Math.max(0, Math.abs(l.forward) - s.length / 2));
-          if (d < 55 && !s.sunk) this.damageShip(s, (b.damage || 155) * 0.4 * (1 - d / 55), b, "bomb", b.team);
+          if (d < 55 && !s.sunk)
+            this.damageShip(s, (b.damage || 155) * 0.4 * (1 - d / 55), b, "bomb", b.team, { owner: b.owner, nearMiss: true, stamp: b.stamp });
         }
         b.dead = true;
       }
@@ -1218,7 +1516,7 @@ export class Battle {
         }
         if (lo <= hi && lo <= 1 && hi >= 0) {
           const impact = { x: lerp(prev.x, t.x, Math.max(0, lo)), y: 2, z: lerp(prev.z, t.z, Math.max(0, lo)) };
-          if (t.run >= t.armedDistance) this.damageShip(s, 145, impact, "torpedo", t.team);
+          if (t.run >= t.armedDistance) this.damageShip(s, 145, impact, "torpedo", t.team, { owner: t.owner, stamp: t.stamp });
           else this.fx("splash", impact, 0.7);
           t.ttl = 0;
           break;

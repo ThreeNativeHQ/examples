@@ -5,7 +5,7 @@ search the northwest sector, confirm the Japanese carrier group, dive or torpedo
 decks, then bring your crew home. This is a ThreeNative port of a standalone WebGL build, with its
 flight dynamics lifted into `@threenative/core` as `FlightModel` and reused here.
 
-Controls: `W`/`S` throttle · arrow keys or mouse steer · `Space` guns · `B` ordnance · `F` dive
+Controls: `W`/`S` throttle · arrow keys steer (`Down` raises the nose) · `Space` guns · `B` ordnance · `F` dive
 brakes · `G` gear · `N` flaps · `C` camera · `T` course hold · `M` intel map · `Q` squadron orders
 · `H` home · `P`/`Esc` pause.
 

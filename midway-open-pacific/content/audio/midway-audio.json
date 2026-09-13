@@ -1,0 +1,2960 @@
+{
+  "version": 1,
+  "models": {
+    "sfx": "eleven_text_to_sound_v2",
+    "tts": "eleven_multilingual_v2",
+    "voiceDesign": "eleven_multilingual_ttv_v2"
+  },
+  "voices": {
+    "control": {
+      "role": "control",
+      "voiceDescription": "An American male naval aviator in his late thirties, natural general American accent, medium-low register, calm and authoritative under pressure. Brief, clearly articulated operational reports, brisk but intelligible pacing, restrained urgency. Conversational delivery, not a newsreel announcer or movie trailer. Clean dry studio recording, no radio effect, no background noise. Original fictional voice.",
+      "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+      "generatedVoiceId": "7c5Y5rWii5opQH2jx0Mf",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "generatedVoiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf"
+        }
+      ]
+    },
+    "wingman": {
+      "role": "wingman",
+      "voiceDescription": "An American male naval pilot in his late twenties, natural general American accent, medium register with a lightly rough edge. Alert, practical and concise, with credible urgency during combat but no theatrical shouting. Clear consonants and natural pauses between short reports. Clean dry studio recording, no radio effect, no background noise. Original fictional voice.",
+      "voiceId": "dLhShFKQhTRqVtb7JD37",
+      "generatedVoiceId": "dLhShFKQhTRqVtb7JD37",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "generatedVoiceId": "dLhShFKQhTRqVtb7JD37",
+          "voiceId": "dLhShFKQhTRqVtb7JD37"
+        }
+      ]
+    },
+    "gunner": {
+      "role": "gunner",
+      "voiceDescription": "An American male aircraft radioman and gunner in his early twenties, natural general American accent, slightly higher register than the pilot. Close, direct, watchful delivery, short warnings spoken clearly through controlled stress. No exaggerated accent, no comedy, no heroic narration. Clean dry studio recording, no radio effect, no background noise. Original fictional voice.",
+      "voiceId": "DiD9RqNjUHH94s2cG1ol",
+      "generatedVoiceId": "DiD9RqNjUHH94s2cG1ol",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "generatedVoiceId": "DiD9RqNjUHH94s2cG1ol",
+          "voiceId": "DiD9RqNjUHH94s2cG1ol"
+        }
+      ]
+    },
+    "pa": {
+      "role": "pa",
+      "voiceDescription": "An American male Navy petty officer in his forties, natural general American accent, firm baritone, deliberate practical diction. Short shipboard orders with a clear pause between clauses, projecting authority without shouting. No ceremonial flourish, no newsreel cadence. Clean dry studio recording, no loudspeaker effect, no background noise. Original fictional voice.",
+      "voiceId": "CU4gwOi8yZ4CZPhogzYp",
+      "generatedVoiceId": "CU4gwOi8yZ4CZPhogzYp",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "generatedVoiceId": "CU4gwOi8yZ4CZPhogzYp",
+          "voiceId": "CU4gwOi8yZ4CZPhogzYp"
+        }
+      ]
+    }
+  },
+  "sfx": [
+    {
+      "id": "sbd-engine-exterior-idle-01",
+      "file": "audio/sbd-engine-exterior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "fc28ad7addc8fee833c3639a528312b188c15880799cc4590b785b242770ea61",
+          "outputHash": "b2919ee73ed89f84ab00f290b6266ff69f2b295e4a73b5e4f26d7e3647da4eb5",
+          "bytes": 98098
+        }
+      ]
+    },
+    {
+      "id": "sbd-engine-exterior-cruise-01",
+      "file": "audio/sbd-engine-exterior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "13b982a2ad422d6b156229efb19ab0c273bc48516db2928b30c8c3394d5b08df",
+          "outputHash": "9c6cc68a1b259e58513ff7d1e44b1ef2fc80553d0d9dfad5d8e4abcc25240b70",
+          "bytes": 102271
+        }
+      ]
+    },
+    {
+      "id": "sbd-engine-exterior-power-01",
+      "file": "audio/sbd-engine-exterior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "bb5e9ad36ab1f766bebcbd20d6ffe26df0b060c58bf015947db59e795d313527",
+          "outputHash": "52097978746f1ba89aec69d7654832eb29e86b51a7362a83628bdb7537cf4e0b",
+          "bytes": 133612
+        }
+      ]
+    },
+    {
+      "id": "sbd-engine-interior-idle-01",
+      "file": "audio/sbd-engine-interior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "c2c3dde044185b4e540cc0d791edca60a220f81ad9f6bc76f1c67714f827d15b",
+          "outputHash": "351db229c76db426eb12ce99ea3aa62f562de88cb95d2e8b1624b9b91ec15ab7",
+          "bytes": 88208
+        }
+      ]
+    },
+    {
+      "id": "sbd-engine-interior-cruise-01",
+      "file": "audio/sbd-engine-interior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Steady cruising power with a settled mechanical drone and moderate propeller load. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Steady cruising power with a settled mechanical drone and moderate propeller load. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "192091626ba9e2013075531cbfe0d34a144229b177cd9b5306041b6743dc0edc",
+          "outputHash": "00090c3dec4d1c2d475295fd329db6932f6289675c4a43a44315d2f895577905",
+          "bytes": 94125
+        }
+      ]
+    },
+    {
+      "id": "sbd-engine-interior-power-01",
+      "file": "audio/sbd-engine-interior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Wright R-1820-52 nine-cylinder radial piston engine driving the propeller of a Douglas SBD-3 Dauntless. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "256f14b505d2e019aeb7c323ad2e43b8ae239bc5b8fa4ae49c648143153c4442",
+          "outputHash": "927d713682a5a4e5daa3b16773cf5a82d9c601a4fe0e82456822c16b0d41e5fd",
+          "bytes": 105385
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-exterior-idle-01",
+      "file": "audio/tbd-engine-exterior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "2fd787c3d712b68342bfc3eb50d00af678dc9f7b5f5926e876bfbff1e0aed5b7",
+          "outputHash": "416ead651f2d9fa5d08e683f4ebf2fbae18c91274385f14f8f867bd4ee7ff4bc",
+          "bytes": 90414
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-exterior-cruise-01",
+      "file": "audio/tbd-engine-exterior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "01779cd97d593b4227e1e8d2f5717fc4e137566bd9628746578b81d9554a8ed6",
+          "outputHash": "300e59b0f30c3ec177c64ffb3fc3d98f228c44b337d26896246303bd2e2966cc",
+          "bytes": 112709
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-exterior-power-01",
+      "file": "audio/tbd-engine-exterior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "67a62317b29ad7ec0d40385dbb83ccec4bd34f8f3094847897a9d6e45c10d6d9",
+          "outputHash": "58b0c36d14857f8dde2cfb7b73258a27f543062dcb8748a658289c4e6a2318f9",
+          "bytes": 109469
+        }
+      ]
+    },
+    {
+      "id": "wildcat-engine-exterior-idle-01",
+      "file": "audio/wildcat-engine-exterior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830 twin-row radial piston engine driving the propeller of a Grumman F4F Wildcat. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830 twin-row radial piston engine driving the propeller of a Grumman F4F Wildcat. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "7d9a086d2a81215de396425e548d8787ccc1712a91077169b324c1cb6f0a1d81",
+          "outputHash": "993e71bf2472258589a06bbfd174491eecd94bd75bd40533f7affb8b49e12343",
+          "bytes": 109612
+        }
+      ]
+    },
+    {
+      "id": "wildcat-engine-exterior-cruise-01",
+      "file": "audio/wildcat-engine-exterior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830 twin-row radial piston engine driving the propeller of a Grumman F4F Wildcat. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830 twin-row radial piston engine driving the propeller of a Grumman F4F Wildcat. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "02026b1e21da684709fb92c304c8a567f8ce1497ff08fda1364dce25dc4bd412",
+          "outputHash": "adbbc286e70ca302a4337ae1d7e0331fdbe0b14f3fd3cc867364d3a6eb7b2883",
+          "bytes": 128322
+        }
+      ]
+    },
+    {
+      "id": "wildcat-engine-exterior-power-01",
+      "file": "audio/wildcat-engine-exterior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830 twin-row radial piston engine driving the propeller of a Grumman F4F Wildcat. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830 twin-row radial piston engine driving the propeller of a Grumman F4F Wildcat. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "73249d34244a35fd56c807fefb4a51e249310f5bf917b18868e322438b80dec2",
+          "outputHash": "c88a222d2f45908ab615b3b00bc55e02145373c37f7febf42649a54817855393",
+          "bytes": 131583
+        }
+      ]
+    },
+    {
+      "id": "catalina-engine-exterior-idle-01",
+      "file": "audio/catalina-engine-exterior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One isolated Pratt and Whitney R-1830 radial piston engine from a Consolidated PBY-5 Catalina; only one engine in this recording. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One isolated Pratt and Whitney R-1830 radial piston engine from a Consolidated PBY-5 Catalina; only one engine in this recording. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "aa3100e3835a0c612ab31f79aacee5871582364e83dc85345873c086baeafd03",
+          "outputHash": "68a59ffd46b914027cfb5f08449a777c46066b44771a9f733164289db79b2d28",
+          "bytes": 100781
+        }
+      ]
+    },
+    {
+      "id": "catalina-engine-exterior-cruise-01",
+      "file": "audio/catalina-engine-exterior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One isolated Pratt and Whitney R-1830 radial piston engine from a Consolidated PBY-5 Catalina; only one engine in this recording. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One isolated Pratt and Whitney R-1830 radial piston engine from a Consolidated PBY-5 Catalina; only one engine in this recording. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "e41c656ebb6af76d94a5d32bfce8483dd6ac386bc0845632505ccb6bc9d5f305",
+          "outputHash": "da4cd5ccf548ae49e76ec4391375a1fef8b1b74b52e6eda4dc1f2472d8c023a5",
+          "bytes": 150371
+        }
+      ]
+    },
+    {
+      "id": "catalina-engine-exterior-power-01",
+      "file": "audio/catalina-engine-exterior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One isolated Pratt and Whitney R-1830 radial piston engine from a Consolidated PBY-5 Catalina; only one engine in this recording. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One isolated Pratt and Whitney R-1830 radial piston engine from a Consolidated PBY-5 Catalina; only one engine in this recording. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "c47755abecd26e69af52dce9b3cac4989ef0f43110a1f411a68e3e292dbd86a0",
+          "outputHash": "9732abd0e23d5edfdfa0439b352bbc7cf918b37f1ddae614c91668d1dbbdae7c",
+          "bytes": 137035
+        }
+      ]
+    },
+    {
+      "id": "zero-engine-exterior-idle-01",
+      "file": "audio/zero-engine-exterior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Nakajima Sakae 12 twin-row radial piston engine driving the propeller of a Mitsubishi A6M2 Zero. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Nakajima Sakae 12 twin-row radial piston engine driving the propeller of a Mitsubishi A6M2 Zero. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "dd6bf954fb2ea228f310c674de0bdcf75e230f170d40c50bb3ebefc6072af6bb",
+          "outputHash": "c4f2d5aeedf89993d5e7cd9e41e473f08ccd0e14e939b567d15ab4feb1b4c92d",
+          "bytes": 104535
+        }
+      ]
+    },
+    {
+      "id": "zero-engine-exterior-cruise-01",
+      "file": "audio/zero-engine-exterior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Nakajima Sakae 12 twin-row radial piston engine driving the propeller of a Mitsubishi A6M2 Zero. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Nakajima Sakae 12 twin-row radial piston engine driving the propeller of a Mitsubishi A6M2 Zero. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "19fda84771af775c26618f3bb54e62ca7d65817ce1ee3305c79160ea830899f3",
+          "outputHash": "dad19a970f60167c5cecece45023a07546a132e0ef4c2f8f45682e6f16ab7066",
+          "bytes": 115129
+        }
+      ]
+    },
+    {
+      "id": "zero-engine-exterior-power-01",
+      "file": "audio/zero-engine-exterior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Nakajima Sakae 12 twin-row radial piston engine driving the propeller of a Mitsubishi A6M2 Zero. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Nakajima Sakae 12 twin-row radial piston engine driving the propeller of a Mitsubishi A6M2 Zero. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "28c8f7e42df16afe746e46cb2b7356c13b82f6cdf19e62b755429c850acfbc7b",
+          "outputHash": "d855794ed890bf9eb8db5def0b3fd8eac088a24431a8374856aca17265650c0a",
+          "bytes": 122382
+        }
+      ]
+    },
+    {
+      "id": "val-engine-exterior-idle-01",
+      "file": "audio/val-engine-exterior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Mitsubishi Kinsei radial piston engine driving the propeller of an Aichi D3A1 dive bomber. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Mitsubishi Kinsei radial piston engine driving the propeller of an Aichi D3A1 dive bomber. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "d59eadeeadb58752089f673d57ebe4af73b3aa6c1e69ce437cdf134e4ebd6922",
+          "outputHash": "f88343360149016d62d9827fefceb34433eb3c5059d38703b7a339b373bb4b4d",
+          "bytes": 106411
+        }
+      ]
+    },
+    {
+      "id": "val-engine-exterior-cruise-01",
+      "file": "audio/val-engine-exterior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Mitsubishi Kinsei radial piston engine driving the propeller of an Aichi D3A1 dive bomber. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Mitsubishi Kinsei radial piston engine driving the propeller of an Aichi D3A1 dive bomber. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "e0f916326e1f2d1b0a33763369f44c24c49ca08e4666490e6070477701eca32f",
+          "outputHash": "3e4f0a29448442d56232dcf4936596672cb36c92a19a2c7b8bc6f172b2c4cf17",
+          "bytes": 114644
+        }
+      ]
+    },
+    {
+      "id": "val-engine-exterior-power-01",
+      "file": "audio/val-engine-exterior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Mitsubishi Kinsei radial piston engine driving the propeller of an Aichi D3A1 dive bomber. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Mitsubishi Kinsei radial piston engine driving the propeller of an Aichi D3A1 dive bomber. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "7669f4791ec3c487c7cfd640bfbd41dbc1afb6ad98f325d75c27cc87cc894836",
+          "outputHash": "4fa66f01b51d74442f3ba85b0828e6b7d8a511d75c5344402090d8618a424046",
+          "bytes": 113841
+        }
+      ]
+    },
+    {
+      "id": "kate-engine-exterior-idle-01",
+      "file": "audio/kate-engine-exterior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Nakajima Sakae 11 twin-row radial piston engine driving the propeller of a Nakajima B5N2 torpedo bomber. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Nakajima Sakae 11 twin-row radial piston engine driving the propeller of a Nakajima B5N2 torpedo bomber. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "426ec8ed378b19bef1335d01c541759ea40149bacf51992d6877847779587595",
+          "outputHash": "30655e378f136a63b38e4327fafd385f960ac94ed5392b3733c6e13ab6289d50",
+          "bytes": 109903
+        }
+      ]
+    },
+    {
+      "id": "kate-engine-exterior-cruise-01",
+      "file": "audio/kate-engine-exterior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Nakajima Sakae 11 twin-row radial piston engine driving the propeller of a Nakajima B5N2 torpedo bomber. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Nakajima Sakae 11 twin-row radial piston engine driving the propeller of a Nakajima B5N2 torpedo bomber. Steady cruising power with a settled mechanical drone and moderate propeller load. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "a587fb030b2ece3495602177a202436db6abb5d41222f863292f6cbeb0a50107",
+          "outputHash": "f7c09cc1a90f94eded33cea3d63c20f96c3230bda974d212369fc697fb8f0aba",
+          "bytes": 114687
+        }
+      ]
+    },
+    {
+      "id": "kate-engine-exterior-power-01",
+      "file": "audio/kate-engine-exterior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Nakajima Sakae 11 twin-row radial piston engine driving the propeller of a Nakajima B5N2 torpedo bomber. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Nakajima Sakae 11 twin-row radial piston engine driving the propeller of a Nakajima B5N2 torpedo bomber. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Dry stationary close exterior recording, listener near the aircraft but outside the propeller arc, no room echo and no movement past the microphone. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "f805b1447a97c93723a7f6a823271de43e715ecd6235870e04dfaca995ef2d51",
+          "outputHash": "0064c9d218543cba0a8301265258b6ba81a77e00513591d811c46c25c966e0db",
+          "bytes": 119062
+        }
+      ]
+    },
+    {
+      "id": "airflow-exterior",
+      "file": "audio/airflow-exterior.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Steady broadband airflow past the outside of a 1942 propeller aircraft canopy, constant flying speed, smooth continuous air rush with a little low turbulence, no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Steady broadband airflow past the outside of a 1942 propeller aircraft canopy, constant flying speed, smooth continuous air rush with a little low turbulence, no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "9669195c24044433baa0ba57522a28f8209cbf997db014f6a6eaf4acd275e6b3",
+          "outputHash": "baae2072dab52f39524877963da4362070445563a44befe999f58241cef303b9",
+          "bytes": 106049
+        }
+      ]
+    },
+    {
+      "id": "airflow-cockpit",
+      "file": "audio/airflow-cockpit.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Steady air leaking and rushing around the frame of a partially enclosed 1942 dive bomber cockpit, restrained high hiss and soft low turbulence, pilot-seat perspective, no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Steady air leaking and rushing around the frame of a partially enclosed 1942 dive bomber cockpit, restrained high hiss and soft low turbulence, pilot-seat perspective, no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "233ef2affafc64166d303259a47c338802d86da2e86d8e2ca97f4515a7c928ab",
+          "outputHash": "7d8f79f12d8af4bd0f89c1c79137f8befca482d92b746bc3b675a3f45ba3d2de",
+          "bytes": 122919
+        }
+      ]
+    },
+    {
+      "id": "sbd-dive-brake",
+      "file": "audio/sbd-dive-brake.ogg",
+      "seconds": 8,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Turbulent air streaming through the extended perforated dive brakes of a Douglas SBD Dauntless, coarse fluttering air roar at constant dive speed, no siren and no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Turbulent air streaming through the extended perforated dive brakes of a Douglas SBD Dauntless, coarse fluttering air roar at constant dive speed, no siren and no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "3a572d6c38cf1e8e6d68d9dae6e0f28c45711ddf1cafd047f24c28c13e5ae6c3",
+          "outputHash": "0472139365a9ad0ce5d1ec75d5b65578b1364fcd316b30c2cb218fee8bf2d431",
+          "bytes": 74783
+        }
+      ]
+    },
+    {
+      "id": "airframe-buffet",
+      "file": "audio/airframe-buffet.ogg",
+      "seconds": 6,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Irregular low aerodynamic buffeting transmitted through a light metal propeller aircraft airframe, short soft panel rattles and turbulent vibration, no electronic warning and no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Irregular low aerodynamic buffeting transmitted through a light metal propeller aircraft airframe, short soft panel rattles and turbulent vibration, no electronic warning and no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 6,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "b6040e87a36050b6cbf9cd7a6178e1b64623d963c2d349d7115794f9311f2679",
+          "outputHash": "63805201f81ec0353856c67015ae5494666b368e87e7428fbac463126d25313c",
+          "bytes": 54643
+        }
+      ]
+    },
+    {
+      "id": "cockpit-rattle",
+      "file": "audio/cockpit-rattle.ogg",
+      "seconds": 8,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Subtle irregular rattling of small instrument-panel fittings and canopy frame in a vibrating 1942 metal aircraft cockpit, close and dry, no engine and no wind. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Subtle irregular rattling of small instrument-panel fittings and canopy frame in a vibrating 1942 metal aircraft cockpit, close and dry, no engine and no wind. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "0e2384afd7e0b7aa9e7618851f5e7830c96974f7979b246e469e3089b55c5165",
+          "outputHash": "8fdca0b816e68906b23a8dc602be39ca0f93dcfbcc1fb8addc462a2a757d3905",
+          "bytes": 140823
+        }
+      ]
+    },
+    {
+      "id": "gear-travel",
+      "file": "audio/gear-travel.ogg",
+      "seconds": 3,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One short hydraulic landing gear mechanism operating on a 1940s naval propeller aircraft, restrained mechanical whir and metal linkage movement ending in a firm locking clunk. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One short hydraulic landing gear mechanism operating on a 1940s naval propeller aircraft, restrained mechanical whir and metal linkage movement ending in a firm locking clunk. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 3,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "6a6cfacb3ec17989478112fc8286e8e05a987442df16f45eecc5123f51236ec9",
+          "outputHash": "b9f5808e7051d69e7c0bb4f61c370d76032b7726598aa38d17f9daa22b436844",
+          "bytes": 36491
+        }
+      ]
+    },
+    {
+      "id": "flap-travel",
+      "file": "audio/flap-travel.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One short movement of a 1940s aircraft flap linkage, muted hydraulic mechanism and light metal joints settling into position. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One short movement of a 1940s aircraft flap linkage, muted hydraulic mechanism and light metal joints settling into position. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "698d55e546976eb9d695d765c443b5fc5da77d1be922f30f3b59228eb9875d8c",
+          "outputHash": "244b285850f05b7674fe46bf177eb8323b4e1388d254cfdcc911bdb42362a031",
+          "bytes": 25524
+        }
+      ]
+    },
+    {
+      "id": "canopy-latch",
+      "file": "audio/canopy-latch.ogg",
+      "seconds": 1,
+      "loop": false,
+      "identity": "unverified",
+      "conditional": true,
+      "prompt": "One close mechanical latch fastening on a lightweight framed aircraft canopy, metal click followed by a small firm clunk. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One close mechanical latch fastening on a lightweight framed aircraft canopy, metal click followed by a small firm clunk. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 1,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": []
+    },
+    {
+      "id": "bomb-shackle",
+      "file": "audio/bomb-shackle.ogg",
+      "seconds": 1,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One heavy bomb shackle releasing beneath a 1942 dive bomber, short mechanical snap and solid metal release clunk transmitted through the aircraft, no whistle and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One heavy bomb shackle releasing beneath a 1942 dive bomber, short mechanical snap and solid metal release clunk transmitted through the aircraft, no whistle and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 1,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "190808d7eb6537a92a1614e5a0a9c3d8c7e117907671ffdb8294ec78a5b0535c",
+          "outputHash": "da845bcad665605a791f27b3b6baa6ef7d8e5a4233751481fd468f7d6e10faac",
+          "bytes": 13817
+        }
+      ]
+    },
+    {
+      "id": "torpedo-release",
+      "file": "audio/torpedo-release.ogg",
+      "seconds": 1,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One heavy aerial torpedo released from an aircraft mounting rack, a short latch snap and weighty metal linkage clunk, no propulsion sound and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One heavy aerial torpedo released from an aircraft mounting rack, a short latch snap and weighty metal linkage clunk, no propulsion sound and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 1,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "ee842480c57346887dceed8cf079658c64abb0fa28b2ed40d68c54bf1375fe6b",
+          "outputHash": "4f163186e82eb2b1fcbf89308ec3be74cc351f0463874144123425d4c2c34ead",
+          "bytes": 14446
+        }
+      ]
+    },
+    {
+      "id": "sbd-engine-start",
+      "file": "audio/sbd-engine-start.ogg",
+      "seconds": 8,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "A plausible 1942 nine-cylinder aircraft radial engine starting, mechanical starter activity followed by several uneven combustion catches that settle into a low idle, no dramatic backfire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A plausible 1942 nine-cylinder aircraft radial engine starting, mechanical starter activity followed by several uneven combustion catches that settle into a low idle, no dramatic backfire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "f141133cc1f6fa17cd24152a6b30b26b8e35caa99a2090d2a198a9003995ebd1",
+          "outputHash": "2c9dd537b77be024e5101ebc66de2340361f38a07fd4a8aeda50d7c551117b66",
+          "bytes": 88709
+        }
+      ]
+    },
+    {
+      "id": "sbd-engine-stop",
+      "file": "audio/sbd-engine-stop.ogg",
+      "seconds": 5,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "A nine-cylinder aircraft radial engine shutting down from idle, combustion pulses cease and rotating machinery slows naturally to rest, no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A nine-cylinder aircraft radial engine shutting down from idle, combustion pulses cease and rotating machinery slows naturally to rest, no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 5,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "dee1890f442ce57f5d7f1232db4062ea1f23b4bcad4fd87fa114783c0177e4c8",
+          "outputHash": "a1972dc89e110af6aa72bbe1ca7dad1876f88d3ddb7e935f7af38a134b6acb2d",
+          "bytes": 53735
+        }
+      ]
+    },
+    {
+      "id": "engine-rough",
+      "file": "audio/engine-rough.ogg",
+      "seconds": 8,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Irregular missed combustion pulses and rough mechanical vibration from a damaged aircraft radial piston engine, sustained uneven running, no explosions and no music. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Irregular missed combustion pulses and rough mechanical vibration from a damaged aircraft radial piston engine, sustained uneven running, no explosions and no music. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "228d1992e48f80dfc577dcb2d49adc46e881e4227bc68e61141fc1652fda8bc0",
+          "outputHash": "c62c014008a22a8a1965d2494eab5d81f35d3f8c8647bc9d7f15ae88c8b58282",
+          "bytes": 86444
+        }
+      ]
+    },
+    {
+      "id": "prop-windmill",
+      "file": "audio/prop-windmill.ogg",
+      "seconds": 8,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "An unpowered aircraft propeller turning in steady airflow, soft repetitive mechanical rotation and air swish without any combustion or exhaust. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "An unpowered aircraft propeller turning in steady airflow, soft repetitive mechanical rotation and air swish without any combustion or exhaust. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "2d2901b3e08de7e2de18421de37604177258598f2b05154e1305a4a6aae67fbe",
+          "outputHash": "06dabb14e5fa6dc26a686700948c959bf09a0692f37ce445e6bcc3f7651d96fa",
+          "bytes": 90983
+        }
+      ]
+    },
+    {
+      "id": "airframe-hit",
+      "file": "audio/airframe-hit.ogg",
+      "seconds": 1,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "A short burst of small hard impacts puncturing thin aluminum aircraft skin near the listener, sharp metal ticks and a brief loose-panel rattle, no large explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A short burst of small hard impacts puncturing thin aluminum aircraft skin near the listener, sharp metal ticks and a brief loose-panel rattle, no large explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 1,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "821c957f5eb3447d4c227b448a28725a8f00ac4aa96441cfe1a85933b397e350",
+          "outputHash": "dd39f235998988560e65e338b4372acd9bcbdc22d2a50382ef192651576b59c8",
+          "bytes": 13987
+        }
+      ]
+    },
+    {
+      "id": "gun-50",
+      "file": "audio/gun-50.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "documented",
+      "conditional": false,
+      "prompt": "One short burst from a single aircraft-mounted Browning fifty-caliber machine gun, rapid hard mechanical reports with a dry percussive attack, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One short burst from a single aircraft-mounted Browning fifty-caliber machine gun, rapid hard mechanical reports with a dry percussive attack, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "bffc15723c81d18ef358bd0c911ffd868347cd224789d59059433bbd5d6e3803",
+          "outputHash": "1cd7a811b95b90563c264cac24a0c48b30a6fb2f8c767184c39394fdfa4e1b75",
+          "bytes": 22526
+        }
+      ]
+    },
+    {
+      "id": "gun-30",
+      "file": "audio/gun-30.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "documented",
+      "conditional": false,
+      "prompt": "One short burst from a flexible aircraft-mounted thirty-caliber Browning machine gun, lighter fast mechanical chatter, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One short burst from a flexible aircraft-mounted thirty-caliber Browning machine gun, lighter fast mechanical chatter, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "5918beb09cda194b43c53ae60fdbf90510233c07dab1f4f6b856266746af7b84",
+          "outputHash": "76d55986ed082f730a5951ce0771f4c74db5ec2d2d132eebc83307f685309a90",
+          "bytes": 25171
+        }
+      ]
+    },
+    {
+      "id": "gun-77",
+      "file": "audio/gun-77.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "documented",
+      "conditional": false,
+      "prompt": "One short burst from a Japanese aircraft seven point seven millimeter machine gun, quick light mechanical chatter and sharp small reports, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One short burst from a Japanese aircraft seven point seven millimeter machine gun, quick light mechanical chatter and sharp small reports, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "293ca6e66b611961516d0c430b08b930d4aabab2040b48bf08bf2d0b17c9dab1",
+          "outputHash": "ec3a90a0ac61d5d22e03cb208e82265d6dc6621a53f4a645ff58848e9421d378",
+          "bytes": 32941
+        }
+      ]
+    },
+    {
+      "id": "cannon-20",
+      "file": "audio/cannon-20.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "documented",
+      "conditional": false,
+      "prompt": "One short burst from a Japanese Type 99 twenty millimeter aircraft cannon, distinct heavy automatic reports with mechanical cycling, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One short burst from a Japanese Type 99 twenty millimeter aircraft cannon, distinct heavy automatic reports with mechanical cycling, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "38d78026a0d6a38075d57a2d69131e1f98b1eb96f476eb2d2a573fe250e99bb9",
+          "outputHash": "17453aadef0dfd16142e5b8f925bcbb9dbe842507efe821b0fb2d76d04263a08",
+          "bytes": 24173
+        }
+      ]
+    },
+    {
+      "id": "bullet-near",
+      "file": "audio/bullet-near.ogg",
+      "seconds": 1,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One brief close supersonic rifle-caliber projectile crack and air snap passing the listener outdoors, no gun muzzle report and no impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One brief close supersonic rifle-caliber projectile crack and air snap passing the listener outdoors, no gun muzzle report and no impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 1,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "8b61d548430ecc2499ec1628a3ae1135caa0d8a543843e4b500af589979a2cb6",
+          "outputHash": "112d6d0bfd59f3ac363bbaf9664b7714ccdccb7026eead751ec4e8deb7a8db62",
+          "bytes": 13484
+        }
+      ]
+    },
+    {
+      "id": "aa-heavy",
+      "file": "audio/aa-heavy.ogg",
+      "seconds": 4,
+      "loop": false,
+      "identity": "documented",
+      "conditional": false,
+      "prompt": "One heavy 1942 naval five-inch gun firing outdoors from a ship, a hard concussive report, brief mechanical recoil and open-air decay, no impact explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One heavy 1942 naval five-inch gun firing outdoors from a ship, a hard concussive report, brief mechanical recoil and open-air decay, no impact explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 4,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "b11b07f3b0e5e9d8a8a2d418a561e0bb9670be08ce2e6f2ec7e9171c11cf4b92",
+          "outputHash": "d84d00257877ffa33f910a1413dd935642098a8e5eccc8bd34eb167955bbb7a9",
+          "bytes": 44883
+        }
+      ]
+    },
+    {
+      "id": "aa-11",
+      "file": "audio/aa-11.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "documented",
+      "conditional": false,
+      "prompt": "A short burst from a 1942 naval one point one inch automatic antiaircraft gun mounting, overlapping solid mechanical reports, outdoors, no aircraft or explosions. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A short burst from a 1942 naval one point one inch automatic antiaircraft gun mounting, overlapping solid mechanical reports, outdoors, no aircraft or explosions. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "40b0c05378b7fdfd1100312073db700918d8ac9c54310208d4c683f405b8e653",
+          "outputHash": "572fb92e19a892be36802b0f4943b9de1bc49b6aaf2cee4ffff056e2bf65bffc",
+          "bytes": 24949
+        }
+      ]
+    },
+    {
+      "id": "aa-20",
+      "file": "audio/aa-20.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "documented",
+      "conditional": false,
+      "prompt": "A short burst from a single naval Oerlikon twenty millimeter antiaircraft cannon, sharp regular automatic reports and mechanical chatter, outdoors, no impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A short burst from a single naval Oerlikon twenty millimeter antiaircraft cannon, sharp regular automatic reports and mechanical chatter, outdoors, no impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "1acb5f8cbc9cd7f353acabf810940bc5ff7940eeef2e4db1643fad775888c220",
+          "outputHash": "ecaf32f5398d3a4a6dee9384aa1a429b1de2ff702863005419bb45bcce6ac247",
+          "bytes": 22790
+        }
+      ]
+    },
+    {
+      "id": "aa-25",
+      "file": "audio/aa-25.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "documented",
+      "conditional": false,
+      "prompt": "A short burst from a Japanese Type 96 twenty-five millimeter naval antiaircraft gun mounting, abrupt heavy automatic chatter with a short pause at the end, outdoors, no impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A short burst from a Japanese Type 96 twenty-five millimeter naval antiaircraft gun mounting, abrupt heavy automatic chatter with a short pause at the end, outdoors, no impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "614ea4861240d74ab3abe99eb4547177dcd9617882f57016d4ef12d89d8afb37",
+          "outputHash": "f56f38b20f5612a69b3a5739e987f3eea555cad3299ee3bf6979ee7d722c3367",
+          "bytes": 26559
+        }
+      ]
+    },
+    {
+      "id": "flak-airburst",
+      "file": "audio/flak-airburst.ogg",
+      "seconds": 3,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One antiaircraft shell bursting in open air, abrupt dry explosive crack with a compact low body and a few brief fragment snaps, open sky with no cavernous echo. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One antiaircraft shell bursting in open air, abrupt dry explosive crack with a compact low body and a few brief fragment snaps, open sky with no cavernous echo. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 3,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "b5d2056aa5446a86f14e2d53a807d25a2075f4c49ad4995f4fd42ecc3136f709",
+          "outputHash": "4cad2dddc2965596fc62900a3afd4755ea28de216a497f2496fd57c7ddbedaa5",
+          "bytes": 36934
+        }
+      ]
+    },
+    {
+      "id": "bomb-deck",
+      "file": "audio/bomb-deck.ogg",
+      "seconds": 6,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One large conventional aerial bomb striking a wooden flight deck over steel and detonating inside a ship, sharp initial impact then a heavy explosive blast, metal debris and a short uneven decay, no sustained fire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One large conventional aerial bomb striking a wooden flight deck over steel and detonating inside a ship, sharp initial impact then a heavy explosive blast, metal debris and a short uneven decay, no sustained fire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 6,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "3d267cf535180a98411c3fa62b1ddf0d2bd9f0fce4f2c98c4032e61411b35258",
+          "outputHash": "78aa013c42d390f74d8d7d5ecd8e4db51f56887d4630d9ad88db4a70014f2ff1",
+          "bytes": 61019
+        }
+      ]
+    },
+    {
+      "id": "bomb-water",
+      "file": "audio/bomb-water.ogg",
+      "seconds": 5,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One conventional aerial bomb exploding in seawater, blunt explosive impact followed by a heavy rising splash and falling sheets of water, outdoors over open ocean. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One conventional aerial bomb exploding in seawater, blunt explosive impact followed by a heavy rising splash and falling sheets of water, outdoors over open ocean. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 5,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "576a4d6b5a6a0920ec8a730615479093ad8a9745b0a79e0adc732454a1f5af21",
+          "outputHash": "533154f16f84ab21e9ee9c5ff7bbf4807c349aa67eed494b143fcc95286d4502",
+          "bytes": 57884
+        }
+      ]
+    },
+    {
+      "id": "torpedo-hit",
+      "file": "audio/torpedo-hit.ogg",
+      "seconds": 6,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One torpedo warhead detonating against a steel ship hull below the waterline as heard above water close to the ship, heavy muffled concussion, hull shock and water surge, no sonar ping. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One torpedo warhead detonating against a steel ship hull below the waterline as heard above water close to the ship, heavy muffled concussion, hull shock and water surge, no sonar ping. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 6,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "869e05003ea5f371e81b859377fd259ee86d6a37a1f0a9623fa5a4eef8b60b20",
+          "outputHash": "049be0113b26c15c65f95678c27812abb50f6c9b63f91077250545256a385bce",
+          "bytes": 58465
+        }
+      ]
+    },
+    {
+      "id": "torpedo-entry",
+      "file": "audio/torpedo-entry.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One heavy aerial torpedo entering the sea at a shallow angle, a forceful splash and short churning water trail, no explosion and no motor heard through the air. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One heavy aerial torpedo entering the sea at a shallow angle, a forceful splash and short churning water trail, no explosion and no motor heard through the air. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "0cf922c54bc524d3547a76f62587cdd1193e336381f681bb54452459d0498682",
+          "outputHash": "8b77b4e41e9c2232560de3863b5e03c12136ae1a85ceacc3766a33d5f3f46f6e",
+          "bytes": 25698
+        }
+      ]
+    },
+    {
+      "id": "aircraft-crash",
+      "file": "audio/aircraft-crash.ogg",
+      "seconds": 5,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One light metal propeller aircraft striking the sea, hard initial water impact, crumpling thin metal and a broad heavy splash, no automatic fuel explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One light metal propeller aircraft striking the sea, hard initial water impact, crumpling thin metal and a broad heavy splash, no automatic fuel explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 5,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "db6e3d3b570fe77522dab7b89ab601a089a1ef803f3ee735aa8ea5f5c07a28bf",
+          "outputHash": "6e3d0d1dd527734890220c8378f7d6b75657718e90e5e56f8fc7711339fcbbd2",
+          "bytes": 55262
+        }
+      ]
+    },
+    {
+      "id": "fuel-fire",
+      "file": "audio/fuel-fire.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": true,
+      "prompt": "Sustained liquid-fuel fire on a damaged ship outdoors, uneven rushing flame with small intermittent crackles, no explosions and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Sustained liquid-fuel fire on a damaged ship outdoors, uneven rushing flame with small intermittent crackles, no explosions and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": []
+    },
+    {
+      "id": "secondary-blast",
+      "file": "audio/secondary-blast.ogg",
+      "seconds": 4,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One compact secondary ammunition explosion inside a burning steel ship, a sudden contained report with rattling metal debris and a brief rough decay. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One compact secondary ammunition explosion inside a burning steel ship, a sudden contained report with rattling metal debris and a brief rough decay. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 4,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "16efdd3b7a49fb1d8f348764a7c2b124d84aa6dd9e28ec1373bf991ee7d09b1a",
+          "outputHash": "4587a667807f8e72d4c784796d73e27e7ba5690f1720c2c18fc0bbb56eacefc4",
+          "bytes": 46642
+        }
+      ]
+    },
+    {
+      "id": "steel-hit",
+      "file": "audio/steel-hit.ogg",
+      "seconds": 1,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "A short cluster of small projectile impacts on a thick steel ship surface, hard metallic strikes and brief ringing, no large explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A short cluster of small projectile impacts on a thick steel ship surface, hard metallic strikes and brief ringing, no large explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 1,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "ed4191a021c65d26f09e58410cbdf5379dfe210396739373e1554b927ec9c716",
+          "outputHash": "681c09e206c30db634e3af77e2712f16209551d22386ffee9283bff37b15ae23",
+          "bytes": 13966
+        }
+      ]
+    },
+    {
+      "id": "hull-collapse",
+      "file": "audio/hull-collapse.ogg",
+      "seconds": 6,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One heavy damaged steel ship structure giving way, slow stressed metal groan followed by tearing plates and falling debris, no monster-like sound and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One heavy damaged steel ship structure giving way, slow stressed metal groan followed by tearing plates and falling debris, no monster-like sound and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 6,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "40d2395dc63b899d1a9589a5766ea8b1ad0eb93448b460fb95bb4fd380cddeb8",
+          "outputHash": "e08edd4e6abbe95a2c194e9263d5f6491819ce61cb5c5b8eb14f469001979bbf",
+          "bytes": 63630
+        }
+      ]
+    },
+    {
+      "id": "water-fragments",
+      "file": "audio/water-fragments.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Several small fragments and bullets striking open seawater in quick succession, sharp little splashes and brief water ticks, no explosive blast. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "Several small fragments and bullets striking open seawater in quick succession, sharp little splashes and brief water ticks, no explosive blast. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "9c02be3f98f53428d8e1b5a66dc7e92813b55860df459feb0203749e86463caa",
+          "outputHash": "a37f5956835d5809bb3e8a482f6834308155cda3aa7b1e0b6ea0d28594f8bf74",
+          "bytes": 25383
+        }
+      ]
+    },
+    {
+      "id": "deck-roll",
+      "file": "audio/deck-roll.ogg",
+      "seconds": 8,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Rubber aircraft wheels rolling steadily over a wooden carrier flight deck, low rolling rumble with restrained repeated plank-joint bumps, no engine and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Rubber aircraft wheels rolling steadily over a wooden carrier flight deck, low rolling rumble with restrained repeated plank-joint bumps, no engine and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "c2ea2241258e18fe1162ce50d996a3f78652e2a3d8cc7f3159101d050f5c10ff",
+          "outputHash": "d0ecd619235b2448acfe6e0d6931794994ec3192a8b7e4972b3754ff4859b6fe",
+          "bytes": 67585
+        }
+      ]
+    },
+    {
+      "id": "wire-catch",
+      "file": "audio/wire-catch.ogg",
+      "seconds": 3,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One aircraft tailhook catching a steel carrier arresting wire, a sharp cable grab, heavy tensioning whine and short mechanical settling as the aircraft slows, no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One aircraft tailhook catching a steel carrier arresting wire, a sharp cable grab, heavy tensioning whine and short mechanical settling as the aircraft slows, no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 3,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "69c21e768b8197ce791c63737158c14405f59352e9c5eb636de84b5203584801",
+          "outputHash": "a94219821d674e9d27eb9ed34eb69660b641630c3f5aaac45cd776f1a1ae745d",
+          "bytes": 34305
+        }
+      ]
+    },
+    {
+      "id": "deck-touchdown",
+      "file": "audio/deck-touchdown.ogg",
+      "seconds": 2,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One naval aircraft landing gear touching down on a wooden carrier deck, two close tire thumps, a brief rubber chirp and light strut compression, no arresting wire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One naval aircraft landing gear touching down on a wooden carrier deck, two close tire thumps, a brief rubber chirp and light strut compression, no arresting wire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 2,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "64e1595aa61e6630f4a6c92d371da03b747abbdbdcfc53626ffc32ecb5177242",
+          "outputHash": "80b0633844da1c9609bd63fc53e76b1aad6eaa6cc2e10094a0119b4e8092e0d7",
+          "bytes": 25483
+        }
+      ]
+    },
+    {
+      "id": "deck-handling",
+      "file": "audio/deck-handling.ogg",
+      "seconds": 3,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": true,
+      "prompt": "One brief aircraft handling action on a wooden carrier deck, heavy rubber wheel nudging a wooden chock with a short wood scrape and one metal fitting clink, no motor and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One brief aircraft handling action on a wooden carrier deck, heavy rubber wheel nudging a wooden chock with a short wood scrape and one metal fitting clink, no motor and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 3,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": []
+    },
+    {
+      "id": "deck-footsteps",
+      "file": "audio/deck-footsteps.ogg",
+      "seconds": 3,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": true,
+      "prompt": "A few practical boot footsteps on a wooden ship flight deck, firm uneven steps with light clothing movement, no marching rhythm and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A few practical boot footsteps on a wooden ship flight deck, firm uneven steps with light clothing movement, no marching rhythm and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 3,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": []
+    },
+    {
+      "id": "ship-machinery",
+      "file": "audio/ship-machinery.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Low continuous steam-powered warship machinery vibration transmitted through the deck, restrained turbine and ventilation hum with faint mechanical pulse, no diesel chug and no whistle. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Low continuous steam-powered warship machinery vibration transmitted through the deck, restrained turbine and ventilation hum with faint mechanical pulse, no diesel chug and no whistle. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "1f44efa8ad5e623b7f0a2c5a048619633d6b4a54e6d582d5ceebf5e500f61e87",
+          "outputHash": "4bc0d4103b835bb18050e9f540799acb46b6c8118c64d79d05373e5c2d5f9b24",
+          "bytes": 90194
+        }
+      ]
+    },
+    {
+      "id": "hull-wash",
+      "file": "audio/hull-wash.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Steady seawater rushing and slapping along the hull of a moving large ship, broad water wash and small irregular splashes, no surf breaking on shore and no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Steady seawater rushing and slapping along the hull of a moving large ship, broad water wash and small irregular splashes, no surf breaking on shore and no engine. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "9633efdaba7e0090a21717b5955ca4f6d9e96835e0e0a534cc31637d1c1ecc35",
+          "outputHash": "43376e380d9fa3ad8b7fe9a959e7d955dcef64c846a471664a396182418d0408",
+          "bytes": 109185
+        }
+      ]
+    },
+    {
+      "id": "general-alarm",
+      "file": "audio/general-alarm.ogg",
+      "seconds": 6,
+      "loop": false,
+      "identity": "unverified",
+      "conditional": false,
+      "prompt": "A plausible early-1940s naval electromechanical general alarm, repeated firm metallic gong strikes with short natural resonance through a small shipboard loudspeaker, regular urgent pulse, no voice and no submarine diving klaxon. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A plausible early-1940s naval electromechanical general alarm, repeated firm metallic gong strikes with short natural resonance through a small shipboard loudspeaker, regular urgent pulse, no voice and no submarine diving klaxon. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 6,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "6e1bb45c3c632522df5f6a2ac0cc82c690b67f868e54b0863cd92946d77128e8",
+          "outputHash": "6dfc8232733a42357270ca23731c8addf4235abc660306df06eb5d9f6425d36c",
+          "bytes": 63059
+        }
+      ]
+    },
+    {
+      "id": "radio-key",
+      "file": "audio/radio-key.ogg",
+      "seconds": 1,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One short analog aircraft radio transmission opening and closing, a quiet microphone switch click, brief soft static onset and a clean cutoff click, no speech, no digital beep. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One short analog aircraft radio transmission opening and closing, a quiet microphone switch click, brief soft static onset and a clean cutoff click, no speech, no digital beep. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 1,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "e2634683cac018cf2167e4001ef69652cbb4e559d425b888305f394ddfcf8580",
+          "outputHash": "cc3852f1bf66ee306bd6246d16bc9b96f8ba97fdee1adfc8518ea4294f2558cd",
+          "bytes": 15564
+        }
+      ]
+    },
+    {
+      "id": "radio-static",
+      "file": "audio/radio-static.ogg",
+      "seconds": 8,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Low-level analog aircraft radio receiver hiss with subtle irregular crackle, narrow and restrained, no speech, no morse, no digital tones and no sweeping interference. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Low-level analog aircraft radio receiver hiss with subtle irregular crackle, narrow and restrained, no speech, no morse, no digital tones and no sweeping interference. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "d370fdddb895f5f7a1757a1393b46684fcc01ec5b11bb87ac7dfbb8194d3084d",
+          "outputHash": "d01bd2cb0d76a6eabc7b5fff1c1e5670f50e8964d26b5555037522073714479a",
+          "bytes": 83135
+        }
+      ]
+    },
+    {
+      "id": "ocean-wind",
+      "file": "audio/ocean-wind.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "Steady moderate wind over open Pacific seawater with restrained natural gust texture, distant soft water surface noise, no storm, no birds and no ship. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Steady moderate wind over open Pacific seawater with restrained natural gust texture, distant soft water surface noise, no storm, no birds and no ship. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "ea8e35e5e4397213a3329d5f1c5e9c721d90583963b68400d878baf9e765ecf3",
+          "outputHash": "060d5d63a556e9a2c9215b1e6666f1eb047b731086eca0e7a0136f1f79ed9220",
+          "bytes": 213838
+        }
+      ]
+    },
+    {
+      "id": "reef-surf",
+      "file": "audio/reef-surf.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "documented",
+      "conditional": false,
+      "prompt": "Small Pacific ocean waves breaking across a shallow coral reef and washing onto a low island shore, irregular gentle surf with natural gaps, no storm and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "Small Pacific ocean waves breaking across a shallow coral reef and washing onto a low island shore, irregular gentle surf with natural gaps, no storm and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "9b0d7aba396be3c83055e0ec17d33575d8551cdfc9f22d97a40f63cabd7227ea",
+          "outputHash": "b883d41c7bc6a63bf6b92f21022cdcd565e06b42875488cb23b7848ca40ed219",
+          "bytes": 106278
+        }
+      ]
+    },
+    {
+      "id": "albatross",
+      "file": "audio/albatross.ogg",
+      "seconds": 5,
+      "loop": false,
+      "identity": "documented",
+      "conditional": true,
+      "prompt": "A few natural Laysan albatross whinnies and dry bill clacks at a Pacific island nesting colony, sparse separated calls, no generic gull cries and no other birds. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A few natural Laysan albatross whinnies and dry bill clacks at a Pacific island nesting colony, sparse separated calls, no generic gull cries and no other birds. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 5,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": []
+    },
+    {
+      "id": "fire-hose",
+      "file": "audio/fire-hose.ogg",
+      "seconds": 8,
+      "loop": true,
+      "identity": "reconstruction",
+      "conditional": true,
+      "prompt": "A shipboard fire hose spraying a steady forceful stream of water onto a hard nearby surface, pressurized water hiss and splashing runoff, no pump motor and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+      "request": {
+        "text": "A shipboard fire hose spraying a steady forceful stream of water onto a hard nearby surface, pressurized water hiss and splashing runoff, no pump motor and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. Seamless steady loop, no fade-in or fade-out.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": []
+    },
+    {
+      "id": "ship-whistle",
+      "file": "audio/ship-whistle.ogg",
+      "seconds": 3,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": true,
+      "prompt": "One restrained steam whistle blast from an early-1940s steam-powered warship outdoors, natural breathy mechanical tone and short decay, no modern electronic horn and no submarine klaxon. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One restrained steam whistle blast from an early-1940s steam-powered warship outdoors, natural breathy mechanical tone and short decay, no modern electronic horn and no submarine klaxon. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 3,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": []
+    }
+  ],
+  "speech": [
+    {
+      "id": "R01",
+      "slug": "r01",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Unidentified aircraft in sight. Investigating.",
+      "substitutions": {},
+      "file": "audio/voice/r01.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "HnyjRz0sFpoKtsYfJq6l",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "2b0ad34dc5bd8ca3cfdaadaf3ac93eae1de64b8f452d7bf428e1e7847cef6851",
+          "outputHash": "dca2ca702425329c437b522f813d4e6708c2341bcd665a3cfb7bf66fb0a237d5",
+          "bytes": 62932
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "slug": "r02-north",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Enemy aircraft sighted to the north of our task force.",
+      "substitutions": {
+        "direction": "north"
+      },
+      "file": "audio/voice/r02-north.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "RbvxQk6TM6HeH7aO6D41",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "c21022c59b92bb857bba3a7b36fd74004ee060df64064340a0e0e922accff45f",
+          "outputHash": "2b45c8bc68a4f6422e16cc0419b689bb86d62f2a2c2f6a2328faeae9080b6a1f",
+          "bytes": 61688
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "slug": "r02-northeast",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Enemy aircraft sighted to the northeast of our task force.",
+      "substitutions": {
+        "direction": "northeast"
+      },
+      "file": "audio/voice/r02-northeast.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "Dv8pUgHWiZjlWjVelMbi",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "735cecadb56ff8da11d420fc464f5c0f860bfcce06f81830adc16b87398288f7",
+          "outputHash": "24762c74ef7f034333f9549c1a2a6351df035740d0299fb469aee307c163dcec",
+          "bytes": 65923
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "slug": "r02-east",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Enemy aircraft sighted to the east of our task force.",
+      "substitutions": {
+        "direction": "east"
+      },
+      "file": "audio/voice/r02-east.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "T63ruxVZRoaLhZDghXUV",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "0e89b8cbf1e083790dec04eb1180974d8b8c3806859100be92ef5522628832e8",
+          "outputHash": "a6af6d803b89c022628751fcbe2c95a3884c0f6acb1423092a80601d4fcef626",
+          "bytes": 67844
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "slug": "r02-southeast",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Enemy aircraft sighted to the southeast of our task force.",
+      "substitutions": {
+        "direction": "southeast"
+      },
+      "file": "audio/voice/r02-southeast.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "cnot6J4yaiFtn5HSo8g9",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "e7fe53422d1ae846c29039753917d3734459d278c9e7e59220227caabc898c19",
+          "outputHash": "a9858b4662c6a73825e10242d306c15a8e572907c7fba6140c98f6adab003760",
+          "bytes": 70376
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "slug": "r02-south",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Enemy aircraft sighted to the south of our task force.",
+      "substitutions": {
+        "direction": "south"
+      },
+      "file": "audio/voice/r02-south.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "jSWqnp2ihWD4Jj9FVq1H",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "f8f0615a8ee1b175767dd9b355986769015a492411c25f55a6d098fab62d69da",
+          "outputHash": "31bdbfaa4b9c2246ffe16b883a174f9e70433d475bf72b16f46d7f072f772ef3",
+          "bytes": 65255
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "slug": "r02-southwest",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Enemy aircraft sighted to the southwest of our task force.",
+      "substitutions": {
+        "direction": "southwest"
+      },
+      "file": "audio/voice/r02-southwest.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "x75YBy0Yfs0c7npEpL9R",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "fd348287ddabe5bf3003c4c954d671468ee41fb4b37eeedcaacdc18ffcc2d3af",
+          "outputHash": "f84bab3c9094e227ccc04217d27127318a3763d3eb49775f0fc6defed1aa0544",
+          "bytes": 76080
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "slug": "r02-west",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Enemy aircraft sighted to the west of our task force.",
+      "substitutions": {
+        "direction": "west"
+      },
+      "file": "audio/voice/r02-west.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "xszXtfM74xQsKczNixdI",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "3c5f78c7ee1dc4c65fe531dbf352acbaf5fed2bc7f218312c8d31acb83d0a86f",
+          "outputHash": "c110a8ed65b30d19591a77d95956232cd6cba47014f555831998a57ac7ecaf6e",
+          "bytes": 61223
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "slug": "r02-northwest",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Enemy aircraft sighted to the northwest of our task force.",
+      "substitutions": {
+        "direction": "northwest"
+      },
+      "file": "audio/voice/r02-northwest.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "9jTKM7h0eOYCwOWzCTOp",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "08ad72ba6fee439fb7210733b37aea3cd8c4e2cb541e8b20a8627a93ddd85b0f",
+          "outputHash": "ebd494326cca92d2b73491f23513ca14865bb41f344723febacdcd2c6efe5ebd",
+          "bytes": 68473
+        }
+      ]
+    },
+    {
+      "id": "R03",
+      "slug": "r03",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Zeros in sight. Fighters, watch your altitude.",
+      "substitutions": {},
+      "file": "audio/voice/r03.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "su1VBJyxB8MhAo69n7F5",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "dd2581f8ff1de8bfb183eb9893435a0a8ff5ca48f9a64cbd98541892ef9b6673",
+          "outputHash": "e1f0627009b84128185697a03c88df6790f8cd69b5b0744469df6856f4e5ac35",
+          "bytes": 64059
+        }
+      ]
+    },
+    {
+      "id": "R04",
+      "slug": "r04",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Large ships sighted. Possible carriers. Sending position.",
+      "substitutions": {},
+      "file": "audio/voice/r04.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "Zp5PYH7FVW2jypu8n3Ln",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "ab1565ea59b3bb005f8e32f4452314486aef9430c343762c93fe55b9061a9396",
+          "outputHash": "725ffaa748af1ef6aebf14e52c8b034bd1fca9bf64618e89af4029922ef4caad",
+          "bytes": 74854
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "slug": "r05-north",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to the strike group. Enemy ships are reported moving north. Check your attack course.",
+      "substitutions": {
+        "direction": "north"
+      },
+      "file": "audio/voice/r05-north.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "Nasia2kgLCgj2HBYnp7b",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "b771eb4f17e9ae181d7301598de5ba337b90f4ff65e9b35e9e25568d89709bc7",
+          "outputHash": "246bd2de14dbe1b0930002a987d177152b56ff9c80a5dd6c7f80fbfe2d1eea1b",
+          "bytes": 69864
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "slug": "r05-northeast",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to the strike group. Enemy ships are reported moving northeast. Check your attack course.",
+      "substitutions": {
+        "direction": "northeast"
+      },
+      "file": "audio/voice/r05-northeast.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "n6f7uJrTBSbcCWBD6yaS",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "ad0f4740a11ebb881645dc2b0834d2b0fd41837efb8b5731cfd5042944db4b33",
+          "outputHash": "47f70ff7875c874e3707f4925a9e7def43963df6dc3c632d2f5feed67565ef38",
+          "bytes": 81773
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "slug": "r05-east",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to the strike group. Enemy ships are reported moving east. Check your attack course.",
+      "substitutions": {
+        "direction": "east"
+      },
+      "file": "audio/voice/r05-east.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "fTfCe6U8BjzUO4JkMchu",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "bcfb0d5e00ee59600b321cb8dd2b783550e576428067ec32bc2c90ef856a8b3e",
+          "outputHash": "0aa169bfd47464d663680709e8c05b3ec3c4373c32032ba31b6f574a9845a218",
+          "bytes": 75539
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "slug": "r05-southeast",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to the strike group. Enemy ships are reported moving southeast. Check your attack course.",
+      "substitutions": {
+        "direction": "southeast"
+      },
+      "file": "audio/voice/r05-southeast.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "en38wSCMC8Z44zAEhF19",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "b735ca630355d16802f6597b4dc053e1d6c2cb55006082323344884641a92d8f",
+          "outputHash": "59408c33b77e8f6646f395fd8a71d63b0e53994b158022a0a621593f75434425",
+          "bytes": 73172
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "slug": "r05-south",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to the strike group. Enemy ships are reported moving south. Check your attack course.",
+      "substitutions": {
+        "direction": "south"
+      },
+      "file": "audio/voice/r05-south.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "aw1pppP4tXPR6sLaR57p",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "3285f7e46fffa7e754bfdb18226c3c029d259653dc633581e06620a3697bcfa3",
+          "outputHash": "ecfb164427fc90dcbe252b4f80311cb5f623aae882872cad3f40aa5a817fb812",
+          "bytes": 66108
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "slug": "r05-southwest",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to the strike group. Enemy ships are reported moving southwest. Check your attack course.",
+      "substitutions": {
+        "direction": "southwest"
+      },
+      "file": "audio/voice/r05-southwest.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "lhJymYvYSRm3CI1ioSqU",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "35bf161e21e5b150b92576121384ca493e5d867e910eb84d76e965d2f8d418dd",
+          "outputHash": "0437aef45d5bfc5c2485709429f22c025dfed91886581e3d0901b677a517d231",
+          "bytes": 74380
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "slug": "r05-west",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to the strike group. Enemy ships are reported moving west. Check your attack course.",
+      "substitutions": {
+        "direction": "west"
+      },
+      "file": "audio/voice/r05-west.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "o41Chvd0ZlNnrUbiXyZS",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "a48340012af635b8750efa352220bdd7a47dddba1fad14f4051a0ca00703335e",
+          "outputHash": "219b2eab6657caaf02100c2b79b746d817cb08a0af7331624953e0f01b154951",
+          "bytes": 68872
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "slug": "r05-northwest",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to the strike group. Enemy ships are reported moving northwest. Check your attack course.",
+      "substitutions": {
+        "direction": "northwest"
+      },
+      "file": "audio/voice/r05-northwest.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "z4LdNFDl5dpZqoYPeTpx",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "c42484709ad8e2083f0abb31063d986f52aa0c3dd4e4e485b0b80337840aebfe",
+          "outputHash": "26ca9b86332582bfa4495860738c0ebbbfd42705e5dae1d3449315074f8cf0c9",
+          "bytes": 72547
+        }
+      ]
+    },
+    {
+      "id": "R06",
+      "slug": "r06",
+      "voice": "control",
+      "priority": 1,
+      "text": "Enterprise to all fighters. Zeros are strafing our flight deck. Intercept immediately.",
+      "substitutions": {},
+      "file": "audio/voice/r06.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "WPZckbU71PKP3oEf0tsn",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "978393eda84e326a81614ca824578315b37ab4f3d78a16e34f8359148580b985",
+          "outputHash": "320542ac87a3023b6f0c4c683ef29a8d341d736b1cb4f92d49e023769af42132",
+          "bytes": 70926
+        }
+      ]
+    },
+    {
+      "id": "R07",
+      "slug": "r07",
+      "voice": "control",
+      "priority": 1,
+      "text": "Enterprise to all fighters. Enemy dive bombers are coming in on us. Break up their attack.",
+      "substitutions": {},
+      "file": "audio/voice/r07.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "ADpU8tQSzpd0194NxTSj",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "bfbea2fc456f9eec62bcb879dd107a04caae3c0c0ca511a91953c3e9c9cb39fb",
+          "outputHash": "be0c723ff3ae32e9e296b62eedac7dc09b31392f224a580126127f535df656ce",
+          "bytes": 69698
+        }
+      ]
+    },
+    {
+      "id": "R08",
+      "slug": "r08",
+      "voice": "control",
+      "priority": 1,
+      "text": "Enterprise to all fighters. Torpedo planes low over the water. Intercept before they release.",
+      "substitutions": {},
+      "file": "audio/voice/r08.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "HACUHM89d6m1ET78wHSO",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "3ca0c10c9a2719cd2985fd5180229248b7c2e184f1349422dedf1a30bd2ba96d",
+          "outputHash": "19e5a0024c8eb7ebefd243f3589965ac2cc21bd4f742e8d683cd28e60b35e625",
+          "bytes": 71612
+        }
+      ]
+    },
+    {
+      "id": "R09",
+      "slug": "r09",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. We have the enemy fighters in sight. Moving to intercept.",
+      "substitutions": {},
+      "file": "audio/voice/r09.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "kLy1FwiCHpz0EiUveswC",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "a3a7d2d1167313c087ff204c9f72faa53bb7efde0c42278d5c864c99c189bf98",
+          "outputHash": "6849ccc196bbc5d06fc4c25485cb00611110478190e4e6e3d5a92a6b972bf16e",
+          "bytes": 57197
+        }
+      ]
+    },
+    {
+      "id": "R10",
+      "slug": "r10",
+      "voice": "control",
+      "priority": 3,
+      "text": "Enterprise to all aircraft. The immediate attack has broken off. Maintain your patrol.",
+      "substitutions": {},
+      "file": "audio/voice/r10.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "YrgvaCHwDZ3yRVUp4icQ",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "017155ae374a446289d9043d8fa027630d283e2a3e0857782476ccdcd10479ae",
+          "outputHash": "a5051457778ffa638d1f6d4d1e3776893a61381dae69e03b82ca08c65ee69745",
+          "bytes": 69750
+        }
+      ]
+    },
+    {
+      "id": "R11",
+      "slug": "r11",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to all aircraft. Our flight deck is damaged. Stand by for recovery instructions.",
+      "substitutions": {},
+      "file": "audio/voice/r11.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "1rzObMG5odN6hgsPPr2R",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "685b04016acd7973375339e202281269bdeeffdb29c10346d6e434eb3a210881",
+          "outputHash": "c65754f635c20322086c868f1a5fe60af94d4b106609096fd8156bc496cd5397",
+          "bytes": 71814
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "slug": "r12-enterprise",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to all aircraft. Enterprise reports fire aboard. Keep clear of the ship.",
+      "substitutions": {
+        "ship": "Enterprise"
+      },
+      "file": "audio/voice/r12-enterprise.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "3pWWAKDvJ5fV8A0ZXRG0",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "f5403e9dacf913855948c53b81a01e413afc70c0a0014eb5e3ad6bbe0e4def64",
+          "outputHash": "6326888cd913c0d97b2e3204c4314f1bd556c9ee17ac062ef7a66f9c889be2a8",
+          "bytes": 58923
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "slug": "r12-hornet",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to all aircraft. Hornet reports fire aboard. Keep clear of the ship.",
+      "substitutions": {
+        "ship": "Hornet"
+      },
+      "file": "audio/voice/r12-hornet.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "XjuA0xeNEp1BLE9XlRWr",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "6f0a709ec9898d004b5beef2e87703e6204c4cc90b77604f0e71a220a0565786",
+          "outputHash": "0528b425cd1ba7666822f68ff3a1ece5b1114227b5e57a9429c8978dfc71fe08",
+          "bytes": 52858
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "slug": "r12-yorktown",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to all aircraft. Yorktown reports fire aboard. Keep clear of the ship.",
+      "substitutions": {
+        "ship": "Yorktown"
+      },
+      "file": "audio/voice/r12-yorktown.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "I9f9HZdDNJOCgk9vTPe3",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "e0c74c6f4755adf3feb18bc2f902a2ec5c4671205a3c4a48754f10563db1a5f6",
+          "outputHash": "d8e03c1efba06c6bc29eb7aaeaf3a534b2ef455eee7c155ed7329e85f6a133df",
+          "bytes": 63167
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "slug": "r12-akagi",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to all aircraft. Akagi reports fire aboard. Keep clear of the ship.",
+      "substitutions": {
+        "ship": "Akagi"
+      },
+      "file": "audio/voice/r12-akagi.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "PpqAUIEjHxZoM7pTxmam",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "3832bfb845c7d75c22e5e62345c48205886f6fbeab0c99f551e93e0e92285328",
+          "outputHash": "0a58875c0bb8404666ca1a6dd53a977dec8c46766c4f914156376f3d0073c75e",
+          "bytes": 68544
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "slug": "r12-kaga",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to all aircraft. Kaga reports fire aboard. Keep clear of the ship.",
+      "substitutions": {
+        "ship": "Kaga"
+      },
+      "file": "audio/voice/r12-kaga.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "dWJQQzQ9KZtfZgf8TPZm",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "b9da900611e3e0720125139d1eed9b8c75ec33441d3d0090ff4163e437e02f4c",
+          "outputHash": "bd61137366708f4b1a0f905be87bf12f380f8ade95ab98a6efab34c40c04239b",
+          "bytes": 66121
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "slug": "r12-soryu",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to all aircraft. Soryu reports fire aboard. Keep clear of the ship.",
+      "substitutions": {
+        "ship": "Soryu"
+      },
+      "file": "audio/voice/r12-soryu.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "NdqySr8hV2Qfthg5B7or",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "2d2c5e40191e80a26e0c29d8d593c82cdf7779fad966df5ceabb8cfb63c09d31",
+          "outputHash": "3ab9618cad8201392a5e3243f8d021a6a7a728468f1fdacb916974dcc0728bff",
+          "bytes": 66690
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "slug": "r12-hiryu",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to all aircraft. Hiryu reports fire aboard. Keep clear of the ship.",
+      "substitutions": {
+        "ship": "Hiryu"
+      },
+      "file": "audio/voice/r12-hiryu.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "xwsUpAWMeGN0rr4mYvs5",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "e53e8056a3730db4d3138660f63a50d77cd03c000590b91773a419a240067faf",
+          "outputHash": "9fcc5f496cfd6f492320ab1c46d1223ae2213cfe2ce9e7a0023bc2b793e591ce",
+          "bytes": 57249
+        }
+      ]
+    },
+    {
+      "id": "R13",
+      "slug": "r13",
+      "voice": "gunner",
+      "priority": 1,
+      "text": "Engine's running rough. Watch your power.",
+      "substitutions": {},
+      "file": "audio/voice/r13.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "u9nBMcXf8QWIsbMg61VW",
+          "voiceId": "DiD9RqNjUHH94s2cG1ol",
+          "sourceHash": "47c495d9cd525a0f738194f418e02c1c6b7a971f65bfc39682399dc6af8d2144",
+          "outputHash": "22454f636fdad060f3ab423a7a3e1b10a53cd6af859605d182a9b3bef72f566d",
+          "bytes": 31423
+        }
+      ]
+    },
+    {
+      "id": "R14",
+      "slug": "r14",
+      "voice": "gunner",
+      "priority": 1,
+      "text": "Fuel is running low. We need to head home.",
+      "substitutions": {},
+      "file": "audio/voice/r14.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "wmwqoma5BjLawUN4zuNP",
+          "voiceId": "DiD9RqNjUHH94s2cG1ol",
+          "sourceHash": "2b6e7c2ee107583a570c91a3e5ea0c566e131616d41e92803a29e23c26c13cb8",
+          "outputHash": "f1aec8ab10f1d1ff43542f0d8358da74f934b9fbbd89feb095a5b0591ffc34bd",
+          "bytes": 33905
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "slug": "r15-enterprise",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Enterprise is going down.",
+      "substitutions": {
+        "ship": "Enterprise"
+      },
+      "file": "audio/voice/r15-enterprise.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "EpXP4yhcKt2ojcNECqFp",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "5cbb8a696c3da3ed0ba7495ae9942aea69983bb96fa42b7431188aa070f36f24",
+          "outputHash": "07ce3166e92b72e7fbbe176b504a321cf2faf7e1a7a076a1fbdeb80dc325499d",
+          "bytes": 47477
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "slug": "r15-hornet",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Hornet is going down.",
+      "substitutions": {
+        "ship": "Hornet"
+      },
+      "file": "audio/voice/r15-hornet.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "UVwFYc5GkX4F8Vy19UN8",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "84d6cc7776b15d1c8c76cfa263d82342c70718d07b6c851e440e01244d333182",
+          "outputHash": "0549e9c13dd69c29466f23955c876efbc558cc87922724a971e9df7ffa5b501a",
+          "bytes": 43870
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "slug": "r15-yorktown",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Yorktown is going down.",
+      "substitutions": {
+        "ship": "Yorktown"
+      },
+      "file": "audio/voice/r15-yorktown.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "tXpfKWYl9WACS3AbKyMx",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "1e253156360ff6db2cc0e3ba86625a9633384896ea731db1264ce8f211887925",
+          "outputHash": "82ba3a6f4b2e6cd91263784f5977e7eea18622243207c6423720c0c2827bf252",
+          "bytes": 45402
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "slug": "r15-akagi",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Akagi is going down.",
+      "substitutions": {
+        "ship": "Akagi"
+      },
+      "file": "audio/voice/r15-akagi.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "fK824OBaXnb0waMq6GrD",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "f39fa47ce6b074c2564a4c6ef84cc214fdb697b215e5ca6a0f5394dbdd8c85d1",
+          "outputHash": "52b6a2d6d9cb1de915c87a38719f0c861649b23263a8434280a4df7dd0b113ca",
+          "bytes": 44978
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "slug": "r15-kaga",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Kaga is going down.",
+      "substitutions": {
+        "ship": "Kaga"
+      },
+      "file": "audio/voice/r15-kaga.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "O0U4KYx71BwYvwoEWQrR",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "f3144151a664b412765558b81363c318c09e9021414d2a04c02e9636b37cb093",
+          "outputHash": "09461a82be21e0e65c683b179cf8d395c47a7f96c7b0aa42249864225536cd4c",
+          "bytes": 46856
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "slug": "r15-soryu",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Soryu is going down.",
+      "substitutions": {
+        "ship": "Soryu"
+      },
+      "file": "audio/voice/r15-soryu.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "yCGpOzkMiPoIoQhq3PzO",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "485a2cf1043dac7d5acbd9cf5933b44da7905ed98f7f97f0ad838981769c3d8e",
+          "outputHash": "4fdf7484c4d3b4aeb7e981debe47ae1641810af57f39ac34e480f3537f698e3d",
+          "bytes": 43535
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "slug": "r15-hiryu",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Hiryu is going down.",
+      "substitutions": {
+        "ship": "Hiryu"
+      },
+      "file": "audio/voice/r15-hiryu.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "LcTQlszScKLEpQ3wrgLf",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "10877bccd076977d96ddb89c438ed3059e1bb40efb6a4f43cda5ec6a43110b0f",
+          "outputHash": "24597fc73de0d18f4da7105ceed8383de7c69ca323f13721f82a0554808b2b17",
+          "bytes": 47936
+        }
+      ]
+    },
+    {
+      "id": "R16",
+      "slug": "r16",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. Target in sight. Following you in.",
+      "substitutions": {},
+      "file": "audio/voice/r16.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "QHj0yE2uIetvFnf9e5CX",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "cd1adae08005be79d4b32f1993c4c417e3b5ebcc69f5a18e46a274cb5b6bd33a",
+          "outputHash": "68f4dcd2a254123cf49de24263a8085a8bf69835adef4d3311a4307e598d4286",
+          "bytes": 43306
+        }
+      ]
+    },
+    {
+      "id": "R17",
+      "slug": "r17",
+      "voice": "gunner",
+      "priority": 3,
+      "text": "Bomb away.",
+      "substitutions": {},
+      "file": "audio/voice/r17.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "7vWzCThpLnkvOoxNmLEG",
+          "voiceId": "DiD9RqNjUHH94s2cG1ol",
+          "sourceHash": "9a3d2608f4080cf95ccce26afd10cedeff34116495a5800086a1668fa2a3208b",
+          "outputHash": "7eaf4015b504929216368d74541b768c33fdc27a9ac4975a658ef95e85959718",
+          "bytes": 14456
+        }
+      ]
+    },
+    {
+      "id": "R18",
+      "slug": "r18",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Hits on the carrier. She's burning.",
+      "substitutions": {},
+      "file": "audio/voice/r18.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "5PCZieeYKzix8wY5yhbC",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "8a8b053378274aabdf87a451478efcb205b87e9c08aac389b96b60ad1e654c19",
+          "outputHash": "121131c0e01f5291d2e7e0dd2dd6c7ac055d5fcd35fe2914a94bdcf1c6134a74",
+          "bytes": 55382
+        }
+      ]
+    },
+    {
+      "id": "R19",
+      "slug": "r19",
+      "voice": "gunner",
+      "priority": 1,
+      "text": "Fighter behind us! Break!",
+      "substitutions": {},
+      "file": "audio/voice/r19.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "kxfv9iruIcKXeTYcZGXB",
+          "voiceId": "DiD9RqNjUHH94s2cG1ol",
+          "sourceHash": "695d937a09dd15bb41f562196e3480b63bc7c5e05c686fb714bb73fc9964a7a3",
+          "outputHash": "7d8360cf3da23ceab8b26ee3e1a0b2b409bfddae7c225428852139ef211a22e4",
+          "bytes": 28835
+        }
+      ]
+    },
+    {
+      "id": "R20",
+      "slug": "r20",
+      "voice": "wingman",
+      "priority": 3,
+      "text": "Scout Three to Enterprise. Contact lost. Last position reported.",
+      "substitutions": {},
+      "file": "audio/voice/r20.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "HtPMZZ67r9aHDA3LJ32N",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "5c03fdf9012e971972ab38321be5121b8b3b2842ed4719dda84095c44c7dfef5",
+          "outputHash": "6f8e765da5c62f0e462b7aea1fe58c36b1f8d97d7bbaa28df494458cdd0e9ef8",
+          "bytes": 56170
+        }
+      ]
+    },
+    {
+      "id": "R21",
+      "slug": "r21",
+      "voice": "control",
+      "priority": 3,
+      "text": "Enterprise to returning aircraft. Deck is clear. Join the landing pattern.",
+      "substitutions": {},
+      "file": "audio/voice/r21.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "lx54qfs50tCKbeKG3YpW",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "2adc1adffd8cb2533c09f9a216a4f501265371578c3d771ac4ce909562dcc828",
+          "outputHash": "08846e10a4fb5d2caede32b9668cda1f464178e18eb16875734e9c8ee911fd06",
+          "bytes": 53040
+        }
+      ]
+    },
+    {
+      "id": "R22",
+      "slug": "r22",
+      "voice": "control",
+      "priority": 1,
+      "text": "Wave off! Deck is not clear. Go around.",
+      "substitutions": {},
+      "file": "audio/voice/r22.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "ZXN3rwdCAHrNeg9ojHOx",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "64d7703f7c034b99a41f71820b23b14e3acb219ea160c5f9f4b006d0cba20183",
+          "outputHash": "1ea5df27afb1b088b161b4aa80ed2cdf26112516f82da8fc1970099e1455d183",
+          "bytes": 36806
+        }
+      ]
+    },
+    {
+      "id": "R23",
+      "slug": "r23",
+      "voice": "control",
+      "priority": 2,
+      "text": "Enterprise to Yorktown aircraft. Recover aboard Enterprise. Join the landing pattern.",
+      "substitutions": {},
+      "file": "audio/voice/r23.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "oaIWx1QiZDF1Jf0DThLC",
+          "voiceId": "7c5Y5rWii5opQH2jx0Mf",
+          "sourceHash": "95d9f41d99bd897b4d874e631a96d77b7e4bf1110d7684967925a593ab7b1e66",
+          "outputHash": "d7634358188845563b4961f8ebc2314010bf044b4f094919b1470cdc4c1ce8db",
+          "bytes": 69661
+        }
+      ]
+    },
+    {
+      "id": "R24",
+      "slug": "r24",
+      "voice": "wingman",
+      "priority": 3,
+      "text": "Scout Three. Forming up on your wing.",
+      "substitutions": {},
+      "file": "audio/voice/r24.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "hKreNQ7tWlxncpWwEpV6",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "348115a4146b604feab3c5caba3572f0a92f68bca4c2db74724868e0d542abe6",
+          "outputHash": "bd032687f785617768ff3958622c6457d3aca451257de838e072348a7353f5ac",
+          "bytes": 34661
+        }
+      ]
+    },
+    {
+      "id": "R25",
+      "slug": "r25",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three to Enterprise. Pilot in the water. Marking the position.",
+      "substitutions": {},
+      "file": "audio/voice/r25.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "gDTnWbTCBxRygvPjJPnI",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "78ec6f7a84fa57ca2b392ee907e127a8149a4766ac6f56adf7923a2cce3bb743",
+          "outputHash": "2383f0ff68f94d598b0d03b152e460feec424d9ef929587238cbeabe0aea7184",
+          "bytes": 53456
+        }
+      ]
+    },
+    {
+      "id": "P01",
+      "slug": "p01",
+      "voice": "pa",
+      "priority": 2,
+      "text": "General quarters. General quarters. All hands to battle stations.",
+      "substitutions": {},
+      "file": "audio/voice/p01.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "aczKRzrLDZQq8kMVX3G3",
+          "voiceId": "CU4gwOi8yZ4CZPhogzYp",
+          "sourceHash": "e5438aec74e2e77f100d1aa442282e07aa01199b3cfcc79a437456d65b1c2c99",
+          "outputHash": "602173f816f1cf2a7b3cca905c347afcb190655fb3f35c0b106c57a574d35e27",
+          "bytes": 56680
+        }
+      ]
+    },
+    {
+      "id": "P02",
+      "slug": "p02",
+      "voice": "pa",
+      "priority": 3,
+      "text": "Flight quarters. Stand by to launch aircraft. Keep the flight deck clear.",
+      "substitutions": {},
+      "file": "audio/voice/p02.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "bgYp76vnfmujPtv4pcu6",
+          "voiceId": "CU4gwOi8yZ4CZPhogzYp",
+          "sourceHash": "f2f449db12769cacd41e62391e1f9194034c53bef2bd0ae07ea311a267fa55e7",
+          "outputHash": "d408f34c2c9212eeace76a8affa638d9f091c4c248b3b737f7affc2f55ff22e5",
+          "bytes": 66834
+        }
+      ]
+    },
+    {
+      "id": "P03",
+      "slug": "p03",
+      "voice": "pa",
+      "priority": 1,
+      "text": "Enemy aircraft approaching. All exposed personnel take cover.",
+      "substitutions": {},
+      "file": "audio/voice/p03.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "D6n8a9PwKWaN77kaaq96",
+          "voiceId": "CU4gwOi8yZ4CZPhogzYp",
+          "sourceHash": "0123e2bb025abb3cb389b66cab52a6566e6a3c64cf0f2d962d82b09ec27d5843",
+          "outputHash": "42286c7f140d1d6c9c817ed3aad52a18288dd6d92d1ee5ff92e58131c0b1aa08",
+          "bytes": 49651
+        }
+      ]
+    },
+    {
+      "id": "P04",
+      "slug": "p04",
+      "voice": "pa",
+      "priority": 1,
+      "text": "Fire on the flight deck. Repair parties to your stations.",
+      "substitutions": {},
+      "file": "audio/voice/p04.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "aLfGjnQAtUwwkLM2JtHz",
+          "voiceId": "CU4gwOi8yZ4CZPhogzYp",
+          "sourceHash": "2025e6c8c01941312f566e9e7904edf1d9af681bf706822a8366a5bf26c39abd",
+          "outputHash": "dcab95a8b239cf0e132cc514d5395b89cee995306376f50ec25f10a1787470d2",
+          "bytes": 48393
+        }
+      ]
+    },
+    {
+      "id": "P05",
+      "slug": "p05",
+      "voice": "pa",
+      "priority": 1,
+      "text": "Torpedoes approaching. Stand by for emergency maneuver.",
+      "substitutions": {},
+      "file": "audio/voice/p05.ogg",
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": "pkUwdhp3K0yENkin4Lym",
+          "voiceId": "CU4gwOi8yZ4CZPhogzYp",
+          "sourceHash": "8f30907c83f97b406760e18d0fc1fda4a61b826be74803eba5739f81d55c7b88",
+          "outputHash": "bff2f043641c7c54308301508dfd62159d4d811dfb8b240d25e7819e9ba679aa",
+          "bytes": 43237
+        }
+      ]
+    }
+  ]
+}

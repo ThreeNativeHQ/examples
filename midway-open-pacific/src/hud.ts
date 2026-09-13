@@ -157,9 +157,9 @@ export class Hud {
     }
     $("toast").style.opacity = performance.now() < this.toastUntil ? "1" : "0";
     let tip = "";
-    if (p.mode === "deck") tip = "<strong>HOLD W TO LAUNCH</strong><br>At 90–100 kt, gently hold ↑. G raises gear; N cycles flaps.";
+    if (p.mode === "deck") tip = "<strong>HOLD W TO LAUNCH</strong><br>At 90–100 kt, gently hold ↓ (Down) to raise the nose. G raises gear; N cycles flaps.";
     else if (p.autopilot) tip = `<strong>COURSE HOLD · ${p.nav === "home" ? "RETURNING HOME" : "EN ROUTE"}</strong><br>${b.canAccelerate() ? "Hold SHIFT for 3× transit." : "Combat proximity — normal time."}`;
-    else if (p.mode === "flight" && b.time < 100) tip = "<strong>STEER WITH ← → AND ↑ ↓</strong><br>A / D also bank. T holds course to the search sector.";
+    else if (p.mode === "flight" && b.time < 100) tip = "<strong>← → BANK · ↓ RAISES THE NOSE</strong><br>A / D also bank. T holds course to the search sector.";
     else if (p.brakes && p.pitch < -0.25) tip = "<strong>DIVE BRAKES EXTENDED</strong><br>Amber circle predicts impact. B releases a bomb.";
     else if (p.nav === "home") tip = "<strong>RECOVERY: APPROACH FROM BEHIND THE CARRIER</strong><br>Gear down · below 600 ft · under 140 kt · L within 700 m";
     $("center-tip").innerHTML = tip;

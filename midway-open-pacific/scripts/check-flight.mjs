@@ -76,3 +76,80 @@ for (const loadout of ["bomb", "torpedo"]) for (const manoeuvre of [false, true]
 }
 
 console.log(JSON.stringify({ pass: true, cruiseVy: cruise.player.vy, cruiseStall: cruise.player.stall, climbAltitude, climbVy }));
+
+// ---- PRD-midway-sortie-realism E1: honest stores, honest credit, one launch rule ----
+const bombOn = (b, s, owner, team = 'us', damage = 155) => {
+  b.bombs.push({ id: b.id('bomb'), x: s.x, y: 21, z: s.z, vx: 0, vy: -120, vz: 0, team, owner, age: 0, damage });
+  b.updateWeapons(1 / 60);
+};
+const bombNear = (b, s, owner, team = 'us') => {
+  b.bombs.push({ id: b.id('bomb'), x: s.x + s.width / 2 + 20, y: 1, z: s.z, vx: 0, vy: -120, vz: 0, team, owner, age: 0, damage: 155 });
+  b.updateWeapons(1 / 60);
+};
+
+// AC-1 — a released weapon leaves the racks and the flight model sees it go.
+const stores = airborne();
+assert.deepEqual([stores.player.payloadMass, stores.player.payloadDrag], [544, 0.003], 'loaded SBD carries its full rack');
+const bombSequence = [stores.player.payloadMass];
+for (let i = 0; i < 3; i++) { assert.equal(stores.releaseOrdnance(), true); bombSequence.push(stores.player.payloadMass); }
+assert.deepEqual(bombSequence, [544, 90, 45, 0], 'bomb payload follows the stores actually left');
+assert.equal(stores.player.payloadDrag, 0, 'an empty rack carries no drag');
+assert.equal(stores.releaseOrdnance(), false, 'an empty rack rejects the release');
+assert.equal(stores.player.payloadMass, 0, 'a rejected release changes nothing');
+const torp = new Battle(); torp.selectLoadout('torpedo'); torp.start(true);
+assert.equal(torp.player.payloadMass, 1000, 'loaded TBD carries its Mark 13');
+assert.equal(torp.releaseOrdnance(), true);
+assert.deepEqual([torp.player.payloadMass, torp.player.payloadDrag], [0, 0], 'torpedo payload leaves with the weapon');
+stores.player.mode = 'service'; stores.player.serviceTime = 0; tick(stores, 1 / 60);
+assert.equal(stores.player.payloadMass, 544, 'service restores the selected loadout and its weight');
+
+// AC-2 — credit follows the weapon's actual owner, not its team.
+const credit = airborne();
+const akagi = credit.ships.find((s) => s.name === 'Akagi');
+bombOn(credit, akagi, 'allied-ai', 'us', 20);
+assert.deepEqual([credit.score, credit.stats.shipHits], [0, 0], 'an allied AI hit never becomes a personal hit');
+assert.ok(akagi.hp < akagi.maxHp, 'the allied hit still damages the ship');
+const wingman = credit.launch(credit.home, 'bomber');
+bombOn(credit, akagi, wingman.id, 'us', 20);
+assert.deepEqual([credit.score, credit.stats.shipHits, credit.stats.wingShipHits], [0, 0, 1], 'an ordered wing hit is a wing contribution, not a personal one');
+bombOn(credit, akagi, 'player', 'us', 20);
+assert.deepEqual([credit.score, credit.stats.shipHits], [250, 1], 'the player is credited for the player\'s own bomb');
+bombNear(credit, akagi, 'player');
+assert.deepEqual([credit.stats.shipHits, credit.stats.nearMisses], [1, 1], 'a near miss is labelled a near miss');
+const friendly = airborne();
+const hornet = friendly.ships.find((s) => s.name === 'USS Hornet');
+bombOn(friendly, hornet, 'player', 'us', 20);
+assert.deepEqual([friendly.score, friendly.stats.shipHits, friendly.stats.friendlyHits], [0, 0, 1], 'friendly damage earns no positive credit');
+const burn = airborne();
+const kaga = burn.ships.find((s) => s.name === 'Kaga');
+kaga.hp = 40; kaga.fire = 0;
+bombOn(burn, kaga, 'player', 'us', 20);
+const afterHit = { score: burn.score, hits: burn.stats.shipHits, sunk: burn.stats.shipsSunk };
+kaga.hp = 0.05; kaga.fire = 1;
+tick(burn, 1);
+assert.equal(kaga.sunk, true, 'a fire finishes a gutted ship');
+assert.equal(burn.stats.shipHits, afterHit.hits, 'a fire death invents no new weapon hit');
+assert.equal(burn.stats.shipsSunk, afterHit.sunk + 1, 'the last effective attacker is credited with the sinking');
+tick(burn, 2);
+assert.equal(burn.stats.shipsSunk, afterHit.sunk + 1, 'sinking credit is awarded exactly once');
+
+// AC-3 — one launch rule, and a disabled deck is not a sinking.
+const decks = new Battle();
+const soryu = decks.ships.find((s) => s.name === 'Soryu');
+soryu.deck = 0.35;
+assert.ok(decks.operationalEnemyCarriers.includes(soryu), 'a deck at the launch threshold still counts as operational');
+assert.notEqual(decks.launch(soryu, 'fighter'), null, 'and it can actually launch');
+soryu.deck = 0.3499;
+assert.ok(!decks.operationalEnemyCarriers.includes(soryu), 'just below the threshold it is no longer operational');
+assert.equal(decks.launch(soryu, 'fighter'), null, 'and it can no longer launch');
+assert.equal(soryu.sunk, false, 'being unable to launch is not sinking');
+
+// AC-12 foundation — impacts are recorded in the ship's own frame, and bounded.
+const marks = airborne();
+const hiryu = marks.ships.find((s) => s.name === 'Hiryu');
+for (let i = 0; i < 12; i++) bombOn(marks, hiryu, 'player', 'us', 5);
+assert.equal(hiryu.impacts.length, 8, 'impact records stay bounded');
+assert.ok(hiryu.impacts.every((m) => Math.abs(m.forward) < hiryu.length && Math.abs(m.right) < hiryu.width * 4), 'impacts are stored in the ship frame');
+assert.ok(hiryu.impacts.every((m) => m.owner === 'player' && m.weapon === 'bomb' && m.nearMiss === false), 'impact records carry their attribution');
+
+console.log(JSON.stringify({ sortieRealismE1: true, bombSequence, score: credit.score, stats: credit.stats }));

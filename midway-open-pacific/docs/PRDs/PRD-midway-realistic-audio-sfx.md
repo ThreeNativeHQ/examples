@@ -1,12 +1,12 @@
 # PRD-midway-realistic-audio-sfx — Hear Midway from the aircraft and the ship
 
-**Status:** PROPOSED
+**Status:** IN PROGRESS
 **Complexity:** 9 (HIGH)
 **Owner:** Midway game implementer; engine maintainer for portable audio mechanisms.
 **Depends on:** Existing flight, combat, camera and mission state; Phase 1 portable audio audit.
 **Scope:** Audio SFX and historically grounded diegetic speech. Planning only; no implementation authorized by this document.
 **Research date:** 2026-09-13
-**Progress:** Research and plan complete; implementation 0/4 phases.
+**Progress:** Phase 1 partial — asset pipeline, manifest, non-conditional SFX bank, engine perspective, wind, buffeting and AudioBus migration done and green under the handoff; radio queue, weapons/damage enrichment and the owner listening check remain. Asset records live in `content/audio/midway-audio.json`.
 **AUDIO-LISTENING-REQUIRED:** João reviews the final in-game listening sequence; automated checks cannot approve realism.
 
 Implementation complexity: 6–10 likely implementation files (+2), expanded audio subsystem (+2), event/voice/priority lifecycle (+2), independent engine/game release boundary (+2), offline ElevenLabs API integration (+1); risk override: none. The present task changes one Markdown document only and receives proportionate document checks.
@@ -443,7 +443,7 @@ No runtime wiring changes in this planning task. Future implementation must clos
 
 ### Phase 1: Portable audio and aircraft perspective
 
-**Status:** NOT STARTED
+**Status:** PARTIAL — code and assets landed; E3 native smoke pending.
 **ACs:** AC-1, AC-2; foundation for AC-7/AC-8.
 **Files:** `src/audio.ts`, `src/scenes/Midway.ts`, `src/render/world.ts`, `threenative.config.ts`; proposed `content/audio/midway-audio.json`; existing engine `packages/core/src/audio.ts` only if a required seam is missing.
 
@@ -454,7 +454,7 @@ No runtime wiring changes in this planning task. Future implementation must clos
 
 ### Phase 2: Friendly radio and Enterprise alerts
 
-**Status:** NOT STARTED
+**Status:** PARTIAL — the `control` voice and `R06` are generated and in the manifest; the bounded speech queue and caption wiring are NOT STARTED.
 **ACs:** AC-5, AC-6; communication portions of AC-1/AC-7.
 **Files:** `src/sim/battle.ts`, `src/scenes/Midway.ts`, `src/audio.ts`; proposed `src/audio-cues.ts` only if keeping the finite script table separate improves readability; existing caption/HUD code only where needed; asset manifest and generated clips.
 
@@ -510,6 +510,33 @@ The audio scenario should use repeatable game setup and actual event producers f
 | Exact dialogue variation count | Generate only reachable full-sentence variants and repeat-sensitive SFX takes; keep the supplied script text deterministic. | Asset manifest assembled from actual consumers before the production batch. |
 | Histories versus generated game outcomes | Reports follow observed gameplay; historical time/place facts remain source-tagged reference material. | Tests that prevent historical scripts from announcing attacks, sinking, rescue or diversion that did not occur. |
 
+## Implementation notes
+
+Implementation has begun under this PRD (the plan above is no longer unexecuted). What landed:
+
+- `tools/audio-catalog.mjs` transcribes every exact PRD prompt; `tools/audio-generate.mjs` calls the
+  ElevenLabs API, converts MP3→Ogg Vorbis with ffmpeg, and maintains the single machine-consumed
+  manifest `content/audio/midway-audio.json` (request text, model, duration, loop flag, voice ID,
+  source/output SHA-256). No prose ledger.
+- The 24-row engine bank, all 43 non-conditional named SFX, the `control` voice and `R06` are
+  generated and packaged under `public/assets/audio/`. The seven conditional rows remain
+  ungenerated until their listed consumer exists.
+- **Verified deviation:** the ElevenLabs sound endpoint rejects text over 450 characters (HTTP 400
+  `text_too_long`), and every engine-bank row with the PRD's full template plus suffix reached
+  636–739 characters. The trailing template sentence is therefore folded into a compact
+  `ENGINE_LOOP_SUFFIX` ("Seamless loop, no fade, no flyby. Engine only."); engine identity, state
+  and perspective stay verbatim. Every named prompt keeps the exact full suffix and fits under 450.
+- `src/audio.ts` now owns no WebAudio graph: buffers arrive through `ctx.assets.audio` and play
+  through the engine `AudioBus` (supplied by `Midway.enter`). Exterior/interior engine layers
+  cross-fade over ~150 ms, wind follows IAS, buffeting replaces the stall horn, and deck roll,
+  machinery and hull wash are driven from deck contact.
+- `scripts/check-audio.mjs` covers packaged-file presence, single layer start, perspective cross-fade,
+  airspeed wind, cutoff windmill, deck roll, cooldowns, positional cues, mute/pause suppression and
+  dispose. `bash tools/run-handoff.sh` is green (9 passed, 0 failed).
+
+Open: the radio speech queue (Phase 2), event enrichment and weapon banks (Phase 3), the remaining
+aircraft/deck/Pacific production, native desktop proof and the owner listening sequence (Phase 4).
+
 ## Planning verification
 
-Only this PRD is the deliverable. Source/API references and real integration locations were researched; no SFX, voices, gameplay code or engine packages were generated or modified by this task. Document checks passed: two JSON request examples parse; four phases, ten unique unchecked ACs, 30 unique speech IDs and 50 unique SFX IDs; every specified SFX duration is within the documented API range; local Markdown links resolve. Self-review checked historical/reconstruction labels and consumer/trigger alignment. Implementation ACs remain unchecked and phase statuses remain NOT STARTED.
+At the time this document was written only the PRD existed. Source/API references and real integration locations were researched; no SFX, voices, gameplay code or engine packages were generated or modified by the planning task itself. Document checks passed: two JSON request examples parse; four phases, ten unique unchecked ACs, 30 unique speech IDs and 50 unique SFX IDs; every specified SFX duration is within the documented API range; local Markdown links resolve. Self-review checked historical/reconstruction labels and consumer/trigger alignment. The implementation notes above record what later landed; the implementation ACs remain unchecked and phases 2–4 remain NOT STARTED.
