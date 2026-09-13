@@ -133,25 +133,49 @@ export function airframeFor(id: string | undefined): IAircraftAirframe {
 }
 
 /**
- * One aircraft's flight. Rebuilds its engine model only when the airframe changes, so a loadout
- * switch on the deck is picked up on the next step without a per-frame allocation.
+ * One aircraft's flight. Rebuilds its engine model only when the airframe or the bound deck
+ * changes, so a loadout switch or a diversion to another carrier is picked up on the next step
+ * without a per-frame allocation.
+ *
+ * `deckHeight` is the engine's wheels-on-deck plane and is a construction-time environment option,
+ * which is why binding a different deck rebuilds the model. The airframe's own `deckHeight` field
+ * is not what the engine reads for the deck run: `stepDeck` takes `environment.deckHeight ?? 20`.
+ * The state object is retained across a rebuild, so nothing the game wrote to the aircraft is lost.
  */
 export class AircraftFlight {
   readonly state: any;
   wind = { ...SEA_WIND };
   #model: FlightModel;
   #airframeId: string;
+  #deckHeight: number;
 
-  constructor(state: any, airframeId = "sbd") {
+  constructor(state: any, airframeId = "sbd", deckHeight = DECK_HEIGHT) {
     this.state = state;
     this.#airframeId = airframeId;
-    this.#model = new FlightModel({ airframe: airframeFor(airframeId), state, wind: this.wind });
+    this.#deckHeight = deckHeight;
+    this.#model = this.#build();
+  }
+
+  #build(): FlightModel {
+    return new FlightModel({
+      airframe: airframeFor(this.#airframeId),
+      state: this.state,
+      wind: this.wind,
+      deckHeight: this.#deckHeight,
+    });
   }
 
   setAirframe(id: string): void {
     if (id === this.#airframeId) return;
     this.#airframeId = id;
-    this.#model = new FlightModel({ airframe: airframeFor(id), state: this.state, wind: this.wind });
+    this.#model = this.#build();
+  }
+
+  /** Bind the aircraft to one carrier's own flight-deck datum, in metres above the sea. */
+  setDeck(deckHeight: number): void {
+    if (!Number.isFinite(deckHeight) || deckHeight === this.#deckHeight) return;
+    this.#deckHeight = deckHeight;
+    this.#model = this.#build();
   }
 
   reset(): void {

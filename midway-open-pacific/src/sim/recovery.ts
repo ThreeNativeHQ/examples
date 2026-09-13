@@ -3,25 +3,42 @@
  * autopilot's navigation point, the L gate and the HUD's approach cues all read this one module,
  * so the guidance the player is shown and the eligibility the game enforces cannot drift apart.
  */
-import { DECK_HEIGHT } from "./flight.js";
 import { angleDelta, clamp, distance2, forward, localPoint } from "./math.js";
 
 type Any = any;
 
-/** The existing assisted-final envelope. These are the limits `assistRecovery` has always used. */
+/**
+ * The assisted-final envelope. These are the limits `assistRecovery` has always used, expressed
+ * against the deck being landed on rather than against sea level: heights are clearances above that
+ * carrier's own datum, and the line-up corridor is its own deck width plus the LSO's tolerance.
+ * Enterprise's deck sits at 20.06 m and Yorktown's at 20.45 m, so a fleet-wide constant promised a
+ * final on one ship that was 0.39 m out of the envelope on the other.
+ */
 export const FINAL = Object.freeze({
   range: 700,
-  minAltitude: 24,
-  maxAltitude: 180,
+  minClearance: 3.94,
+  maxClearance: 159.94,
   maxSpeed: 72,
-  lateral: 100,
+  lateralMargin: 90,
   heading: 0.4,
 });
+
+/** This carrier's flight deck above the sea. Set by `Battle.setupFleet`, never by a renderer. */
+export function deckDatum(s: Any): number {
+  const y = s?.deckHeight;
+  if (!Number.isFinite(y)) throw new Error(`carrier has no deck datum: ${s?.name ?? s}`);
+  return y;
+}
+
+/** Half-width of the line-up corridor for this deck. */
+export function lineUpLimit(s: Any): number {
+  return (s?.deckWidth ?? 0) / 2 + FINAL.lateralMargin;
+}
 
 /** Where the approach is flown from: on the centreline, astern of the moving deck. */
 export const SETUP = Object.freeze({
   astern: 1600,
-  /** Inside the existing L envelope (24-180 m), so the groove starts where the assist can take it. */
+  /** Inside the L envelope over any of the fleet's decks, so the groove starts where L can take it. */
   altitude: 150,
   transitAltitude: 350,
   capture: 2600,
@@ -78,13 +95,14 @@ export function recoveryDeck(ships: Any[], p: Any, minDeck: number): Any {
 export function finalReady(p: Any, s: Any): boolean {
   if (!s || s.sunk || p.mode !== "flight" || !p.gear) return false;
   const local = localPoint(p, s);
+  const deck = deckDatum(s);
   return (
     distance2(p, s) < FINAL.range &&
     local.forward < 0 &&
-    p.y > FINAL.minAltitude &&
-    p.y < FINAL.maxAltitude &&
+    p.y > deck + FINAL.minClearance &&
+    p.y < deck + FINAL.maxClearance &&
     p.speed < FINAL.maxSpeed &&
-    Math.abs(local.right) < FINAL.lateral &&
+    Math.abs(local.right) < lineUpLimit(s) &&
     Math.abs(angleDelta(p.heading, s.heading)) < FINAL.heading
   );
 }
@@ -117,7 +135,9 @@ export function approach(p: Any, s: Any): IApproach {
   // Once the aircraft has actually reached the setup point — or is already inside the groove —
   // guidance turns up the centreline toward the deck instead of orbiting the setup fix.
   const arrived = distance2(p, setup) < 300;
-  const inGroove = local.forward < 0 && range < SETUP.astern && Math.abs(local.right) < FINAL.lateral * 3;
+  const deck = deckDatum(s);
+  const lateral = lineUpLimit(s);
+  const inGroove = local.forward < 0 && range < SETUP.astern && Math.abs(local.right) < lateral * 3;
   const phase: Phase = ready
     ? "final"
     : range >= SETUP.capture && !inGroove
@@ -133,9 +153,9 @@ export function approach(p: Any, s: Any): IApproach {
     if (local.forward > 0) cues.push("GO AROUND — AHEAD OF THE DECK");
     else if (range > FINAL.range) cues.push(`CLOSE TO ${FINAL.range} M ASTERN`);
     if ((p.speed ?? 0) > FINAL.maxSpeed) cues.push("TOO FAST");
-    if (p.y > FINAL.maxAltitude) cues.push("HIGH");
-    else if (p.y < FINAL.minAltitude) cues.push("LOW");
-    if (Math.abs(local.right) >= FINAL.lateral) cues.push(local.right > 0 ? "RIGHT OF CENTERLINE" : "LEFT OF CENTERLINE");
+    if (p.y > deck + FINAL.maxClearance) cues.push("HIGH");
+    else if (p.y < deck + FINAL.minClearance) cues.push("LOW");
+    if (Math.abs(local.right) >= lateral) cues.push(local.right > 0 ? "RIGHT OF CENTERLINE" : "LEFT OF CENTERLINE");
     if (Math.abs(headingError) >= FINAL.heading) cues.push(headingError > 0 ? "LINE UP LEFT" : "LINE UP RIGHT");
   }
   return {
@@ -152,7 +172,7 @@ export function approach(p: Any, s: Any): IApproach {
         ? SETUP.transitAltitude
         : phase === "setup"
           ? SETUP.altitude
-          : clamp(glidePath(-local.forward), FINAL.minAltitude + 4, SETUP.altitude),
+          : clamp(glidePath(-local.forward, deck), deck + FINAL.minClearance + 4, SETUP.altitude),
     ready,
     cues,
     range,
@@ -205,8 +225,8 @@ export function routeLength(p: Any, s: Any): number {
 export const GLIDE = 0.07;
 export const GROOVE_FLARE = 65;
 
-export function glidePath(astern: number): number {
-  return DECK_HEIGHT + 2 + Math.max(0, astern - GROOVE_FLARE) * GLIDE;
+export function glidePath(astern: number, deckHeight: number): number {
+  return deckHeight + 2 + Math.max(0, astern - GROOVE_FLARE) * GLIDE;
 }
 
 /** Approach speed the groove is flown at: the assisted-final limit with a working margin. */

@@ -36,6 +36,7 @@ import {
   finalReady,
   GLIDE,
   GROOVE_FLARE,
+  GROOVE_LEAD,
   recoveryDeck,
   reserveEstimate,
   routeLength,
@@ -43,11 +44,11 @@ import {
   type IReserve,
 } from "./recovery.js";
 import { SPEAKERS, SPEECH, radioShipName, type ISpeechRequest } from "./radio-script.js";
+import { shipClass } from "./catalog.js";
 import {
   AircraftFlight,
   airDensity,
   attitudeAxes,
-  DECK_HEIGHT,
   gearClearance,
   setAttitude,
   SEA_WIND,
@@ -64,6 +65,7 @@ import {
   lerp,
   localPoint,
   onDeck,
+  overHull,
   rng,
   wrap,
 } from "./math.js";
@@ -78,6 +80,101 @@ export const RECOVERY_DECK = 0.25;
 export const DECK_FAILED = 0.2;
 /** Impact records kept per ship for persistent damage visuals. */
 export const MAX_IMPACTS = 8;
+
+/**
+ * Every ship's geometry, in metres, resolved here so a `Battle` knows how big its world is before
+ * any renderer exists. Three different rectangles used to share two fields — `length`/`width` meant
+ * the launch corridor on the player's own carrier and the damage bounds on every other ship — and
+ * the renderer patched them in while building meshes, so the numbers depended on a `WorldView`
+ * having been constructed. They are now three named things:
+ *
+ * - `hullLength`/`hullBeam`: the damage and collision volume, and the outline that is drawn. For a
+ *   carrier that is the flight-deck plan, because the overhanging deck is what a bomb meets first.
+ * - `deckLength`/`deckWidth`: the launch and recovery corridor, carriers only. Narrower than the
+ *   hull: the flight model rolls an aircraft down these numbers and calls an overrun from them.
+ * - `deckHeight`: the horizontal surface above the sea — a carrier's own flight deck datum, and for
+ *   every other hull the superstructure plane the weapon code has always used.
+ */
+interface IHull {
+  hullLength: number;
+  hullBeam: number;
+}
+
+/** Class references and measured GLB extents; the repaired model is `hullBeam` wide when drawn. */
+const hullOf = (classId: string): IHull => {
+  const cls = shipClass(classId);
+  return { hullLength: cls.measuredLength, hullBeam: cls.hullBeam };
+};
+
+/**
+ * Hulls by ship name. Enterprise, Hornet and Akagi are the models supplied with the project and
+ * have no catalog class, so they keep the extents the renderer used to write in. Northampton,
+ * Phelps and Balch have neither a class nor a model and keep the per-kind defaults below; giving
+ * them a sister ship's numbers would be the substitution this change exists to remove.
+ */
+const HULLS: Readonly<Record<string, IHull>> = Object.freeze({
+  "USS Enterprise": { hullLength: 251.58, hullBeam: 32.4 }, // Yorktown class, as drawn by hornet.glb
+  "USS Hornet": { hullLength: 251.58, hullBeam: 32.4 },
+  "USS Yorktown": hullOf("yorktown"),
+  Akagi: { hullLength: 260.67, hullBeam: 31.3 }, // supplied akagi.glb
+  Kaga: hullOf("kaga"),
+  Soryu: hullOf("soryu"),
+  Hiryu: hullOf("hiryu"),
+  Tone: hullOf("tone"),
+  Chikuma: hullOf("tone"),
+  Arashi: hullOf("kagero"),
+  Nowaki: hullOf("kagero"),
+  "USS Hammann": hullOf("hammann"),
+  "I-168": hullOf("i168"),
+  "USS Nautilus": hullOf("nautilus"),
+});
+
+interface IDeck {
+  deckLength: number;
+  deckWidth: number;
+  deckHeight: number;
+}
+
+/** A carrier class's corridor is its own hull reference; the datum is measured from the GLB. */
+const deckOf = (classId: string, deckHeight: number): IDeck => {
+  const cls = shipClass(classId);
+  return { deckLength: cls.hullLength, deckWidth: cls.hullBeam, deckHeight };
+};
+
+/**
+ * Flight decks by ship name. Enterprise, Hornet and Akagi were surveyed by raycasting their own
+ * tapered decks (tools/capture-deck.mjs), which is where the conservative 220x20 corridor and the
+ * 20.06 m datum come from. The imported carriers take their corridor from the class reference and
+ * their datum from the shipped GLB. These must stay equal to `DECKS` in src/render/imported-ships.ts,
+ * which is the same table on the render side; that file's owner should import this one instead.
+ */
+const CARRIER_DECKS: Readonly<Record<string, IDeck>> = Object.freeze({
+  "USS Enterprise": { deckLength: 220, deckWidth: 20, deckHeight: 20.06 },
+  "USS Hornet": { deckLength: 220, deckWidth: 20, deckHeight: 20.06 },
+  "USS Yorktown": deckOf("yorktown", 20.45),
+  // Akagi's original stern deck slopes down ~1.4 m; the datum is its central deck.
+  Akagi: { deckLength: 220, deckWidth: 20, deckHeight: 20.06 },
+  Kaga: deckOf("kaga", 23.47),
+  Soryu: deckOf("soryu", 20.42),
+  Hiryu: deckOf("hiryu", 20.6),
+});
+
+/** The plane a weapon strikes on a ship with no flight deck. What the hit code always assumed. */
+const SUPERSTRUCTURE_TOP = 9;
+
+/**
+ * One ship's geometry by name. A carrier with no deck entry throws rather than taking a fleet-wide
+ * default: a wrong launch corridor or deck datum is a silent 3 m error in where the wheels are, and
+ * the whole point of resolving this here is that nothing downstream has to guess.
+ */
+export function shipGeometry(name: string, kind: string): IHull & IDeck {
+  const sub = kind === "sub";
+  const hull = HULLS[name] ?? { hullLength: sub ? 92 : 112, hullBeam: sub ? 9 : 13 };
+  if (kind !== "carrier") return { ...hull, deckLength: 0, deckWidth: 0, deckHeight: SUPERSTRUCTURE_TOP };
+  const deck = CARRIER_DECKS[name];
+  if (!deck) throw new Error(`no flight deck geometry for carrier: ${name}`);
+  return { ...hull, ...deck };
+}
 
 export { LOADOUTS };
 export type { ILoadout };
@@ -185,7 +282,7 @@ export class Battle {
     });
     applyLoadout(this.player, "bomb");
     initDamage(this.player);
-    this.playerFlight = new AircraftFlight(this.player, "sbd");
+    this.playerFlight = new AircraftFlight(this.player, "sbd", home.deckHeight);
     this.playerFlight.reset();
     this.playerFlight.stepDeck(home, 0.001, {});
   }
@@ -236,8 +333,8 @@ export class Battle {
         heading,
         speed: sub ? 4 : cv ? 8 : 10,
         baseSpeed: sub ? 4 : cv ? 8 : 10,
-        length: cv ? 250 : sub ? 92 : 112,
-        width: cv ? 35 : sub ? 9 : 13,
+        // Geometry, resolved before any renderer exists.
+        ...shipGeometry(name, kind),
         hp: cv ? 340 : sub ? 90 : 145,
         maxHp: cv ? 340 : sub ? 90 : 145,
         deck: 1,
@@ -838,8 +935,8 @@ export class Battle {
       z: s.z,
       heading: s.heading,
       speed: s.speed,
-      width: s.width,
-      length: s.length,
+      hullBeam: s.hullBeam,
+      hullLength: s.hullLength,
       deck: s.deck,
       sunk: s.sunk,
       time: this.time,
@@ -1159,6 +1256,10 @@ export class Battle {
     p.gunTimer = Math.max(0, p.gunTimer - dt);
     p.heat = Math.max(0, p.heat - dt * 6);
     const h = this.home;
+    // The engine takes the deck datum as a construction-time environment option, so the wrapper is
+    // rebound whenever the player's deck changes — a diversion to a carrier 0.4 m taller otherwise
+    // rolls and touches down on the previous ship's deck height.
+    if (h) this.playerFlight.setDeck(h.deckHeight);
     if (p.mode === "service") {
       if (!h || h.sunk || h.deck < DECK_FAILED) {
         this.lose("The carrier was destroyed during recovery.");
@@ -1218,7 +1319,7 @@ export class Battle {
       p.x = h.x + f.x * p.deckOffset + Math.cos(h.heading) * p.deckLateral;
       p.z = h.z + f.z * p.deckOffset + Math.sin(h.heading) * p.deckLateral;
       setAttitude(p, h.heading, lerp(p.pitch, 0.22, dt * 1.5), 0);
-      p.y = DECK_HEIGHT + gearClearance(p);
+      p.y = h.deckHeight + gearClearance(p);
       p.throttle = 0;
       p.rpm = lerp(p.rpm, 0, dt);
       p.vy = 0;
@@ -1226,7 +1327,7 @@ export class Battle {
       p.vz = f.z * (p.deckSpeed + h.speed);
       p.speed = Math.hypot(p.vx - this.wind.x, p.vz - this.wind.z);
       p.ias = p.speed * Math.sqrt(airDensity(p.y) / 1.225);
-      if (p.deckOffset > h.length / 2) {
+      if (p.deckOffset > h.deckLength / 2) {
         this.lose("The arresting run overran the bow. Touch down farther aft and slower.");
         return;
       }
@@ -1291,20 +1392,22 @@ export class Battle {
         } else {
           const loc = localPoint(p, s);
           const f = forward(s.heading);
-          // Chase a point on the centreline a fixed distance ahead of the aircraft. A fixed
-          // waypoint is either passed — and the assist banks hard away at deck height — or so far
-          // off that a thirty-metre lineup error produces no correction at all.
-          const lead = loc.forward + 400;
+          // Chase a point on the centreline ahead of the aircraft. A fixed waypoint is either
+          // passed — and the assist banks hard away at deck height — or so far off that a
+          // thirty-metre lineup error produces no correction at all. The lead therefore closes with
+          // the deck: held at 400 m all the way in, the groove arrived 16 m off the centreline,
+          // which is abeam a 20 m deck rather than on it.
+          const lead = loc.forward + clamp(-loc.forward * 0.5, 60, GROOVE_LEAD);
           nav = { x: s.x + f.x * lead, z: s.z + f.z * lead };
           // The glide path aims at the deck and keeps descending through it, because an assist that
           // levels at deck height never touches: it floats the length of the ship and off the bow.
-          const touch = DECK_HEIGHT + gearClearance(p) - 3;
+          const touch = s.deckHeight + gearClearance(p) - 3;
           desiredAlt = touch + Math.max(0, -loc.forward - GROOVE_FLARE) * GLIDE;
           p.gear = true;
           p.flaps = 1;
           p.brakes = false;
           p.throttle = clamp(0.59 + (50 - (p.ias || p.speed)) * 0.027, 0.12, 0.98);
-          if (loc.forward > 100 && p.y > 26) {
+          if (loc.forward > 100 && p.y > s.deckHeight + 6) {
             // A bolter goes round again on the same guidance. Handing back an unattended aircraft
             // at full power and no autopilot is how a missed wire became a ditching.
             p.landingAssist = null;
@@ -1359,7 +1462,7 @@ export class Battle {
     const previousY = p.y;
     this.playerFlight.step(dt, controls);
     if (p.autoGearPending && !p.landingAssist) {
-      const safeClimb = p.y > DECK_HEIGHT + gearClearance(p) + 5 && p.vy > 0.5 && p.stall < 0.1;
+      const safeClimb = p.y > (this.home?.deckHeight ?? 0) + gearClearance(p) + 5 && p.vy > 0.5 && p.stall < 0.1;
       p.gearClimbTime = safeClimb ? p.gearClimbTime + dt : 0;
       if (p.gearClimbTime >= 1) {
         p.gear = false;
@@ -1389,7 +1492,7 @@ export class Battle {
     if (p.y < 30 && p.takeoffGrace <= 0) {
       for (const s of this.ships) {
         if (s.kind !== "carrier" || s.sunk || !onDeck(p, s, 0)) continue;
-        const contactY = DECK_HEIGHT + gearClearance(p);
+        const contactY = s.deckHeight + gearClearance(p);
         const aligned = Math.abs(angleDelta(p.heading, s.heading)) < 0.23;
         const f = forward(s.heading);
         const relativeSpeed = Math.hypot(p.vx - f.x * s.speed, p.vz - f.z * s.speed);
@@ -1402,7 +1505,7 @@ export class Battle {
           this.lose("Hard deck impact. Lower gear, align from astern, keep wings level and reduce descent below 1,000 ft/min.");
           return;
         }
-        if (p.y < 20) {
+        if (p.y < s.deckHeight) {
           this.lose("Impact with the carrier. Fly the approach from astern.");
           return;
         }
@@ -1576,13 +1679,13 @@ export class Battle {
       if (!nearest && Math.min(prev.y, b.y) < 30) {
         for (const s of this.ships) {
           if (s.sunk || s.id === b.owner) continue;
-          const top = s.kind === "carrier" ? 20 : 9;
+          const top = s.deckHeight;
           let at = b;
           if (prev.y > top && b.y <= top) {
             const u = (prev.y - top) / (prev.y - b.y || 1);
             at = { x: lerp(prev.x, b.x, u), y: top, z: lerp(prev.z, b.z, u) };
           }
-          if (at.y > 0 && at.y <= top + 0.2 && onDeck(at, s, 1)) {
+          if (at.y > 0 && at.y <= top + 0.2 && overHull(at, s, 1)) {
             this.damageShip(s, 0.7, at, "strafe", b.team, { owner: b.owner });
             b.ttl = 0;
             break;
@@ -1606,11 +1709,12 @@ export class Battle {
       let point = b;
       for (const s of this.ships) {
         if (s.sunk) continue;
-        const top = s.kind === "carrier" ? 20 : s.kind === "sub" ? 0 : 9;
+        // A submarine has no deck worth bombing: its hit plane is the water it is sitting in.
+        const top = s.kind === "sub" ? 0 : s.deckHeight;
         if (prev.y >= top && b.y <= top) {
           const u = (prev.y - top) / (prev.y - b.y || 1);
           const at = { x: lerp(prev.x, b.x, u), y: top, z: lerp(prev.z, b.z, u) };
-          if (onDeck(at, s, 3)) {
+          if (overHull(at, s, 3)) {
             hit = s;
             point = at;
             break;
@@ -1625,7 +1729,7 @@ export class Battle {
         this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: b.y, z: b.z } });
         for (const s of this.ships) {
           const l = localPoint(b, s);
-          const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.width / 2), Math.max(0, Math.abs(l.forward) - s.length / 2));
+          const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.hullBeam / 2), Math.max(0, Math.abs(l.forward) - s.hullLength / 2));
           if (d < 55 && !s.sunk)
             this.damageShip(s, (b.damage || 155) * 0.4 * (1 - d / 55), b, "bomb", b.team, { owner: b.owner, nearMiss: true, stamp: b.stamp });
         }
@@ -1642,11 +1746,11 @@ export class Battle {
       t.z += t.vz * dt;
       t.vy -= 9.81 * dt;
       for (const s of this.ships) {
-        const top = s.kind === "carrier" ? 20 : 9;
+        const top = s.deckHeight;
         if (s.sunk || prev.y < top || t.y > top) continue;
         const u = (prev.y - top) / (prev.y - t.y || 1);
         const hit = { x: lerp(prev.x, t.x, u), y: top, z: lerp(prev.z, t.z, u) };
-        if (onDeck(hit, s)) {
+        if (overHull(hit, s)) {
           t.dead = true;
           this.fx("hit", hit, 1.3);
           break;
@@ -1678,7 +1782,7 @@ export class Battle {
         const a = localPoint(prev, s);
         let lo = 0;
         let hi = 1;
-        for (const [key, extent] of [["right", s.width / 2 + 1], ["forward", s.length / 2]] as [string, number][]) {
+        for (const [key, extent] of [["right", s.hullBeam / 2 + 1], ["forward", s.hullLength / 2]] as [string, number][]) {
           const d = (b as Any)[key] - (a as Any)[key];
           if (Math.abs(d) < 1e-9) {
             if (Math.abs((a as Any)[key]) > extent) {
@@ -1723,8 +1827,8 @@ export class Battle {
             z: target.z,
             heading: target.heading,
             speed: target.speed,
-            width: target.width,
-            length: target.length,
+            hullBeam: target.hullBeam,
+            hullLength: target.hullLength,
             deck: target.deck,
             sunk: target.sunk,
             time: this.time,

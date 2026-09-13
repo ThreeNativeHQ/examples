@@ -26,13 +26,39 @@ export function localPoint(
     forward: x * Math.sin(s.heading) - z * Math.cos(s.heading),
   };
 }
-export function onDeck(
+/**
+ * Two rectangles, named apart, because a ship has two of them and they are not the same size: the
+ * flight-deck corridor an aircraft may roll and land on, and the hull volume a weapon can hit. A
+ * carrier's corridor is 220x20 m inside a hull 251x32 m, so one predicate serving both either
+ * refuses hits on the visible bow or lets an aircraft land on the sea alongside.
+ */
+function inRect(
   p: { x: number; z: number },
-  s: { x: number; z: number; heading: number; width: number; length: number },
-  margin = 0,
+  s: { x: number; z: number; heading: number },
+  length: number,
+  width: number,
+  margin: number,
 ): boolean {
   const l = localPoint(p, s);
-  return Math.abs(l.right) < s.width / 2 + margin && Math.abs(l.forward) < s.length / 2 + margin;
+  return Math.abs(l.right) < width / 2 + margin && Math.abs(l.forward) < length / 2 + margin;
+}
+
+/** Inside the carrier's launch/recovery corridor. Carriers only; every other hull has none. */
+export function onDeck(
+  p: { x: number; z: number },
+  s: { x: number; z: number; heading: number; deckWidth: number; deckLength: number },
+  margin = 0,
+): boolean {
+  return inRect(p, s, s.deckLength, s.deckWidth, margin);
+}
+
+/** Inside the ship's hull plan: the damage volume, and the outline that is actually drawn. */
+export function overHull(
+  p: { x: number; z: number },
+  s: { x: number; z: number; heading: number; hullBeam: number; hullLength: number },
+  margin = 0,
+): boolean {
+  return inRect(p, s, s.hullLength, s.hullBeam, margin);
 }
 export function segmentDistance(
   a: { x: number; y: number; z: number },

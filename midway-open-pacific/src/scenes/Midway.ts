@@ -10,7 +10,7 @@ import { clamp, distance2 } from "../sim/math.js";
 import { loadImportedShips } from "../render/imported-ships.js";
 import { loadEnvironment } from "../render/environment.js";
 import { loadImportedAircraft } from "../render/imported-aircraft.js";
-import { loadImportedFleet } from "../render/imported-fleet.js";
+import { loadImportedFleet, loadImportedHulls } from "../render/imported-fleet.js";
 import { loadDeckCrew } from "../render/deck-crew.js";
 import { WorldView } from "../render/world.js";
 import { Hud } from "../hud.js";
@@ -43,10 +43,14 @@ export class Midway extends Scene<GameState, undefined> {
   private cleanups: Array<() => void> = [];
 
   async load(ctx: ICtx<GameState, undefined>): Promise<void> {
-    const [, , , , , buffers] = await Promise.all([
+    const [, , , , , , buffers] = await Promise.all([
       loadImportedAircraft(ctx),
       loadImportedShips(ctx),
       loadImportedFleet(ctx),
+      // The imported hulls the fleet is built from — Yorktown, the three Japanese carriers, the
+      // cruisers, destroyers and submarines. Their sizes come from src/sim/catalog.ts, which
+      // `Battle` has already read; this only brings in the geometry to draw them with.
+      loadImportedHulls(ctx),
       loadDeckCrew(ctx),
       loadEnvironment(ctx),
       Soundscape.load(ctx.assets),

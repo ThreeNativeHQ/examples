@@ -31,7 +31,7 @@ const cruise = airborne();
 tick(cruise, 1, { pitch: 1 });
 tick(cruise, 30);
 assert.ok(Math.abs(cruise.player.vy) < 3 && cruise.player.stall < .1, 'released cruise stick settles without stalling');
-const deck = new Battle(); deck.home.length = 220; deck.home.width = 20; deck.start();
+const deck = new Battle(); deck.start();
 for (let i = 0; i < 3000 && deck.player.mode === 'deck'; i++) tick(deck, 1 / 60, { throttleUp: true });
 assert.equal(deck.player.mode, 'flight', 'must leave deck');
 assert.equal(deck.player.gear, true, 'gear stays down until clear and climbing');
@@ -52,7 +52,7 @@ tick(deck, 1 / 60);
 assert.equal(deck.player.gearManual, false, 'new sortie resets manual override');
 
 for (const loadout of ["bomb", "torpedo"]) for (const manoeuvre of [false, true]) {
-  const launch = new Battle(); launch.home.length = 220; launch.home.width = 20; launch.selectLoadout(loadout); launch.start();
+  const launch = new Battle(); launch.selectLoadout(loadout); launch.start();
   let departedAt = null, maxRoll = 0, maxRollRate = 0, minAltitude = Infinity;
   for (let i = 0; i < 3600; i++) {
     const elapsed = departedAt === null ? 0 : i / 60 - departedAt;
@@ -79,11 +79,12 @@ console.log(JSON.stringify({ pass: true, cruiseVy: cruise.player.vy, cruiseStall
 
 // ---- PRD-midway-sortie-realism E1: honest stores, honest credit, one launch rule ----
 const bombOn = (b, s, owner, team = 'us', damage = 155) => {
-  b.bombs.push({ id: b.id('bomb'), x: s.x, y: 21, z: s.z, vx: 0, vy: -120, vz: 0, team, owner, age: 0, damage });
+  // One metre over the hit plane, which is this ship's own deck: Kaga's is 23.47 m, not 20.
+  b.bombs.push({ id: b.id('bomb'), x: s.x, y: s.deckHeight + 1, z: s.z, vx: 0, vy: -120, vz: 0, team, owner, age: 0, damage });
   b.updateWeapons(1 / 60);
 };
 const bombNear = (b, s, owner, team = 'us') => {
-  b.bombs.push({ id: b.id('bomb'), x: s.x + s.width / 2 + 20, y: 1, z: s.z, vx: 0, vy: -120, vz: 0, team, owner, age: 0, damage: 155 });
+  b.bombs.push({ id: b.id('bomb'), x: s.x + s.hullBeam / 2 + 20, y: 1, z: s.z, vx: 0, vy: -120, vz: 0, team, owner, age: 0, damage: 155 });
   b.updateWeapons(1 / 60);
 };
 
@@ -149,7 +150,7 @@ const marks = airborne();
 const hiryu = marks.ships.find((s) => s.name === 'Hiryu');
 for (let i = 0; i < 12; i++) bombOn(marks, hiryu, 'player', 'us', 5);
 assert.equal(hiryu.impacts.length, 8, 'impact records stay bounded');
-assert.ok(hiryu.impacts.every((m) => Math.abs(m.forward) < hiryu.length && Math.abs(m.right) < hiryu.width * 4), 'impacts are stored in the ship frame');
+assert.ok(hiryu.impacts.every((m) => Math.abs(m.forward) < hiryu.hullLength && Math.abs(m.right) < hiryu.hullBeam * 4), 'impacts are stored in the ship frame');
 assert.ok(hiryu.impacts.every((m) => m.owner === 'player' && m.weapon === 'bomb' && m.nearMiss === false), 'impact records carry their attribution');
 
 console.log(JSON.stringify({ sortieRealismE1: true, bombSequence, score: credit.score, stats: credit.stats }));
@@ -157,7 +158,7 @@ console.log(JSON.stringify({ sortieRealismE1: true, bombSequence, score: credit.
 // ---- E1: assignments, objective credit and distinct short-sortie results (AC-4/5/11) ----
 const onTarget = (b, ship) => {
   const w = b.bombs[b.bombs.length - 1];
-  Object.assign(w, { x: ship.x, y: 21, z: ship.z, vx: 0, vy: -120, vz: 0 });
+  Object.assign(w, { x: ship.x, y: ship.deckHeight + 1, z: ship.z, vx: 0, vy: -120, vz: 0 });
   b.updateWeapons(1 / 60);
 };
 const strikeBattle = () => {

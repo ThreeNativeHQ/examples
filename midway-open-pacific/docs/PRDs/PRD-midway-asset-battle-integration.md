@@ -395,18 +395,42 @@ but `public/assets/aircraft.*.glb` should be treated as that lane's to finish. A
 
 ### Phase 2 — Flyable aircraft and working carrier decks (28–44 hours)
 
-**Status:** NOT STARTED
+**Status:** IN PROGRESS. Render identity and pure hull geometry are in; the carrier cycle is not.
 **ACs:** AC-3–9.
 **Files:** `flight.ts`, `armament.ts`, `battle.ts`, `tactics.ts`, `recovery.ts`; existing imported render loaders, `world.ts`, `model-damage.ts`, relevant HUD/camera wiring.
 
 Adopt explicit airframe/model identity and one animation/disposal path per family. Correct player TBD cockpit/exterior and Kate performance/loadouts. Move AI onto engine flight with existing tactical decisions, full state initialization, consistent fuel representation and queued deck departures. Initialize pure hull/deck geometry and use it for recovery/collision/render placement. Introduce finite per-type carrier cycles and an honest deck park; remove B-25 parking. This is one integration slice despite crossing more than five files.
 
 **Verification E2:** Extend existing `scripts/check-flight.mjs`, `scripts/check-weapons.mjs` and `scripts/check-loops.mjs` through real Battle calls for AI flight, payload and carrier inventory. Extend `capture-deck.mjs`, `capture-sortie.mjs` and `capture-sortie-runs.mjs` for TBD launch/release/diversion/recovery. Preserve existing sortie completion expectations, including the current twelve-simulated-minute short-run guard; longer new Open Pacific runs have separate limits.
-**Checkpoint:** pending.
+
+**Checkpoint (2026-09-13), partial.** Done:
+
+- **Model identity is explicit.** `imported-fleet.ts` loads all eleven new hulls through `ctx.assets`
+  and exposes one creator each, with `shipModelFor(classId)` as the single dispatch.
+  `createIjnCarrier` keeps its signature but Kaga, Sōryū and Hiryū now return their own hulls
+  instead of a rescaled Akagi. `imported-aircraft.ts` adds `createAirframe(id, detail)` keyed by an
+  explicit airframe id, throwing on an unknown id rather than falling back to a Dauntless, and
+  `spinPropeller` keeps its rotation state per instance so two aircraft at different RPM cannot
+  share a transform. `DECKS` gains kaga, soryu, hiryu and yorktown, their deck datum measured from
+  the shipped GLB by a method that reproduces Hornet's surveyed 20.06 m to within 0.10 m.
+- **AC-6 is met.** `Battle` initialises every hull from the catalog before any render exists, and
+  `world.ts:sizeCarrier` no longer writes simulation state. The two overloaded fields are now three
+  named ones — `hullLength`/`hullBeam` for the damage and collision volume, `deckLength`/`deckWidth`
+  for the launch and recovery corridor, and a per-carrier `deckHeight` — and every consumer was
+  updated, including `math.ts:onDeck`, which had been serving both meanings from one rectangle.
+  `recovery.ts:finalReady` reads the selected deck's own datum and remains the single gate.
+  `node scripts/check-geometry.mjs` reports 17 hulls sized before any render, five distinct deck
+  datums, and that no render module assigns a geometry field.
+
+Not done: the carrier cycle itself (AC-7 to AC-9). `carrier-ops.ts` exists, is checked and is
+committed, but `Battle.launch` still draws on the generic reserve of twelve and `updateShips` still
+picks types by the modulo sequence. AI flight has not moved onto the engine `FlightModel` (AC-5).
+
+**Checkpoint:** partial; see above.
 
 ### Phase 3 — Scouts, surface agendas and useful Midway targets (18–28 hours)
 
-**Status:** NOT STARTED
+**Status:** MODULES WRITTEN, NOT WIRED. `src/sim/intel.ts`, `src/sim/naval.ts` and `src/sim/facilities.ts` exist, are checked by `scripts/check-intel.mjs`, `check-naval.mjs` and `check-facilities.mjs`, and are committed. `Battle` does not call any of them yet, so none of AC-10 to AC-15 is met.
 **ACs:** AC-10–15.
 **Files:** new `intel.ts`/`naval.ts`; `battle.ts`, `tactics.ts`, `gunnery.ts`, `sortie.ts`; imported-fleet/world and HUD/scene target wiring.
 
@@ -417,7 +441,7 @@ Implement reports before adding strategic targeting. Add finite cruiser scouts, 
 
 ### Phase 4 — Submarines, ASW and saving a carrier (18–28 hours)
 
-**Status:** NOT STARTED
+**Status:** MODULE WRITTEN, NOT WIRED. `src/sim/submarine.ts` holds depth with an explicit downward sign, battery, tubes and reloads, hydrophone bearings without range or identity, and depth charges that damage by three-dimensional separation. `scripts/check-submarine.mjs` passes. `Battle` still surfaces boats on the sine timer and still reads the nearest live enemy carrier directly, so none of AC-16 to AC-18 is met.
 **ACs:** AC-16–18.
 **Files:** `naval.ts`, `battle.ts`, `gunnery.ts`, `armament.ts`; imported-fleet/model-damage/world/ocean; existing event-based audio as needed.
 
@@ -428,7 +452,7 @@ Replace sine surfacing and unlimited direct-world attack loops. Add depth/contac
 
 ### Phase 5 — Assignments, variable outcomes and full battle proof (12–18 hours)
 
-**Status:** NOT STARTED
+**Status:** NOT STARTED, beyond the surface-strike and fleet-support records being added to `src/sim/sortie.ts`.
 **ACs:** AC-19–24; integrated acceptance of all prior ACs.
 **Files:** `sortie.ts`, `Midway.ts`, `hud.ts`, affected radio/audio text, role captures, existing performance/lifecycle checks and this PRD.
 

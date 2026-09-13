@@ -140,15 +140,15 @@ export function createOcean() {
   mesh.name = "sea-surface";
   return {
     mesh,
-    update(camera: { x: number; z: number }, elapsed: number, vessels: Array<{ x: number; z: number; heading: number; length: number; visualLength?: number; width: number; speed: number; sunk: boolean; kind: string; surfaced?: boolean }>) {
+    update(camera: { x: number; z: number }, elapsed: number, vessels: Array<{ x: number; z: number; heading: number; hullLength: number; hullBeam: number; speed: number; sunk: boolean; kind: string; surfaced?: boolean }>) {
       time.value = elapsed;
       origin.value.set(camera.x, camera.z);
       mesh.position.set(camera.x, 0, camera.z);
       for (let i = 0; i < ships.length; i++) {
         const s = vessels[i];
         if (s && !s.sunk && (s.kind !== "sub" || s.surfaced)) {
-          ships[i].set(s.x, s.z, s.heading, s.visualLength ?? s.length);
-          sizes[i].set(s.width, s.speed, Math.min(1, s.speed / 8), 0);
+          ships[i].set(s.x, s.z, s.heading, s.hullLength);
+          sizes[i].set(s.hullBeam, s.speed, Math.min(1, s.speed / 8), 0);
         } else sizes[i].z = 0;
       }
     },

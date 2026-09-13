@@ -59,9 +59,9 @@ export function updateGunnery(b: Any, s: Any, dt: number): void {
       const f = forward(s.heading);
       const side = i ? 1 : -1;
       const origin = {
-        x: s.x + Math.cos(s.heading) * (s.width * 0.52) * side + f.x * mounts[i],
+        x: s.x + Math.cos(s.heading) * (s.hullBeam * 0.52) * side + f.x * mounts[i],
         y: s.kind === "carrier" ? 17 : 12,
-        z: s.z + Math.sin(s.heading) * (s.width * 0.52) * side + f.z * mounts[i],
+        z: s.z + Math.sin(s.heading) * (s.hullBeam * 0.52) * side + f.z * mounts[i],
       };
       const aim = {
         x: target.x + d.vx * ft + (b.random() - 0.5) * spread,
@@ -95,9 +95,9 @@ export function updateGunnery(b: Any, s: Any, dt: number): void {
     const f = forward(s.heading);
     const side = Math.sin(s.aaBearing - s.heading) > 0 ? 1 : -1;
     const origin = {
-      x: s.x + Math.cos(s.heading) * s.width * 0.54 * side + f.x * 30,
+      x: s.x + Math.cos(s.heading) * s.hullBeam * 0.54 * side + f.x * 30,
       y: s.kind === "carrier" ? 16 : 12,
-      z: s.z + Math.sin(s.heading) * s.width * 0.54 * side + f.z * 30,
+      z: s.z + Math.sin(s.heading) * s.hullBeam * 0.54 * side + f.z * 30,
     };
     const dispersion = 6 + range * 0.048;
     const dx = target.x + d.vx * tt - origin.x + (b.random() - 0.5) * dispersion;

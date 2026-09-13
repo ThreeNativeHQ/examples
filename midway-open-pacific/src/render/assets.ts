@@ -415,7 +415,7 @@ function hullGeometry(length: number, width: number, depth: number, deck = false
  *   Yorktown — starboard island, a single straight funnel, full-length hull.
  *   Hornet   — as Yorktown, but a lighter island and marginally shorter hull.
  * funnels holds the funnel z offsets (its length is the funnel count). Hull/beam scale the
- * drawn geometry only: ship.length and ship.width stay the simulation's collision numbers.
+ * drawn geometry only: ship.hullLength and ship.hullBeam stay the simulation's collision numbers.
  */
 type CarrierProfile = {
   side: number;
@@ -451,21 +451,22 @@ export function makeShip(ship: any): THREE.Group {
   const black = mat(0x192c34);
   const wood = mat(jp ? 0x847b60 : 0x677371);
   const metal = mat(0x667270);
-  const hull = new THREE.Mesh(hullGeometry(ship.length, ship.width * (cv ? 0.86 : 1), cv ? 17 : sub ? 5 : 9), grey);
+  const hull = new THREE.Mesh(hullGeometry(ship.hullLength, ship.hullBeam * (cv ? 0.86 : 1), cv ? 17 : sub ? 5 : 9), grey);
   hull.position.y = cv ? 16 : sub ? 3 : 8;
   body.add(hull);
-  const water = new THREE.Mesh(hullGeometry(ship.length * 0.99, ship.width * (cv ? 0.875 : 1.015), 1.4), dark);
+  const water = new THREE.Mesh(hullGeometry(ship.hullLength * 0.99, ship.hullBeam * (cv ? 0.875 : 1.015), 1.4), dark);
   water.position.y = 1.5;
   body.add(water);
-  const deck = new THREE.Mesh(hullGeometry(ship.length * (cv ? 1 : 0.92), ship.width, cv ? 1.4 : 1, cv), wood);
-  deck.position.y = cv ? 20 : sub ? 3.5 : 9;
+  const deck = new THREE.Mesh(hullGeometry(ship.hullLength * (cv ? 1 : 0.92), ship.hullBeam, cv ? 1.4 : 1, cv), wood);
+  deck.position.y = cv ? ship.deckHeight : sub ? 3.5 : 9;
   body.add(deck);
   const parked: THREE.Object3D[] = [];
   const elevator = new THREE.Group();
   if (cv) {
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(ship.width, ship.length), new THREE.MeshStandardMaterial({ map: deckTexture(jp), roughness: 0.94, metalness: 0 }));
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(ship.hullBeam, ship.hullLength), new THREE.MeshStandardMaterial({ map: deckTexture(jp), roughness: 0.94, metalness: 0 }));
     plane.rotation.x = -Math.PI / 2;
-    plane.position.y = 20.03;
+    // Just clear of the deck slab, at this carrier's own datum rather than a fleet-wide 20 m.
+    plane.position.y = ship.deckHeight - 0.03;
     body.add(plane);
     for (const x of [-17.9, 17.9]) {
       box(body, 0.65, 1.1, 160, x, 16.5, 4, grey);

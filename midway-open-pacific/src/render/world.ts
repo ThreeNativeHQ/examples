@@ -1,9 +1,9 @@
 /** The battle's Three.js world, built into the scene the framework owns. */
 import * as T from "three";
-import { attitudeAxes, DECK_HEIGHT } from "../sim/flight.js";
+import { attitudeAxes } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { ellipsoid, mat, wakeTexture, makeAircraft, makeShip } from "./assets.js";
-import { createCarrier, createIjnCarrier, createMitchell, DECKS, IJN_CARRIERS } from "./imported-ships.js";
+import { createCarrier, createIjnCarrier, createMitchell, DECKS } from "./imported-ships.js";
 import { createDouglas, animateDouglas, disposeDouglas } from "./imported-aircraft.js";
 import { createMidwayAtoll, createSamidare, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
@@ -36,26 +36,15 @@ function importedAircraftFor(a: { team: string; kind: string }): (() => T.Group)
 const WORLD_UP = new T.Vector3(0, 1, 0);
 
 /**
- * A carrier's simulation dimensions, which are two different things wearing one pair of fields.
- *
- * The player's own deck needs the conservative launch corridor, because the flight model rolls
- * the aircraft along these numbers and decides an overrun from the same length. Every other
- * carrier is a target instead, and a target has to be hittable where the player can see it: the
- * corridor is 220m by 20m against a hull 260m by 31m, so bombs aimed at an enemy carrier's bow or
- * outer deck were passing straight through geometry that was plainly there.
+ * The model a US carrier is drawn with. Its hull, corridor and deck datum are already on the ship
+ * record, resolved by `Battle.setupFleet`; this view only picks the geometry that matches them, and
+ * writes nothing back. Yorktown draws its own hull rather than a second Hornet, because the
+ * simulation carries Yorktown's own 246.8 m hull and 20.45 m deck and the two must agree.
  */
-function sizeCarrier(ship: any, isHome: boolean): void {
-  const japanese = ship.team !== "us";
-  const id = japanese ? "akagi" : ship.name === "USS Enterprise" ? "enterprise" : "hornet";
-  const ijn = IJN_CARRIERS[ship.name];
-  ship.visualLength = japanese && ijn ? ijn.length : DECKS[id].visualLength;
-  if (isHome) {
-    ship.length = DECKS[id].length;
-    ship.width = DECKS[id].width;
-  } else {
-    ship.length = ship.visualLength;
-    ship.width = japanese && ijn ? ijn.beam : 32.4;
-  }
+function carrierModelId(ship: any): keyof typeof DECKS {
+  if (ship.name === "USS Enterprise") return "enterprise";
+  if (ship.name === "USS Yorktown") return "yorktown";
+  return "hornet";
 }
 
 export interface IWorldHost {
@@ -165,7 +154,7 @@ export class WorldView {
         mesh.userData.importedShip = true;
       } else if (s.kind === "carrier") {
         const japanese = s.team !== "us";
-        const id = japanese ? "akagi" : s.name === "USS Enterprise" ? "enterprise" : "hornet";
+        const id = japanese ? "akagi" : carrierModelId(s);
         const detailed = japanese ? createIjnCarrier(s.name) : createCarrier(id);
         const lod = new T.LOD();
         lod.addLevel(detailed, 0);
@@ -174,7 +163,6 @@ export class WorldView {
         mesh.add(lod);
         mesh.userData.importedShip = true;
         mesh.userData.parked = [];
-        sizeCarrier(s, s.id === b.player.home);
         // The deck park is spotted aft, behind the launch spot, because it has to be: the deck
         // is 32m across and an SBD spans 12.66m with no folding wings, so a machine parked
         // abeam the launch lane must hang its outboard wing over the sea. Measured edges at
@@ -184,7 +172,7 @@ export class WorldView {
           plane.userData.parkedDouglas = id !== "hornet";
           plane.position.set(
             id === "enterprise" ? -4.5 : -1,
-            20.06 + (id === "enterprise" ? 1.82 : 0),
+            s.deckHeight + (id === "enterprise" ? 1.82 : 0),
             72 + i * 16,
           );
           if (id === "enterprise") plane.rotation.x = .22;
@@ -196,9 +184,8 @@ export class WorldView {
       this.meshes.set(s.id, mesh);
 
     }
-    const h = this.meshes.get(b.player.home);
     this.crew = new DeckCrew();
-    h?.add(this.crew.group);
+    this.meshes.get(b.player.home)?.add(this.crew.group);
     const island = createMidwayAtoll();
     island.position.set(b.island.x, 0, b.island.z);
     this.scene.add(island);
@@ -246,10 +233,6 @@ export class WorldView {
 
   reset(b: any): void {
     this.battle = b;
-    // A restart builds a fresh Battle with default hull numbers but keeps the existing meshes,
-    // so the carriers have to be re-sized exactly as they were when they were built.
-    for (const ship of b.ships)
-      if (ship.kind === "carrier") sizeCarrier(ship, ship.id === b.player.home);
     this.snap = true;
     this.followBomb = false;
     this.lookYaw = this.lookPitch = 0;
@@ -304,7 +287,11 @@ export class WorldView {
       if (briefing) this.crewAnchor = 15;
       else if (home && (p.mode !== "deck" || (p.speed ?? 0) < 2))
         this.crewAnchor = -localPoint(p, home).forward;
-      this.crew.group.position.set(0, DECK_HEIGHT, this.crewAnchor);
+      // The party stands on whichever deck the player is actually on, at that carrier's own datum:
+      // a diversion to Yorktown otherwise left the crew on Enterprise, 0.39 m too low.
+      const deck = home ? this.meshes.get(home.id) : undefined;
+      if (deck && this.crew.group.parent !== deck) deck.add(this.crew.group);
+      this.crew.group.position.set(0, home?.deckHeight ?? 0, this.crewAnchor);
       this.crew.update(dt);
     }
     const live = new Set<string>();

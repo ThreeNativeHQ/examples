@@ -48,16 +48,13 @@ let atoll: GLTF;
 let garrison: GLTF;
 let radar: GLTF;
 
-export async function loadImportedFleet(ctx: Pick<ICtx, "assets" | "renderer">): Promise<void> {
-  [zero, samidare, atoll, garrison, radar] = await Promise.all([
-    ctx.assets.model<GLTF>("/assets/aircraft.mitsubishi-a6m3.glb"),
-    ctx.assets.model<GLTF>("/assets/destroyer.samidare.glb"),
-    ctx.assets.model<GLTF>("/assets/midway-atoll.glb"),
-    ctx.assets.model<GLTF>("/assets/structures.garrison-camp.glb"),
-    ctx.assets.model<GLTF>("/assets/structures.radar-station.glb"),
-  ]);
+/** Give every texture the renderer's full anisotropy; grazing deck and sea views need it. */
+export function applyAnisotropy(
+  ctx: Pick<ICtx, "renderer">,
+  sources: readonly GLTF[],
+): void {
   const anisotropy = (ctx.renderer.raw as WebGPURenderer).getMaxAnisotropy();
-  for (const source of [zero, samidare, atoll, garrison, radar]) {
+  for (const source of sources) {
     source.scene.traverse((node) => {
       if (!(node instanceof T.Mesh)) return;
       for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
@@ -70,6 +67,17 @@ export async function loadImportedFleet(ctx: Pick<ICtx, "assets" | "renderer">):
       }
     });
   }
+}
+
+export async function loadImportedFleet(ctx: Pick<ICtx, "assets" | "renderer">): Promise<void> {
+  [zero, samidare, atoll, garrison, radar] = await Promise.all([
+    ctx.assets.model<GLTF>("/assets/aircraft.mitsubishi-a6m3.glb"),
+    ctx.assets.model<GLTF>("/assets/destroyer.samidare.glb"),
+    ctx.assets.model<GLTF>("/assets/midway-atoll.glb"),
+    ctx.assets.model<GLTF>("/assets/structures.garrison-camp.glb"),
+    ctx.assets.model<GLTF>("/assets/structures.radar-station.glb"),
+  ]);
+  applyAnisotropy(ctx, [zero, samidare, atoll, garrison, radar]);
 }
 
 function clone(source: GLTF | undefined, what: string): T.Group {
@@ -210,4 +218,101 @@ export function createMidwayAtoll(): T.Group {
   mast.scale.setScalar(1.4);
   root.add(mast);
   return root;
+}
+
+/**
+ * The hulls imported by tools/import-fleet.sh from the table in tools/blender/fleet.json.
+ *
+ * The importer bakes the contract into the bytes — metres, bow along -Z, keel on y = 0, one mesh,
+ * one material — and tools/check-catalog.mjs re-reads every one of those numbers out of the shipped
+ * GLB on each run. So nothing below scales, rotates or sinks a hull: a creator clones what shipped
+ * and names it. The sizes these models answer to live in src/sim/catalog.ts, never here.
+ *
+ * cruiser.mogami is the one derived model. The supplied Mogami GLB was byte-identical to the Tone,
+ * so tools/blender/derive-mogami.py moved the after pair of Tone's forward turrets onto the
+ * quarterdeck; it is the only Mogami geometry that exists.
+ */
+const HULL_URLS = {
+  "carrier.kaga": "/assets/carrier.kaga.glb",
+  "carrier.soryu": "/assets/carrier.soryu.glb",
+  "carrier.hiryu": "/assets/carrier.hiryu.glb",
+  "carrier.yorktown": "/assets/carrier.yorktown.glb",
+  "cruiser.tone": "/assets/cruiser.tone.glb",
+  "cruiser.mogami": "/assets/cruiser.mogami.glb",
+  "destroyer.kagero": "/assets/destroyer.kagero.glb",
+  "destroyer.hammann": "/assets/destroyer.hammann.glb",
+  "submarine.i168": "/assets/submarine.i168.glb",
+  "submarine.nautilus": "/assets/submarine.nautilus.glb",
+  "weapon.torpedo": "/assets/weapon.torpedo.glb",
+} as const;
+
+type HullId = keyof typeof HULL_URLS;
+
+const hulls = new Map<HullId, GLTF>();
+
+/**
+ * Load every imported hull. Idempotent: ctx.assets owns the cache, so a second call re-reads the
+ * same models it already handed out and leaves the same state behind.
+ */
+export async function loadImportedHulls(ctx: Pick<ICtx, "assets" | "renderer">): Promise<void> {
+  const ids = Object.keys(HULL_URLS) as HullId[];
+  const loaded = await Promise.all(ids.map((id) => ctx.assets.model<GLTF>(HULL_URLS[id])));
+  ids.forEach((id, i) => hulls.set(id, loaded[i]));
+  applyAnisotropy(ctx, loaded);
+}
+
+/** One imported hull, at the size it shipped. */
+function hull(id: HullId, name: string, mark = "importedShip"): T.Group {
+  const model = clone(hulls.get(id), name);
+  model.name = name;
+  model.userData[mark] = true;
+  return model;
+}
+
+export function createKaga(): T.Group {
+  return hull("carrier.kaga", "IJN Kaga");
+}
+
+export function createSoryu(): T.Group {
+  return hull("carrier.soryu", "IJN Soryu");
+}
+
+export function createHiryu(): T.Group {
+  return hull("carrier.hiryu", "IJN Hiryu");
+}
+
+export function createYorktown(): T.Group {
+  return hull("carrier.yorktown", "USS Yorktown");
+}
+
+/** Tone or Chikuma; the class's two ships were near-identical at Midway. */
+export function createToneCruiser(name: string): T.Group {
+  return hull("cruiser.tone", `IJN ${name}`);
+}
+
+/** Mogami or Mikuma, on the derived Mogami hull. */
+export function createMogamiCruiser(name: string): T.Group {
+  return hull("cruiser.mogami", `IJN ${name}`);
+}
+
+/** Arashi or Nowaki, both Kagero class. */
+export function createKageroDestroyer(name: string): T.Group {
+  return hull("destroyer.kagero", `IJN ${name}`);
+}
+
+export function createHammann(): T.Group {
+  return hull("destroyer.hammann", "USS Hammann");
+}
+
+export function createI168(): T.Group {
+  return hull("submarine.i168", "IJN I-168");
+}
+
+export function createNautilus(): T.Group {
+  return hull("submarine.nautilus", "USS Nautilus");
+}
+
+/** The Mark 13 body a Devastator drops; a weapon, not a ship. */
+export function createTorpedoBody(): T.Group {
+  return hull("weapon.torpedo", "Mark 13 torpedo", "importedWeapon");
 }

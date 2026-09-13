@@ -106,17 +106,84 @@ all six clips at two phases on the live deck; inspect those images before accept
 For another T-pose model, use [the fitting/reuse guide](tools/blender/HUMANOID-RIGGING.md) and a
 new measurement file. The shared `tools/check-humanoid.mjs <file.glb>` runs independently of Midway.
 
+`tools/import-fleet.sh [id]` turns the supplied hulls into shipped GLBs, and
+`tools/import-aircraft.sh [id]` does the same for the supplied airframes. Both re-run from the
+originals every time, never write to them, and take an optional id to redo one asset:
+
+```sh
+bash tools/import-fleet.sh                      # every hull in tools/blender/fleet.json
+bash tools/import-fleet.sh carrier.yorktown
+bash tools/import-aircraft.sh aircraft.tbd-devastator
+node tools/check-fleet.mjs && node tools/check-catalog.mjs
+```
+
+Sources come from `$MIDWAY_SOURCE_MODELS` (default `/home/joao/Downloads/midway-missing-models`),
+intermediates from `$MIDWAY_STAGE` (default `/tmp/midway-fleet-stage`), and only the WebP-packed
+result reaches `public/assets/`. `tools/blender/fleet.json` is the measured table for the hulls — id,
+source, length, waterline beam, keel-to-masthead height, draught, `flip`, triangle budget, source
+triangle count, class, and the stated source of every declared repair — and `tools/check-fleet.mjs`
+and `tools/check-catalog.mjs` read that same file, so a hull the table does not name has no budget
+and fails. The aircraft table is the heredoc at the foot of `tools/import-aircraft.sh`, not
+`fleet.json`.
+
+The import contract, enforced on the shipped bytes and not on the Blender scene: metres, +Y up, bow
+or nose along glTF **-Z**, keel or wheels at y = 0, beam or aircraft span on X, the hull centred on
+X, one mesh and one material per hull, no animation clips, WebP textures, `--vertex-layout separate`.
+
+Three rules, each paid for with a wrong-looking model:
+
+- **Blender's +Y-up glTF exporter maps Blender +Y to glTF -Z**, so an importer must finish with the
+  bow on Blender **+Y**. Put it on Blender -Y and the whole fleet ships backwards, and neither a
+  Blender preview render nor a width-taper check will catch it, because both reason in the
+  pre-export frame. Verify orientation by measuring the exported bytes.
+- **Weld before decimating.** Tripo meshes split a vertex at every UV seam, and collapsing unwelded
+  geometry tears the skin into visible shards — that is what a 94% cut of the Devastator looked
+  like. `bpy.ops.mesh.remove_doubles` first, then triangulate, then decimate.
+- **`bpy.ops.object.modifier_apply` silently does nothing unless the object is both selected and
+  active**, which is what made a second decimation pass look like a no-op. Deselect, select, set
+  active, apply — on every pass.
+
+Bow direction cannot be inferred. Plan taper read the bow backwards on five of seven hulls, and
+which end hangs deepest is no better, so `flip` in `fleet.json` is a recorded visual decision taken
+from orthographic side renders, and `tools/check-fleet.mjs` asserts the result it produced: surface
+hulls by plan taper (the bow band narrower than midships), submarines and the torpedo by end
+fineness (the aft 5% mean half-breadth at least 15% fuller than the forward 5%, because bow diving
+planes spread wider than the pressure hull). An aircraft needs no such entry: the fin is the tallest
+thing on the airframe and it is at the tail, so `align-aircraft.py` finds the nose itself.
+
+`docs/asset-provenance.md` records every supplied file's size, SHA-256 and glTF generator; no licence
+was supplied with any of them, so distribution rights are **UNVERIFIED**.
+`docs/reference-dimensions.md` holds the cited class and airframe figures every scale factor is
+fitted to, with **not found** written wherever no source gives one.
+
 ## Geometry tools
 
 - `node tools/check-fleet.mjs` — parses the shipped GLBs with no browser and asserts crew clips and
   skeleton, the A6M3's span and propeller pivot, the destroyer hull's length and axis, and the
   atoll's scale.
+- `node tools/check-catalog.mjs` — re-reads every shipped hull and the torpedo body and asserts
+  `src/sim/catalog.ts` against those bytes: measured dimensions, triangle count, the keel on the
+  datum, the `fleet.json` triangle budget and the class length within 2%.
 - `node tools/inspect-glb.mjs <file>` — dimensions, node names, clips, triangle and material counts.
 - `node tools/probe-glb.mjs <file> [nameFilter]` — per-node world bounds, for finding a nose
   direction, propeller or gear.
 - `node tools/probe-ocean.mjs` — measures the ocean's real significant wave height on the CPU.
 - `blender -b -P tools/blender/preview.py -- <file> <out-prefix> [front,side,top]` — headless
   orthographic previews.
+- `blender -b -P tools/blender/align-ship.py -- <src.glb> <out.glb> --length M --beam M --height M
+  --draught M [--decimate N] [--flip] [--preview PREFIX]` — one hull: covariance alignment, bow to
+  glTF -Z, uniform scale to the class length with the beam and height repair factors printed,
+  decimation, and the keel re-dropped afterwards because decimation moves the lowest vertex.
+- `blender -b -P tools/blender/align-aircraft.py -- <src.glb> <out.glb> --span M --length M
+  --height M [--decimate N] [--gear] [--preview PREFIX]` — one airframe: span on X, nose to glTF -Z,
+  wheels on y = 0, weld, decimate to budget, and the propeller cut into its own object pivoted on
+  the shaft. `--gear` stays off: the geometric selection takes the wheel and lower strut but leaves
+  the upper leg in the body, so it retracts wrong.
+- `blender -b -P tools/blender/derive-mogami.py -- <aligned-tone.glb> <out.glb> [--preview P]` —
+  the supplied Mogami GLB is byte-identical to the Tone, so this copies the after pair of forward
+  turrets, mirrors it to face aft and sets it on the quarterdeck rather than drawing one hull twice.
+- `tools/blender/_render_views.py` is not run directly; `--preview` on either aligner execs it for
+  orthographic top and side renders of the aligned scene.
 - `bash tools/capture-lock.sh node tools/capture-fleet.mjs` — browser capture of the deck party, the
   Zero, the destroyer and Midway, with assertions a screenshot cannot make.
 - `bash tools/capture-lock.sh node tools/capture-deck.mjs` — raycasts the carrier's own geometry to
@@ -140,9 +207,15 @@ pnpm exec vite build
 node scripts/check-flight.mjs
 node scripts/check-aircraft.mjs
 node scripts/check-audio.mjs
+node scripts/check-intel.mjs
+node scripts/check-naval.mjs
+node scripts/check-carrier-ops.mjs
+node scripts/check-submarine.mjs
+node scripts/check-facilities.mjs
 # Project and platform health, including whether a native target can build at all:
 node node_modules/create-threenative/dist/threenative.js doctor
 node tools/check-fleet.mjs
+node tools/check-catalog.mjs
 node tools/probe-ocean.mjs
 bash tools/capture-lock.sh node tools/check-repair.mjs
 bash tools/capture-lock.sh node tools/capture-deck.mjs

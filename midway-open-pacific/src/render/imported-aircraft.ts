@@ -1,4 +1,10 @@
-/** User-supplied Douglas SBD-3, battle-of-pacific/assets/generated; textures and 12 clips retained. */
+/**
+ * The game's imported airframes, chosen by an explicit airframe id.
+ *
+ * The Douglas SBD-3 (battle-of-pacific/assets/generated) keeps its textures and 12 clips and its
+ * own clip-driven animator. The TBD-1 and B5N2 come through tools/import-aircraft.sh already at
+ * real size, so nothing here scales a model.
+ */
 import { AnimationPlayer, type ICtx, softCircleDataTexture } from "@threenative/core";
 import * as T from "three";
 import type { WebGPURenderer } from "three/webgpu";
@@ -11,6 +17,7 @@ import {
   type CockpitInterior,
 } from "./cockpit-detail.js";
 import { createDauntlessGear } from "./dauntless.js";
+import { createZero } from "./imported-fleet.js";
 
 /** The detailed interior is a real-metre cockpit, scaled into the Douglas canopy opening. */
 const COCKPIT_SCALE = 0.52;
@@ -25,7 +32,42 @@ const surfaceClips = [
   "flight.rudder-left",
   "flaps.deploy",
 ];
+/** Which airframe a group is; the id the rest of the game asks for. */
+export type AirframeId = "sbd3" | "tbd1" | "b5n2" | "a6m3";
+
+const DOUGLAS_URL = "/assets/aircraft.douglas-sbd3.glb";
+
+/**
+ * The airframes imported by tools/import-aircraft.sh: metres, +Y up, span on X, wheels on y = 0,
+ * and the propeller cut out of the fused mesh into its own child named `propeller` whose origin
+ * sits on the real shaft, so spinning it about its own local Z is the whole animation. `ai` is the
+ * reduced-detail build of the same airframe for wing aircraft and parked deck loads; the Kate
+ * ships at one detail only.
+ *
+ * Nose direction is measured per file rather than assumed — see createAirframe.
+ */
+const IMPORTS = {
+  tbd1: {
+    name: "Douglas TBD-1 Devastator",
+    hero: "/assets/aircraft.tbd-devastator.glb",
+    ai: "/assets/aircraft.tbd-devastator.ai.glb",
+  },
+  b5n2: {
+    name: "Nakajima B5N2",
+    hero: "/assets/aircraft.b5n2-kate.glb",
+    ai: "/assets/aircraft.b5n2-kate.glb",
+  },
+} as const;
+
+/** Measured with tools/probe-glb.mjs: the A6M3 pivots its propeller under this node. */
+const ZERO_PROPELLER = "VINTThreeNativePivot";
+
+/** Rad/s at full throttle — about 2200 rpm, the rate dauntless.ts turns a propeller. */
+const PROP_RATE = 231;
+const TAU = Math.PI * 2;
+
 let source: GLTF;
+const imported = new Map<string, GLTF>();
 const instances = new WeakMap<
   T.Group,
   {
@@ -40,24 +82,33 @@ const instances = new WeakMap<
   }
 >();
 
+/** Idempotent: ctx.assets caches each model, and the anisotropy pass writes the same value again. */
 export async function loadImportedAircraft(ctx: Pick<ICtx, "assets" | "renderer">): Promise<void> {
   const anisotropy = (ctx.renderer.raw as WebGPURenderer).getMaxAnisotropy();
-  const [sourceModel] = await Promise.all([
-    ctx.assets.model<GLTF>("/assets/aircraft.douglas-sbd3.glb"),
+  const urls = [
+    DOUGLAS_URL,
+    ...new Set(Object.values(IMPORTS).flatMap((airframe) => [airframe.hero, airframe.ai])),
+  ];
+  const [models] = await Promise.all([
+    Promise.all(urls.map((url) => ctx.assets.model<GLTF>(url))),
     ensureCockpitMaterials(anisotropy),
   ]);
-  source = sourceModel;
-  source.scene.traverse((node) => {
-    if (!(node instanceof T.Mesh)) return;
-    for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
-      for (const value of Object.values(material)) {
-        if (value instanceof T.Texture) {
-          value.anisotropy = anisotropy;
-          value.needsUpdate = true;
+  urls.forEach((url, i) => {
+    const model = models[i]!;
+    imported.set(url, model);
+    model.scene.traverse((node) => {
+      if (!(node instanceof T.Mesh)) return;
+      for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+        for (const value of Object.values(material)) {
+          if (value instanceof T.Texture) {
+            value.anisotropy = anisotropy;
+            value.needsUpdate = true;
+          }
         }
       }
-    }
+    });
   });
+  source = imported.get(DOUGLAS_URL)!;
 }
 
 /** Metres, nose -Z; the body's origin is the flight model's centre of gravity. */
@@ -203,6 +254,9 @@ export function createDouglas(withCockpit = false): T.Group {
     }),
   );
   root.userData.importedAircraft = true;
+  // Exposed for symmetry with every other airframe, but animateDouglas owns it: the mixer writes
+  // this pivot's quaternion from propeller.spin every frame, so spinPropeller cannot move it.
+  root.userData.propeller = propellerPivot;
   root.userData.cockpitInterior = instrumentRoot;
   root.userData.cockpitShell = cockpitShell;
   root.userData.cockpitRig = interior;
@@ -281,4 +335,145 @@ export function disposeDouglas(root: T.Group): void {
     // Gear materials come from the shared mat() cache and belong to the whole scene.
   });
   instances.delete(root);
+}
+
+/**
+ * One aircraft of a named airframe, at the requested detail.
+ *
+ * The id is explicit on purpose: a caller asks for the airframe it means, so no team or kind
+ * mapping can quietly hand back the wrong silhouette. `ai` is the reduced-detail build where the
+ * airframe has one; where it does not, the same model serves both and says so here.
+ */
+export function createAirframe(id: AirframeId, detail: "hero" | "ai"): T.Group {
+  // The Dauntless and the Zero keep the constructors that measured them; only their propeller is
+  // republished here, so one animator can find any airframe's propeller the same way.
+  if (id === "sbd3") return createDouglas();
+  if (id === "a6m3") {
+    const zero = createZero();
+    zero.userData.propeller = requirePropeller(zero, ZERO_PROPELLER, "Mitsubishi A6M3", "aircraft.mitsubishi-a6m3.glb");
+    return zero;
+  }
+  const airframe = IMPORTS[id as keyof typeof IMPORTS] as (typeof IMPORTS)[keyof typeof IMPORTS] | undefined;
+  if (!airframe)
+    throw new Error(`Unknown airframe id "${String(id)}": expected sbd3, tbd1, b5n2 or a6m3.`);
+  const url = airframe[detail];
+  const gltf = imported.get(url);
+  if (!gltf) throw new Error(`Load the imported aircraft before constructing the ${airframe.name}.`);
+  const root = new T.Group();
+  root.name = airframe.name;
+  // Already metres, wheels on y = 0 and nose -Z out of the import: never scaled or rotated here.
+  const model = gltf.scene.clone(true);
+  model.traverse((node) => {
+    if (node instanceof T.Mesh) {
+      node.castShadow = true;
+      node.receiveShadow = true;
+    }
+  });
+  root.add(model);
+  const propeller = requirePropeller(model, "propeller", airframe.name, url);
+  root.updateMatrixWorld(true);
+
+  // Which way the file points, measured from the model itself rather than assumed. The game flies
+  // every model nose -Z, and the propeller IS the nose, so its own sign along the fuselage says
+  // which end is which: a mis-exported airframe gets turned instead of flown backwards. Every
+  // shipped model satisfies -Z today, so this is a no-op — it earns its place by having caught a
+  // Blender +Y-to-glTF -Z axis error in tools/blender/align-aircraft.py that nothing else saw.
+  let shaft = propeller.getWorldPosition(new T.Vector3());
+  if (!(Math.abs(shaft.z) > 0.5))
+    throw new Error(`${airframe.name} propeller sits at neither end of its fuselage.`);
+  if (shaft.z > 0) {
+    model.rotation.y = Math.PI;
+    root.updateMatrixWorld(true);
+    shaft = propeller.getWorldPosition(new T.Vector3());
+  }
+
+  // The blade disc at speed, the way dauntless.ts fades one: a soft circle that comes up as the
+  // blades go out. Sized from the propeller's own measured diameter, and parented to the root at
+  // the shaft rather than to the propeller, so it keeps the root's scale and never spins.
+  const span = new T.Box3().setFromObject(propeller).getSize(new T.Vector3());
+  const radius = Math.max(span.x, span.y) / 2;
+  if (!(radius > 0)) throw new Error(`${airframe.name} propeller has no measurable diameter.`);
+  const blur = new T.Mesh(
+    new T.PlaneGeometry(radius * 2, radius * 2),
+    new T.MeshBasicMaterial({
+      map: softCircleDataTexture(64, 0.8),
+      color: 0xa3aaa3,
+      transparent: true,
+      opacity: 0,
+      side: T.DoubleSide,
+      depthWrite: false,
+      forceSinglePass: true,
+      toneMapped: false,
+    }),
+  );
+  blur.name = "Propeller motion blur";
+  blur.position.copy(shaft);
+  blur.visible = false;
+  root.add(blur);
+
+  root.userData.importedAircraft = true;
+  root.userData.propeller = propeller;
+  // The scene's generic per-frame path spins `prop`; this is the same object under the name
+  // createZero established, so an imported airframe drops into it without a special case.
+  root.userData.prop = propeller;
+  root.userData.propAngle = 0;
+  root.userData.propBlur = blur;
+  return root;
+}
+
+function requirePropeller(root: T.Object3D, name: string, model: string, file: string): T.Object3D {
+  const propeller = root.getObjectByName(name);
+  // A silently missing pivot is the failure the whole import was built to remove: without it the
+  // propeller is fused into the airframe and no rotation can look right, so this never falls back.
+  if (!propeller)
+    throw new Error(`${model} (${file}) has no child named "${name}" to spin as its propeller.`);
+  return propeller;
+}
+
+/**
+ * Turn one aircraft's propeller. `rpmNormalised` is 0 at rest and 1 at full throttle.
+ *
+ * The angle lives on the group, so two aircraft at different throttle settings never share a
+ * rotation, and a paused frame (dt = 0) advances nothing.
+ */
+export function spinPropeller(group: T.Group, rpmNormalised: number, dt: number): void {
+  const propeller = group.userData.propeller as T.Object3D | undefined;
+  if (!propeller)
+    throw new Error(`${group.name || "This object"} is not an airframe with a propeller to spin.`);
+  const rpm = Math.max(0, rpmNormalised);
+  const angle = ((group.userData.propAngle as number | undefined) ?? 0) + dt * rpm * PROP_RATE;
+  group.userData.propAngle = angle % TAU;
+  propeller.rotation.z = group.userData.propAngle as number;
+  const blur = group.userData.propBlur as
+    | T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>
+    | undefined;
+  // Only an airframe that owns a blur disc may hide its blades; the rest would just vanish.
+  if (!blur) return;
+  propeller.visible = rpm < 0.38;
+  blur.visible = rpm > 0.15;
+  blur.material.opacity = Math.min(1, rpm * 2.5);
+}
+
+/**
+ * Give back what this one aircraft owns, and nothing else.
+ *
+ * Geometry, materials and textures come from the shared GLTF that `ctx.assets` owns and outlive
+ * every instance, so only the blur disc built for this group is disposed. Procedural parts another
+ * constructor built for its own instance stay in that instance's `userData.owned`, where the
+ * scene's model disposal already gives them back.
+ */
+export function disposeAirframe(group: T.Group): void {
+  if (instances.has(group)) {
+    disposeDouglas(group);
+    return;
+  }
+  const blur = group.userData.propBlur as
+    | T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>
+    | undefined;
+  if (!blur) return;
+  blur.geometry.dispose();
+  blur.material.map?.dispose();
+  blur.material.dispose();
+  blur.removeFromParent();
+  delete group.userData.propBlur;
 }
