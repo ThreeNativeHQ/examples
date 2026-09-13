@@ -439,7 +439,49 @@ started with `--host 127.0.0.1`: Vite binds IPv6 only by default and the runner'
 `http://127.0.0.1:<port>` is then refused with `TN_PLAYTEST_PAGE_UNREACHABLE`, which reads as a
 broken game and is not one.
 
-Not done: the carrier cycle itself (AC-7 to AC-9). `carrier-ops.ts` exists, is checked and is
+**Second Phase 2 checkpoint (2026-09-13): the carrier cycle is in.** `Battle` now draws on
+`carrier-ops.ts` and `intel.ts` instead of the generic reserve of twelve and the radius-detect
+intelligence:
+
+- Per-airframe and per-store-family inventory with a real deck-occupancy schedule. A launch consumes
+  one airframe and one store; a recovery returns the airframe but no store, so a recovered aircraft
+  must be serviced and re-armed before it can fly again. At the active cap the launch is queued and
+  nothing is charged. `suspendReason` is the single gate the deck consults.
+- Damage reaches the inventory: a hit wrecks actual aircraft and burns actual stores rather than
+  draining generic hit points.
+- Contacts are observed rather than copied. `canObserve` gates on range, horizon, altitude, depth and
+  visibility; `classify` degrades identity with range; delivery is delayed; and `estimatePosition`
+  dead-reckons a stale contact with a growing error radius, so an old report sends a strike to where
+  the ship was rather than where it is.
+- The scene draws the imported hulls. Tone, Chikuma, Arashi, Nowaki, Hammann, I-168 and Nautilus have
+  their own geometry at close range with the procedural silhouette beyond, at LOD distances argued
+  from triangle cost. Northampton, Phelps and Balch stay procedural: no class and no model was
+  supplied for them, and lending one a sister's hull would draw a ship this battle does not contain.
+  The B-25s are gone from Hornet, replaced by Devastators.
+
+Two further defects the wiring exposed in the code it replaced: Yorktown's deck park sat 1.82 m
+inside its own flight deck, because the gear-up park corrections were applied only to Enterprise;
+and Arashi and Nowaki were drawn with the 111 m Shiratsuyu-class Samidare against the 118.5 m the
+simulation gave them, so the drawn hull was 7.5 m shorter than its own collision volume.
+
+Fourteen non-browser gates pass on this state — check-loops, check-flight, check-geometry,
+check-weapons, check-aircraft, check-armament, check-sortie-kinds, check-intel, check-naval,
+check-carrier-ops, check-submarine, check-facilities, check-catalog and check-fleet — with
+`pnpm typecheck` at zero errors and `pnpm exec vite build` clean.
+
+Two things recorded rather than fixed: `intel.canObserve` treats `visibility` as an on/off gate
+rather than scaling range, so `Battle` passes a reduced range limit instead; and `carrier-ops` has
+`canLaunch` with no matching `canRecover`, so recovery occupancy is gated in `Battle` on
+`deck.occupiedUntil`. Both belong in the modules later.
+
+The game still runs on all of it: `playtests/launch.playtest.json` passes against a real WebGPU
+adapter with the carrier cycle, the contact model and the imported hulls all live — ready at 8.0 s,
+zero console, network and runtime errors. One caution for whoever runs it next: a first attempt
+reported `TN_PLAYTEST_RUNNER_FAILED`, which was the harness colliding with another browser capture
+holding the display, not the game. `tools/capture-lock.sh` serialises them; re-run rather than
+believing the first red.
+
+Not done: AC-5, the migration of AI aircraft onto the engine `FlightModel`. `carrier-ops.ts` exists, is checked and is
 committed, but `Battle.launch` still draws on the generic reserve of twelve and `updateShips` still
 picks types by the modulo sequence. AI flight has not moved onto the engine `FlightModel` (AC-5).
 
