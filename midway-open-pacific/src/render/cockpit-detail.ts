@@ -177,12 +177,17 @@ interface AttitudeFace {
 
 /** Live artificial horizon: sky/ground and pitch ladder move, the aircraft symbol stays fixed. */
 function createAttitudeFace(): AttitudeFace | undefined {
-  if (typeof document === "undefined") return undefined;
+  // No 2D canvas on this target: the caller falls back to the painted dial face below.
+  if (typeof document?.createElement !== "function") return undefined;
   const size = 256;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
-  const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+  const ctx = canvas.getContext("2d");
+  if (ctx === null) return undefined;
+  // The native 2D shim does not implement every context method (clip, setLineDash); without them
+  // the live horizon cannot draw, so the caller keeps the painted dial face instead of crashing.
+  if (typeof ctx.clip !== "function" || typeof ctx.setLineDash !== "function") return undefined;
   const texture = new T.CanvasTexture(canvas);
   texture.colorSpace = T.SRGBColorSpace;
   texture.anisotropy = 8;
@@ -196,6 +201,7 @@ function createAttitudeFace(): AttitudeFace | undefined {
   return {
     material,
     update(pitch: number, roll: number) {
+      try {
       ctx.clearRect(0, 0, size, size);
       ctx.save();
       ctx.beginPath();
@@ -253,6 +259,9 @@ function createAttitudeFace(): AttitudeFace | undefined {
       ctx.fill();
       ctx.restore();
       texture.needsUpdate = true;
+      } catch {
+        /* an unsupported 2D op on this target: keep the last good frame */
+      }
     },
   };
 }

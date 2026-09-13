@@ -62,6 +62,8 @@ export interface IWorldHost {
   scene: T.Scene;
   camera: T.PerspectiveCamera;
   renderer: { raw: unknown };
+  /** Drawable size, for the frames where the canvas has no CSS box to measure. */
+  viewport: { size: { width: number; height: number } };
   add: (object: T.Object3D) => unknown;
 }
 
@@ -73,6 +75,8 @@ export class WorldView {
   bombMeshes = new Map<string, T.Object3D>();
   torpMeshes = new Map<string, T.Object3D>();
   cameraMode = 0;
+  /** True while the pilot view is active, for whatever the shell wants to do about it. */
+  cockpit = false;
   rear = false;
   followBomb = false;
   snap = true;
@@ -264,8 +268,8 @@ export class WorldView {
 
   project(p: any): { x: number; y: number; visible: boolean; depth: number } {
     const v = this.tmp.set(p.x, p.y || 0, p.z).project(this.camera);
-    const w = this.renderer.domElement.clientWidth || window.innerWidth;
-    const h = this.renderer.domElement.clientHeight || window.innerHeight;
+    const w = this.renderer.domElement.clientWidth || this.host.viewport.size.width;
+    const h = this.renderer.domElement.clientHeight || this.host.viewport.size.height;
     return { x: (v.x * 0.5 + 0.5) * w, y: (-0.5 * v.y + 0.5) * h, visible: v.z > -1 && v.z < 1 && Math.abs(v.x) < 1.15 && Math.abs(v.y) < 1.15, depth: v.z };
   }
 
@@ -444,7 +448,7 @@ export class WorldView {
     if (this.playerMesh.userData.cockpitInterior) this.playerMesh.userData.cockpitInterior.visible = cockpit;
     if (this.playerMesh.userData.cockpitShell)
       for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit;
-    document.body.classList.toggle("cockpit-view", cockpit);
+    this.cockpit = cockpit;
     if (this.snap || briefing || cockpit) {
       this.camera.position.copy(this.targetCamera);
       this.snap = false;

@@ -29,7 +29,9 @@ const config: IThreeNativeConfig = {
     resolutionScale: "auto",
     alphaAntialiasing: true,
   },
-  ui: { renderer: "web" },
+  // The game's UI is the DOM in index.html, which src/ui/dom.ts drives on the web only. There is
+  // no src/ui/main.tsx web view to composite, so native targets draw the game and nothing else.
+  ui: { renderer: "native" },
 };
 
 export default config;
