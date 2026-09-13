@@ -6,17 +6,15 @@ import { mat, rod } from "./assets.js";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import {
   createCockpitInterior,
-  loadCockpitMaterials,
+  ensureCockpitMaterials,
+  getCockpitMaterials,
   type CockpitInterior,
-  type CockpitMaterials,
 } from "./cockpit-detail.js";
 import { createDauntlessGear } from "./dauntless.js";
 
 /** The detailed interior is a real-metre cockpit, scaled into the Douglas canopy opening. */
 const COCKPIT_SCALE = 0.52;
 const COCKPIT_POSITION: [number, number, number] = [0, 0.342, -2.482];
-
-let materials: CockpitMaterials;
 
 const surfaceClips = [
   "flight.pitch-up",
@@ -46,9 +44,7 @@ export async function loadImportedAircraft(ctx: Pick<ICtx, "assets" | "renderer"
   const anisotropy = (ctx.renderer.raw as WebGPURenderer).getMaxAnisotropy();
   const [sourceModel] = await Promise.all([
     ctx.assets.model<GLTF>("/assets/aircraft.douglas-sbd3.glb"),
-    loadCockpitMaterials("/assets/cockpit/", anisotropy).then((loaded) => {
-      materials = loaded;
-    }),
+    ensureCockpitMaterials(anisotropy),
   ]);
   source = sourceModel;
   source.scene.traverse((node) => {
@@ -161,7 +157,8 @@ export function createDouglas(withCockpit = false): T.Group {
   propellerPivot.add(blur);
   const instrumentRoot = new T.Group();
   instrumentRoot.name = "Douglas live cockpit instruments";
-  const interior = withCockpit ? createCockpitInterior(materials) : undefined;
+  const cockpitMaterials = getCockpitMaterials();
+  const interior = withCockpit && cockpitMaterials ? createCockpitInterior(cockpitMaterials) : undefined;
   if (interior) {
     interior.root.scale.setScalar(COCKPIT_SCALE);
     interior.root.position.set(...COCKPIT_POSITION);

@@ -1,8 +1,12 @@
 /** Detailed procedural SBD-inspired player aircraft. Metres, nose toward local -Z. */
 import * as T from "three";
 import { box, canvasTexture, consolidate, cylinder, ellipsoid, mat, rod } from "./assets.js";
-import { makeInstrumentPanel, updateInstrumentPanel } from "./cockpit.js";
+import { createCockpitInterior, getCockpitMaterials } from "./cockpit-detail.js";
 import { makeTorpedoModel } from "./model-damage.js";
+
+/** Same real-metre interior as the imported Douglas, fitted to the procedural Devastator. */
+const TBD_COCKPIT_SCALE = 0.52;
+const TBD_COCKPIT_POSITION: [number, number, number] = [0, 0.412, -1.382];
 
 const TAU = Math.PI * 2;
 
@@ -370,7 +374,19 @@ export function makeDauntless(torpedo = false): T.Group {
     box(person, 0.23, 0.04, 0.028, 0, 1.15, z + (z > 0 ? 0.145 : -0.145), rubber);
     for (const side of [-1, 1]) rod(person, [side * 0.19, 0.87, z], [side * 0.26, 0.72, z + (z > 0 ? 0.25 : -0.3)], 0.055, mat(0xb1a17c));
   }
-  const instruments = makeInstrumentPanel(root);
+  const cockpitMaterials = getCockpitMaterials();
+  const cockpitRig = cockpitMaterials ? createCockpitInterior(cockpitMaterials) : undefined;
+  let cockpitEye: T.Vector3 | undefined;
+  if (cockpitRig) {
+    cockpitRig.root.scale.setScalar(TBD_COCKPIT_SCALE);
+    cockpitRig.root.position.set(...TBD_COCKPIT_POSITION);
+    root.add(cockpitRig.root);
+    cockpitEye = new T.Vector3(
+      TBD_COCKPIT_POSITION[0] + cockpitRig.eye[0] * TBD_COCKPIT_SCALE,
+      TBD_COCKPIT_POSITION[1] + cockpitRig.eye[1] * TBD_COCKPIT_SCALE,
+      TBD_COCKPIT_POSITION[2] + cockpitRig.eye[2] * TBD_COCKPIT_SCALE,
+    );
+  }
   rod(staticParts, [0, 0.56, -0.72], [0, 0.83, -0.82], 0.022, darkSteel);
   const ring = new T.Mesh(new T.TorusGeometry(0.43, 0.026, 7, 32), darkSteel);
   ring.rotation.x = Math.PI / 2;
@@ -511,12 +527,18 @@ export function makeDauntless(torpedo = false): T.Group {
       mesh.receiveShadow = !(mesh.material as T.Material).transparent;
     }
   });
+  // The procedural airframe has no separable canopy nodes, so the pilot view shows only the
+  // detailed interior; the exterior returns in every other camera mode.
+  const cockpitShell = cockpitRig ? root.children.filter((child) => child !== cockpitRig.root) : undefined;
   root.userData = {
     detailed: true,
     airframe: torpedo ? "tbd" : "sbd",
+    cockpit: cockpitEye,
+    cockpitInterior: cockpitRig?.root,
+    cockpitShell,
     torpedoStore,
     crew,
-    instruments,
+    cockpitRig,
     wings,
     prop,
     blades,
@@ -559,7 +581,7 @@ export function animateDauntless(root: T.Group, p: any, dt: number): void {
   d.hook.rotation.x = (p.gearPos || 0) * 0.42;
   d.torpedoStore.visible = (p.torpedo || 0) > 0;
   d.cradle.visible = p.airframe !== "tbd";
-  updateInstrumentPanel(d.instruments, p);
+  d.cockpitRig?.update(p);
   d.loads[0].visible = p.bombs >= 3;
   d.loads[1].visible = p.bombs >= 2;
   d.loads[2].visible = p.bombs >= 1;

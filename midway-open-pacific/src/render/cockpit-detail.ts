@@ -157,6 +157,19 @@ export interface CockpitInterior {
   dispose(): void;
 }
 
+let cachedMaterials: CockpitMaterials | undefined;
+let loadingMaterials: Promise<CockpitMaterials> | undefined;
+
+/** Cockpit textures are loaded once per session and shared by every aircraft that mounts the rig. */
+export function ensureCockpitMaterials(anisotropy = 8): Promise<CockpitMaterials> {
+  loadingMaterials ??= loadCockpitMaterials("/assets/cockpit/", anisotropy).then((loaded) => (cachedMaterials = loaded));
+  return loadingMaterials;
+}
+
+export function getCockpitMaterials(): CockpitMaterials | undefined {
+  return cachedMaterials;
+}
+
 interface AttitudeFace {
   material: T.MeshStandardMaterial;
   update(pitch: number, roll: number): void;
@@ -736,18 +749,16 @@ export function createCockpitInterior(m: CockpitMaterials): CockpitInterior {
   }
 
   function dispose(): void {
+    // Materials and textures are shared through the session cache; only per-instance geometry and
+    // the live attitude face (created per interior) are owned here.
     const geos = new Set<T.BufferGeometry>();
-    const mats = new Set<T.Material>();
     root.traverse((o) => {
       const mesh = o as T.Mesh;
-      if (!mesh.isMesh) return;
-      geos.add(mesh.geometry);
-      for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) mats.add(mat);
+      if (mesh.isMesh) geos.add(mesh.geometry);
     });
     for (const geo of geos) geo.dispose();
-    for (const mat of mats) mat.dispose();
     attitudeFace?.material.map?.dispose();
-    for (const tex of Object.values(m.textures)) tex.dispose();
+    attitudeFace?.material.dispose();
   }
 
   return { root, eye: EYE, update, dispose };

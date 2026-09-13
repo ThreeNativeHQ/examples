@@ -582,7 +582,7 @@ export class WorldView {
       branch.traverse((o) => (o as T.Mesh).geometry?.dispose());
     const torpedo = group.userData.torpedoLoad as T.Object3D | undefined;
     torpedo?.traverse((o) => (o as T.Mesh).geometry?.dispose());
-    (group.userData.interior as { dispose?: () => void } | undefined)?.dispose?.();
+    (group.userData.cockpitRig as { dispose?: () => void } | undefined)?.dispose?.();
     if (group.userData.detailed || group.userData.importedAircraft || group.userData.importedShip)
       return;
     group.traverse((o) => {
