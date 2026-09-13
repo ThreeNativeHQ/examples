@@ -36,6 +36,7 @@ export class Midway extends Scene<GameState, undefined> {
   mouse = { fire: false, looking: false, lx: 0, ly: 0 };
   private audioBuffers: ReadonlyMap<string, AudioBuffer> = new Map();
   private camPos = new Vector3();
+  private nextAlbatross = 0;
   private cleanups: Array<() => void> = [];
 
   async load(ctx: ICtx<GameState, undefined>): Promise<void> {
@@ -280,6 +281,24 @@ export class Midway extends Scene<GameState, undefined> {
       this.paused || b.status !== "playing",
       dt,
     );
+    // Continuous world loops follow the scene: a burning hull hisses where it is, the atoll surf
+    // only exists near the atoll. Passing the full set each frame makes a stopped loop impossible.
+    const emitters: Array<{ id: string; key: string; source: unknown; volume: number }> = [];
+    for (const s of b.ships) {
+      if (s.sunk || !(s.fire > 0.12)) continue;
+      const mesh = this.world.meshes.get(s.id);
+      if (mesh) emitters.push({ id: `fire-${s.id}`, key: "fuelFire", source: mesh, volume: Math.min(0.85, 0.35 + s.fire * 0.35) });
+    }
+    const island = b.island;
+    if (island) {
+      const range = Math.sqrt(distance2(island, p));
+      if (range < 4000) emitters.push({ id: "reef", key: "reefSurf", source: { x: island.x, y: 0, z: island.z }, volume: Math.min(0.5, 0.5 * (1 - range / 4000)) });
+    }
+    this.audio.syncEmitters(emitters);
+    if (island && Math.sqrt(distance2(island, p)) < 3000 && this.wall > this.nextAlbatross) {
+      this.nextAlbatross = this.wall + 9 + Math.random() * 12;
+      this.audio.event({ cue: "albatross", at: { x: island.x + 150, y: 20, z: island.z + 150 } });
+    }
     if ((b.status === "lost" || b.status === "won") && !this.ended) {
       this.ended = true;
       this.clearInput();

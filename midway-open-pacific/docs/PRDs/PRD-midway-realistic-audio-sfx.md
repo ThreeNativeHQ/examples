@@ -476,7 +476,7 @@ No runtime wiring changes in this planning task. Future implementation must clos
 
 ### Phase 4: Deck detail, remaining aircraft and final listening
 
-**Status:** PARTIAL — `playtests/audio-realism.playtest.json` runs the real deck/camera/cutoff/release/pause/rear sequence on WebGPU with clean diagnostics; sustained positional fire loops, the remaining conditional cues, native desktop E3 and the owner listening E4 remain.
+**Status:** PARTIAL — `playtests/audio-realism.playtest.json` runs the real deck/camera/cutoff/release/pause/rear sequence on WebGPU with clean diagnostics; burning hulls carry a positional `fuel-fire` loop and the atoll carries `reef-surf` plus sparse `albatross`, both synced from the scene; native desktop E3 and the owner listening E4 remain.
 **ACs:** AC-7, AC-8, AC-9, AC-10; reconcile AC-1 across the shipped catalog.
 **Files:** `src/audio.ts`, cue data, existing deck-crew rendering only for a needed visible-action cue, `public/assets/audio/`, the consumed manifest, `scripts/check-audio.mjs`; proposed `playtests/audio-realism.playtest.json` and a desktop equivalent using the existing runners.
 
@@ -561,6 +561,12 @@ E3 evidence gap recorded 2026-09-13: `pnpm build:desktop` fails with `TN_NATIVE_
 the game's HUD and scene use `document.getElementById`; the desktop bundle is not yet portable. This
 is a web-only-UI limitation owned by PRD-051, not a defect in the audio path, and no native audio
 output can be captured until it is resolved. E3 remains unverified and no desktop claim is made.
+
+Conditional-cue disposition: `fuel-fire` (burning hulls) and `albatross` (atoll) are generated and
+wired; `reef-surf` was already generated and is now wired. `deck-handling`, `deck-footsteps`,
+`fire-hose`, `ship-whistle` and `canopy-latch` remain ungenerated with no wired consumer — the deck
+crew performs visible motion but no per-action event reaches audio yet, and there is no damage-control
+or signal event — and are recorded as not applicable rather than shipped as generic noise.
 
 ## Planning verification
 

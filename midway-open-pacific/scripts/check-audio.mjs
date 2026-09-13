@@ -443,6 +443,20 @@ const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1)
   assert.equal(bus.playAtCalls.length, 1, "the frozen cue never resumed after the pause");
 }
 
+// 23 — continuous emitters start once, retarget in place, and stop when no longer wanted.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0);
+  const hull = { name: "burning-hull" };
+  s.syncEmitters([{ id: "fire-1", key: "fuelFire", source: hull, volume: 0.6 }]);
+  assert.equal(bus.playAtCalls.filter((c) => c.key === "fuelFire").length, 1, "a burning ship loop did not start");
+  s.syncEmitters([{ id: "fire-1", key: "fuelFire", source: hull, volume: 0.3 }]);
+  assert.equal(bus.playAtCalls.filter((c) => c.key === "fuelFire").length, 1, "a running emitter was restarted instead of retargeted");
+  s.syncEmitters([]);
+  assert.ok((bus.stopped ?? 0) >= 1, "a no-longer-wanted emitter kept playing");
+}
+
 function listener(over = {}) {
   return { cockpit: false, onDeck: false, engineCut: false, damage: 0, rpm: 0.5, throttle: 0.5, ias: 120, ...over };
 }
@@ -463,4 +477,4 @@ function speechBuffers(entries) {
   return new Map(Object.entries(entries).map(([slug, duration]) => [`speech:${slug}`, { duration, __key: `speech:${slug}` }]));
 }
 
-console.log("check-audio: 23 checks passed");
+console.log("check-audio: 24 checks passed");

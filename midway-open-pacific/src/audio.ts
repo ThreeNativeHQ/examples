@@ -36,6 +36,7 @@ export interface IAudioTarget {
   play(buffer: AudioBuffer, options?: Record<string, unknown>): IVoice;
   playAt(buffer: AudioBuffer, source: unknown, options?: Record<string, unknown>): IVoice;
   music(buffer: AudioBuffer, options?: Record<string, unknown>): IVoice;
+  stopVoice(voice: unknown): boolean;
   unlock(): Promise<void>;
   dispose(): void;
 }
@@ -95,6 +96,8 @@ export const CUE_FILES: Record<string, string> = {
   radioStatic: "audio/radio-static.ogg",
   oceanWind: "audio/ocean-wind.ogg",
   reefSurf: "audio/reef-surf.ogg",
+  fuelFire: "audio/fuel-fire.ogg",
+  albatross: "audio/albatross.ogg",
 };
 
 /** Speech clips, keyed `speech:<slug>`; a missing clip is silent and keeps its caption. */
@@ -146,6 +149,16 @@ export interface ISoundEvent {
   readonly request?: ISpeechRequest;
 }
 
+/** A continuous world loop the scene reconciles each frame: ship fire, reef surf at the atoll. */
+export interface IEmitterSpec {
+  readonly id: string;
+  /** Cue key in `CUE_FILES`. */
+  readonly key: string;
+  /** An `Object3D` to weld to, or a fixed world point. */
+  readonly source: unknown;
+  readonly volume: number;
+}
+
 /** One-shot volume and cooldown by cue family; distance is applied per event. */
 const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolean }> = {
   gun50: { volume: 0.5, cooldown: 0.05 },
@@ -178,6 +191,7 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
   engineStop: { volume: 0.6, cooldown: 1 },
   radioKey: { volume: 0.25, cooldown: 0.2 },
   generalAlarm: { volume: 0.8, cooldown: 3 },
+  albatross: { volume: 0.5, cooldown: 8 },
 };
 
 /** A simple engineering starting point for acoustic travel time; temperature changes it. */
@@ -203,6 +217,9 @@ const FALLOFF: Record<string, number> = {
   steelHit: 3000,
   hullCollapse: 9000,
   waterFragments: 2500,
+  fuelFire: 0,
+  reefSurf: 0,
+  albatross: 4000,
 };
 
 function clamp01(v: number): number {
@@ -243,6 +260,8 @@ export class Soundscape {
   /** World cues awaiting acoustic arrival, and the listener position they are measured against. */
   #pending: Array<{ cue: string; at: { x: number; y: number; z: number }; emitAt: number; detune: number }> = [];
   #listener = { x: 0, y: 0, z: 0 };
+  /** Continuous positional loops (burning ships, reef surf), reconciled against the scene. */
+  readonly #emitters = new Map<string, { key: string; voice: IVoice }>();
 
   constructor(buffers: Buffers, bus: IAudioTarget, speechBus?: ISpeechBus) {
     this.buffers = buffers;
@@ -478,6 +497,37 @@ export class Soundscape {
     return this.speech.request(request);
   }
 
+  /**
+   * Reconcile the continuous positional loops against the scene's current state. Called every frame
+   * with the complete desired set; a loop that is no longer wanted is stopped, one already playing
+   * only has its gain retargeted, and a missing cue is silently absent.
+   */
+  syncEmitters(specs: readonly IEmitterSpec[]): void {
+    if (this.#disposed) return;
+    const now = this.bus.listener.context.currentTime;
+    const wanted = new Set(specs.map((s) => s.id));
+    for (const [id, entry] of [...this.#emitters]) {
+      if (wanted.has(id)) continue;
+      this.bus.stopVoice(entry.voice);
+      this.#emitters.delete(id);
+    }
+    for (const spec of specs) {
+      const buffer = this.buffers.get(spec.key);
+      if (!buffer) continue;
+      const existing = this.#emitters.get(spec.id);
+      if (existing && existing.key === spec.key) {
+        existing.voice.gain.gain.setTargetAtTime?.(spec.volume, now, 0.35);
+        continue;
+      }
+      if (existing) {
+        this.bus.stopVoice(existing.voice);
+        this.#emitters.delete(spec.id);
+      }
+      const voice = this.bus.playAt(buffer, spec.source, { loop: true, volume: spec.volume, fade: 0.5, refDistance: 80, rolloffFactor: 0.8 });
+      this.#emitters.set(spec.id, { key: spec.key, voice });
+    }
+  }
+
   /** Stops every voice and closes the buses. Safe to call twice. */
   dispose(): void {
     if (this.#disposed) return;
@@ -486,6 +536,8 @@ export class Soundscape {
     this.#loops.clear();
     this.#lastAt.clear();
     this.#pending = [];
+    for (const entry of this.#emitters.values()) this.bus.stopVoice(entry.voice);
+    this.#emitters.clear();
     this.speech.dispose();
     if (this.#speechBus && (this.#speechBus as unknown) !== (this.bus as unknown)) this.#speechBus.dispose();
     this.bus.dispose();

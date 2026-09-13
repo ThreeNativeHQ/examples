@@ -134,7 +134,9 @@ async function generateSfx(manifest, only) {
   for (const row of manifest.sfx) {
     if (only && !only.has(row.id)) continue;
     // A conditional cue without a real consumer is left ungenerated and recorded as such.
-    if (row.conditional && !flag("--all")) continue;
+    // A conditional cue without a real consumer is left ungenerated; naming it explicitly with
+    // `--only` asserts that this worktree has connected its listed consumer.
+    if (row.conditional && !flag("--all") && !(only && only.has(row.id))) continue;
     if (!flag("--force") && row.generations.length && existsSync(resolve(root, "public/assets", row.file))) continue;
     if (row.request.text.length > 450) throw new Error(`${row.id}: prompt is ${row.request.text.length} chars; the API caps text at 450`);
     const { bytes, requestId } = await post(`/sound-generation?output_format=${OUTPUT_FORMAT}`, row.request);

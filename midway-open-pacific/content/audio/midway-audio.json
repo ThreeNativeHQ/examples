@@ -1393,7 +1393,15 @@
         "prompt_influence": 0.6,
         "loop": true
       },
-      "generations": []
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "2c941b7032157d20767ee699a305c9d3f6b6e9120b0cc8073355a04c84e29ad9",
+          "outputHash": "85ca9621aadc99502fc918d9b99d65e352b9f1765d0c778bf0116504d0912c52",
+          "bytes": 124635
+        }
+      ]
     },
     {
       "id": "secondary-blast",
@@ -1794,7 +1802,15 @@
         "prompt_influence": 0.6,
         "loop": false
       },
-      "generations": []
+      "generations": [
+        {
+          "date": "2026-09-13",
+          "requestId": null,
+          "sourceHash": "290cfbb39a83673f6d28ec188b65d41df5847cb79f74e88ff0ee97822f971d02",
+          "outputHash": "87069adc8887ca7dcf3e769c3d293097342b4b9049ddfb18f71b564ef40c1ba9",
+          "bytes": 56674
+        }
+      ]
     },
     {
       "id": "fire-hose",
