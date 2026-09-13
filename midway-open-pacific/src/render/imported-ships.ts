@@ -51,6 +51,31 @@ function cloneModel(source: GLTF | undefined): T.Group {
   return model;
 }
 
+/**
+ * The Japanese carriers, at the size each ship actually measured.
+ *
+ * Only Akagi was supplied with a model. Kaga, Soryu and Hiryu borrow that hull scaled to their
+ * own length, which is a class substitution and not those ships: in reality Kaga and Soryu
+ * carried their islands to starboard where Akagi and Hiryu carried theirs to port, and the funnel
+ * arrangements differ. Those distinctions survive in the differentiated procedural hulls behind
+ * the LOD; what this buys is a carrier that reads as a warship at attack range instead of a box.
+ */
+export const IJN_CARRIERS: Record<string, { length: number; beam: number }> = {
+  Akagi: { length: 260.67, beam: 31.3 },
+  Kaga: { length: 247.65, beam: 32.5 },
+  Soryu: { length: 227.5, beam: 21.3 },
+  Hiryu: { length: 227.4, beam: 22.3 },
+};
+
+export function createIjnCarrier(name: string): T.Group {
+  const ship = IJN_CARRIERS[name] ?? IJN_CARRIERS.Akagi;
+  const model = cloneModel(akagi);
+  model.scale.setScalar(ship.length / IJN_CARRIERS.Akagi.length);
+  model.name = `IJN ${name}`;
+  model.userData.importedShip = true;
+  return model;
+}
+
 export function createCarrier(id: keyof typeof DECKS): T.Group {
   // The supplied Hornet contains the detailed Enterprise-1944 hull. Use that WWII
   // sister-ship geometry for CV-6; the CVN-80's single 1K atlas fails close deck views.

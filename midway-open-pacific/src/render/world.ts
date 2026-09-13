@@ -3,7 +3,7 @@ import * as T from "three";
 import { attitudeAxes, DECK_HEIGHT } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { ellipsoid, mat, wakeTexture, makeAircraft, makeShip } from "./assets.js";
-import { createCarrier, createMitchell, DECKS } from "./imported-ships.js";
+import { createCarrier, createIjnCarrier, createMitchell, DECKS, IJN_CARRIERS } from "./imported-ships.js";
 import { createDouglas, animateDouglas, disposeDouglas } from "./imported-aircraft.js";
 import { createMidwayAtoll, createSamidare, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
@@ -34,6 +34,29 @@ function importedAircraftFor(a: { team: string; kind: string }): (() => T.Group)
 
 /** Reused so the per-frame camera orbit allocates nothing. */
 const WORLD_UP = new T.Vector3(0, 1, 0);
+
+/**
+ * A carrier's simulation dimensions, which are two different things wearing one pair of fields.
+ *
+ * The player's own deck needs the conservative launch corridor, because the flight model rolls
+ * the aircraft along these numbers and decides an overrun from the same length. Every other
+ * carrier is a target instead, and a target has to be hittable where the player can see it: the
+ * corridor is 220m by 20m against a hull 260m by 31m, so bombs aimed at an enemy carrier's bow or
+ * outer deck were passing straight through geometry that was plainly there.
+ */
+function sizeCarrier(ship: any, isHome: boolean): void {
+  const japanese = ship.team !== "us";
+  const id = japanese ? "akagi" : ship.name === "USS Enterprise" ? "enterprise" : "hornet";
+  const ijn = IJN_CARRIERS[ship.name];
+  ship.visualLength = japanese && ijn ? ijn.length : DECKS[id].visualLength;
+  if (isHome) {
+    ship.length = DECKS[id].length;
+    ship.width = DECKS[id].width;
+  } else {
+    ship.length = ship.visualLength;
+    ship.width = japanese && ijn ? ijn.beam : 32.4;
+  }
+}
 
 export interface IWorldHost {
   scene: T.Scene;
@@ -140,9 +163,10 @@ export class WorldView {
         mesh = new T.Group();
         mesh.add(lod);
         mesh.userData.importedShip = true;
-      } else if (s.kind === "carrier" && (s.team === "us" || s.name === "Akagi")) {
-        const id = s.team !== "us" ? "akagi" : s.name === "USS Enterprise" ? "enterprise" : "hornet";
-        const detailed = createCarrier(id);
+      } else if (s.kind === "carrier") {
+        const japanese = s.team !== "us";
+        const id = japanese ? "akagi" : s.name === "USS Enterprise" ? "enterprise" : "hornet";
+        const detailed = japanese ? createIjnCarrier(s.name) : createCarrier(id);
         const lod = new T.LOD();
         lod.addLevel(detailed, 0);
         lod.addLevel(mesh, 1200);
@@ -150,9 +174,7 @@ export class WorldView {
         mesh.add(lod);
         mesh.userData.importedShip = true;
         mesh.userData.parked = [];
-        s.length = DECKS[id].length;
-        s.width = DECKS[id].width;
-        s.visualLength = DECKS[id].visualLength;
+        sizeCarrier(s, s.id === b.player.home);
         // The deck park is spotted aft, behind the launch spot, because it has to be: the deck
         // is 32m across and an SBD spans 12.66m with no folding wings, so a machine parked
         // abeam the launch lane must hang its outboard wing over the sea. Measured edges at
@@ -224,12 +246,10 @@ export class WorldView {
 
   reset(b: any): void {
     this.battle = b;
-    for (const ship of b.ships) if (ship.kind === "carrier" && (ship.team === "us" || ship.name === "Akagi")) {
-      const deck = DECKS[ship.team !== "us" ? "akagi" : ship.name === "USS Enterprise" ? "enterprise" : "hornet"];
-      ship.length = deck.length;
-      ship.width = deck.width;
-      ship.visualLength = deck.visualLength;
-    }
+    // A restart builds a fresh Battle with default hull numbers but keeps the existing meshes,
+    // so the carriers have to be re-sized exactly as they were when they were built.
+    for (const ship of b.ships)
+      if (ship.kind === "carrier") sizeCarrier(ship, ship.id === b.player.home);
     this.snap = true;
     this.followBomb = false;
     this.lookYaw = this.lookPitch = 0;
