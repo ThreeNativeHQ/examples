@@ -273,3 +273,93 @@ Prepared cockpit-only capture script: `/tmp/capture-midway-opus-cockpit.mjs`, no
 3. Preserve imported source assets and the dirty working tree. Stage/commit only this game when Codex performs finalization; unrelated sibling folders `prd221-16kb-starter` and `prd360-bayview-live` must remain untouched.
 4. Engine fixes already committed: `ad18927e9` (lift slope) and `6d529638f` (shadow material bindings). The game installs the corrected core tarball and Three patch. An engine PRD note remains uncommitted; do not revert it. Root full gates had unrelated temporary-directory/generated-declaration failures, recorded in that PRD; browser/native equivalence has not been proved.
 5. Codex will review the aggregate diff, run final appropriate checks, update PRD status, choose final evidence and handle finalization. João explicitly requested this implementation handoff before that step.
+
+---
+
+## 13. What the Claude session of 13 September 2026 actually changed
+
+Cockpit work (section 6) was explicitly taken off this lane by João mid-session and done in
+parallel by another agent; nothing below touches `cockpit*.ts`. Everything below was verified in
+the browser against the real tree, not an isolated copy, after that lane landed.
+
+### Model gaps closed
+
+| Was | Now |
+|---|---|
+| Twelve blocky box people in identical raised-arm poses | `src/render/deck-crew.ts`: twelve rigged sailors, one per flight-deck station, each with a real job, its own clip, start phase, playback rate, height and trade-coloured cloth helmet. Built by `tools/blender/rig-deck-crew.py` from the supplied WWII sailor mesh bound to the CC0 Quaternius skeleton. |
+| Japanese fighters were generic procedural aircraft | The supplied A6M3 is wired in and swapped onto AI Zeros inside 1.1km, released past 1.5km, capped at ten detailed instances. |
+| Friendly SBDs were generic procedural aircraft | The imported Douglas is used for nearby US dive bombers under the same detail loan. |
+| Arashi and Nowaki were generic procedural destroyers | The supplied Samidare hull, scaled to 111m, bow corrected to -Z, with a procedural far LOD. |
+| Kaga, Soryu and Hiryu were the same procedural box | Akagi's hull scaled to 247.65m, 227.5m and 227.4m. **Class substitution, not those ships** — Kaga and Soryu carried starboard islands, and that survives only in the far LOD. |
+| Midway was an ellipsoid | The supplied atoll, with Sand Island's X-runways and Eastern Island's 1942 triangle in its own texture, plus the garrison camp and radar station. |
+
+### Bugs found and fixed
+
+1. **Japanese dive bombers were flying as Douglas SBDs.** `launch()` stamped `airframe: "sbd"` on every bomber regardless of team. A D3A Val airframe was added and the mapping corrected.
+2. **The Catalina had no airframe at all.** `launchRecon()` never set one, so `airframeFor(undefined)` silently gave the reconnaissance flying boat a 12.66m dive bomber's span, mass and power. It now has its own PBY-5 entry.
+3. **The parked Douglas hung 4.8m of wing over the sea.** Measured port deck edge -14.6 against aircraft centred at x=-13. There is no fix by nudging: a 32m deck cannot hold a 12.66m parked span abeam a 12.66m launch lane, so the pack is now spotted aft of the launch start where a real carrier put it.
+4. **Enemy carriers were unhittable where they were visible.** Every detailed carrier had its length and width overwritten with the 220m x 20m launch corridor against a 260m x 31m hull. Only the player's own deck needs the corridor; every other carrier is now sized as the target it is.
+5. **`disposeModel()` disposed geometry shared by every other instance.** Imported clones share their geometry with `ctx.assets`; killing one aircraft took the geometry out from under the rest. Disposal now gives back only per-instance parts.
+6. **Free-look did nothing outside the cockpit.** Right-drag moved `lookYaw`/`lookPitch`, which only the cockpit branch consumed. The chase views now orbit the viewpoint.
+7. **The `visibilitychange` listener outlived the scene.** It was the one input hook never added to the cleanup list.
+8. **The arbitrary 1.15 scale** is gone for imported, metre-true models and kept only for the procedural airframe it was compensating for.
+
+### Section 5, the deck-scale question, answered
+
+Measured by raycasting the carrier's own geometry at the aircraft's stations
+(`tools/capture-deck.mjs`), in Douglas spans:
+
+| Ship-local z | +15 | -20 | -55 | -90 (bow) | +55 | +78 | +100 | +118 |
+|---|---|---|---|---|---|---|---|---|
+| Width (m) | 32.4 | 32.2 | 29.4 | 22.8 | 25.6 | 25.4 | 23.2 | 29.0 |
+| Spans | 2.56 | 2.54 | 2.32 | 1.80 | 2.02 | 2.01 | 1.83 | 2.29 |
+
+**The deck is not narrow.** 32.4m at the aircraft's station is a correct Yorktown-class flight
+deck. What was wrong was the deck park hanging over the sea, and water that was not conveying
+scale. Both are fixed; João should judge the result in `screenshots/deck-*.png`.
+
+### Section 8, the water
+
+`tools/probe-ocean.mjs` measures the wave field on the CPU: significant height 4.55m, 6.64m peak
+to trough. The field was never the problem. The log-ring grid spaced vertices 21m apart out at
+300m, so a 45m wave got two of them and the sea flattened into ripples exactly where the ships
+are. Ring density is doubled; A/B tested at 0.1ms, which is to say free.
+
+### Section 10.2, the frame figure
+
+Wall-clock timing on the private Xvfb reports 83.3ms median and is **wrong**: it does not move
+when the sea, ships or sky are hidden, nor when the render target is cut to a third of its width.
+It measures window presentation, not the game. GPU timestamp queries measure the game — NVIDIA
+Turing, 1672x941, pixel ratio 1, balanced, flying and firing with 18 aircraft and 17 ships,
+919 draw calls, 286,519 triangles:
+
+> **GPU median 3.57ms, p95 9.99ms, worst 10.79ms.**
+
+### What could NOT be sourced, and why
+
+The TBD Devastator, F4F Wildcat, D3A Val, B5N Kate and PBY Catalina have **no source asset
+available through any agent-reachable provider**, and neither do US or Japanese cruisers,
+destroyers or submarines. Checked: Sketchfab needs a `SKETCHFAB_API_TOKEN` that is not set on this
+machine; Smithsonian NASM 3D carries only a Bell X-1 and the Wright Flyer; Fab's free tier has no
+WWII naval types; Poly Haven and ambientCG have no aircraft. Those types therefore stay procedural
+at every range rather than wearing another aircraft's silhouette — `importedAircraftFor()` in
+`world.ts` says so in a comment. This is the largest remaining gap and it needs either a Sketchfab
+token or purchased assets.
+
+### Still open
+
+- Subjective audio listening (section 9) — not done, nobody listened.
+- Native `--target` playtest — not run.
+- Full combat/landing/win/loss lifecycle requalification (section 10.3).
+- The Enterprise still wears Hornet's "8" on her flight deck; the marking is baked into `hornet.glb`.
+- The IJN carriers' island sides are Akagi's for all four at close range.
+- Ships have no bow wave or hull foam; they sit in the water but do not disturb it.
+
+### Engine friction worth reporting
+
+`AnimationPlayer`'s stride pass rewrites an in-place clip's `timeScale` back to 1 on every frame
+even when the game passed `strideSync: false`, so a per-instance playback rate set on the action
+is silently discarded. The documented contract for that option is that the authored rate is kept
+and the override reported. The deck crew varies each sailor's own `dt` instead rather than patch
+`node_modules/`. Separately, `SkeletalMesh3D`'s `size` option measures a skinned rig to its crown
+**bone**, which stops mid-skull: asking for 1.74m produced a 2.03m sailor.
