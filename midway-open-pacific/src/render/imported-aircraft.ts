@@ -410,7 +410,7 @@ export function createAirframe(id: AirframeId, detail: "hero" | "ai", animated =
   // republished here, so one animator can find any airframe's propeller the same way.
   if (id === "sbd3") return createDouglas();
   // The Devastator is drawn from the ported standalone airframe, not a supplied GLB.
-  if (id === "tbd1") return makeDevastator();
+  if (id === "tbd1") return makeDevastator(detail);
   if (id === "a6m3") {
     const zero = createZero();
     zero.userData.propeller = requirePropeller(zero, ZERO_PROPELLER, "Mitsubishi A6M3", "aircraft.mitsubishi-a6m3.glb");

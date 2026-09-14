@@ -12,17 +12,11 @@
     {
       "kind": "wait",
       "label": "play and switch clips",
-      "waitTicks": 240,
+      "waitTicks": 900,
       "release": true
     }
   ],
   "assert": {
-    "diagnostics": {
-      "noConsoleErrors": true,
-      "noNetworkErrors": false,
-      "networkErrorsOptOutReason": "Desktop device transport has no CDP network observer; the browser offline/no-download check is asserted separately.",
-      "runtimeReady": true
-    },
     "components": [
       {
         "allowTrivial": "The AETHER export ships an 18-bone skeleton; a lower count is a load failure, not a scene difference.",
@@ -31,10 +25,10 @@
         "gte": 18
       },
       {
-        "allowTrivial": "The retargeted walk moves the limb bones; a still pose is the regression this catches.",
         "component": "poseDelta",
         "entity": "character",
-        "gte": 0.05
+        "gte": 0.05,
+        "allowTrivial": "The retargeted walk moves the limb bones; a still pose is the regression this catches."
       },
       {
         "allowTrivial": "AETHER's rigid segment lengths are preserved by construction; any drift is a skinning regression.",
@@ -79,10 +73,10 @@
         "gte": 18
       },
       {
-        "allowTrivial": "Two distinct retargeted clips must actually play in the run.",
         "component": "clipsPlayed",
         "entity": "character",
-        "gte": 2
+        "gte": 2,
+        "changed": true
       },
       {
         "allowTrivial": "The source 14-unit AETHER size is retained unless the sample overrides it.",

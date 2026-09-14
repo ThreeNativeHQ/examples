@@ -256,8 +256,8 @@ try {
   assert.ok(Math.abs(tbdSpan - 15.24) < 0.05, `TBD span stays measured: ${tbdSpan}`);
   tbd.updateMatrixWorld(true);
   assert.ok(
-    Math.abs(new Box3().setFromObject(tbd).min.y) < 0.02,
-    "the Devastator rests on the y = 0 wheel datum the deck park and the flight model both use",
+    Math.abs(new Box3().setFromObject(tbd).min.y + 1.82) < 0.02,
+    "the Devastator rests on the 1.82 m gear datum the flight model and the deck park both use",
   );
   const part = (name) => tbd.getObjectByName(name);
   const moved = ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].map(part);
@@ -291,6 +291,20 @@ try {
   assert.equal(tbd.userData.torpedoLoad.visible, false, "releasing the store hides it once");
   assert.ok(tbd.userData.arrestingHook, "the Devastator carries its hook");
   assert.ok(tbd.userData.cockpit, "the Devastator publishes the pilot eye");
+  const count = (group) => {
+    let triangles = 0;
+    group.traverse((node) => {
+      if (node.isMesh && node.geometry)
+        triangles += node.geometry.index
+          ? node.geometry.index.count / 3
+          : node.geometry.attributes.position.count / 3;
+    });
+    return Math.round(triangles);
+  };
+  assert.ok(
+    count(parkedTbd) < count(tbd) * 0.6,
+    `the deck-park Devastator is the cheap build: hero ${count(tbd)} vs parked ${count(parkedTbd)}`,
+  );
   disposeAirframe(tbd);
   disposeAirframe(parkedTbd);
   console.log(

@@ -29,12 +29,14 @@ interface DevastatorModel {
   dispose(): void;
 }
 
-/** The model itself, ported nearly verbatim: metres, nose -X, up +Y. */
-function buildModel(supplied: MaterialMap = {}): DevastatorModel {
-  const root = new T.Group();
-  root.name = "Douglas_TBD_1_Devastator";
-  const parts: Record<string, T.Object3D> = {};
-  const surfaces: Surface[] = [];
+/**
+ * One material set for every Devastator in the scene. Materials are shared rather than rebuilt per
+ * instance: each unique material is its own WebGPU pipeline, and a carrier's deck park would
+ * otherwise multiply the pipeline count by the number of parked airframes.
+ */
+let shared: MaterialMap | undefined;
+function materials(): MaterialMap {
+  if (shared) return shared;
   const standard = (color: number, metalness = 0.1, roughness = 0.65): T.MeshStandardMaterial =>
     new T.MeshStandardMaterial({
       color: new T.Color(color).convertSRGBToLinear(),
@@ -42,7 +44,7 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
       roughness,
       envMapIntensity: 0.72,
     });
-  const M: MaterialMap = {
+  shared = {
     skin: standard(0x617a86),
     wing: standard(0x69828c),
     under: standard(0xabb3af),
@@ -74,8 +76,19 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     }),
     red: new T.MeshStandardMaterial({ color: 0x701a15, emissive: 0xf92912, emissiveIntensity: 0.7, roughness: 0.18 }),
     green: new T.MeshStandardMaterial({ color: 0x164a3e, emissive: 0x23d3a1, emissiveIntensity: 0.65, roughness: 0.18 }),
-    ...supplied,
+    blade: new T.MeshStandardMaterial({ vertexColors: true, metalness: 0.47, roughness: 0.39, side: T.DoubleSide }),
   };
+  return shared;
+}
+
+/** The model itself, ported nearly verbatim: metres, nose -X, up +Y. */
+function buildModel(detail: "hero" | "ai"): DevastatorModel {
+  const ai = detail === "ai";
+  const root = new T.Group();
+  root.name = "Douglas_TBD_1_Devastator";
+  const parts: Record<string, T.Object3D> = {};
+  const surfaces: Surface[] = [];
+  const M: MaterialMap = materials();
   const mesh = (geo: T.BufferGeometry, mat: T.Material, parent: T.Object3D = root, name = ""): T.Mesh => {
     const o = new T.Mesh(geo, mat);
     o.name = name;
@@ -101,7 +114,7 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     parent: T.Object3D = root,
     scale?: [number, number, number],
   ): T.Mesh => {
-    const o = mesh(new T.SphereGeometry(r, 24, 12), mat, parent);
+    const o = mesh(new T.SphereGeometry(r, 16, 10), mat, parent);
     o.position.set(...pos);
     if (scale) o.scale.set(...scale);
     return o;
@@ -231,7 +244,7 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     [2.8, 0.54, 0.405, 0.05], [3.7, 0.41, 0.29, 0.09], [4.6, 0.29, 0.175, 0.14], [5.18, 0.23, 0.09, 0.19],
     [5.53, 0.16, 0.012, 0.24],
   ];
-  const fuselage = mesh(latheX(fuselageProfile, 96, 180, true), M.skin, root, "fuselage");
+  const fuselage = mesh(latheX(fuselageProfile, ai ? 36 : 72, ai ? 64 : 120, true), M.skin, root, "airframebody");
   parts.fuselage = fuselage;
   for (const side of [-1, 1]) {
     const fair = new T.Group();
@@ -255,15 +268,15 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     latheX([
       [-5.07, 0.7, 0.7, 0], [-5.02, 0.83, 0.82, 0], [-4.85, 0.91, 0.89, 0], [-4.48, 0.92, 0.89, 0],
       [-4.02, 0.88, 0.83, 0], [-3.87, 0.84, 0.8, 0],
-    ], 96, 55),
+    ], ai ? 32 : 64, ai ? 20 : 36),
     M.skin,
     cowling,
   );
-  mesh(latheX([[-5.075, 0.69, 0.69, 0], [-5.04, 0.68, 0.68, 0], [-4.88, 0.69, 0.69, 0]], 80, 10), M.dark, cowling);
-  const lip = mesh(new T.TorusGeometry(0.743, 0.047, 12, 96), M.edge, cowling);
+  mesh(latheX([[-5.075, 0.69, 0.69, 0], [-5.04, 0.68, 0.68, 0], [-4.88, 0.69, 0.69, 0]], ai ? 20 : 48, ai ? 6 : 8), M.dark, cowling);
+  const lip = mesh(new T.TorusGeometry(0.743, 0.047, 10, ai ? 32 : 64), M.edge, cowling);
   lip.rotation.y = PI / 2;
   lip.position.x = -5.062;
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < (ai ? 8 : 16); i++) {
     const a = (i / 16) * TAU;
     const flap = box([0.25, 0.3, 0.025], [-3.91, Math.sin(a) * 0.858, Math.cos(a) * 0.817], M.frame, cowling);
     flap.rotation.x = -a;
@@ -272,26 +285,30 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
   engine.name = "R1830_radial_engine";
   root.add(engine);
   parts.engine = engine;
-  rod([-5.03, 0, 0], [-4.47, 0, 0], 0.28, M.steel, engine, 0.32, 32);
-  for (let row = 0; row < 2; row++)
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * TAU + (row * PI) / 7;
-      const x = -4.82 + row * 0.25;
-      rod([x, Math.sin(a) * 0.28, Math.cos(a) * 0.28], [x, Math.sin(a) * 0.72, Math.cos(a) * 0.72], 0.145, M.dark, engine, 0.145, 14);
-      for (let k = 0; k < 8; k++) {
-        const r = 0.37 + k * 0.043;
-        rod(
-          [x, Math.sin(a) * (r - 0.01), Math.cos(a) * (r - 0.01)],
-          [x, Math.sin(a) * (r + 0.01), Math.cos(a) * (r + 0.01)],
-          0.165,
-          M.steel,
-          engine,
-          0.165,
-          14,
-        );
+  // The radial engine is only read through the cowl's open front, so the parked build omits it
+  // whole rather than paying for a second row of cylinders no one can resolve on a deck.
+  if (!ai) {
+    rod([-5.03, 0, 0], [-4.47, 0, 0], 0.28, M.steel, engine, 0.32, 16);
+    for (let row = 0; row < 2; row++)
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU + (row * PI) / 7;
+        const x = -4.82 + row * 0.25;
+        rod([x, Math.sin(a) * 0.28, Math.cos(a) * 0.28], [x, Math.sin(a) * 0.72, Math.cos(a) * 0.72], 0.145, M.dark, engine, 0.145, 10);
+        for (let k = 0; k < 5; k++) {
+          const r = 0.37 + k * 0.043;
+          rod(
+            [x, Math.sin(a) * (r - 0.01), Math.cos(a) * (r - 0.01)],
+            [x, Math.sin(a) * (r + 0.01), Math.cos(a) * (r + 0.01)],
+            0.165,
+            M.steel,
+            engine,
+            0.165,
+            10,
+          );
+        }
+        rod([x - 0.1, Math.sin(a) * 0.22, Math.cos(a) * 0.22], [x - 0.1, Math.sin(a) * 0.67, Math.cos(a) * 0.67], 0.015, M.black, engine, undefined, 6);
       }
-      rod([x - 0.1, Math.sin(a) * 0.22, Math.cos(a) * 0.22], [x - 0.1, Math.sin(a) * 0.67, Math.cos(a) * 0.67], 0.015, M.black, engine, undefined, 6);
-    }
+  }
   for (const side of [-1, 1])
     tube([[-4.05, -0.4, side * 0.64], [-3.9, -0.58, side * 0.66], [-3.58, -0.61, side * 0.65]], 0.1, M.dark, cowling, 14);
   batch(engine);
@@ -307,8 +324,8 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     const uv: number[] = [];
     const ix: number[] = [];
     const cols: number[] = [];
-    const n = 35;
-    const k = 10;
+    const n = ai ? 14 : 28;
+    const k = ai ? 6 : 8;
     for (let i = 0; i <= n; i++) {
       const f = i / n;
       const r = 0.2 + f * 1.49;
@@ -333,8 +350,7 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
       }
     const g = geometry(p, uv, ix);
     g.setAttribute("color", new T.Float32BufferAttribute(cols, 3));
-    const pm = new T.MeshStandardMaterial({ vertexColors: true, metalness: 0.47, roughness: 0.39, side: T.DoubleSide });
-    const bladeMesh = mesh(g, pm, prop, "propeller_blade_" + blade);
+    const bladeMesh = mesh(g, M.blade!, prop, "propeller_blade_" + blade);
     bladeMesh.rotation.x = (blade / 3) * TAU;
   }
   ball(0.22, [0, 0, 0], M.steel, prop, [1.1, 1, 1]);
@@ -369,8 +385,8 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     tail = false,
     name = "wing_skin",
   ): void => {
-    const ns = Math.max(6, Math.ceil((sb - sa) * 11));
-    const nc = 24;
+    const ns = Math.max(6, Math.ceil((sb - sa) * (ai ? 4 : 8)));
+    const nc = ai ? 8 : 16;
     for (const upper of [true, false]) {
       const p: number[] = [];
       const uv: number[] = [];
@@ -463,6 +479,7 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
         fold,
         12,
       );
+    batch(fold);
     wingPatch(root, 0, 2.52, 0, 0.7, side, V(), true, "horizontal_stabilizer");
     hinged(root, "elevator" + suffix, 0.03, 2.49, 0.713, 1, side, V(), true);
   }
@@ -471,7 +488,7 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     const shape = new T.Shape();
     points.forEach((p, i) => (i ? shape.lineTo(p[0]!, p[1]!) : shape.moveTo(p[0]!, p[1]!)));
     shape.closePath();
-    const g = new T.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025, bevelSegments: 3, curveSegments: 24, steps: 1 });
+    const g = new T.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025, bevelSegments: 2, curveSegments: ai ? 8 : 16, steps: 1 });
     g.translate(-offset.x, -offset.y, -depth / 2 - offset.z);
     const p = g.attributes.position!;
     const u: number[] = [];
@@ -504,10 +521,11 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     const seat = box([0.4, 0.48, 0.45], [x, 0.55, 0], M.cockpit!, cockpit);
     seat.rotation.z = -0.12;
     box([0.44, 0.1, 0.43], [x - 0.15, 0.31, 0], M.seat!, cockpit);
-    for (const side of [-1, 1]) {
-      const strap = box([0.038, 0.38, 0.012], [x - 0.224, 0.58, side * 0.14], M.yellow!, cockpit);
-      strap.rotation.z = -0.18;
-    }
+    if (!ai)
+      for (const side of [-1, 1]) {
+        const strap = box([0.038, 0.38, 0.012], [x - 0.224, 0.58, side * 0.14], M.yellow!, cockpit);
+        strap.rotation.z = -0.18;
+      }
     rod([x - 0.48, 0.3, 0], [x - 0.52, 0.62, 0], 0.018, M.black!, cockpit);
     ball(0.035, [x - 0.52, 0.62, 0], M.black!, cockpit);
   }
@@ -517,12 +535,14 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
   instrument.position.set(-2.994, 0.64, 0);
   for (const side of [-1, 1]) {
     box([0.7, 0.13, 0.14], [-2.7, 0.49, side * 0.43], M.black!, cockpit);
-    for (let i = 0; i < 5; i++) rod([-2.93 + i * 0.1, 0.55, side * 0.43], [-2.93 + i * 0.1, 0.61, side * 0.43], 0.01, M.steel!, cockpit);
+    if (!ai) for (let i = 0; i < 5; i++) rod([-2.93 + i * 0.1, 0.55, side * 0.43], [-2.93 + i * 0.1, 0.61, side * 0.43], 0.01, M.steel!, cockpit);
   }
   box([0.3, 0.3, 0.48], [0.17, 0.48, 0], M.black!, cockpit);
-  rod([0.82, 0.61, 0], [1.15, 0.8, 0], 0.035, M.dark!, cockpit);
-  rod([1.05, 0.8, 0], [1.75, 0.85, 0], 0.027, M.dark!, cockpit, 0.018, 12);
-  box([0.26, 0.1, 0.09], [1.0, 0.78, 0], M.dark!, cockpit);
+  if (!ai) {
+    rod([0.82, 0.61, 0], [1.15, 0.8, 0], 0.035, M.dark!, cockpit);
+    rod([1.05, 0.8, 0], [1.75, 0.85, 0], 0.027, M.dark!, cockpit, 0.018, 12);
+    box([0.26, 0.1, 0.09], [1.0, 0.78, 0], M.dark!, cockpit);
+  }
   batch(cockpit);
 
   const canopyStations: Station[] = [
@@ -583,11 +603,11 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     rod([0.12, -0.67, side * 0.01], [0.21, -0.91, side * 0.01], 0.023, M.dark!, gear);
     rod([0.21, -0.91, side * 0.01], [0.045, -1.06, side * 0.01], 0.023, M.dark!, gear);
     rod([0.045, -1.13, -side * 0.16], [0.045, -1.13, side * 0.26], 0.064, M.steel!, gear, 0.064, 16);
-    const tire = mesh(new T.TorusGeometry(0.385, 0.135, 16, 52), M.rubber!, gear, "main_tire");
+    const tire = mesh(new T.TorusGeometry(0.385, 0.135, ai ? 10 : 14, ai ? 20 : 36), M.rubber!, gear, "main_tire");
     tire.position.set(0.045, -1.13, side * 0.12);
     rod([0.045, -1.13, side * 0.015], [0.045, -1.13, side * 0.24], 0.264, M.steel!, gear, 0.264, 32);
     for (const z of [-0.01, 0.25]) {
-      const hub = mesh(new T.TorusGeometry(0.199, 0.022, 8, 32), M.dark!, gear);
+      const hub = mesh(new T.TorusGeometry(0.199, 0.022, 8, ai ? 12 : 24), M.dark!, gear);
       hub.position.set(0.045, -1.13, side * z);
     }
     for (let j = 0; j < 8; j++) {
@@ -603,7 +623,7 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
   root.add(tailGear);
   parts.tailGear = tailGear;
   rod([4.7, -0.045, 0], [4.91, -0.49, 0], 0.034, M.steel!, tailGear);
-  const tw = mesh(new T.TorusGeometry(0.145, 0.062, 12, 30), M.rubber!, tailGear);
+  const tw = mesh(new T.TorusGeometry(0.145, 0.062, 10, ai ? 16 : 24), M.rubber!, tailGear);
   tw.position.set(4.91, -0.55, 0);
   rod([4.91, -0.55, -0.075], [4.91, -0.55, 0.075], 0.102, M.steel!, tailGear, 0.102, 20);
   batch(tailGear);
@@ -624,7 +644,7 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
     [-2.88, 0.267, 0.267, 0], [-0.15, 0.267, 0.267, 0], [0.48, 0.245, 0.245, 0], [0.86, 0.16, 0.16, 0],
     [1.08, 0.065, 0.065, 0],
   ];
-  mesh(latheX(tp, 64, 92, false, false), M.torpedo!, torpedo, "torpedo_body");
+  mesh(latheX(tp, ai ? 28 : 48, ai ? 36 : 64, false, false), M.torpedo!, torpedo, "torpedo_body");
   for (const x of [-2.94, -1.25, 0.26]) {
     const band = mesh(new T.TorusGeometry(0.267, 0.012, 8, 48), M.dark!, torpedo);
     band.rotation.y = PI / 2;
@@ -744,8 +764,9 @@ function buildModel(supplied: MaterialMap = {}): DevastatorModel {
       }
     });
     for (const g of gs) g.dispose();
-    for (const m of ms) m.dispose();
+    for (const m of ms) if (!Object.values(shared!).includes(m)) m.dispose();
   };
+  batch(root);
   reset();
   return { root, parts, materials: M, setControl, update, reset, releaseTorpedo, getState, dispose };
 }
@@ -756,20 +777,26 @@ const instances = new WeakMap<
 >();
 
 /**
- * The Devastator as the game draws it: nose -Z, wheels on y = 0, and the published handles the
- * scene's own animator and capture gates already address.
+ * The Devastator as the game draws it: nose -Z, its wheels on the same datum every other airframe
+ * uses, and the published handles the scene's own animator and capture gates already address.
+ *
+ * `WHEEL_DROP` is `gearClearance` rest value: `@threenative/core`'s flight model puts the simulated
+ * root 1.82 m above the wheel contact, and every other drawn airframe (the SBD, the Zero, the
+ * procedural hull) hangs its gear that far below its origin. The standalone model grounds its own
+ * wheels on y = 0, so it is dropped to match rather than floating a gear-height above the deck.
  */
-export function makeDevastator(): T.Group {
-  const model = buildModel();
+const WHEEL_DROP = 1.82;
+
+export function makeDevastator(detail: "hero" | "ai" = "hero"): T.Group {
+  const model = buildModel(detail);
   const root = new T.Group();
   root.name = "Douglas TBD-1 Devastator";
   model.root.rotation.y = -PI / 2;
   root.add(model.root);
   root.updateMatrixWorld(true);
   const bounds = new T.Box3().setFromObject(model.root);
-  model.root.position.y = -bounds.min.y;
+  model.root.position.y = -bounds.min.y - WHEEL_DROP;
 
-  model.parts.fuselage!.name = "airframebody";
   model.parts.aileronPort!.name = "aileronleft";
   model.parts.aileronStarboard!.name = "aileronright";
   model.parts.flapPort!.name = "flapleft";

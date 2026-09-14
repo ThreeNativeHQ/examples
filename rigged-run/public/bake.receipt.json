@@ -1,32 +1,44 @@
 {
   "outputs": [
     {
-      "bytes": 1597028,
-      "path": "aether-rigged.a8fe588c.glb",
-      "producer": "audio+model",
+      "bytes": 571108,
+      "path": "aether-rigged.332507a9.glb",
+      "producer": "audio+ktx2+model",
       "source": "aether-rigged.glb"
     },
     {
-      "bytes": 1597214,
-      "path": "shared/images/3f1184f67376ac65.none.png",
-      "producer": "image",
-      "source": "aether-rigged.glb"
+      "bytes": 57529,
+      "path": "basis/basis_transcoder.js",
+      "producer": "basis-transcoder",
+      "source": null
     },
     {
-      "bytes": 756534,
-      "path": "shared/images/7dc0ccfa22804c88.none.jpg",
-      "producer": "image",
-      "source": "aether-rigged.glb"
-    },
-    {
-      "bytes": 132480,
-      "path": "shared/images/e288649dfdea1234.none.png",
-      "producer": "image",
-      "source": "aether-rigged.glb"
+      "bytes": 527333,
+      "path": "basis/basis_transcoder.wasm",
+      "producer": "basis-transcoder",
+      "source": null
     },
     {
       "bytes": 440827,
-      "path": "shared/images/e5fb24f85651f0a6.none.jpg",
+      "path": "shared/images/7caa474ff47bf9f9.none.jpg",
+      "producer": "image",
+      "source": "aether-rigged.glb"
+    },
+    {
+      "bytes": 657521,
+      "path": "shared/images/803563fdd69d7085.etc1s.ktx2",
+      "producer": "image",
+      "source": "aether-rigged.glb"
+    },
+    {
+      "bytes": 32716,
+      "path": "shared/images/83e1010612751a6c.etc1s.ktx2",
+      "producer": "image",
+      "source": "aether-rigged.glb"
+    },
+    {
+      "bytes": 187977,
+      "path": "shared/images/8c49024576deae02.etc1s.ktx2",
       "producer": "image",
       "source": "aether-rigged.glb"
     }

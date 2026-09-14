@@ -177,17 +177,18 @@ const PARK_FACTORY: Readonly<Record<string, () => T.Group>> = {
 /**
  * How far a parked airframe's origin stands above its wheel contact, in metres.
  *
- * The import contract lands the TBD's and Kate's wheels on y = 0, so their root is the contact
- * datum. The other three are not: the Douglas main wheels reach -1.84 m below its root
+ * The Kate's wheels land on y = 0 out of the import contract, so its root is the contact datum.
+ * The others hang their gear below the origin: the Douglas main wheels reach -1.84 m
  * (`createDauntlessGear`: leg -0.3, wheel -1.19, radius 0.35), the Zero's reach -1.87 m
- * (`createZero`: wheel -1.55, radius 0.32), and the procedural hull's reach -2.36 m
- * (`makeAircraft`: wheel -1.85, radius 0.51). A station adds this back so every type rests on the
- * same deck plane instead of sinking its undercarriage into it.
+ * (`createZero`: wheel -1.55, radius 0.32), the procedural hull's -2.36 m (`makeAircraft`: wheel
+ * -1.85, radius 0.51), and the ported Devastator's rest on the same 1.82 m datum the flight
+ * model's `gearClearance` assumes. A station adds this back so every type rests on the same deck
+ * plane instead of sinking its undercarriage into it.
  */
 const PARK_GROUND: Readonly<Record<string, number>> = {
   wildcat: 2.36,
   sbd: 1.84,
-  tbd: 0,
+  tbd: 1.82,
   zero: 1.87,
   val: 2.36,
   kate: 0,
