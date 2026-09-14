@@ -367,6 +367,8 @@ export class Battle {
   contacts = new Map<string, IReport>();
   /** Transmitted and not yet delivered. Killing the observer cannot recall what it already sent. */
   reports: IReport[] = [];
+  /** When each side last filed on each hull, so a sweep re-files a track rather than every sighting. */
+  filed: Record<string, Map<string, number>> = { us: new Map(), jp: new Map() };
   radio: Any[] = [];
   events: Any[] = [];
   reported = 0;
@@ -1076,7 +1078,9 @@ export class Battle {
         role = key;
       }
     }
+    // Nothing wanted is not a blocked deck: the reason the HUD reads must not outlive its attempt.
     if (role) this.launch(s, role);
+    else s.launchBlocked = null;
   }
 
   /** Every observer of one side that could see anything at all, with its own height and reach. */
@@ -1118,8 +1122,11 @@ export class Battle {
       if (!observers.length) continue;
       for (const target of this.ships) {
         if (target.team === team || target.sunk) continue;
+        // The last time this side put anything on the air about this hull, delivered or still in
+        // transit: a fleet files a track update, not one report per observer per second.
         const held = this.teamIntel[team].get(target.id);
-        if (held && this.time - held.observedAt < TRACK_SECONDS) continue;
+        const last = Math.max(held?.observedAt ?? -Infinity, this.filed[team].get(target.id) ?? -Infinity);
+        if (this.time - last < TRACK_SECONDS) continue;
         const targetAltitude = target.kind === "sub" ? (target.surfaced ? 2 : -40) : target.deckHeight;
         for (const o of observers) {
           if (
@@ -1147,6 +1154,7 @@ export class Battle {
     const truth = classOf(target);
     const { classification, confidence } = classify({ truth, range, random: this.random() });
     const identified = classification === truth;
+    this.filed[team].set(target.id, this.time);
     this.reports.push({
       ...makeContact({
         id: target.id,

@@ -1,5 +1,6 @@
 /** The battle's Three.js world, built into the scene the framework owns. */
 import * as T from "three";
+import { shipClass } from "../sim/catalog.js";
 import { attitudeAxes } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { ellipsoid, mat, wakeTexture, makeAircraft, makeShip } from "./assets.js";
@@ -200,6 +201,15 @@ export class WorldView {
         const detailed = shipModelFor(classId);
         // The class creators name their lead ship; this is the sister actually being built.
         detailed.name = s.name;
+        // Float it at its own waterline. The import contract lands the keel on y = 0, so an
+        // imported hull drawn at the ship's own y shows its whole underwater body above the sea —
+        // a destroyer standing on the water with its full anti-fouling band in daylight. The
+        // procedural hull at the far level uses the other convention: `makeShip` in assets.ts puts
+        // the WATERLINE on y = 0, lifts the hull band to y = 8 and models no submerged body at
+        // all. So only the imported level moves, by its own class draught, and the two levels then
+        // float on the same line. A submerged boat needs nothing further here: the wrapper already
+        // drops to y = -7 and ocean.ts skips a dived boat's wake slot.
+        detailed.position.y = -shipClass(classId).draught;
         const lod = new T.LOD();
         lod.addLevel(detailed, 0);
         lod.addLevel(mesh, far);
@@ -210,6 +220,15 @@ export class WorldView {
         const japanese = s.team !== "us";
         const id = japanese ? "akagi" : carrierModelId(s);
         const detailed = japanese ? createIjnCarrier(s.name) : createCarrier(id);
+        // A carrier does NOT get the draught offset the escorts get above, and this is deliberate.
+        // Its flight deck is the one drawn surface the simulation also stands on: `deckHeight` is
+        // measured from the keel, the player's aircraft is placed in world space at that height by
+        // the flight model, and the deck park and the deck crew below are positioned at it too.
+        // Because the keel sits on y = 0, world y = deckHeight IS the drawn deck. Lowering the
+        // hull by its 7.5-7.9 m draught would drop the drawn deck that far while the simulation
+        // kept landing aircraft at the old datum, so recovery would touch down in mid-air. Moving
+        // it needs `deckHeight` in src/sim/battle.ts to move with it, which is not this file.
+        // Until then a carrier floats high and that is the lesser of the two wrongs.
         const lod = new T.LOD();
         lod.addLevel(detailed, 0);
         lod.addLevel(mesh, 1200);
@@ -221,18 +240,21 @@ export class WorldView {
         // morning of 4 June; the B-25s that used to stand on Hornet had been flown off her for
         // Tokyo two months earlier and never came back aboard, so they were scenery, not a strike
         // type. `ai` is the reduced-detail build of the same airframe, 11,640 triangles against
-        // the hero's 42k, which is what it exists for.
+        // the hero's 38,800 (tools/inspect-glb.mjs), which is what it exists for.
         //
         // The park is spotted aft, behind the launch spot, because it has to be: the deck is 32 m
         // across at its widest and none of these aircraft is drawn with its wings folded, so a
         // machine parked abeam the launch lane hangs a wingtip over the sea. The clearance is
-        // against the surveyed edges at these stations, port -12.80 m and starboard +12.60 m
-        // (tools/capture-deck.mjs), not against the nominal 32 m:
+        // against the surveyed edges, not the nominal 32 m. tools/capture-deck.mjs raycasts the
+        // deck at z = 55 / 78 / 100 and finds port -12.8 / -12.8 / -10.6 and starboard
+        // +12.8 / +12.6 / +12.6, so the park's three stations are governed by the narrowest of
+        // them, the -10.6 m port edge abreast z = 100:
         //
         //   TBD-1 span 15.24 m (public/assets/aircraft.tbd-devastator.ai.glb, tools/inspect-glb.mjs)
-        //   half-span 7.62 m, wider than the SBD's 6.33 m, so the old x = -4.5 station left this
-        //   wing only 12.80 - (4.5 + 7.62) = 0.68 m of deck and is abandoned.
-        //   At x = -1: port tip -8.62 m, 4.18 m clear; starboard tip +6.62 m, 5.98 m clear.
+        //   half-span 7.62 m against the SBD's 6.33 m, so the old x = -4.5 station would put this
+        //   wing at -12.12 m, over the edge at both of the two aft stations, and is abandoned.
+        //   At x = -1: port tip -8.62 m, 1.98 m clear of the tightest edge; starboard tip
+        //   +6.62 m, 5.98 m clear. Measured back off the built scene, not only computed here.
         //
         // The import lands the TBD's wheels on y = 0, so a station is the deck datum with nothing
         // added. The +1.82 m and the 0.22 rad nose-up were corrections for the gear-up Douglas
