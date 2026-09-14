@@ -317,6 +317,41 @@ const notes = [];
   notes.push(`stale report: ${age.toFixed(0)} s old, ${drift.toFixed(0)} m off the ship, uncertainty ±${radius.toFixed(0)} m`);
 }
 
+// 9 — a damaged deck suspends operations with a reason a person can read, refuses launches while it
+//     holds, and reopens once the condition is genuinely repaired — without giving back the hull or
+//     the stores that were destroyed.
+{
+  const b = new Battle(31);
+  b.status = "playing";
+  b.time = 5;
+  const kaga = b.ships.find((s) => s.name === "Kaga");
+  assert.equal(b.deckSuspension(kaga), null, "an undamaged deck is not suspended");
+  const before = { hp: kaga.hp, ready: ready(kaga), stores: JSON.stringify(kaga.air.stores), fuel: kaga.air.fuel };
+  b.damageShip(kaga, 150, { x: kaga.x, y: kaga.deckHeight, z: kaga.z }, "bomb", "us");
+  const reason = b.deckSuspension(kaga);
+  assert.ok(reason && typeof reason === "string", `a wrecked deck must report a readable reason, got ${reason}`);
+  assert.equal(b.launch(kaga, "fighter"), null, "a suspended deck must not launch");
+  assert.equal(kaga.launchBlocked, reason, `the refusal must be that same reason, got ${kaga.launchBlocked}`);
+  const hit = { ready: ready(kaga), stores: JSON.stringify(kaga.air.stores), fuel: kaga.air.fuel };
+  assert.ok(hit.ready < before.ready, "a bomb on a working deck must wreck aircraft that were ready");
+  assert.ok(hit.stores !== before.stores, "and burn stores");
+  assert.ok(hit.fuel < before.fuel, "and burn aviation fuel");
+  assert.ok(kaga.hp < before.hp, "and damage the ship");
+
+  // Firefighting and deck repair, at the rate the simulation already runs them.
+  let reopened = 0;
+  for (let i = 0; i < Math.round(900 / STEP) && !reopened; i += 1) {
+    b.step(STEP, {});
+    if (b.deckSuspension(kaga) === null) reopened = b.time;
+  }
+  assert.ok(reopened, `the deck never reopened: ${b.deckSuspension(kaga)} after ${(b.time - 5).toFixed(0)} s`);
+  assert.ok(kaga.hp < before.hp, "reopening the deck must not repair the hull");
+  assert.ok(ready(kaga) + Object.values(kaga.air.damaged).reduce((a, c) => a + c, 0) <= before.ready, "nor restore written-off aircraft");
+  assert.ok(kaga.air.fuel <= hit.fuel, "nor refill the burnt aviation fuel");
+  assert.ok(b.launch(kaga, "fighter"), "and the deck must actually be able to launch again");
+  notes.push(`suspension: "${reason}" for ${(reopened - 5).toFixed(0)} s, then limited operations with ${kaga.hp.toFixed(0)}/${kaga.maxHp} hull`);
+}
+
 // 7 — the same seed and the same input trace reproduce the same state, exactly.
 {
   const trace = (i) => (i % 3 === 0 ? { throttleUp: true } : i % 3 === 1 ? { pitch: 0.2 } : { turn: -0.1 });

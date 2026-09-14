@@ -12,7 +12,7 @@ from rig_humanoid import main as rig_humanoid
 
 
 def main(ual1, ual2, model, out):
-    measurements = json.loads(Path(__file__).with_name('navy-sailor.json').read_text())
+    measurements = json.loads(Path(__file__).with_name('navy-sailor-light.json').read_text())
     rig_humanoid(ual1, ual2, model, out, measurements)
 
 

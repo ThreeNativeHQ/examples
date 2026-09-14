@@ -57,7 +57,7 @@ def bind(character, armature, measurements):
                 character.modifiers.remove(modifier)
     groups = {b.name: character.vertex_groups.new(name=b.name) for b in armature.data.bones}
     segments = {}
-    for side in ['l', 'r']:
+    for side in ([] if measurements.get('hands') == 'rigid' else ['l', 'r']):
         segments[side] = [('hand', *map(Vector, measurements['palms'][side]))]
         for finger, points in measurements['fingers'][side].items():
             segments[side].extend((f'{finger}_{i + 1:02}', Vector(points[i]), Vector(points[i + 1]))
@@ -69,12 +69,19 @@ def bind(character, armature, measurements):
                       regions["torso"])
         arm = chain(abs(x), [f'upperarm_{side}', f'lowerarm_{side}', f'hand_{side}'],
                     [regions["elbow"], regions["wrist"]])
-        arm_blend = smooth(abs(x), *regions["shoulderX"]) * smooth(z, *regions["shoulderZ"])
+        # Height distinguishes the shoulder from the torso only near the armpit. Distal
+        # fingers can hang below that band; attaching them to spine bones tears the fingertips.
+        distal = smooth(abs(x), regions["shoulderX"][1], regions["elbow"][0])
+        arm_blend = smooth(abs(x), *regions["shoulderX"]) * max(smooth(z, *regions["shoulderZ"]), distal)
         weights = {name: w * (1 - arm_blend) for name, w in torso.items()}
         weights.update({name: w * arm_blend for name, w in arm.items()})
         hand_weight = weights.pop(f'hand_{side}')
         hand_weights = {}
-        if hand_weight:
+        if hand_weight and measurements.get('hands') == 'rigid':
+            # Fused gloves have no separate digits to bend. Keep their silhouette at the wrist.
+            hand_weights[f'hand_{side}'] = hand_weight
+            weights[f'hand_{side}'] = hand_weight
+        elif hand_weight:
             p = v.co
             influence = {}
             for name, start, end in segments[side]:
@@ -115,7 +122,7 @@ def fit_rig(armature, measurements):
     armature.animation_data_clear()
     bpy.ops.object.mode_set(mode='EDIT')
     targets = dict(measurements['joints'])
-    for side in ['l', 'r']:
+    for side in ([] if measurements.get('hands') == 'rigid' else ['l', 'r']):
         for finger, points in measurements['fingers'][side].items():
             for i, point in enumerate(points):
                 suffix = f'{i + 1:02}' if i < 3 else '04_leaf'
@@ -129,7 +136,7 @@ def fit_rig(armature, measurements):
         offset = Vector(point) - bone.head
         bone.head += offset
         bone.tail += offset
-    for side in ['l', 'r']:
+    for side in ([] if measurements.get('hands') == 'rigid' else ['l', 'r']):
         for finger, points in measurements['fingers'][side].items():
             for i in range(3):
                 bone = bones[f'{finger}_{i + 1:02}_{side}']
@@ -210,14 +217,15 @@ def pose_hand(armature, side, closed):
 def validate_measurements(data):
     """Fail before changing the Blender session when calibration data is incomplete."""
     assert data.get("bodyWeights", "automatic") in ["automatic", "anatomical"], "Unknown body binding method"
+    assert data.get('hands', 'articulated') in ['rigid', 'articulated'], 'Unknown hand binding method'
     assert isinstance(data['name'], str) and data['name'], 'Model name is required'
     assert math.isfinite(data['height']) and data['height'] > 0, 'Height must be positive metres'
     assert isinstance(data['triangles'], int) and data['triangles'] >= 1000, 'Triangle budget must be >= 1000'
     assert data['clips'] and all(len(c) == 2 and all(isinstance(n, str) and n for n in c) for c in data['clips']), 'Clips must map source to output names'
     assert len({c[1] for c in data['clips']}) == len(data['clips']), 'Output clip names must be unique'
-    assert all(math.isfinite(v) and v >= 0 for v in data['fingerMotion'].values()), 'Finger motion must be finite and nonnegative'
+    assert all(math.isfinite(v) and v >= 0 for v in data.get('fingerMotion', {}).values()), 'Finger motion must be finite and nonnegative'
     points = list(data['joints'].values())
-    for side in ['l', 'r']:
+    for side in ([] if data.get('hands') == 'rigid' else ['l', 'r']):
         assert set(data['fingers'][side]) == {'thumb', 'index', 'middle', 'ring', 'pinky'}, f'{side}: map all five fingers'
         assert len(data['palms'][side]) == 2, f'{side}: palm needs a wrist and knuckle centre'
         points.extend(data['palms'][side])
@@ -279,6 +287,15 @@ def main(ual1, ual2, model_path, out, measurements):
     decimate.ratio = min(1.0, measurements["triangles"] / len(character.data.polygons))
     decimate.use_collapse_triangulate = True
     bpy.ops.object.modifier_apply(modifier=decimate.name)
+    if measurements.get('subdivideBeforeBinding', False):
+        # Linear triangle subdivision supplies intermediate skin weights across coarse joints.
+        # Split every edge together: partial splits create long diagonals when glTF triangulates.
+        bm = bmesh.new(); bm.from_mesh(character.data)
+        bmesh.ops.triangulate(bm, faces=list(bm.faces))
+        bmesh.ops.subdivide_edges(bm, edges=list(bm.edges), cuts=1, use_grid_fill=True, smooth=0)
+        bmesh.ops.triangulate(bm, faces=list(bm.faces))
+        print(f'JOINT TOPOLOGY: {len(bm.faces)} triangles')
+        bm.to_mesh(character.data); bm.free()
     separate_fingers(character, measurements.get("fingerCuts", []))
     for polygon in character.data.polygons:
         polygon.use_smooth = True
@@ -287,7 +304,8 @@ def main(ual1, ual2, model_path, out, measurements):
     keep = []
     for src, name in measurements["clips"]:
         action = by_name[src]
-        relax_fingers(action, measurements)
+        if measurements.get('hands') != 'rigid':
+            relax_fingers(action, measurements)
         action.name = name
         action.use_fake_user = True
         keep.append(action)

@@ -8,6 +8,7 @@ import {
   length,
   max,
   mix,
+  mx_noise_float,
   positionLocal,
   pow,
   sin,
@@ -15,6 +16,7 @@ import {
   step,
   uv,
   vec2,
+  vec3,
   vec4,
 } from "three/tsl";
 import * as T from "three";
@@ -72,9 +74,43 @@ function batch(capacity: number, glow: boolean): any {
     mix(spark, streak, step(float(2.5), kind)),
     step(float(1.5), kind),
   );
-  material.opacityNode = alpha.mul(aShape.z);
   const shade = uv().y.oneMinus().mul(0.3).add(0.7);
-  material.colorNode = aColor.mul(mix(shade, float(1.0), step(float(0.5), kind)));
+  // Ship smoke (4) and flame (5) have their own surface; flashes, spray and aircraft
+  // trails retain their masks. The seed and age were already uploaded for every particle.
+  const flow = vec3(q.mul(2.3), aExtra.x.add(aExtra.z.mul(2)));
+  const billow = mx_noise_float(flow);
+  const detail = mx_noise_float(flow.mul(2.9).add(17));
+  const density = float(1).sub(radial).add(billow.mul(0.65)).add(detail.mul(0.18));
+  const smoke = smoothstep(0.02, 0.55, density).mul(smoothstep(1, 0.72, radial));
+  const smokeShade = billow.mul(0.65).add(detail.mul(0.22)).add(uv().y.mul(0.35)).add(0.65);
+  const height = uv().y;
+  const flameFlow = vec3(q.x.mul(3), height.mul(3).sub(aExtra.z.mul(6)), aExtra.x);
+  const curl = mx_noise_float(flameFlow);
+  const wisps = mx_noise_float(flameFlow.mul(2.7));
+  const heat = height.oneMinus().mul(0.85)
+    .sub(q.x.add(curl.mul(height).mul(0.6)).abs().mul(0.65))
+    .add(curl.mul(0.65)).add(wisps.mul(0.2));
+  const flame = smoothstep(0.08, 0.4, heat)
+    .mul(smoothstep(0, 0.1, height)).mul(smoothstep(1, 0.8, height))
+    .mul(smoothstep(1, 0.78, q.x.abs()));
+  const isFlame = step(4.5, kind);
+  const shipMask = mix(smoke, flame, isFlame);
+  // FIRE_COLOR / FIRE_ALPHA from the engine VFX gallery's render/archivePresets.ts.
+  // Reuse the authored fire curves in this game's existing batches, at carrier scale.
+  const age = aExtra.z;
+  let flameColor = mix(vec3(1, 0.957, 0.749), vec3(1, 0.945, 0.541), age.div(0.12).clamp(0, 1));
+  flameColor = mix(flameColor, vec3(1, 0.612, 0.184), age.sub(0.12).div(0.33).clamp(0, 1));
+  flameColor = mix(flameColor, vec3(1, 0.294, 0.071), age.sub(0.45).div(0.37).clamp(0, 1));
+  flameColor = mix(flameColor, vec3(0.322, 0.078, 0), age.sub(0.82).div(0.18).clamp(0, 1));
+  let flameFade = mix(float(0), float(0.55), age.div(0.08).clamp(0, 1));
+  flameFade = mix(flameFade, float(1), age.sub(0.08).div(0.1).clamp(0, 1));
+  flameFade = mix(flameFade, float(0.92), age.sub(0.18).div(0.52).clamp(0, 1));
+  flameFade = mix(flameFade, float(0), age.sub(0.7).div(0.3).clamp(0, 1));
+  flameColor = flameColor.mul(mix(0.65, 1.8, smoothstep(0.15, 0.8, heat)));
+  const shipColor = mix(aColor.mul(smokeShade), flameColor, isFlame);
+  const isShip = step(3.5, kind);
+  material.opacityNode = mix(alpha, shipMask, isShip).mul(aShape.z).mul(mix(1, flameFade, isFlame));
+  material.colorNode = mix(aColor.mul(mix(shade, float(1.0), step(0.5, kind))), shipColor, isShip);
 
   const mesh = new T.Mesh(g, material);
   mesh.frustumCulled = false;
@@ -221,8 +257,25 @@ export class CombatParticles {
       for (let j = 0; j < origins.length; j += 1) {
         const pos = aircraftWorld({ ...s, y: s.y || 0, pitch: 0, roll: 0 }, origins[j]);
         const f = Math.min(s.fire, 1.4);
-        this.continuous(s.id + j + "smoke", pos, 8 * detail, dt, (p) => this.emit(this.smoke, p, { vx: 0, vy: 6 + f * 5, vz: 0, drag: 0.18, buoyancy: 0.1, life: 18 + this.random() * 5, size: 6 + f * 5, growth: 3 + f * 2, alpha: 0.48, color: [0.025, 0.028, 0.029] }));
-        this.continuous(s.id + j + "flame", pos, 10 * detail, dt, (p) => this.emit(this.glow, { x: p.x + this.spread(6), y: p.y + 2, z: p.z + this.spread(8) }, { vy: 12, life: 0.45 + this.random() * 0.4, size: 8 + f * 7, aspect: 1.5, kind: 1, alpha: 0.6, color: [1.2, 0.3, 0.025], drag: 0.9 }));
+        this.continuous(s.id + j + "smoke", pos, 4 * detail, dt, (p) => {
+          const grey = 0.085 + this.random() * 0.045;
+          this.emit(this.smoke, { x: p.x + this.spread(6), y: p.y + 5, z: p.z + this.spread(6) }, {
+            vx: this.spread(5), vy: 10 + f * 5 + this.random() * 4, vz: this.spread(5),
+            drag: 0.16, buoyancy: 0.32, life: 18 + this.random() * 6,
+            size: 7 + f * 4, growth: 2.8 + this.random() * 1.8, aspect: 0.85 + this.random() * 0.4,
+            kind: 4, alpha: 0.38, color: [grey * 0.88, grey * 0.95, grey], spin: this.spread(0.16),
+          });
+        });
+        this.continuous(s.id + j + "flame", pos, 16 * detail, dt, (p) => {
+          const size = 3 + f + this.random() * 4;
+          // Normal blending keeps overlapping tongues orange and lets smoke obscure them.
+          this.emit(this.smoke, { x: p.x + this.spread(10), y: p.y + size * 0.65, z: p.z + this.spread(14) }, {
+            vx: this.spread(3), vy: 4 + this.random() * 5, vz: this.spread(3),
+            life: 0.5 + this.random() * 0.65, size, aspect: 1.4 + this.random() * 0.8,
+            kind: 5, alpha: 0.9, color: [1.25, 0.095, 0.004], drag: 0.4,
+            rot: this.spread(0.3), spin: this.spread(0.25), growth: -1.5,
+          });
+        });
       }
     }
     for (const [key, e] of this.emitters) if (b.time - e.time > 2) this.emitters.delete(key);
@@ -238,8 +291,8 @@ export class CombatParticles {
       const k = count * 3;
       const j = count * 4;
       const t = p.age / p.life;
-      const fadeIn = Math.min(1, p.age / (p.kind === 1 ? 0.018 : 0.1) + 0.2);
-      const fadeOut = clamp((1 - t) * 2.2, 0, 1);
+      const fadeIn = p.kind === 5 ? 1 : Math.min(1, p.age / (p.kind === 1 ? 0.018 : 0.1) + 0.2);
+      const fadeOut = p.kind === 5 ? 1 : clamp((1 - t) * 2.2, 0, 1);
       const size = Math.max(0.02, p.size + p.growth * p.age);
       attrs.aPosition.set([p.x, p.y, p.z], k);
       attrs.aColor.set(p.color, k);
