@@ -113,18 +113,22 @@ const AIRFRAMES: Record<string, IAircraftAirframe> = Object.freeze({
     wingArea: 34.9,
     yawInertia: 17800,
   },
+  // Nakajima B5N2. The previous figures contradicted the cited §12 reference values: 2,790 kg empty
+  // against the source's 2,279 kg, 34.6 m² against 37.7 m², 14.9 m span against 15.518 m and 690 kW
+  // against 746 kW. The excess weight and missing wing made a loaded Kate unable to reach flying
+  // speed on the deck, so it overran and stalled into the sea on every launch.
   kate: {
     chord: 2.4,
     deckHeight: DECK_HEIGHT,
-    dryMass: 2790,
+    dryMass: 2279, // kg; §12 empty weight
     fuelMass: 480,
     pitchInertia: 9500,
-    power: 690000,
+    power: 746000, // W; §12 746 kW (1,000 hp) takeoff
     propEfficiency: 0.8,
     rollInertia: 13000,
-    span: 14.9,
-    staticThrust: 9600,
-    wingArea: 34.6,
+    span: 15.518, // m; §12
+    staticThrust: 10400,
+    wingArea: 37.7, // m²; §12
     yawInertia: 16000,
   },
 });
@@ -145,7 +149,7 @@ export function airframeFor(id: string | undefined): IAircraftAirframe {
  */
 export class AircraftFlight {
   readonly state: any;
-  wind = { ...SEA_WIND };
+  wind: { x: number; y: number; z: number } = { ...SEA_WIND };
   #model: FlightModel;
   #airframeId: string;
   #deckHeight: number;

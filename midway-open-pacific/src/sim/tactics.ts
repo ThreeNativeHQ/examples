@@ -13,7 +13,7 @@ import {
 } from "./math.js";
 import { damageModifiers, initDamage, stepDamage } from "./damage.js";
 import { torpedoEnvelope, torpedoIntercept, updateStores } from "./armament.js";
-import { AircraftFlight, DECK_HEIGHT, initFlightState, steerToward, type ISteerLimits } from "./flight.js";
+import { AircraftFlight, DECK_HEIGHT, initFlightState, SEA_WIND, steerToward, type ISteerLimits } from "./flight.js";
 import { DRIFT_RATE, isStale, STALE_SECONDS } from "./intel.js";
 
 /**
@@ -375,6 +375,9 @@ const BOMB_LEAD: Any = {};
 const DECK_FRAME = { x: 0, y: 0, z: 0, heading: 0, speed: 0, length: 0, width: 0 };
 const DECK_CONTROLS = { pitch: 0, rudder: 0 };
 
+/** A destroyed aircraft: no power, no lift, no control authority. The engine integrates the fall. */
+const DESTROYED_MODIFIERS = Object.freeze({ power: 0, lift: 0, drag: 0, roll: 0, controls: 0 });
+
 /**
  * One aircraft's engine flight, built on first use. Everything the engine requires is finite before
  * the model exists, the fuel is converted to the percentage the engine and the player already share,
@@ -502,6 +505,19 @@ function deckDeparture(b: Any, a: Any, home: Any, dt: number): void {
   // angle of attack at a drag price that costs more roll than it gains lift.
   DECK_CONTROLS.pitch = a.speed > 24 ? 1 : 0;
   DECK_CONTROLS.rudder = clamp(angleDelta(home.heading, a.heading) * 6, -1, 1);
+  // A carrier turns into the wind before launching. That turn is not simulated here — steering the
+  // whole group off its transit course for every departure derails the surface battle — so an
+  // airframe that cannot make its deck run in the ambient wind is given the wind the turn would
+  // produce: a headwind along the ship's heading of the shared sea wind's speed. Only the loaded Kate
+  // on a downwind Japanese deck is marginal; everything else already flies off in the true wind.
+  const wind = fl.wind;
+  const keptX = wind.x;
+  const keptZ = wind.z;
+  if (a.airframe === "kate") {
+    const seaSpeed = Math.hypot(SEA_WIND.x, SEA_WIND.z);
+    wind.x = -Math.sin(home.heading) * seaSpeed;
+    wind.z = Math.cos(home.heading) * seaSpeed;
+  }
   const departure = fl.stepDeck(
     DECK_FRAME,
     dt,
@@ -510,6 +526,8 @@ function deckDeparture(b: Any, a: Any, home: Any, dt: number): void {
     // flying speed. Steer down the deck instead.
     DECK_CONTROLS,
   );
+  wind.x = keptX;
+  wind.z = keptZ;
   if (departure !== null) {
     // `stepDeck` reports the departure but the game owns `mode`; without this the aircraft stays
     // pinned to the deck plane and never climbs.
@@ -693,14 +711,15 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
     if (a.recovered || a.removed) continue;
     if (a.mode === "crashing") {
       a.crashAge = (a.crashAge || 0) + dt;
-      a.roll += (a.phase > 3 ? 1 : -1) * dt * 0.9;
-      a.pitch = Math.max(-1.3, a.pitch - dt * 0.15);
-      a.vy = (a.vy || 0) - 9.81 * dt;
-      a.vx *= Math.exp(-dt * 0.04);
-      a.vz *= Math.exp(-dt * 0.04);
-      a.x += (a.vx || 0) * dt;
-      a.z += (a.vz || 0) * dt;
-      a.y += a.vy * dt;
+      // A destroyed aircraft is still the engine's: no power, no lift and no control authority, so
+      // the model integrates the fall. The old hand-rolled `x += vx * dt` here was the last motion
+      // integrator beside the FlightModel.
+      a.aileron = a.phase > 3 ? 1 : -1;
+      flightOf(a).step(
+        dt,
+        { autopilot: true, pitch: -0.35, rudder: 0, turn: 0 },
+        DESTROYED_MODIFIERS,
+      );
       if (a.y <= 0 || a.crashAge > 30) {
         a.removed = true;
         b.fx("splash", { ...a, y: 0 }, 2.7);
@@ -841,6 +860,13 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
           speed = 130;
         } else {
           a.tactic = "intercept";
+          // A friendly fighter committing to an enemy strike aircraft is the air-defence duty, as
+          // distinct from escort-engaged: the target is a bomber or torpedo making for the fleet.
+          // One event per fighter-and-target engagement, never one per step while the run holds.
+          if (a.team === "us" && (t.kind === "bomber" || t.kind === "torpedo") && a.airDefenceFor !== t.id) {
+            a.airDefenceFor = t.id;
+            b.event("support", { duty: "air-defence" });
+          }
           const lead = clamp(d / 250, 0, 2.1);
           dest = aimPoint(t.x + (t.vx || 0) * lead, t.z + (t.vz || 0) * lead);
           alt = t.y;

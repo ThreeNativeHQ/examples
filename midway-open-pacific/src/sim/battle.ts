@@ -180,14 +180,25 @@ import {
   applyFire,
   batteryDrain,
   canFire,
+  chargeDamage,
   interceptCourse,
   maxSpeed,
+  stepCharge,
   stepDepth,
   SURFACED_MAX,
   subY,
+  type DepthCharge,
   type SubMode,
   type SubState,
 } from "./submarine.js";
+import {
+  ASW_SALVO,
+  stepHunt,
+  type AswContact,
+  type AswLimits,
+  type AswState,
+  type AttackSolution,
+} from "./asw.js";
 
 type Any = any;
 
@@ -491,6 +502,28 @@ const SUB_TURN_RATE = 0.05;
 const SUB_TORPEDO_RANGE = 4800;
 const SUB_FIRE_INTERVAL = 25;
 
+/**
+ * Escort anti-submarine tuning. A hunt runs on the ops cadence: a held contact is studied, an attack
+ * track is flown, a finite salvo goes into the water, and the escort reassesses or rejoins.
+ * `submarine.ts`'s own fuse and falloff decide every hit; these are only the phase timings.
+ */
+const ASW_LIMITS: AswLimits = Object.freeze({
+  investigateSeconds: 12,
+  attackSeconds: 6,
+  holdSeconds: 30,
+  searchSeconds: 120,
+  spreadRate: 8,
+  assumedSpeed: 6,
+});
+/** Three salvoes per U.S. escort: the finite magazine that eventually sends the hunt home. */
+const ASW_CHARGES = ASW_SALVO * 3;
+/** How fast a depth charge sinks to its fuse setting, metres per second. */
+const ASW_SINK_RATE = 5;
+/** A charge's lethal radius, metres: the 3D falloff inside it is `submarine.chargeDamage`. */
+const ASW_LETHAL_RADIUS = 40;
+/** Hull damage a co-located charge does, before the falloff scales it. */
+const ASW_CHARGE_DAMAGE = 90;
+
 /** Seconds between an aircrew's sighting and the fleet holding the report, and a ship's by lamp/TBS. */
 const AIR_REPORT_DELAY = 30;
 const SHIP_REPORT_DELAY = 8;
@@ -505,14 +538,19 @@ const ROLE_AIRFRAMES: Readonly<Record<string, Readonly<Record<string, string>>>>
   fighter: { us: "wildcat", jp: "zero" },
   bomber: { us: "sbd", jp: "val" },
   torpedo: { us: "tbd", jp: "kate" },
+  // A Kate carrying bombs for a shore target, flown level, is the same airframe as the torpedo
+  // Kate but a different store: the role, not the airframe, picks the family.
+  level: { jp: "kate" },
   recon: { us: "sbd", jp: "val" },
 });
 
 /**
  * The ordnance family an airframe re-arms with. `carrier-ops.ts` keeps the same table privately for
  * `stepService`, and does not export it, so the launch side has to name it again; the two must agree.
+ * A Kate flies either a torpedo or a bomb depending on the role the deck armed it for.
  */
-function storeFamilyOf(airframe: string): string {
+function storeFamilyOf(airframe: string, role?: string): string {
+  if (role === "level") return "bomb";
   if (airframe === "tbd" || airframe === "kate") return "torpedo";
   if (airframe === "sbd" || airframe === "val") return "bomb";
   return "ammo";
@@ -596,6 +634,8 @@ export interface IReport extends Contact {
   /** True once a crew has identified the hull; an identification is never unlearned by a vaguer one. */
   identified: boolean;
   source: string;
+  /** The observer's kind when it was an aircraft, so a delivered track can name its source role. */
+  observerKind?: string;
   reported: boolean;
 }
 
@@ -955,6 +995,18 @@ export class Battle {
         baseZ: z,
       };
       if (scoutCruiser) this.equipScoutCruiser(s);
+      // A U.S. escort hunts submarines; it is the only hull that carries depth charges, so no other
+      // ship gets a hunt state. Identified by class through the one `isEscort`, never by name.
+      if (s.team === "us" && isEscort(s))
+        s.hunt = {
+          phase: "searching",
+          charges: ASW_CHARGES,
+          phaseTime: 0,
+          salvoes: 0,
+          solution: null,
+          search: null,
+          lastContact: null,
+        } as AswState;
       this.ships.push(s);
       return s;
     };
@@ -1328,7 +1380,7 @@ export class Battle {
     this.refreshDeck(s);
     const airframe = ROLE_AIRFRAMES[role]?.[s.team];
     if (!airframe) return null;
-    const store = storeFamilyOf(airframe);
+    const store = storeFamilyOf(airframe, role);
     const check = canLaunch(s.air, s.deckState, airframe, store, this.time, this.activeAircraft, ACTIVE_CAP);
     if (!check.ok || s.air.fuel < FUEL_PER_LAUNCH) {
       s.launchBlocked = check.ok ? "no aviation fuel" : check.reason;
@@ -1340,7 +1392,8 @@ export class Battle {
     s.air.fuel -= FUEL_PER_LAUNCH;
     s.deckState = applied.deck;
     this.refreshDeck(s);
-    const kind = role;
+    // A level role is the bomber kind flown by the level-bomber airframe.
+    const kind = role === "level" ? "bomber" : role;
     s.launchCount += 1;
     const f = forward(s.heading);
     const a: Any = {
@@ -1508,18 +1561,23 @@ export class Battle {
       const ready: Record<string, number> = {};
       for (const role in ROLE_AIRFRAMES) {
         const airframe = ROLE_AIRFRAMES[role][s.team];
-        const store = storeFamilyOf(airframe);
+        if (!airframe) {
+          ready[role] = 0;
+          continue;
+        }
+        const store = storeFamilyOf(airframe, role);
         ready[role] = (s.air.stores[store] ?? 0) > 0 ? (s.air.ready[airframe] ?? 0) : 0;
       }
       s.mission = chooseCarrierMission(this, s, ready, COMMIT_SECONDS);
       // The Nagumo decision: with no ship contact to answer, a Japanese deck arms for the island
-      // again — but only while the *reported* capability still says the base is working.
+      // again — but only while the *reported* capability still says the base is working. A shore
+      // target is a level-bombing job, so the deck arms Kates with bombs rather than Vals.
       if (s.team === "jp" && !s.mission.target && this.followUpPending && this.islandStrike) {
         this.followUpPending = false;
         s.mission = {
           ...s.mission,
           kind: "island-strike",
-          want: { ...s.mission.want, bomber: Math.min(ready.bomber, 3), fighter: Math.min(ready.fighter, (s.mission.want.fighter ?? 0) + 2) },
+          want: { ...s.mission.want, level: Math.min(ready.level, 3), fighter: Math.min(ready.fighter, (s.mission.want.fighter ?? 0) + 2) },
         };
       }
     }
@@ -1528,7 +1586,12 @@ export class Battle {
     let shortest = 0;
     for (const key in want) {
       let flying = 0;
-      for (const a of this.aircraft) if (a.hp > 0 && a.home === s.id && a.kind === key) flying += 1;
+      for (const a of this.aircraft) {
+        if (a.hp <= 0 || a.home !== s.id) continue;
+        // The level role shares the Kate airframe with the torpedo role, so it counts the same hull
+        // flying in its bomber configuration rather than an "level" kind no aircraft ever has.
+        if (key === "level" ? a.airframe === "kate" && a.kind === "bomber" : a.kind === key) flying += 1;
+      }
       const deficit = want[key] - flying;
       if (deficit > shortest) {
         shortest = deficit;
@@ -1771,6 +1834,7 @@ export class Battle {
       time: this.time,
       identified,
       source: observer.id.startsWith("air") ? "aircraft report" : "fleet lookout",
+      observerKind: this.aircraft.find((a: Any) => a.id === observer.id)?.kind,
       reported: true,
     });
   }
@@ -1798,10 +1862,22 @@ export class Battle {
       const store = this.teamIntel[r.team];
       const prev = store.get(r.id);
       const won = prev ? (mergeContact(prev, r) as IReport) : r;
-      store.set(r.id, this.keepIdentity(prev, won));
+      const kept = this.keepIdentity(prev, won);
+      store.set(r.id, kept);
       if (r.team === "us") {
         const shown = this.contacts.get(r.id);
         if (!shown || shown.time < won.time) this.contacts.set(r.id, this.keepIdentity(shown, won));
+        // The two duties the fleet's own reconnaissance picture earns at the moment a report
+        // reaches it: a boat's contact passed on, and a reconnaissance aircraft's contact arriving
+        // under friendly fighter cover. Both report an observation; neither steers anything.
+        if (kept.classification === "submarine") this.event("support", { duty: "sub-report" });
+        else if (
+          kept.observerKind === "recon" &&
+          this.aircraft.some(
+            (a: Any) => a.team === "us" && a.kind === "fighter" && a.hp > 0 && a.mode !== "launch" && a.mode !== "crashing",
+          )
+        )
+          this.event("support", { duty: "scout-cover" });
       }
     }
     this.reports = waiting;
@@ -2411,6 +2487,7 @@ export class Battle {
       this.observeFleet();
       this.observeFacilities();
       this.deliverReports();
+      this.updateHunts();
       for (const s of this.ships) if (s.kind === "carrier" && !s.sunk && s.air) this.updateCarrier(s);
       this.updateOperation();
     }
@@ -2604,6 +2681,9 @@ export class Battle {
         this.survivors = step.survivors;
         if (s.rescue.phase === "done" || s.rescue.phase === "aborted") {
           s.recovered = (s.recovered ?? 0) + s.rescue.recovered;
+          // People are actually aboard: the one occurrence the rescue-cover duty names. An aborted
+          // run or a group lost before the ship reached it brings nobody home and emits nothing.
+          if (s.rescue.phase === "done" && s.rescue.recovered > 0) this.event("support", { duty: "rescue-cover" });
           this.endTask(s);
         }
         continue;
@@ -2626,6 +2706,24 @@ export class Battle {
       if (!window) continue;
       // One escort per group, so the exposure decay is not applied several times over per step.
       if (this.ships.some((o: Any) => o.rescue && o.rescue.targetId === window.targetId)) continue;
+      // The nearest eligible escort takes the boatload, not whichever hull happens to sit first in
+      // the fleet array. Array order let a carrier's own screen escort leave station for survivors a
+      // nearer escort — the survivors' own group in particular — could reach just as well.
+      const boat = this.survivors.find((g: Any) => g.id === window.targetId);
+      if (boat) {
+        const mine = Math.hypot(boat.x - s.x, boat.z - s.z);
+        const nearer = this.ships.some(
+          (o: Any) =>
+            o !== s &&
+            !o.sunk &&
+            isEscort(o) &&
+            !o.rescue &&
+            !o.assist &&
+            o.task?.task === "station" &&
+            Math.hypot(boat.x - o.x, boat.z - o.z) < mine - 1e-6,
+        );
+        if (nearer) continue;
+      }
       s.rescue = { targetId: window.targetId, phase: "approaching", startedAt: now, recovered: 0 };
       s.task = { task: "rescue", targetId: window.targetId, startedAt: now, reason: "survivors in the water" };
     }
@@ -2636,6 +2734,99 @@ export class Battle {
       if (g.count > 0.5) this.survivors[kept++] = g;
     }
     this.survivors.length = kept;
+  }
+
+  /**
+   * The anti-submarine hunt, one ops tick at a time. Each U.S. escort advances its own `hunt`
+   * against the submarine contact its fleet actually holds — a delivered report, never a live hull —
+   * through `asw.stepHunt`, which is pure. When a pass puts a salvo in the water the escort resolves
+   * it: `submarine.ts`'s own fuse and falloff decide whether a charge is close enough and fuzed deep
+   * enough to damage the boat, so a too-deep or too-distant contact survives the miss. The escort
+   * never reads the boat's true depth or position to decide to attack, and draws no random of its own.
+   */
+  updateHunts(): void {
+    for (const s of this.ships) {
+      const hunt: AswState | null = s.hunt;
+      if (!hunt || s.sunk || s.team !== "us" || !isEscort(s)) continue;
+      const report = this.huntedContact(s);
+      const contact: AswContact = report
+        ? this.aswContact(s, report)
+        : { bearing: 0, bearingUncertainty: 1, range: null, depth: 0, held: false, lastHeld: hunt.phaseTime + 1 };
+      const next = stepHunt(hunt, contact, { x: s.x, z: s.z, heading: s.heading, speed: s.speed }, OPS_INTERVAL, ASW_LIMITS);
+      s.hunt = next;
+      const dropped = next.salvoes - hunt.salvoes;
+      if (dropped > 0 && report && next.solution) {
+        this.resolveSalvo(report, next.solution);
+        this.event("hunt", { phase: next.phase, salvoes: dropped });
+      }
+    }
+  }
+
+  /**
+   * The freshest submarine contact the escort's own fleet holds, nearest to the escort. Only a
+   * delivered report is read: with no held belief there is nothing to hunt, however close the boat
+   * truly is. A stale track is not a contact.
+   */
+  huntedContact(s: Any): IReport | null {
+    let best: IReport | null = null;
+    let bestD = Infinity;
+    for (const c of this.teamIntel.us.values()) {
+      if (c.kind !== "sub" && c.classification !== "submarine") continue;
+      if (isStale(c, this.time, STALE_SECONDS)) continue;
+      const d = distance2(s, estimatePosition(c, this.time));
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * The escort's belief about the boat, built only from the delivered report. Its dead-reckoned
+   * estimate gives the bearing and the range, and the track's age is how long it has gone
+   * unrefreshed. `depth` is the escort's own estimate — a report carries none — so the fuse ladder
+   * follows a belief, never the boat's true depth.
+   */
+  aswContact(s: Any, c: IReport): AswContact {
+    const estimate = estimatePosition(c, this.time);
+    const range = distance2(s, estimate);
+    const age = this.time - c.observedAt;
+    return {
+      bearing: bearing(s, estimate),
+      bearingUncertainty: clamp(estimate.radius / Math.max(range, 1), 0.05, 1.2),
+      range,
+      depth: 0,
+      held: !isStale(c, this.time, STALE_SECONDS),
+      lastHeld: age,
+    };
+  }
+
+  /**
+   * Resolve one dropped salvo against the boat through `submarine.ts`'s charge arithmetic. Each drop
+   * point sinks to the fuse's preset and detonates; the 3D falloff to the boat's real position
+   * decides the damage, so a charge that is too shallow, too far, or fuzed for another depth does
+   * nothing at all. Damage goes through `damageShip`; nothing invents a hit beyond the falloff.
+   */
+  resolveSalvo(c: IReport, solution: AttackSolution): void {
+    const boat = this.byId(c.id);
+    if (!boat || boat.sunk || !boat.sub) return;
+    const targetY = subY(boat.sub);
+    let total = 0;
+    for (const point of solution.dropPoints) {
+      let charge: DepthCharge = {
+        x: point.x,
+        y: 0,
+        z: point.z,
+        presetDepth: solution.presetDepth,
+        sinkRate: ASW_SINK_RATE,
+        armed: false,
+      };
+      while (!charge.armed) charge = stepCharge(charge, 0.1);
+      const damage = chargeDamage(charge, boat.x, targetY, boat.z, ASW_LETHAL_RADIUS);
+      if (damage > 0) total += damage;
+    }
+    if (total > 0) this.damageShip(boat, total * ASW_CHARGE_DAMAGE, { x: boat.x, y: targetY, z: boat.z }, "depth-charge", "us");
   }
 
   /** The rescue module's view of an escort: its screen contribution is the whole station. */
