@@ -294,14 +294,27 @@ try {
         const cls = catalog.shipClass(classId);
 
         // Which live ship draws this hull: ask the game's own classId-to-model dispatch for the
-        // name it gives the model, then look for that name among the meshes the world built.
-        // Matching on the game's own naming survives a re-import that moves every dimension.
+        // model, then look for a live mesh that shares its geometry. A name is not enough since the
+        // swap — CV-5 is drawn from the supplied `hornet.glb` under the name "USS Yorktown", which
+        // is also the name the retired `carrier.yorktown.glb` carries — so the match is on the bytes
+        // the game actually loaded. `Object3D.clone` shares geometry, so identity survives cloning.
         const probe = ships.shipModelFor(classId);
         const detailedOf = (mesh) => {
           const lod = mesh?.children?.[0];
           return lod?.levels ? lod.levels[0].object : lod;
         };
-        const ship = battle.ships.find((s) => detailedOf(view.meshes.get(s.id))?.name === probe.name);
+        const probeGeometry = new Set();
+        probe.traverse((n) => {
+          if (n.isMesh && n.geometry) probeGeometry.add(n.geometry.uuid);
+        });
+        const drawsProbe = (mesh) => {
+          let shares = false;
+          detailedOf(mesh)?.traverse?.((n) => {
+            if (n.isMesh && n.geometry && probeGeometry.has(n.geometry.uuid)) shares = true;
+          });
+          return shares;
+        };
+        const ship = battle.ships.find((s) => drawsProbe(view.meshes.get(s.id)));
         // The datum the game uses, from the one record that holds it: `Battle` resolves every
         // carrier's deck through `shipGeometry` onto the ship itself. src/render/imported-ships.ts
         // used to keep a mirror of that table and no longer does, so there is nothing left to drift.
@@ -497,15 +510,19 @@ try {
     // Reported, not asserted, and the distinction is deliberate: a station inside the corridor with no
     // deck on the centreline at all is a defect in the MODEL, not a disagreement between the model and
     // the game's numbers, which is what AC-2 is about and what the bounds above hold. The imported
-    // Yorktown's island straddles its own centreline amidships, so no rectangle centred on that ship's
-    // origin is clear of it, and neither a corridor nor a datum can be measured there. Fixing it means
-    // the asset, or a laterally offset corridor in `onDeck` and the recovery line-up.
+    // A station with no deck under it on the centreline. For a hull no live ship draws there is no
+    // corridor to measure it against, so the note says what was found and nothing more — the shipped
+    // `carrier.yorktown.glb` puts a centreline superstructure where its flight deck should be, which
+    // is why CV-5 is drawn from `hornet.glb` instead (see src/render/imported-ships.ts).
     for (const row of hull.stations)
-      if (row.deckY === null)
+      if (row.deckY === null) {
+        const corridor = hull.shipBox?.deckLength;
         console.log(
-          `NOTE ${hull.classId}: no flight deck on the centreline at ${row.station} (z=${row.z}), inside its own ` +
-            `${hull.shipBox?.deckLength ?? "?"} m corridor — the model puts structure or open air there`,
+          `NOTE ${hull.classId}: no flight deck on the centreline at ${row.station} (z=${row.z})` +
+            (corridor ? `, inside its own ${corridor} m corridor` : ", and no live ship draws this hull") +
+            " — the model puts structure or open air there",
         );
+      }
     // The deck's own elevation in the world's frame, at every station that found it.
     const elevations = found.map((r) => r.deckY + hull.sink);
     const low = Math.min(...elevations);
@@ -533,24 +550,40 @@ try {
           `worst station ${Math.max(...elevations.map((y) => Math.abs(y - hull.datumHeight))).toFixed(3)} m`,
       );
     }
+    // The keel-on-y = 0 contract is a property of the shipped bytes, so it holds whether or not the
+    // game draws this hull: a file that lifted its keel off its own datum is an import defect either
+    // way. This is the one agreement that survives for a hull no live ship draws.
     agree(
       Math.abs(hull.keelLocal) <= TOL,
       `${hull.classId}: the keel is ${hull.keelLocal} m in the shipped model, not the y = 0 the import contract states`,
     );
-    agree(
-      Math.abs(hull.sink + hull.draught) <= TOL,
-      `${hull.classId}: the view sinks this hull ${(-hull.sink).toFixed(3)} m, not the ${hull.draught} m draught its ` +
-        `class draws (src/sim/catalog.ts)`,
-    );
-    // A hull floats at its draught, not on top of the sea: the keel belongs one draught BELOW the
-    // ocean's mean plane. It used to be asserted equal to it, which passed while every imported hull
-    // rode with its whole anti-fouling band in daylight.
-    agree(
-      Math.abs(hull.keelWorld - (hull.seaY - hull.draught)) <= TOL,
-      `${hull.classId}: the keel lands at ${hull.keelWorld} m where the game floats the hull, against the ` +
-        `${(hull.seaY - hull.draught).toFixed(3)} m a ${hull.draught} m draught puts it under the ocean's mean plane ` +
-        `at y = ${hull.seaY}`,
-    );
+    // "How the game floats this hull" is a question only a hull the game actually draws can answer.
+    // `carrier.yorktown.glb` is still shipped and measured, but CV-5 is drawn from her sister's
+    // supplied hull, so no live ship sinks this file by a draught or lands its keel anywhere.
+    // Testing a file nothing floats against a class the game applies to a different model would be
+    // three disagreements about the wrong ship, so the float checks are skipped with one clear line.
+    if (hull.shipName === null) {
+      console.log(
+        `SKIP ${hull.classId}: no live ship draws this shipped model, so its keel is surveyed against the import ` +
+          `contract on its own bytes only; the draught, sink and waterline checks — and the collision volume — ` +
+          `do not apply to it.`,
+      );
+    } else {
+      agree(
+        Math.abs(hull.sink + hull.draught) <= TOL,
+        `${hull.classId}: the view sinks this hull ${(-hull.sink).toFixed(3)} m, not the ${hull.draught} m draught its ` +
+          `class draws (src/sim/catalog.ts)`,
+      );
+      // A hull floats at its draught, not on top of the sea: the keel belongs one draught BELOW the
+      // ocean's mean plane. It used to be asserted equal to it, which passed while every imported hull
+      // rode with its whole anti-fouling band in daylight.
+      agree(
+        Math.abs(hull.keelWorld - (hull.seaY - hull.draught)) <= TOL,
+        `${hull.classId}: the keel lands at ${hull.keelWorld} m where the game floats the hull, against the ` +
+          `${(hull.seaY - hull.draught).toFixed(3)} m a ${hull.draught} m draught puts it under the ocean's mean plane ` +
+          `at y = ${hull.seaY}`,
+      );
+    }
     agree(
       found.some((r) => r.width !== null),
       `${hull.classId}: no station found both corridor edges: ${JSON.stringify(hull.stations)}`,
@@ -582,12 +615,9 @@ try {
           );
       }
     }
-    if (hull.shipName === null)
-      console.log(
-        `NOTE ${hull.classId}: no ship in the battle draws ${hull.model}, so the game gives this hull no collision ` +
-          `volume and the weapon test cannot be run against it.`,
-      );
-    else
+    // The weapon tests need a live ship's collision volume. A hull no live ship draws was already
+    // reported once by the SKIP line above; it simply has no volume to test against.
+    if (hull.shipName !== null)
       for (const row of found)
         for (const e of row.edge) {
           agree(
