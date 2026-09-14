@@ -23,6 +23,7 @@ import {
   outcomeText,
   recordObjectiveHit,
   stamp,
+  targetEligible,
   type Assignment,
   type IResult,
   type ISortie,
@@ -503,6 +504,23 @@ export class Battle {
     return true;
   }
 
+  /** Known eligible contacts; recon and Open Pacific retain carrier navigation targets. */
+  targetContacts(): IReport[] {
+    const assignment = this.sortie.assignment === "surface" ? "surface" : "strike";
+    return [...this.contacts.values()].filter((contact) => {
+      const ship = this.ships.find((s: Any) => s.id === contact.id);
+      return !contact.lost && contact.kind === ship?.kind && targetEligible(assignment, ship);
+    });
+  }
+
+  designateTarget(id: string, navigate = true): boolean {
+    if (!this.targetContacts().some((c) => c.id === id)) return false;
+    this.target = id;
+    if (navigate) this.player.nav = "search";
+    this.updateSortie();
+    return true;
+  }
+
   selectLoadout(id: string): boolean {
     const p = this.player;
     if (!["briefing", "playing"].includes(this.status) || p.mode !== "deck" || (p.deckSpeed || 0) >= 0.5 || !["bomb", "torpedo"].includes(id)) {
@@ -871,7 +889,7 @@ export class Battle {
         : a.tactic === "rtb" || a.tactic === "landing" || a.tactic === "ditching"
           ? "returning"
           : attacking && designated && a.target === designated
-            ? "attacking the designated carrier"
+            ? "attacking the designated target"
             : attacking
               ? "attacking other shipping"
               : a.tactic === "intercept" || a.tactic === "evade" || a.tactic === "extend"
@@ -891,7 +909,7 @@ export class Battle {
     this.command = cmd;
     const texts: Record<string, string> = {
       cover: "Stay on my wing. Cover the Dauntless.",
-      strike: "Attack the designated carrier. Break by sections.",
+      strike: "Attack the designated ship. Break by sections.",
       engage: "Clear those fighters off our tails.",
       rtb: "All aircraft, return to your carriers.",
     };
@@ -1305,30 +1323,25 @@ export class Battle {
     return stamp(this.sortie, this.sortie.target, ordered);
   }
 
-  /**
-   * Keep the designated target honest: follow what the player designated while it is a known live
-   * enemy carrier, say so when it is lost, and never silently reveal an unknown replacement.
-   */
+  /** Reconcile known targets without silently choosing a replacement after a loss. */
   updateSortie(): void {
     const s = this.sortie;
     confirmPending(s, (id: string) => this.contacts.get(id));
-    if (s.assignment !== "strike") return;
-    const live = (id: string | null) => {
-      if (!id || !this.contacts.has(id)) return null;
-      const ship = this.ships.find((x: Any) => x.id === id);
-      return ship && !ship.sunk && ship.kind === "carrier" && ship.team === "jp" ? ship : null;
-    };
+    if (s.assignment !== "strike" && s.assignment !== "surface") return;
+    const contacts = this.targetContacts();
+    const live = (id: string | null) => contacts.some((c) => c.id === id);
     if (live(this.target)) s.target = this.target;
     else if (s.target && !live(s.target)) {
-      const lost = this.ships.find((x: Any) => x.id === s.target);
+      if (this.target === s.target) this.target = null;
       s.target = null;
       if (s.objective === "pending")
-        this.say("STRIKE CONTROL", `${lost?.name ?? "Your target"} is out of the fight. Designate another carrier with TAB.`, true);
+        this.say("STRIKE CONTROL", "Your target is no longer eligible. Designate another contact with TAB.", true);
     }
     if (s.objective !== "pending") return;
-    if (!s.target && !this.ships.some((x: Any) => x.team === "jp" && x.kind === "carrier" && !x.sunk)) {
+    // A submerged boat can surface again; its dive must not permanently end Surface Strike.
+    if (!s.target && !this.ships.some((x: Any) => targetEligible(s.assignment, { ...x, surfaced: true }))) {
       s.objective = "unavailable";
-      this.say("STRIKE CONTROL", "No enemy carrier remains. Return to the task force and report.", true);
+      this.say("STRIKE CONTROL", "No eligible enemy ship remains. Return to the task force and report.", true);
     }
   }
 
@@ -1485,7 +1498,7 @@ export class Battle {
     if (!prev && source === "visual" && s.kind === "carrier") {
       this.say("REAR GUNNER", `Carrier off the nose! ${s.name}, bearing ${String(Math.round((bearing(this.player, s) * 180) / Math.PI) % 360).padStart(3, "0")}. Press R to send the contact.`, true);
       this.voice("R04", { identity: s.id });
-      if (!this.target) this.target = s.id;
+      if (!this.target) this.designateTarget(s.id, false);
     }
   }
 

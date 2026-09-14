@@ -1,4 +1,5 @@
 /** The battle's DOM and 2D-canvas heads-up display, ported from the standalone build. */
+import type { IReport } from "./sim/battle.js";
 import { damageSummary } from "./sim/damage.js";
 import { torpedoEnvelope, torpedoIntercept } from "./sim/armament.js";
 import { attitudeAxes } from "./sim/flight.js";
@@ -147,7 +148,9 @@ export class Hud {
           ? "Bring your crew home"
           : sortie.assignment === "recon"
             ? "Find and report a carrier"
-            : "Put a weapon on the designated carrier";
+            : sortie.assignment === "surface"
+              ? "Put a weapon on the designated ship"
+              : "Put a weapon on the designated carrier";
         const action = done
           ? "H sets the return course. L flies the final."
           : sortie.assignment === "recon"
@@ -194,9 +197,11 @@ export class Hud {
           : "NO AVAILABLE DECK";
       } else cueLine.textContent = "";
     }
+    const mapOrders = $$("map-orders");
+    if (mapOrders) mapOrders.textContent = ASSIGNMENTS[sortie.assignment as Assignment].brief;
     const orders = $$("command-status");
     if (orders) {
-      const designated = b.ships.find((s: any) => s.id === sortie.target);
+      const designated = b.contacts.get(sortie.target ?? "");
       orders.textContent = `ASSIGNMENT ${ASSIGNMENTS[sortie.assignment as Assignment].name} · TARGET ${designated ? designated.name.toUpperCase() : "NONE DESIGNATED"} · ${b.wingStatus()}`;
     }
     const wingLine = $$("wing-status");
@@ -688,7 +693,7 @@ export class Hud {
   }
 
   updateContactList(): void {
-    const contacts = [...this.b.contacts.values()].filter((c) => c.kind === "carrier");
+    const contacts: IReport[] = this.b.targetContacts();
     const key = contacts.map((c) => c.id + Math.floor((this.b.time - c.time) / 5)).join() + this.b.target;
     if (key === this.lastContacts) return;
     this.lastContacts = key;
@@ -699,7 +704,7 @@ export class Hud {
             return `<button class="contact-item ${c.id === this.b.target ? "selected" : ""}" data-contact="${c.id}">${escapeHTML(c.name)}<small>${Math.round(e.confidence * 100)}% CONFIDENCE · ${Math.floor(e.age)}s AGO</small></button>`;
           })
           .join("")
-      : "<p class=\"map-note\">No carrier contacts.<br>Search northwest, or wait for reconnaissance reports.</p>";
+      : "<p class=\"map-note\">No eligible contacts.<br>Search for targets, or wait for reconnaissance reports.</p>";
   }
 
   debrief(): void {

@@ -159,13 +159,7 @@ export class Midway extends Scene<GameState, undefined> {
     });
     this.onElement($("contact-list"), "click", (e) => {
       const btn = (e.target as HTMLElement).closest("[data-contact]") as HTMLElement | null;
-      if (btn) {
-        this.battle.target = (btn as HTMLElement).dataset.contact as string;
-        this.battle.player.nav = "search";
-        this.hud.lastContacts = "";
-        this.hud.updateContactList();
-        this.hud.drawMap();
-      }
+      if (btn) this.designateTarget(btn.dataset.contact as string);
     });
     this.onElement($("big-map"), "click", (e) => {
       const canvas = e.target as HTMLCanvasElement;
@@ -173,13 +167,7 @@ export class Midway extends Scene<GameState, undefined> {
       const x = ((e as MouseEvent).clientX - rect.left) / rect.width * canvas.width;
       const y = ((e as MouseEvent).clientY - rect.top) / rect.height * canvas.height;
       const nearest = this.hud.mapItems.map((p) => ({ ...p, d: Math.hypot(p.x - x, p.y - y) })).sort((a, b) => a.d - b.d)[0];
-      if (nearest && nearest.d < 55) {
-        this.battle.target = nearest.id;
-        this.battle.player.nav = "search";
-        this.hud.lastContacts = "";
-        this.hud.drawMap();
-        this.hud.updateContactList();
-      }
+      if (nearest && nearest.d < 55) this.designateTarget(nearest.id);
     });
     this.on(window, "keydown", (e) => {
       if ((e.target as HTMLElement).matches("select,input,textarea")) return;
@@ -475,17 +463,25 @@ export class Midway extends Scene<GameState, undefined> {
     this.hud.toast(`RETURN COURSE — ${home.name.toUpperCase()}`);
   }
 
+  private designateTarget(id: string): void {
+    if (!this.battle.designateTarget(id)) {
+      this.hud.toast("CONTACT NOT ELIGIBLE FOR THIS ASSIGNMENT");
+      return;
+    }
+    this.hud.lastContacts = "";
+    this.hud.updateContactList();
+    this.hud.drawMap();
+    this.hud.toast(`DESIGNATED: ${this.battle.contacts.get(id)!.name.toUpperCase()}`);
+  }
+
   private cycleTarget(): void {
-    const cs = [...this.battle.contacts.values()].filter((c) => c.kind === "carrier");
+    const cs = this.battle.targetContacts();
     if (!cs.length) {
-      this.hud.toast("NO KNOWN CARRIER CONTACTS");
+      this.hud.toast("NO ELIGIBLE KNOWN CONTACTS");
       return;
     }
     const index = cs.findIndex((c) => c.id === this.battle.target);
-    const next = cs[(index + 1) % cs.length];
-    this.battle.target = next.id;
-    this.battle.player.nav = "search";
-    this.hud.toast(`DESIGNATED: ${next.name.toUpperCase()}`);
+    this.designateTarget(cs[(index + 1) % cs.length].id);
   }
 
   private command(cmd: string): void {

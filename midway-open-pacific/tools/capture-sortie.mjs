@@ -33,6 +33,12 @@ try {
     const url = performance.getEntriesByType("resource").map((e) => e.name).findLast((n) => /\/src\/game\.ts(?:\?|$)/.test(n));
     window.midway = (await import(url)).default.scene;
   });
+  const adapter = await page.evaluate(async () => {
+    const gpu = await navigator.gpu.requestAdapter();
+    return gpu ? { vendor: gpu.info.vendor, architecture: gpu.info.architecture, description: gpu.info.description } : null;
+  });
+  assert.ok(adapter && !/swiftshader|llvmpipe|software/i.test(JSON.stringify(adapter)), `hardware WebGPU adapter required: ${JSON.stringify(adapter)}`);
+  log("WebGPU adapter", adapter);
   await mkdir(OUT, { recursive: true });
   const seconds = async (n) => {
     const t = await page.evaluate(() => window.midway.battle.time);
@@ -247,6 +253,79 @@ try {
   assert.match(limited.message, /NO TORPEDOES ABOARD/);
   log("limited service", limited);
   await page.screenshot({ path: `${OUT}/05-limited-service.png` });
+
+  // Surface Strike: real briefing, list/TAB/map inputs, weapon release and recovered debrief.
+  await page.click("#restart-pause");
+  await page.waitForSelector("#briefing:not(.hidden)");
+  await page.selectOption("#assignment-select", "surface");
+  assert.match(await page.textContent("#assignment-note"), /cruiser, destroyer or surfaced submarine/);
+  await page.click("#start-air");
+  await seconds(1);
+  const surface = await page.evaluate(() => {
+    const b = window.midway.battle;
+    const ships = ['cruiser', 'destroyer', 'carrier'].map((kind) => b.ships.find((s) => s.team === 'jp' && s.kind === kind));
+    for (const ship of ships) b.recordContact(ship);
+    return Object.fromEntries(ships.map((s) => [s.kind, s.id]));
+  });
+  forced.push("three identified enemy contacts supplied to isolate Surface Strike UI selection");
+  await page.keyboard.press("m");
+  await page.waitForSelector("#map-overlay:not(.hidden)");
+  assert.equal(await page.locator(`#contact-list [data-contact="${surface.carrier}"]`).count(), 0, "Surface Strike does not list carrier objectives");
+  await page.click(`#contact-list [data-contact="${surface.cruiser}"]`);
+  assert.equal(await page.evaluate(() => window.midway.battle.sortie.target), surface.cruiser, "list selection designates the cruiser");
+  await page.keyboard.press("m");
+  await page.keyboard.press("Tab");
+  assert.equal(await page.evaluate(() => window.midway.battle.sortie.target), surface.destroyer, "TAB cycles to the eligible destroyer");
+  await page.keyboard.press("m");
+  const clickContact = async (id) => {
+    const point = await page.evaluate((target) => {
+      const canvas = document.getElementById('big-map');
+      const rect = canvas.getBoundingClientRect();
+      const item = window.midway.hud.mapItems.find((p) => p.id === target);
+      if (!item) throw new Error(`Map contact missing: ${target}`);
+      return { x: rect.x + item.x / canvas.width * rect.width, y: rect.y + item.y / canvas.height * rect.height };
+    }, id);
+    await page.mouse.click(point.x, point.y);
+  };
+  await clickContact(surface.cruiser);
+  assert.equal(await page.evaluate(() => window.midway.battle.sortie.target), surface.cruiser, "map selection uses the same designation");
+  await clickContact(surface.carrier);
+  assert.equal(await page.evaluate(() => window.midway.battle.sortie.target), surface.cruiser, "map refuses the ineligible carrier without replacing the target");
+  assert.match(await page.textContent('#map-orders'), /cruiser, destroyer or surfaced submarine/);
+  await page.screenshot({ path: `${OUT}/06-surface-map.png` });
+  await page.keyboard.press("m");
+  await page.keyboard.press("r");
+  await page.keyboard.press("2");
+  assert.equal(await page.evaluate(() => window.midway.battle.command), 'strike');
+  await page.keyboard.press("b");
+  const release = await page.evaluate(() => {
+    const b = window.midway.battle;
+    const weapon = b.bombs.at(-1);
+    if (!weapon) return null;
+    const target = b.ships.find((s) => s.id === b.sortie.target);
+    const result = { target: b.sortie.target, stamp: weapon.stamp, remaining: b.player.bombs };
+    // Preserve the real release/payload; shorten only the flight to its chosen hull.
+    Object.assign(weapon, { x: target.x, y: target.deckHeight + 15, z: target.z, vx: 0, vy: -120, vz: 0 });
+    return result;
+  });
+  assert.ok(release, 'B released a real bomb');
+  assert.equal(release.stamp.target, surface.cruiser);
+  assert.equal(release.remaining, 2);
+  forced.push("the player-released surface bomb moved above its designated cruiser to bound flight time; recovery called directly");
+  await seconds(0.5);
+  const surfaceArrival = await page.evaluate(() => {
+    const b = window.midway.battle;
+    b.recover(b.home);
+    return b.sortie.result;
+  });
+  assert.equal(surfaceArrival.assignment, 'surface');
+  assert.equal(surfaceArrival.objective, true);
+  assert.equal(surfaceArrival.personalHits, 1);
+  assert.equal(surfaceArrival.outcome, 'recovered');
+  await page.waitForSelector('#debrief:not(.hidden)');
+  assert.match(await page.textContent('#debrief-phase'), /SURFACE STRIKE/);
+  await page.screenshot({ path: `${OUT}/07-surface-debrief.png` });
+  log('surface strike', { surface, release, result: surfaceArrival });
 
   assert.deepEqual(errors, [], `no console or page errors: ${JSON.stringify(errors)}`);
   console.log(JSON.stringify({ pass: true, out: OUT, forced }, null, 1));

@@ -126,6 +126,14 @@ export function chooseCarrierMission(
 export function selectNavalTarget(b: Any, a: Any): Any {
   const known = b.teamIntel[a.team];
   if (!known) return null;
+  // A player-ordered wing uses the same eligible designation as map/TAB and the sortie.
+  // It still needs a delivered report and steers at that estimate, never at the live hull.
+  if (a.team === "us" && a.wing && b.command === "strike") {
+    const c = known.get(b.target);
+    if (!c || c.lost || isStale(c, b.time, STALE_SECONDS) || !b.targetContacts().some((r: Any) => r.id === c.id)) return null;
+    a.target = c.id;
+    return believedTarget(b, c);
+  }
   const candidates = [...known.values()].filter(
     (c: Any) => !c.lost && !isStale(c, b.time, STALE_SECONDS) && STRIKE_CLASSES.has(c.classification),
   );

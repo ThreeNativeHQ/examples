@@ -4,7 +4,7 @@
  * These rules are invisible to a screenshot and to a playtest: a sortie that completes on an
  * unobserved hit, on somebody else's kill, or on a weapon released for a previous target looks
  * exactly like one that was flown honestly. This exercises `src/sim/sortie.ts` directly — no
- * renderer, no Battle — and asserts the release stamp, the pending-confirmation rule, the explicit
+ * renderer — and asserts the release stamp, the pending-confirmation rule, the explicit
  * unavailable/retask results, the participation arithmetic, duty feasibility, and that the one
  * target validator gives map selection, target cycling and debrief eligibility the same answer.
  *
@@ -362,3 +362,79 @@ const surface = () => {
 console.log("check-sortie-kinds: 5 assignments, 7 hulls, 4 duties");
 console.log("check-sortie-kinds: release stamp, pending confirmation, unavailable/retask, participation and one validator all hold");
 console.log("check-sortie-kinds: Open Pacific end conditions, observed withdrawal and one honest conclusion all hold");
+
+// Live surface-strike consumers: known targets, explicit retask, real weapon credit and recovery.
+const battleBuild = await build({ stdin: { contents: 'export { Battle } from "./src/sim/battle.ts"; export { selectNavalTarget } from "./src/sim/tactics.ts";', resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
+const { Battle, selectNavalTarget } = await import(`data:text/javascript;base64,${Buffer.from(battleBuild.outputFiles[0].text).toString('base64')}`);
+const battle = new Battle();
+assert.equal(battle.selectAssignment('surface'), true);
+battle.start(true);
+const cruiser = battle.ships.find((s) => s.team === 'jp' && s.kind === 'cruiser');
+const destroyer = battle.ships.find((s) => s.team === 'jp' && s.kind === 'destroyer');
+const carrier = battle.ships.find((s) => s.team === 'jp' && s.kind === 'carrier');
+assert.deepEqual(battle.targetContacts(), [], 'unseen ships are never offered for designation');
+assert.equal(battle.designateTarget(cruiser.id), false, 'an unseen cruiser is refused');
+for (const ship of [cruiser, destroyer, carrier]) battle.recordContact(ship);
+assert.equal(battle.designateTarget(carrier.id), false, 'a carrier is not a Surface Strike objective');
+assert.equal(battle.designateTarget(cruiser.id), true);
+assert.equal(battle.sortie.target, cruiser.id, 'designation reaches the single sortie record immediately');
+cruiser.sunk = true;
+battle.updateSortie();
+assert.equal(battle.sortie.target, null, 'a lost target requires an explicit retask');
+assert.equal(battle.sortie.objective, 'pending', 'another surface target is still available');
+assert.equal(battle.designateTarget(destroyer.id), true);
+const sub = battle.ships.find((s) => s.team === 'jp' && s.kind === 'sub');
+sub.surfaced = true;
+battle.recordContact(sub);
+assert.equal(battle.designateTarget(sub.id), true, 'a sighted surfaced submarine is eligible');
+battle.report();
+battle.time += 20;
+battle.deliverReports();
+battle.setCommand('strike');
+const wing = { ...battle.aircraft.find((a) => a.wing), team: 'us', wing: true };
+assert.equal(selectNavalTarget(battle, wing)?.id, sub.id, 'an ordered wing accepts the same surfaced contact');
+sub.surfaced = false;
+assert.equal(selectNavalTarget(battle, wing), null, 'wing orders cannot attack a submerged designation');
+battle.updateSortie();
+assert.equal(battle.sortie.target, null, 'a diving target requires retasking');
+assert.equal(battle.designateTarget(sub.id), false, 'a submerged boat cannot be selected');
+assert.equal(battle.designateTarget(destroyer.id), true);
+assert.equal(selectNavalTarget(battle, wing)?.id, destroyer.id, 'an ordered wing can attack the selected destroyer');
+assert.equal(wing.target, destroyer.id);
+battle.recordContact(destroyer); // the crew sees the impact below, after report delivery time elapsed
+assert.equal(battle.releaseOrdnance(), true);
+const weapon = battle.bombs.at(-1);
+assert.equal(weapon.stamp.target, destroyer.id, 'a real released weapon carries the selected surface target');
+battle.damageShip(destroyer, 40, { ...destroyer, y: destroyer.deckHeight }, 'bomb', 'us', { owner: weapon.owner, stamp: weapon.stamp });
+assert.equal(battle.sortie.objective, 'achieved', 'an observed designated surface hit completes the assignment');
+battle.recover(battle.home);
+assert.equal(battle.sortie.result.outcome, 'recovered');
+assert.equal(battle.sortie.result.assignment, 'surface');
+const frozen = JSON.stringify(battle.sortie.result);
+battle.step(1 / 60);
+assert.equal(JSON.stringify(battle.sortie.result), frozen, 'the surface debrief stays frozen');
+console.log('check-sortie-kinds: live surface designation, retask, released-weapon credit and recovered debrief hold');
+
+const unavailable = new Battle();
+unavailable.selectAssignment('surface');
+for (const ship of unavailable.ships) if (ship.team === 'jp' && ship.kind !== 'sub') ship.sunk = true;
+const lastSub = unavailable.ships.find((s) => s.team === 'jp' && s.kind === 'sub');
+lastSub.surfaced = false;
+unavailable.updateSortie();
+assert.equal(unavailable.sortie.objective, 'pending', 'a submerged survivor can surface later');
+lastSub.sunk = true;
+unavailable.updateSortie();
+assert.equal(unavailable.sortie.objective, 'unavailable', 'no surviving eligible hull ends the assignment honestly');
+console.log('check-sortie-kinds: shared wing eligibility, sub dive/retask and unavailable surface targets hold');
+
+const returning = new Battle();
+returning.selectAssignment('recon');
+returning.start(true);
+returning.goHome();
+const firstCarrier = returning.ships.find((s) => s.team === 'jp' && s.kind === 'carrier');
+returning.recordContact(firstCarrier);
+assert.equal(returning.player.nav, 'home', 'an automatic sighting must preserve the ordered home course');
+assert.equal(returning.target, firstCarrier.id, 'the sighting still supplies a carrier navigation contact');
+assert.equal(returning.designateTarget(firstCarrier.id), true);
+assert.equal(returning.player.nav, 'search', 'an explicit designation intentionally sets the target course');
+console.log('check-sortie-kinds: automatic sighting preserves home navigation; explicit selection sets target course');

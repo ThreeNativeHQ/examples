@@ -623,6 +623,30 @@ for initial assignment and retask. The full carrier-cycle check passes: 84 losse
 refusals with every airframe conserved, informed versus blind strike launches 20 versus 0,
 stale-report drift and repeated-seed equality. Typecheck and independent review pass.
 
+**Surface-strike consumer slice (AC-12/19):** Work directly on the current branch.
+The pure sortie contract already accepts surface hits, but the briefing omits the assignment,
+all three scene target paths accept carrier-only or unvalidated contacts, and `Battle.updateSortie`
+updates carrier strikes only. Own the target-selection methods and sortie reconciliation in
+`battle.ts`, their scene/HUD/briefing consumers, and focused extensions to existing checks.
+Centralize eligible known contacts on `Battle` using the installed `targetEligible` rule, route
+map/list/TAB selection through one designation method, and expose Surface Strike with accurate
+orders. Keep the existing carrier-navigation behavior for recon/Open Pacific. Never offer an
+unobserved hull. Validate selection/refusal, loss/retask, release-stamped credit and frozen recovery
+through actual Battle methods; prove the UI route in the existing wrapped sortie capture.
+Fleet Support stays out of the briefing until its live participation events are connected.
+
+**Evidence:** The appended `check-sortie-kinds.mjs` coverage drives the real `Battle` methods: unseen
+hulls and carriers are refused for Surface Strike, a sighted cruiser designates through the one
+`Battle.designateTarget`, a loss forces an explicit retask, an ordered US wing accepts only that same
+delivered eligible contact (and a submerged boat yields nothing), and a weapon released against the
+designated hull scores one observed hit and a frozen recovered surface debrief. The wrapped WebGPU
+`capture-sortie.mjs` passes on an NVIDIA Turing adapter with list/TAB/map selection all routed through
+the one designation, the map refusing an ineligible carrier without replacing the target, and the
+SURFACE STRIKE debrief reading achieved. `pnpm typecheck`, the latest automatic-sighting/home-course
+nav regression and `vite build` are green. Limitations: the capture injects the contacts and bounds the
+bomb's flight (listed as forced), so it proves the UI/Battle route and not a naturally flown surface
+sortie; Fleet Support, natural support runs and any native/Android/iOS target remain unverified.
+
 **Status:** IN PROGRESS
 **Remaining:** AI engine flight, complete aircraft articulation, measured carrier contact geometry and full player/deck inventory acceptance.
 **ACs:** AC-3–9.
