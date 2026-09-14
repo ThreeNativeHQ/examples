@@ -184,7 +184,11 @@ export function damageModifiers(a: any): {
   };
 }
 
-export function stepDamage(a: any, dt: number): void {
+export function stepDamage(target: any, dt: number): any {
+  // A ship record and an aircraft record travel the same call site. The ship record carries a
+  // `capacity` block and five functional zones; the aircraft record carries `damage` parts and hp.
+  if (isShipDamage(target)) return stepShipDamage(target, dt);
+  const a = target;
   if (!a.damage || a.hp <= 0 || dt <= 0) return;
   if (dt > 0.1) {
     const n = Math.ceil(dt / 0.1);
@@ -242,4 +246,182 @@ export function stepWheels(p: IFlightState, dt: number): void {
       ((p as any).wheelOmega || 0) * Math.exp(-dt * ((p.gearPos ?? 1) < 0.65 ? 3.2 : 0.64));
   if ((p as any).wheelOmega < 0.02) (p as any).wheelOmega = 0;
   (p as any).wheelAngle = ((((p as any).wheelAngle || 0) + (p as any).wheelOmega * dt) % TAU + TAU) % TAU;
+}
+
+/**
+ * Ship damage as a handful of functional outcomes, not a hit-point tally. Each field is severity
+ * (0 untouched, 1 destroyed); `flooding` and `fireRate` are rates in severity per second. The
+ * capacity block is the class's own damage pool, so a destroyer and a carrier do not share a scale.
+ */
+export const SHIP_DAMAGE_ZONES = ["hull", "propulsion", "fire", "aviation", "weapons"] as const;
+export type ShipDamageZone = (typeof SHIP_DAMAGE_ZONES)[number];
+
+/** A class's real damage pool and real armament. The drawn gun count is never an input here. */
+export interface IShipCapacity {
+  hull: number;
+  propulsion: number;
+  aviation: number;
+  weapons: number;
+  aa: number;
+  mainGuns: number;
+}
+
+export interface ShipDamage {
+  /** hull/flooding */
+  hull: number;
+  /** propulsion and steering */
+  propulsion: number;
+  /** fire, as a severity: 0 cold, 1 ablaze */
+  fire: number;
+  /** aviation/deck */
+  aviation: number;
+  /** weapons and sensors */
+  weapons: number;
+  /** hull severity gained per second while the ship is taking water */
+  flooding: number;
+  /** fire severity gained per second while the fire still has fuel to spread into */
+  fireRate: number;
+  capacity: IShipCapacity;
+}
+
+/** Severity per second a fresh fire spreads at, before it runs out of fuel and burns down. */
+const FIRE_SPREAD = 0.1;
+/** Per second the fire's own spread potential decays; once it reaches zero the fire burns out. */
+const FIRE_FADE = 0.025;
+/** Per second an unspread fire consumes itself. */
+const FIRE_BURNOUT = 0.05;
+/** Hull severity per second added by a fully open flooding rate. */
+const FLOOD_RATE = 0.06;
+/** Flooding grows itself as the hull weakens, so a bad hit keeps taking water. */
+const FLOOD_GROWTH = 0.05;
+/** A hit this size into a magazine-sized charge raises one unit of fire severity. */
+const FIRE_HIT_CAPACITY = 400;
+
+const clamp01 = (n: number): number => clamp(n, 0, 1);
+
+/**
+ * Real, cited fits per class. Cosmetic model guns are never read: a hull gets the armament its
+ * class actually carried, so a decorative AA mount cannot turn a carrier into a gun platform.
+ */
+const CLASS_CAPACITY: Record<string, IShipCapacity> = Object.freeze({
+  carrier: { hull: 420, propulsion: 180, aviation: 160, weapons: 90, aa: 8, mainGuns: 0 },
+  battleship: { hull: 620, propulsion: 240, aviation: 20, weapons: 220, aa: 12, mainGuns: 9 },
+  cruiser: { hull: 260, propulsion: 130, aviation: 40, weapons: 120, aa: 8, mainGuns: 10 },
+  destroyer: { hull: 110, propulsion: 80, aviation: 0, weapons: 45, aa: 4, mainGuns: 5 },
+  submarine: { hull: 70, propulsion: 55, aviation: 0, weapons: 30, aa: 1, mainGuns: 1 },
+});
+
+export function classCapacity(kind: string): IShipCapacity {
+  const base = CLASS_CAPACITY[kind] ?? CLASS_CAPACITY.destroyer;
+  return Object.freeze({ ...base });
+}
+
+/** A pristine ship of the given class capacity. Returns a fresh, frozen record. */
+export function initShipDamage(capacity: IShipCapacity): ShipDamage {
+  return Object.freeze({
+    hull: 0,
+    propulsion: 0,
+    fire: 0,
+    aviation: 0,
+    weapons: 0,
+    flooding: 0,
+    fireRate: 0,
+    capacity: Object.freeze({ ...capacity }),
+  });
+}
+
+/** True only for a ship damage record; lets `stepDamage` serve the aircraft record unchanged. */
+export function isShipDamage(record: any): record is ShipDamage {
+  return (
+    !!record &&
+    typeof record === "object" &&
+    typeof record.capacity === "object" &&
+    record.capacity !== null &&
+    typeof record.flooding === "number" &&
+    typeof record.hull === "number" &&
+    !("integrity" in record)
+  );
+}
+
+/**
+ * One hit into one functional zone. `r01` is the simulation's seeded draw (0..1): it decides
+ * ignition, never position or amount. Returns a new frozen record; the input is untouched.
+ */
+export function applyHit(damage: ShipDamage, zone: ShipDamageZone, amount: number, r01: number): ShipDamage {
+  if (!damage || !Number.isFinite(amount) || amount <= 0) return damage;
+  const next: ShipDamage = { ...damage, capacity: damage.capacity };
+  if (zone === "fire") {
+    next.fire = clamp01(damage.fire + amount / FIRE_HIT_CAPACITY);
+    next.fireRate = Math.max(damage.fireRate, FIRE_SPREAD);
+    return Object.freeze(next);
+  }
+  const key = zone as Exclude<ShipDamageZone, "fire">;
+  next[key] = clamp01(damage[key] + amount / damage.capacity[key]);
+  // A hull hit opens the ship: flooding scales with how far the hull has already gone.
+  if (key === "hull") next.flooding = Math.max(damage.flooding, next.hull * FLOOD_RATE);
+  // A hard hit can ignite. The draw only decides the ignition, which is why it is an argument.
+  const chance = key === "aviation" ? 0.25 : 0.35;
+  if (Number.isFinite(r01) && r01 < chance) {
+    next.fire = clamp01(Math.max(damage.fire, 0.1) + amount / FIRE_HIT_CAPACITY);
+    next.fireRate = Math.max(damage.fireRate, FIRE_SPREAD);
+  }
+  return Object.freeze(next);
+}
+
+/** Repair one zone by an absolute amount. Only that zone (and its own flooding) is restored. */
+export function applyRepair(damage: ShipDamage, zone: ShipDamageZone, amount: number): ShipDamage {
+  if (!damage || !Number.isFinite(amount) || amount <= 0) return damage;
+  const next: ShipDamage = { ...damage, capacity: damage.capacity };
+  if (zone === "fire") {
+    next.fire = clamp01(damage.fire - amount / FIRE_HIT_CAPACITY);
+    next.fireRate = next.fire > 0 ? damage.fireRate : 0;
+    return Object.freeze(next);
+  }
+  const key = zone as Exclude<ShipDamageZone, "fire">;
+  next[key] = clamp01(damage[key] - amount / damage.capacity[key]);
+  if (key === "hull" && next.hull <= 0) next.flooding = 0;
+  return Object.freeze(next);
+}
+
+/** Flooding and fire move over time; a fire that runs out of spread burns down to nothing. */
+function stepShipDamage(damage: ShipDamage, dt: number): ShipDamage {
+  if (!(dt > 0)) return damage;
+  const next: ShipDamage = { ...damage, capacity: damage.capacity };
+  if (next.flooding > 0) {
+    next.hull = clamp01(next.hull + next.flooding * dt);
+    next.flooding = clamp01(next.flooding + next.hull * FLOOD_GROWTH * dt);
+  }
+  if (next.fire > 0 || next.fireRate > 0) {
+    if (next.fireRate > 0) {
+      next.fire = clamp01(next.fire + next.fireRate * dt);
+      next.fireRate = Math.max(0, next.fireRate - FIRE_FADE * dt);
+    } else {
+      next.fire = clamp01(next.fire - FIRE_BURNOUT * dt);
+    }
+  }
+  return Object.freeze(next);
+}
+
+/** Fraction of ordered speed the ship can still make. Flooding drags, propulsion decides. */
+export function speedFactor(damage: ShipDamage): number {
+  if (!damage) return 1;
+  return clamp01((1 - clamp01(damage.propulsion)) * (1 - 0.5 * clamp01(damage.hull)));
+}
+
+/** Fraction of ordered turn the ship can still hold. Steering lives in the propulsion zone. */
+export function turnFactor(damage: ShipDamage): number {
+  if (!damage) return 1;
+  return clamp01(1 - clamp01(damage.propulsion));
+}
+
+/** Only a hull with a flight deck answers; a destroyer never inherits carrier deck logic. */
+export function canOperateAircraft(damage: ShipDamage): boolean {
+  if (!damage || damage.capacity.aviation <= 0 || damage.hull >= 1) return false;
+  return damage.aviation < 0.5 && damage.hull < 0.75 && damage.fire < 0.5;
+}
+
+/** Real armament only: capacity is the class's own fit, never a cosmetic modelled gun count. */
+export function weaponsAvailable(damage: ShipDamage): boolean {
+  if (!damage || damage.capacity.weapons <= 0 || damage.hull >= 1) return false;
+  return damage.weapons < 1;
 }
