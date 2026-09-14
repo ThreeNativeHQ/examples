@@ -11,6 +11,10 @@
  * run: the approved workload, the declared population envelope, finite observations, the absolute
  * budgets and a matched baseline are all required before "PASS" is printed. An attribution run
  * (reduced resolution/time, a hidden layer) reports its metrics but is explicitly non-qualifying.
+ *
+ * Capture against an HMR-disabled server on the same primary source: a hot update mid-sample
+ * disposes the renderer and zeroes its metrics. Start one with Vite's JS API, `server.hmr: false`,
+ * on a free port, and point MIDWAY_URL at it; never copy the source tree or create a worktree.
  */
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
@@ -23,10 +27,15 @@ const WIDTH = Number(process.env.MIDWAY_WIDTH || 1920);
 const HEIGHT = Number(process.env.MIDWAY_HEIGHT || 1080);
 const WARMUP = Number(process.env.MIDWAY_WARMUP || 8);
 const SAMPLE = Number(process.env.MIDWAY_SAMPLE || 60);
-// The live-aircraft ceiling Battle.enforces (`ACTIVE_CAP` in src/sim/battle.ts). A 30-minute
-// natural run was measured to plateau at 22 active aircraft, so 68 is a declared envelope the
-// current natural battle does not reach; a run below it is labelled non-qualifying, not faked up.
-const REQUIRED_AIRCRAFT = Number(process.env.MIDWAY_REQUIRED_AIRCRAFT || 68);
+// AC-23's approved envelope: the live-aircraft ceiling Battle enforces (`ACTIVE_CAP` in
+// src/sim/battle.ts). It is fixed and never env-overridable, because an override could only lower
+// the bar. A 30-minute natural run was measured to plateau at 22, so the current natural battle
+// does not reach 68 and the run is labelled non-qualifying rather than faked up.
+const REQUIRED_AIRCRAFT = 68;
+// The warm-up and quality the approved run is defined at. An attribution run may use another, and
+// then cannot qualify.
+const REQUIRED_WARMUP = 8;
+const REQUIRED_QUALITY = "balanced";
 
 /** Fields that must match for a baseline to be a matched baseline. */
 const BASELINE_FIELDS = [
@@ -40,6 +49,7 @@ const BASELINE_FIELDS = [
   "damage",
   "input",
   "requiredAircraft",
+  "hidden",
 ];
 
 /** A timing series is an observation only if it has samples and a finite p95. */
@@ -58,11 +68,36 @@ function baselineMismatches(base, current) {
     else if (base[f] !== current[f]) out.push(`${f} ${JSON.stringify(base[f])} != ${JSON.stringify(current[f])}`);
   }
   for (const f of ["gpuP95", "cpuP95"]) if (!Number.isFinite(base[f])) out.push(`baseline ${f} is not finite`);
+  // A baseline only matches the qualified workload if it, too, observed the declared population
+  // envelope. A baseline recorded at 22 aircraft cannot stand in for a 68-aircraft requirement.
+  if (!base.population || !Number.isFinite(base.population.min) || !Number.isFinite(base.population.max))
+    out.push("baseline missing population envelope");
+  else if (base.population.min < current.requiredAircraft)
+    out.push(`baseline observed population ${base.population.min}/${base.population.max} below declared envelope ${current.requiredAircraft}`);
   return out;
 }
 
-// A framework-free provable check that the two fail-closed decisions above actually reject a bad
-// input. `node tools/capture-performance.mjs --self-check`.
+/**
+ * Why a run does not qualify for AC-23, using the fixed approved bar — never the env overrides used
+ * for attribution. The population check is on the observed minimum, so one crowded frame cannot
+ * qualify a mostly empty sample.
+ */
+function qualificationReasons(meta, pop, relativePass) {
+  const reasons = [];
+  if (meta.width !== 1920 || meta.height !== 1080) reasons.push(`resolution ${meta.width}x${meta.height} is not 1920x1080`);
+  if (meta.sample !== 60) reasons.push(`sample ${meta.sample}s is not 60s`);
+  if (meta.warmup !== REQUIRED_WARMUP) reasons.push(`warm-up ${meta.warmup}s is not the required ${REQUIRED_WARMUP}s`);
+  if (meta.quality !== REQUIRED_QUALITY) reasons.push(`quality ${meta.quality} is not the required ${REQUIRED_QUALITY}`);
+  if (meta.pixelRatio !== 1) reasons.push(`pixel ratio ${meta.pixelRatio} is not 1`);
+  if (meta.hidden) reasons.push(`MIDWAY_HIDE=${meta.hidden} disables a layer`);
+  if (!(pop.aircraftMin >= REQUIRED_AIRCRAFT))
+    reasons.push(`observed minimum ${pop.aircraftMin} active aircraft below declared envelope ${REQUIRED_AIRCRAFT} across the sample`);
+  if (!relativePass) reasons.push("relative \u226410% clause UNVERIFIED");
+  return reasons;
+}
+
+// A framework-free provable check that the fail-closed decisions above actually reject the
+// false-pass cases, including the two qualification loopholes. `--self-check`.
 if (process.argv.includes("--self-check")) {
   const cur = {
     adapter: { vendor: "nvidia", architecture: "turing" },
@@ -76,6 +111,8 @@ if (process.argv.includes("--self-check")) {
     damage: false,
     input: "turn-right + fire",
     requiredAircraft: 68,
+    hidden: null,
+    population: { min: 68, max: 70 },
     gpuP95: 6.8,
     cpuP95: 0.7,
   };
@@ -94,10 +131,41 @@ if (process.argv.includes("--self-check")) {
     "a nonfinite baseline timing is rejected",
   );
   assert.ok(
+    baselineMismatches({ ...cur, population: { min: 22, max: 22 } }, cur).some((r) => r.includes("population")),
+    "a baseline observed below the declared envelope is rejected",
+  );
+  assert.ok(
+    baselineMismatches({ ...cur, population: undefined }, cur).some((r) => r.includes("missing population")),
+    "a baseline with no observed population is rejected",
+  );
+  assert.ok(
+    baselineMismatches({ ...cur, requiredAircraft: 1 }, cur).some((r) => r.includes("requiredAircraft")),
+    "a baseline declaring a lowered envelope is rejected",
+  );
+  assert.ok(
     !isFiniteTiming(null) && !isFiniteTiming({ samples: 0, p95: 1 }) && !isFiniteTiming({ samples: 3, p95: NaN }),
     "missing or nonfinite observations are rejected",
   );
   assert.ok(isFiniteTiming({ samples: 3, p95: 1 }), "a finite observation is accepted");
+
+  const qualMeta = { width: 1920, height: 1080, sample: 60, warmup: 8, quality: "balanced", pixelRatio: 1, hidden: null };
+  assert.deepEqual(qualificationReasons(qualMeta, { aircraftMin: 68, aircraftMax: 70 }, true), [], "a fully qualified run passes");
+  assert.ok(
+    qualificationReasons(qualMeta, { aircraftMin: 3, aircraftMax: 70 }, true).some((r) => r.includes("minimum")),
+    "one full-population frame does not qualify a mostly empty sample",
+  );
+  assert.ok(
+    qualificationReasons({ ...qualMeta, warmup: 2 }, { aircraftMin: 68 }, true).some((r) => r.includes("warm-up")),
+    "a lowered warm-up does not qualify",
+  );
+  assert.ok(
+    qualificationReasons({ ...qualMeta, quality: "low" }, { aircraftMin: 68 }, true).some((r) => r.includes("quality")),
+    "a lowered quality does not qualify",
+  );
+  assert.ok(
+    qualificationReasons(qualMeta, { aircraftMin: 68 }, false).some((r) => r.includes("relative")),
+    "a missing relative comparison does not qualify",
+  );
   console.log("self-check PASS");
   process.exit(0);
 }
@@ -345,6 +413,7 @@ try {
     damage: burning,
     input: burning ? "course-held + fire" : "turn-right + fire",
     requiredAircraft: REQUIRED_AIRCRAFT,
+    hidden: process.env.MIDWAY_HIDE || null,
   };
 
   const fps = (ms) => +(1000 / ms).toFixed(1);
@@ -369,6 +438,13 @@ try {
     result.scene.aircraft > 0 && result.scene.ships > 0,
     `the sample has a live population: ${JSON.stringify(result.scene)}`,
   );
+  // A disposed or torn-down renderer reports zero draws and zero memory; that is a missing
+  // observation, not a fast frame, and it must not be reported as a result.
+  assert.ok(
+    result.draws > 0 && result.triangles > 0,
+    `render observations present: ${result.draws} draws, ${result.triangles} triangles`,
+  );
+  assert.ok(result.memory.total > 0, `memory observation present: ${JSON.stringify(result.memory)}`);
   // The AC-23 absolute budgets are checked on the distributions, not on an average. A failing
   // absolute target is an explicit performance gap; it cannot be excused by a relative pass.
   assert.ok(result.gpu.p95 <= 16.7, `GPU p95 at or under 16.7ms: ${result.gpu.p95}ms`);
@@ -399,14 +475,7 @@ try {
     console.log(`baseline written to ${process.env.MIDWAY_BASELINE_OUT}`);
   }
 
-  const reasons = [];
-  if (WIDTH !== 1920 || HEIGHT !== 1080) reasons.push(`resolution ${WIDTH}x${HEIGHT} is not 1920x1080`);
-  if (SAMPLE !== 60) reasons.push(`sample ${SAMPLE}s is not 60s`);
-  if (meta.pixelRatio !== 1) reasons.push(`pixel ratio ${meta.pixelRatio} is not 1`);
-  if (process.env.MIDWAY_HIDE) reasons.push(`MIDWAY_HIDE=${process.env.MIDWAY_HIDE} disables a layer`);
-  if (result.pop.aircraftMax < REQUIRED_AIRCRAFT)
-    reasons.push(`observed peak ${result.pop.aircraftMax} active aircraft below declared envelope ${REQUIRED_AIRCRAFT}`);
-  if (relative !== "PASS") reasons.push("relative \u226410% clause UNVERIFIED");
+  const reasons = qualificationReasons(meta, result.pop, relative === "PASS");
   if (reasons.length) {
     console.log(`AC-23 NON-QUALIFYING: ${reasons.join("; ")}`);
     if (process.env.MIDWAY_REQUIRE_QUALIFIED) assert.fail(`AC-23 not qualified: ${reasons.join("; ")}`);
