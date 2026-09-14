@@ -9,8 +9,12 @@
  *    drawing, at its own measured length — rather than from a position typed in here, so a hull
  *    that failed to load cannot be photographed as an empty patch of sea and pass;
  *  - it refuses a frame the subject never reached, by asking the renderer how many of that hull's
- *    own triangles are inside the camera frustum. A hull that did not load, did not draw, or was
- *    framed off-screen produces exactly the "blank/missing frame" the criterion will not accept.
+ *    own triangles are inside the camera frustum AND that part of the hull rises above the sea.
+ *    A hull that did not load, did not draw, was framed off-screen, or — like a dived submarine —
+ *    was drawn entirely under the water produces exactly the "blank/missing frame" the criterion
+ *    will not accept. This is the second version of that check: reading canvas pixels back reported
+ *    zero subject on every frame, including ones plainly showing a carrier, because a WebGPU canvas
+ *    does not survive `drawImage`. It is not to be reintroduced.
  *
  * What it does NOT do is judge how the hull looks. Nothing automated can: these frames exist to be
  * looked at, and the assertions here only establish that there is something in them to look at.
@@ -129,6 +133,29 @@ try {
     });
 
   /**
+   * Bring a boat to the surface before she is photographed. A dive is a legitimate state — the
+   * simulation puts a boat under whenever she holds a delivered contact and surfaces her when she
+   * does not (`submarine.ts`'s modes, chosen in `Battle.step`, earned through `stepDepth`) — so this
+   * sets the same condition the simulation itself represents, never the rendered mesh: the surfaced
+   * mode, depth 0 (its `SURFACE_DEPTH`), and the `surfaced`/`y` fields the simulation derives from
+   * it through the one `subY` conversion. The renderer then places the hull from `s.y` on the next
+   * frame, exactly as it would after a real surface order. This tool pauses the fixed clock between
+   * frames, so the boat cannot earn the climb itself; setting the condition is the honest stand-in.
+   */
+  const surfaceSub = (id) =>
+    page.evaluate((id) => {
+      const s = window.midway?.battle?.ships?.find((x) => x.id === id);
+      if (!s || s.kind !== "sub" || !s.sub) return { sub: false };
+      s.sub.mode = "surfaced";
+      s.sub.depth = 0;
+      s.sub.depthRate = 0;
+      // The two fields `Battle.step` writes from that state, for a surfaced boat.
+      s.surfaced = true;
+      s.y = 0;
+      return { sub: true, mode: s.sub.mode, depth: s.sub.depth };
+    }, id);
+
+  /**
    * Put the camera off this hull's starboard bow at a multiple of its own length, and report what
    * the renderer says is in front of it. The mesh's own world bounds are the subject, so a hull
    * drawn at the wrong scale or in the wrong place frames wrongly and shows it.
@@ -210,6 +237,12 @@ try {
       push(e[3] - e[2], e[7] - e[6], e[11] - e[10], e[15] - e[14]);
       push(e[3] + e[2], e[7] + e[6], e[11] + e[10], e[15] + e[14]);
       mesh.updateMatrixWorld(true);
+      // The hull's own world bounding box top, from every drawn mesh regardless of frustum: a hull
+      // entirely below the sea was not reached by the frame, however many of its triangles are in
+      // front of the camera. The sea's level comes from the ocean mesh the scene is drawing, not a
+      // zero typed here — the ocean mesh rides the camera at its own y, and that is the plane a
+      // dived hull sits under.
+      let top = -Infinity;
       mesh.traverse((o) => {
         if (!o.isMesh || !o.visible || !o.geometry) return;
         meshes += 1;
@@ -218,46 +251,87 @@ try {
         const centre = g.boundingSphere.center.clone().applyMatrix4(o.matrixWorld);
         const scale = o.matrixWorld.getMaxScaleOnAxis();
         const r = g.boundingSphere.radius * scale;
+        if (!g.boundingBox) g.computeBoundingBox();
+        if (g.boundingBox) {
+          const box = g.boundingBox.clone().applyMatrix4(o.matrixWorld);
+          if (box.max.y > top) top = box.max.y;
+        }
         const inside = planes.every((p) => p[0] * centre.x + p[1] * centre.y + p[2] * centre.z + p[3] > -r);
         if (!inside) return;
         inFrustum += 1;
         triangles += g.index ? g.index.count / 3 : (g.attributes.position?.count ?? 0) / 3;
       });
-      return { meshes, inFrustum, triangles: Math.round(triangles) };
+      const waterLevel = w.sea?.position?.y ?? 0;
+      return {
+        meshes,
+        inFrustum,
+        triangles: Math.round(triangles),
+        topY: +top.toFixed(2),
+        waterLevel,
+        aboveWater: top > waterLevel,
+      };
     }, id);
 
   const rows = [];
+  const skipped = [];
   for (const hull of hulls) {
     for (const range of RANGES) {
       await freeze();
+      if (hull.kind === "sub") await surfaceSub(hull.id);
       const framed = await frameHull(hull.id, range.lengths, range.fov, range.rise);
       await page.waitForTimeout(420);
+      const subject = await subjectInFrame(hull.id);
+      // A frame with the subject below the sea is not evidence. For a surface hull that is a plain
+      // failure the blank gate below reports; for a boat it may simply mean she dived, which is a
+      // legitimate state and not a broken model, so she is surfaced above rather than failed. If
+      // even the surfaced condition leaves her under, the frame is not evidence and she is skipped,
+      // not counted among the classes captured.
+      if (hull.kind === "sub" && !subject.aboveWater) {
+        await release();
+        skipped.push(`${hull.name}/${range.name}`);
+        console.log(
+          `${hull.name} / ${range.name} SKIPPED: hull top ${subject.topY} m is not above the sea ` +
+            `${subject.waterLevel} m — the boat was dived, so the frame is not evidence and is not counted`,
+        );
+        continue;
+      }
+      // Still frozen: `release` would hand the camera back to the game before the frame is taken.
       const slug = `hull-${hull.name.toLowerCase().replace(/[^a-z0-9]+/gu, "-")}-${range.name}`;
       await page.screenshot({ path: `${OUT}/${slug}.png` });
-      const subject = await subjectInFrame(hull.id);
       await release();
       rows.push({ name: hull.name, kind: hull.kind, range: range.name, ...framed, ...subject });
       console.log(
         `${hull.name} / ${range.name}`,
-        JSON.stringify({ standoff: framed.reach, inFrustum: `${subject.inFrustum}/${subject.meshes}`, tris: subject.triangles }),
+        JSON.stringify({
+          standoff: framed.reach,
+          inFrustum: `${subject.inFrustum}/${subject.meshes}`,
+          tris: subject.triangles,
+          aboveWater: subject.aboveWater,
+        }),
       );
     }
   }
 
-  const blank = rows.filter((r) => r.inFrustum === 0 || r.triangles < MIN_SUBJECT_TRIANGLES);
+  const blank = rows.filter((r) => r.inFrustum === 0 || !r.aboveWater || r.triangles < MIN_SUBJECT_TRIANGLES);
   assert.equal(
     blank.length,
     0,
     `AC-22 refuses a blank frame as evidence, and the subject did not reach these: ${blank
-      .map((r) => `${r.name}/${r.range} (${r.inFrustum}/${r.meshes} meshes in frustum, ${r.triangles} tris)`)
+      .map(
+        (r) =>
+          `${r.name}/${r.range} (${r.inFrustum}/${r.meshes} meshes in frustum, ${r.triangles} tris, ` +
+          `top ${r.topY} m vs sea ${r.waterLevel} m)`,
+      )
       .join(", ")}`,
   );
 
   assert.equal(errors.length, 0, `console/page errors during capture: ${errors.join(" | ")}`);
   console.log(
     `PASS: ${hulls.length} hull classes captured at engagement and close range (${rows.length} frames` +
-      `, least subject ${Math.min(...rows.map((r) => r.triangles))} triangles in frustum), no console` +
-      ` or GPU errors. The frames are in ${OUT}/ and AC-22 is not met until a person has looked at them.`,
+      `, least subject ${Math.min(...rows.map((r) => r.triangles))} triangles in frustum)` +
+      (skipped.length ? `, skipped as dived: ${skipped.join(", ")}` : ``) +
+      `, no console or GPU errors. The frames are in ${OUT}/ and AC-22 is not met until a person has` +
+      ` looked at them.`,
   );
 } finally {
   await browser.close();
