@@ -2221,8 +2221,12 @@ export class Battle {
             : "deep";
         Object.assign(state, stepDepth(state, wanted, dt, SUB_DIVE_RATE));
         // A reload is finite and its clock belongs to the boat: when it runs out the tubes are ready
-        // again. `applyFire` spends the reload; nothing here re-arms a repeating salvo.
-        if (state.tubes <= 0 && state.reloadUntil > 0 && this.time >= state.reloadUntil) state.tubes = SUB_TUBES;
+        // again, but only while a spare load remains. `applyFire` spends the reload and starts the
+        // clock; clearing it once served stops a stale clock from re-arming the tubes for free.
+        if (state.tubes <= 0 && state.reloadUntil > 0 && this.time >= state.reloadUntil) {
+          if (state.reloads > 0) state.tubes = SUB_TUBES;
+          state.reloadUntil = 0;
+        }
         state.battery = Math.max(0, state.battery - batteryDrain(state, s.speed, dt));
         // Only a deep boat is unobserved; a periscope still breaks the surface.
         s.surfaced = state.depth < SIGHT_DEPTH;
