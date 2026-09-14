@@ -26,6 +26,14 @@ for name, loc, rot, res in (
 ):
     cam.location = loc; cam.rotation_euler = rot
     scn.render.resolution_x, scn.render.resolution_y = res
+    cam_data.ortho_scale = (max(hi.y - lo.y, (hi.z - lo.z) * res[0] / res[1]) * 1.10
+                            if name == "side" else span)
     scn.render.filepath = f"{preview}-{name}.png"
     bpy.ops.render.render(write_still=True)
     print(f"PREVIEW {scn.render.filepath}")
+scn.render.resolution_x, scn.render.resolution_y = 1200, 800
+cam.location = mid + Vector((span * .7, -span * .85, span * .55))
+cam.rotation_euler = (mid - cam.location).to_track_quat('-Z', 'Y').to_euler()
+cam_data.ortho_scale = span * 1.12
+scn.render.filepath = f"{preview}-quarter.png"
+bpy.ops.render.render(write_still=True)

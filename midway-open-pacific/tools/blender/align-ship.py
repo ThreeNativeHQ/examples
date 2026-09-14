@@ -25,7 +25,7 @@ target_height = flag("--height")
 draught = flag("--draught", 0.0)
 waterline = flag("--waterline", 0.0)
 preview = flag("--preview", None, str)
-budget = flag("--decimate", 0, int)
+assert not flag("--decimate", 0, int), "Simplify before alignment with gltf-transform; Blender collapse damages these meshes"
 flip = "--flip" in opt
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -100,18 +100,16 @@ if flip:
     M = Matrix.Rotation(math.pi, 4, "Z") @ M
 scale = (target_length / raw_len) if target_length else 1.0
 M = Matrix.Scale(scale, 4) @ M
-# Recorded beam repair. These generated hulls run 2-3x too fat for their length; narrowing X to
-# the class reference beam is a declared correction, printed below, not a silent stretch.
-beam_fix = (target_beam / ((wl_beam or raw_beam) * scale)) if target_beam else 1.0
-height_fix = (target_height / (raw_height * scale)) if target_height else 1.0
-if target_beam or target_height:
-    M = Matrix.Diagonal((beam_fix, 1.0, height_fix, 1.0)) @ M
-    print(f"REPAIR beam x{beam_fix:.4f} height x{height_fix:.4f} "
-          f"(waterline beam {(wl_beam or raw_beam) * scale:.2f}->{target_beam or 0:.2f} m, "
-          f"height {raw_height * scale:.2f}->{target_height or 0:.2f} m)")
+# A class dimension is metadata, not permission to squash an authored model.
+# Match length with ONE scalar; preserve beam/height and report their actual values below.
+print(f"PROPORTIONS uniform scale={scale:.6f}; reference beam={target_beam}, height={target_height}")
 
 # Bake into mesh data: a rotated object transform would leave bound_box reporting the
 # axis-aligned box of the unrotated hull, which reads as a beam twice the real one.
+# Fail before export if any future change introduces independent axis scaling.
+axes = M.to_scale()
+assert max(axes) - min(axes) < max(axes) * 1e-5, ('Nonuniform asset scale', tuple(axes))
+
 for o in meshes:
     o.data.transform(M @ o.matrix_world)
     o.matrix_world = Matrix.Identity(4)
@@ -132,31 +130,7 @@ lo, hi = extents()
 print(f"FINAL length={hi.y - lo.y:.3f} beam={hi.x - lo.x:.3f} height={hi.z - lo.z:.3f} "
       f"keel_z={lo.z:.3f} scale={scale:.6f}")
 
-if budget and sum(len(o.data.polygons) for o in meshes) > budget:
-    # Triangulate first so the ratio is against real triangles, not n-gons.
-    for o in meshes:
-        bpy.context.view_layer.objects.active = o
-        o.modifiers.new("tri", "TRIANGULATE")
-        bpy.ops.object.modifier_apply(modifier="tri")
-    total = sum(len(o.data.polygons) for o in meshes)
-    for o in meshes:
-        # modifier_apply silently does nothing unless the object is both selected and active.
-        bpy.ops.object.select_all(action="DESELECT")
-        o.select_set(True)
-        bpy.context.view_layer.objects.active = o
-        m = o.modifiers.new("dec", "DECIMATE")
-        m.ratio = min(1.0, budget / total)
-        bpy.ops.object.modifier_apply(modifier="dec")
-    print(f"DECIMATE {total} -> {sum(len(o.data.polygons) for o in meshes)} (budget {budget})")
-    # Decimation moves the lowest vertex, so the keel has to be dropped again afterwards. Doing it
-    # only before leaves a hull floating or dug in by a few centimetres, which is exactly the size
-    # of error the recovery datum cannot absorb.
-    lo, hi = extents()
-    for o in meshes:
-        o.data.transform(Matrix.Translation(Vector((0.0, 0.0, -lo.z + waterline))))
-    lo, hi = extents()
-    print(f"REDROP keel_z={lo.z:.4f} length={hi.y - lo.y:.3f} height={hi.z - lo.z:.3f}")
-
+exec(open(__file__.replace("align-ship.py", "polish-materials.py")).read())
 if preview:
     exec(open(__file__.replace("align-ship.py", "_render_views.py")).read())
 if out != "-":

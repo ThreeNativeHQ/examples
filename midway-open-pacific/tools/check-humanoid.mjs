@@ -45,7 +45,8 @@ export async function loadGlb(path) {
 
 const sizeOf = (object) => new Box3().setFromObject(object).getSize(new Vector3());
 
-export function checkHumanoid(gltf, { clips, height: expectedHeight, minimumHandVertices = 1, minimumFingerVertices = 1 } = {}) {
+export function checkHumanoid(gltf, { clips, height: expectedHeight, minimumHandVertices = 1, minimumFingerVertices = 1, hands = "articulated" } = {}) {
+  assert(["rigid", "articulated"].includes(hands), "unknown hand binding mode");
   gltf.scene.updateMatrixWorld(true);
 
   const names = gltf.animations.map((clip) => clip.name).sort();
@@ -77,7 +78,7 @@ export function checkHumanoid(gltf, { clips, height: expectedHeight, minimumHand
     const controlled = controlledVertices(name, 0.5);
     assert(controlled >= minimumHandVertices, `${name} controls only ${controlled} vertices; hand binding is broken`);
   }
-  for (const side of ["l", "r"])
+  if (hands === "articulated") for (const side of ["l", "r"])
     for (const finger of ["thumb", "index", "middle", "ring", "pinky"]) {
       const controlled = controlledVertices(`${finger}_02_${side}`, 0.35);
       assert(controlled >= minimumFingerVertices, `${finger}_${side} controls only ${controlled} vertices; fingers stay rigid`);
@@ -135,6 +136,7 @@ export function checkHumanoid(gltf, { clips, height: expectedHeight, minimumHand
     mixer.stopAllAction();
     skinned.skeleton.pose();
     gltf.scene.updateMatrixWorld(true);
+    if (hands === "rigid") continue; // Mitten gloves use the hand bone; body/UV seam checks above still apply.
     const openTips = new Map();
     for (const side of ["l", "r"])
       for (const finger of ["thumb", "index", "middle", "ring", "pinky"]) {

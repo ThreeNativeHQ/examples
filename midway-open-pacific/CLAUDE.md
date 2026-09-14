@@ -75,26 +75,23 @@ Eastern Island. Every orientation and scale constant there was **measured** (wit
 
 ## Asset pipeline
 
-`tools/blender/rig-deck-crew.py` calls the reusable `rig_humanoid.py` with the measured
-`navy-sailor.json` anatomy. It starts from the supplied original `navy sailor 3d model.glb`,
-a textured, unrigged T-pose. It welds coincident vertices, reduces the mesh to 80k triangles,
-and fits the CC0 Quaternius UAL skeleton's joint origins to the sailor's shorter arms and wider
-stance while preserving bone axes and the authored clips. Continuous anatomical weights keep
-scan islands and UV seams together. A narrow bridge between the original middle/ring fingers
-is separated before binding. Do not restore automatic bone-heat binding: it assigned
-whole hands to thumb bones and left both hand bones with zero influence. Each finger has fitted
-knuckles and phalanges, with its flexion axis aligned to its length. Continuous segment weights
-keep neighboring digits independent. The UAL finger motions are softened into relaxed curls;
-binding the entire hand rigidly loses those motions and makes the sailor look robotic.
-`crew.wait` uses `Idle_No_Loop`: the folded-arm clip was rejected because its hand/forearm contact
-positions intersect this shorter-armed mesh. Retaining clip names does not require retaining an
-incompatible source motion.
+`tools/blender/rig-deck-crew.py` calls `rig_humanoid.py` with `navy-sailor-light.json`,
+measured from the replacement `navy sailor 3d.glb`. Its 9,748 source triangles receive one linear
+subdivision before binding (38,992 triangles), so coarse knee/hip triangles have intermediate
+weights without changing the rest surface. The original `navy-sailor.json` remains a legacy fit.
+The CC0 Quaternius UAL skeleton retains all six crew clip names and the 1.83m source-height datum.
+Continuous anatomical weights keep UV seams together. Distal arms bypass the shoulder-height
+mask: otherwise the shorter sailor's low thumb vertices incorrectly receive spine weights.
+Do not restore automatic bone-heat binding or bind the articulated sailor's whole hands rigidly.
+`crew.wait` uses `Idle_No_Loop`; the folded-arm source motion does not fit this mesh.
+Pilot and director use their own measured anatomy and rigid mitten gloves, with `idle`, `walk`
+and `gesture` clips. `tools/import-people.sh` rebuilds all three with `$UAL1` and `$UAL2`.
 
 Run in a private Blender build session (the script clears that session's objects and actions):
 
 ```sh
 blender -b -P tools/blender/rig-deck-crew.py -- <UAL1_Standard.glb> <UAL2_Standard.glb> \
-  '/home/joao/Downloads/navy sailor 3d model.glb' /tmp/deck-crew.glb
+  '/home/joao/Downloads/navy sailor 3d.glb' /tmp/deck-crew.glb
 pnpm exec gltf-transform webp /tmp/deck-crew.glb public/assets/deck-crew.glb \
   --quality 90 --vertex-layout separate
 node tools/check-fleet.mjs
@@ -123,8 +120,7 @@ result reaches `public/assets/`. `tools/blender/fleet.json` is the measured tabl
 source, length, waterline beam, keel-to-masthead height, draught, `flip`, triangle budget, source
 triangle count, class, and the stated source of every declared repair — and `tools/check-fleet.mjs`
 and `tools/check-catalog.mjs` read that same file, so a hull the table does not name has no budget
-and fails. The aircraft table is the heredoc at the foot of `tools/import-aircraft.sh`, not
-`fleet.json`.
+and fails. Aircraft source paths and span constants live in `tools/import-aircraft.sh`.
 
 The import contract, enforced on the shipped bytes and not on the Blender scene: metres, +Y up, bow
 or nose along glTF **-Z**, keel or wheels at y = 0, beam or aircraft span on X, the hull centred on
@@ -136,12 +132,18 @@ Three rules, each paid for with a wrong-looking model:
   bow on Blender **+Y**. Put it on Blender -Y and the whole fleet ships backwards, and neither a
   Blender preview render nor a width-taper check will catch it, because both reason in the
   pre-export frame. Verify orientation by measuring the exported bytes.
-- **Weld before decimating.** Tripo meshes split a vertex at every UV seam, and collapsing unwelded
-  geometry tears the skin into visible shards — that is what a 94% cut of the Devastator looked
-  like. `bpy.ops.mesh.remove_doubles` first, then triangulate, then decimate.
-- **`bpy.ops.object.modifier_apply` silently does nothing unless the object is both selected and
-  active**, which is what made a second decimation pass look like a no-op. Deselect, select, set
-  active, apply — on every pass.
+- **Preserve source proportions.** Match only length (hulls) or span (aircraft) with one scalar.
+  Historical beam and height are reference metadata, never independent axis scales.
+- **Use error-bounded simplification.** Weld with `gltf-transform`, then simplify with the limits
+  in the import scripts. Blender collapse damaged the TBD skin and Yorktown deck even after welding.
+  Keep all 24,856 torpedo triangles; a 3,000-triangle reduction shredded its fins.
+
+Aircraft export nine clips through `articulate-aircraft.py`. Neutral transforms remain identity;
+wing hinges are fitted to the actual cut section and dihedral. TBD's source has no main gear:
+added wheels fold below the wing skin, with attachment height measured by raycast.
+`node tools/check-asset-polish.mjs` checks all three people and aircraft animation contracts.
+`tools/asset-viewer.html` provides a WebGPU orthographic review on the Vite dev server.
+`tools/import-pt59.sh` converts the boat's old spec/gloss materials to supported PBR; it is static.
 
 Bow direction cannot be inferred. Plan taper read the bow backwards on five of seven hulls, and
 which end hangs deepest is no better, so `flip` in `fleet.json` is a recorded visual decision taken

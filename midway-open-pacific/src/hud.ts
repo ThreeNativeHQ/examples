@@ -68,18 +68,6 @@ export class Hud {
     if (this.tick < 0.1) return;
     this.tick = 0;
     $("battle-clock").textContent = new Date((6 * 3600 + 30 * 60 + b.time) * 1000).toISOString().slice(11, 19);
-    $("speed").textContent = String(Math.round((p.ias ?? p.speed) * 1.94384)).padStart(3, "0");
-    $("altitude").textContent = Math.round(p.y * 3.28084).toLocaleString("en-US");
-    for (const [id, value] of [
-      ["throttle", p.throttle * 100],
-      ["fuel", p.fuel],
-      ["hull", p.hp],
-    ] as [string, number][]) {
-      $(`${id}-bar`).style.width = `${clamp(value, 0, 100)}%`;
-      $(`${id}-value`).textContent = `${Math.round(value)}%`;
-    }
-    $("hull-bar").style.background = p.hp < 35 ? "#e79a76" : "#92c8c5";
-    ($("hull-bar").closest(".meter") as HTMLElement).classList.toggle("hidden", p.hp > 99.5);
     $("bomb-count").textContent = p.loadout === "torpedo" ? (p.torpedo ? "◆" : "◇") : "◆ ".repeat(p.bombs) + "◇ ".repeat(3 - p.bombs);
     $("ordnance-label").textContent = p.loadout === "torpedo" ? "TORPEDO" : "BOMBS";
     $("btn-camera").textContent = viewCameraLabel(this.view.cameraMode);
@@ -90,8 +78,10 @@ export class Hud {
       ["auto", p.autopilot],
       ["flaps", p.flapPos > 0.1],
       ["assist", p.assist],
-    ] as [string, boolean][])
+    ] as [string, boolean][]) {
       $(`flag-${id}`).classList.toggle("on", on);
+      $(`flag-${id}`).classList.toggle("hidden", !on);
+    }
     $("damage-status").textContent = damageSummary(p).join(" · ");
     const envelope = torpedoEnvelope(p);
     $("torpedo-guide").classList.toggle("hidden", !(p.loadout === "torpedo" && p.torpedo && p.mode === "flight"));
@@ -232,8 +222,8 @@ export class Hud {
     c.save();
     c.font = "10px ui-monospace,monospace";
     c.textAlign = "center";
-    c.strokeStyle = "rgba(212,231,224,.56)";
-    c.fillStyle = "#d0dfd9";
+    c.strokeStyle = "rgba(226,194,134,.8)";
+    c.fillStyle = "#e8d6ae";
     c.lineWidth = 1;
     const center = w / 2;
     const top = 40;
@@ -256,12 +246,18 @@ export class Hud {
       if (n % 10 === 0) c.fillText(n % 90 === 0 ? ["N", "E", "S", "W"][(((n % 360) + 360) % 360) / 90] : String(((n % 360) + 360) % 360).padStart(3, "0"), x, top - 3);
     }
     c.restore();
+    c.strokeStyle = "rgba(214,178,118,.6)";
+    c.beginPath();
+    c.moveTo(center - span / 2, top + 17.5);
+    c.lineTo(center + span / 2, top + 17.5);
+    c.stroke();
     c.fillStyle = "#e3c38a";
     c.beginPath();
     c.moveTo(center - 4, top + 26);
     c.lineTo(center + 4, top + 26);
     c.lineTo(center, top + 20);
     c.fill();
+    this.drawGauges();
     if (p.mode === "flight") {
       const f = p.attitude ? attitudeAxes(p).f : forward(p.heading, p.pitch);
       const aim = this.view.project({ x: p.x + f.x * 1600, y: p.y + f.y * 1600, z: p.z + f.z * 1600 });
@@ -386,6 +382,123 @@ export class Hud {
         c.fillText(`${p.nav === "home" ? "HOME" : "SECTOR"} ${heading(bearing(p, nav))}°`, x, y - 9);
       }
     }
+    c.restore();
+  }
+
+  /** The bottom-left instrument bank: two brass dials and the vertical throttle/fuel/airframe gauges. */
+  drawGauges(): void {
+    const p = this.b.player;
+    const h = innerHeight;
+    const compact = innerWidth < 1200;
+    const r = compact ? 50 : 64;
+    const cy = h - (compact ? 104 : 122);
+    const left = 28 + r;
+    this.dial(left, cy, r, "AIRSPEED", "KT", knots(p.ias ?? p.speed), 240, 6, String(Math.round((p.ias ?? p.speed) * 1.94384)).padStart(3, "0"));
+    const feet = p.y * 3.28084;
+    this.dial(left + r * 2 + 16, cy, r, "ALTITUDE", "FT ×1K", feet, 20000, 5, Math.round(feet).toLocaleString("en-US"), 1 / 1000);
+    const barHeight = compact ? 88 : 108;
+    const barTop = cy - barHeight / 2 - 4;
+    let x = left + r * 3 + 58;
+    for (const [label, value, color] of [
+      ["THR", p.throttle * 100, "#e0be82"],
+      ["FUEL", p.fuel, "#92c8c5"],
+      ...(p.hp > 99.5 ? [] : [["HULL", p.hp, p.hp < 35 ? "#e79a76" : "#c7d3b6"] as [string, number, string]]),
+    ] as [string, number, string][]) {
+      this.bar(x, barTop, barHeight, label, value, color);
+      x += 38;
+    }
+  }
+
+  /** One dial: a 270° sweep, brass bezel, and the exact value in a window so nothing has to be read off the needle. */
+  dial(cx: number, cy: number, r: number, label: string, unit: string, value: number, max: number, majors: number, readout: string, scale = 1): void {
+    const c = this.ctx;
+    const START = Math.PI * 0.75;
+    const SWEEP = Math.PI * 1.5;
+    const minors = majors * 4;
+    c.save();
+    c.translate(cx, cy);
+    c.textAlign = "center";
+    c.beginPath();
+    c.arc(0, 0, r, 0, Math.PI * 2);
+    c.fillStyle = "rgba(5,16,22,.86)";
+    c.fill();
+    c.lineWidth = 2.5;
+    c.strokeStyle = "rgba(228,194,133,.95)";
+    c.stroke();
+    c.beginPath();
+    c.arc(0, 0, r - 5, 0, Math.PI * 2);
+    c.lineWidth = 1;
+    c.strokeStyle = "rgba(228,194,133,.3)";
+    c.stroke();
+    for (let i = 0; i <= minors; i++) {
+      const a = START + (SWEEP * i) / minors;
+      const major = i % 4 === 0;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      c.beginPath();
+      c.moveTo(cos * (r - (major ? 15 : 11)), sin * (r - (major ? 15 : 11)));
+      c.lineTo(cos * (r - 7), sin * (r - 7));
+      c.lineWidth = major ? 1.4 : 1;
+      c.strokeStyle = major ? "rgba(234,220,190,.85)" : "rgba(190,208,204,.38)";
+      c.stroke();
+      if (major && i < minors) {
+        c.fillStyle = "rgba(226,212,184,.78)";
+        c.font = "9px ui-monospace,monospace";
+        c.fillText(String(Math.round(((max * i) / minors) * scale)), cos * (r - 25), sin * (r - 25) + 3);
+      }
+    }
+    c.fillStyle = "rgba(196,214,210,.62)";
+    c.font = "7.5px ui-monospace,monospace";
+    c.fillText(unit, 0, -r * 0.12);
+    const a = START + SWEEP * clamp(value / max, 0, 1);
+    c.strokeStyle = "#f3dcab";
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(-Math.cos(a) * 7, -Math.sin(a) * 7);
+    c.lineTo(Math.cos(a) * (r - 17), Math.sin(a) * (r - 17));
+    c.stroke();
+    c.fillStyle = "#f3dcab";
+    c.beginPath();
+    c.arc(0, 0, 2.6, 0, Math.PI * 2);
+    c.fill();
+    const wy = r * 0.34;
+    c.fillStyle = "rgba(3,12,18,.92)";
+    c.strokeStyle = "rgba(216,180,120,.75)";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.rect(-29, wy, 58, 18);
+    c.fill();
+    c.stroke();
+    c.fillStyle = "#f4e8ca";
+    c.font = "12px ui-monospace,monospace";
+    c.fillText(readout, 0, wy + 13.5);
+    c.fillStyle = "rgba(232,216,184,.9)";
+    c.font = "9px ui-monospace,monospace";
+    (c as unknown as { letterSpacing: string }).letterSpacing = "2.5px";
+    c.fillText(label, 0, -r - 10);
+    (c as unknown as { letterSpacing: string }).letterSpacing = "0px";
+    c.restore();
+  }
+
+  /** One vertical gauge, drawn to match the dials' bezel. */
+  bar(x: number, y: number, height: number, label: string, value: number, color: string): void {
+    const c = this.ctx;
+    c.save();
+    c.textAlign = "center";
+    c.fillStyle = "rgba(5,16,22,.82)";
+    c.fillRect(x, y, 15, height);
+    c.lineWidth = 1.4;
+    c.strokeStyle = "rgba(228,194,133,.9)";
+    c.strokeRect(x + 0.7, y + 0.7, 13.6, height - 1.4);
+    const filled = (clamp(value, 0, 100) / 100) * (height - 5);
+    c.fillStyle = color;
+    c.fillRect(x + 3, y + height - 3 - filled, 9, filled);
+    c.fillStyle = "rgba(232,216,184,.9)";
+    c.font = "9px ui-monospace,monospace";
+    c.fillText(label, x + 7.5, y - 8);
+    c.fillStyle = "#eadfc4";
+    c.font = "10px ui-monospace,monospace";
+    c.fillText(`${Math.round(value)}%`, x + 7.5, y + height + 14);
     c.restore();
   }
 

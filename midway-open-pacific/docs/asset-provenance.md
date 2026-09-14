@@ -52,3 +52,18 @@ once and referenced from both names rather than treated as separate assets.
 ### Rights
 
 No license document was supplied with these files. The `generator` tag records the tool that produced the mesh; it does not establish distribution rights. Rights are UNVERIFIED. Public distribution of this repository's built game requires recording the actual rights for every row above before release.
+
+## Additional user-supplied assets (asset polish delivery)
+
+The pilot/director use their measured source shape and CC0 Quaternius UAL idle/walk/talking
+clips fitted by `rig_humanoid.py`; the replacement sailor retains the existing six crew clips.
+The PT-59 preserves all 156,663 triangles and converts legacy spec/gloss materials to supported
+metal/rough PBR, then WebP. It has no source animation. The new models' distribution rights
+remain unverified, as with the supplied files above. Downloads were not modified.
+
+| Source | SHA-256 | Shipped derivative |
+| --- | --- | --- |
+| `/home/joao/Downloads/midway-missing-models/carrier-aircraft-pilot.glb` | `e65ddc4c5c9c83812c3fd1405fb0243b10425a55b43792c80776610c84104cc8` | `carrier-aircraft-pilot.glb` |
+| `/home/joao/Downloads/midway-missing-models/flight-deck-director.glb` | `3e73e9cb5d532e57b477562dabdbc7990e06de9527bb9607eff21ddc4b8d1132` | `flight-deck-director.glb` |
+| `/home/joao/Downloads/navy sailor 3d.glb` | `9c75e28a73b8afbe50964bdaa5fa0e27648cdaef5a8c771eee2b8394627aa743` | `deck-crew.glb` |
+| `/home/joao/Downloads/us_elco_77_ft_pt-59_war_thunder.glb` | `00d2135aa605e2a35df875b04c1744ac3afe1a1fbf3ee26b8dfc37783aa3675a` | `boat.pt59.glb` |

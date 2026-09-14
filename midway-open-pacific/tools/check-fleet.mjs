@@ -83,11 +83,8 @@ const sizeOf = (object) => new Box3().setFromObject(object).getSize(new Vector3(
       `${ship.id} length ${size.z.toFixed(2)}m differs from ${ship.length}m by ${(lengthError * 100).toFixed(2)}%`,
     );
 
-    const heightError = Math.abs(size.y - ship.height) / ship.height;
-    assert(
-      heightError <= 0.02,
-      `${ship.id} height ${size.y.toFixed(2)}m differs from ${ship.height}m by ${(heightError * 100).toFixed(2)}%`,
-    );
+    // Historical beam/height metadata must never squeeze an authored hull.
+    assert(size.toArray().every(n => Number.isFinite(n) && n > 0), `${ship.id} invalid bounds`);
 
     let triangles = 0;
     let meshes = 0;

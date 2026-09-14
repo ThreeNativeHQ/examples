@@ -1,5 +1,5 @@
 {
-  "_note": "Import table for PRD-midway-asset-battle-integration Phase 1. `flip` was decided by looking at orthographic side renders, not by the taper heuristic, which read the bow backwards on five of seven hulls: every entry below points its bow at glTF -Z after import. `beam` is the class waterline beam and is fitted to the hull's own waterline band, not to its widest sponson. `height` is keel to masthead; the supplied hulls all run tall for their length, so it is a declared repair with the source noted, not a measurement of the model.",
+  "_note": "Uniform-scale imports. Length sets one scalar for all axes. Beam and height remain historical reference metadata; the mesh is never squeezed to fit them. Flip records inspected bow direction.",
   "ships": [
     {
       "id": "carrier.kaga",
@@ -48,7 +48,7 @@
       "height": 48.0,
       "draught": 7.9,
       "flip": false,
-      "budget": 200000,
+      "budget": 700000,
       "sourceTriangles": 1875769,
       "class": "Yorktown CV-5",
       "heightSource": "DANFS hull figure plus the hornet.glb masthead envelope"
@@ -68,17 +68,16 @@
     },
     {
       "id": "cruiser.mogami",
-      "src": "cruiser/tone-class-cruiser.glb",
+      "src": "cruiser/mogami-class-cruiser.glb",
       "length": 201.5,
       "beam": 20.6,
       "height": 38.0,
       "draught": 6.1,
       "flip": true,
-      "budget": 55000,
-      "sourceTriangles": 51311,
-      "class": "Mogami class as reconstructed, June 1942",
-      "heightSource": "shares the Tone hull envelope; the two classes were close in freeboard; budget 55k rather than 50k because the derived aft turrets add geometry the Tone hull does not carry",
-      "derivedFrom": "cruiser.tone"
+      "budget": 50000,
+      "sourceTriangles": 47991,
+      "class": "Supplied Mogami-labelled model (byte-identical to Tone source)",
+      "heightSource": "shares the Tone hull envelope; the two classes were close in freeboard"
     },
     {
       "id": "destroyer.kagero",
@@ -140,11 +139,11 @@
       "height": 0.569,
       "draught": 0.2845,
       "flip": true,
-      "budget": 3000,
+      "budget": 26000,
       "sourceTriangles": 24856,
       "class": "Mark 13 aerial torpedo body",
       "heightSource": "body diameter; the supplied body is close to the real fineness ratio"
     }
   ],
-  "_derived": "cruiser.mogami is not a separate supplied model. The supplied mogami GLB is byte-identical to the tone GLB and the geometry is a Tone: four turrets forward, aviation deck aft. tools/blender/derive-mogami.py copies the after pair of the forward turret group, mirrors it to face aft and sets it on the quarterdeck, so the two classes read differently instead of the same hull being drawn twice."
+  "_derived": "The supplied Mogami and Tone GLBs are byte-identical. Preserve both sources; the previous turret derivation duplicated an aft mast onto the foredeck and has been removed from the import path."
 }
