@@ -94,6 +94,7 @@ import {
   applyLaunch,
   applyRecovery,
   canLaunch,
+  canRecover,
   stepService,
   suspendReason,
   totalAircraft,
@@ -819,7 +820,7 @@ export class Battle {
     const world = this.briefingWorld();
     const out: IReport[] = [];
     for (const contact of this.contacts.values()) {
-      if (contact.lost) continue;
+      // A lost track is still a transmitted belief: usable, but ranked and drawn as uncertain.
       const ship = this.byId(contact.id);
       if (!ship || contact.kind !== ship.kind) continue;
       const option = this.designationOption(contact.id, assignment);
@@ -924,6 +925,8 @@ export class Battle {
         mission: null as Any,
         /** Why the last launch was refused, for the HUD. Null when the deck can work. */
         launchBlocked: null as string | null,
+        /** Why the last recovery was refused, for the HUD. Null when the deck can take an aircraft. */
+        recoverBlocked: null as string | null,
         /** Airframes that will never come home, and airframes a failed repair wrote off. */
         lostAircraft: 0,
         writtenOff: 0,
@@ -1419,15 +1422,22 @@ export class Battle {
   }
 
   /**
-   * Take one aircraft back aboard, or refuse because the deck is not free. `carrier-ops` has a
-   * `canLaunch` but no `canRecover`, so the occupancy and suspension test for the recovery side lives
-   * here; `navigateHome` holds the aircraft in the pattern until it passes. A recovered aircraft is
-   * counted again immediately but is *not* ready and carries no store: it waits for the crew.
+   * Take one aircraft back aboard, or refuse because the deck is not free. `carrier-ops.canRecover`
+   * is the single gate, exactly as `canLaunch` is on the launch side, so the occupancy, mode and
+   * suspension test lives in one place and every refusal carries the same readable reason the launch
+   * side records. `navigateHome` holds the aircraft in the pattern until it passes. A recovered
+   * aircraft is counted again immediately but is *not* ready and carries no store: it waits for the
+   * crew.
    */
   recoverAircraft(s: Any, a: Any): boolean {
     if (!s?.air || !s.deckState) return true;
     this.refreshDeck(s);
-    if (s.deckState.suspended || s.deckState.occupiedUntil > this.time) return false;
+    const check = canRecover(s.air, s.deckState, a.airframe, this.time);
+    if (!check.ok) {
+      s.recoverBlocked = check.reason;
+      return false;
+    }
+    s.recoverBlocked = null;
     const damaged = a.hp < (a.maxHp || 100) * 0.5 || (a.damage?.engine?.integrity ?? 1) < 0.6;
     const applied = applyRecovery(s.air, s.deckState, a.airframe, this.time, TIMES, damaged);
     s.air = applied.air;
@@ -1596,7 +1606,11 @@ export class Battle {
     for (const s of this.ships) {
       if (!s.scouts || s.team !== "jp" || s.sunk) continue;
       for (const scout of s.scouts as ScoutAircraft[]) {
+        const wasLost = scout.state === "lost";
         Object.assign(scout, stepScout(scout, dt, SCOUT_LIMITS, this.scoutRandom()));
+        // A scout that runs dry has transmitted its last report; the tracks it filed become lost
+        // beliefs the fleet dead-reckons, never reports it can recall.
+        if (!wasLost && scout.state === "lost") this.loseObserver(`air-scout-${scout.id}`);
         if (scout.state === "alongside") {
           // `stepScout` reaches the water at the pickup fuel; `pickupWindow` answers whether the
           // ship is slow enough, keying on the return leg that state has just left.
@@ -1792,6 +1806,21 @@ export class Battle {
     }
     this.reports = waiting;
     this.designateKnownCarrier();
+  }
+
+  /**
+   * An observer that can no longer correct the tracks it filed. Every report it put on the air —
+   * delivered or still in transmission — becomes a lost contact: the fleet keeps the sighting and
+   * must dead-reckon it, with uncertainty growing three times as fast, because nobody is correcting
+   * it. Nothing is withdrawn, so a report already transmitted outlives the observer that sent it.
+   */
+  loseObserver(observerId: string): void {
+    if (!observerId) return;
+    for (const team of ["us", "jp"]) {
+      for (const c of this.teamIntel[team].values()) if (c.observerId === observerId) c.lost = true;
+    }
+    for (const c of this.contacts.values()) if (c.observerId === observerId) c.lost = true;
+    for (const r of this.reports) if (r.observerId === observerId) r.lost = true;
   }
 
   /** A newer, vaguer report improves the position but cannot un-identify a hull already named. */
@@ -2086,6 +2115,9 @@ export class Battle {
       return;
     }
     this.recordLoss(a);
+    // Whatever this aircraft was the eyes for is now somebody else's guess; the reports it already
+    // transmitted stay in the fleet's hands, dead-reckoned, rather than being erased with it.
+    this.loseObserver(a.id);
     a.hp = 0;
     a.mode = "crashing";
     a.crashAge = 0;
@@ -2217,8 +2249,16 @@ export class Battle {
     if (s.sunk) return;
     s.sunk = true;
     s.speed = 0;
-    // A sunk scout cruiser loses its floatplanes; reports already delivered are not its to recall.
-    if (s.scouts) for (const scout of s.scouts as ScoutAircraft[]) { scout.state = "lost"; scout.fuel = 0; }
+    // A sinking hull's lookouts stop correcting their tracks, exactly as a dead aircrew does.
+    this.loseObserver(s.id);
+    // A sunk scout cruiser loses its floatplanes; reports already delivered are not its to recall,
+    // they simply become lost tracks nobody is left to correct.
+    if (s.scouts)
+      for (const scout of s.scouts as ScoutAircraft[]) {
+        if (scout.state !== "lost") this.loseObserver(`air-scout-${scout.id}`);
+        scout.state = "lost";
+        scout.fuel = 0;
+      }
     // The crew is in the water where the hull went down. The seeded draw varies the count; a later
     // rescue genuinely saves fewer because exposure decays the group every step it waits.
     const crew = SURVIVOR_CREW[s.kind] ?? 100;
@@ -2981,7 +3021,10 @@ export class Battle {
       const f = forward(h.heading);
       p.x = h.x + f.x * -105;
       p.z = h.z + f.z * -105;
-      p.y = 22;
+      // Hold the aircraft on the deck it actually recovered onto: a fleet-wide height floated a
+      // diversion to the lower Yorktown deck 7.8 m above it, exactly the class of error AC-6 exists
+      // to catch. The arrestment uses this same clearance.
+      p.y = h.deckHeight + gearClearance(p);
       p.speed = 0;
       setAttitude(p, h.heading, 0.22, 0);
       if (p.serviceTime <= 0) {

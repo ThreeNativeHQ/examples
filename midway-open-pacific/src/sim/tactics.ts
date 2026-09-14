@@ -96,7 +96,10 @@ export function strikeContact(b: Any, s: Any): Any {
   let best: Any = null;
   let score = Infinity;
   for (const c of known.values()) {
-    if (c.lost || isStale(c, b.time, STALE_SECONDS) || !STRIKE_CLASSES.has(c.classification)) continue;
+    // A lost contact stays attackable: the report was transmitted before the observer was lost, and
+    // `er` below already inflates its uncertainty threefold, so it ranks behind a held sighting
+    // rather than disappearing. Only a stale one — beyond the fleet's usable window — is dropped.
+    if (isStale(c, b.time, STALE_SECONDS) || !STRIKE_CLASSES.has(c.classification)) continue;
     // `estimatePosition` inlined: its temporary `{ x, z, radius }` was one allocation per contact.
     const age = b.time - c.observedAt;
     const reach = c.speed * age;
@@ -185,14 +188,17 @@ export function selectNavalTarget(b: Any, a: Any): Any {
   // It still needs a delivered report and steers at that estimate, never at the live hull.
   if (a.team === "us" && a.wing && b.command === "strike") {
     const c = known.get(b.target);
-    if (!c || c.lost || isStale(c, b.time, STALE_SECONDS) || !b.targetContacts().some((r: Any) => r.id === c.id)) return null;
+    if (!c || isStale(c, b.time, STALE_SECONDS) || !b.targetContacts().some((r: Any) => r.id === c.id)) return null;
     a.target = c.id;
     return believedTarget(b, c);
   }
   const candidates = NAVAL_CANDIDATES;
   candidates.length = 0;
   for (const c of known.values()) {
-    if (c.lost || isStale(c, b.time, STALE_SECONDS) || !STRIKE_CLASSES.has(c.classification)) continue;
+    // A lost contact stays attackable: its report was transmitted before the observer was lost, and
+    // `er` below already inflates its uncertainty threefold, so it ranks behind a held sighting
+    // rather than disappearing. Only a stale one — beyond the fleet's usable window — is dropped.
+    if (isStale(c, b.time, STALE_SECONDS) || !STRIKE_CLASSES.has(c.classification)) continue;
     candidates.push(c);
   }
   if (a.wing && b.command === "strike" && b.target) {

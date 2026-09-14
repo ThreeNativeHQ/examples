@@ -63,7 +63,8 @@ const HULL_WORD: Record<string, string> = {
 
 /** Delivered to the fleet, fresh enough to designate, and not a broken track. */
 function usableContact(c: IBriefingContact | null | undefined, now: number): boolean {
-  if (!c || !c.id || c.lost === true) return false;
+  // A lost track is dead-reckoned, not discarded: it stays selectable, with its uncertainty shown.
+  if (!c || !c.id) return false;
   if ((c.deliveredAt ?? 0) > now) return false;
   return now - (c.observedAt ?? c.time ?? 0) <= STALE_SECONDS;
 }
