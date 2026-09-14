@@ -612,6 +612,13 @@ the 960×560 radio area retains 54.92 px and clears the instruments by 27 px. In
 `screenshots/battle-review-hud/03-hud-{960,1400}.png`. Vite build, script syntax, whitespace
 checks and independent read-only review pass. The existing fixed radio top is removed.
 
+**Wing-status follow-up (AC-24):** `selectNavalTarget` returns the ordered contact but leaves
+the aircraft's target id unchanged, so `wingStatus` can describe the real designated attack as
+an attack on other shipping. Update that same target record when selecting a known ordered
+contact; cover both an unassigned aircraft and a retask in `check-carrier-cycle.mjs` using
+copies of its already-delivered report fixture. Owns only that selection branch in `tactics.ts`
+and its regression; the concurrent flight/departure changes remain with their owner.
+
 **Status:** IN PROGRESS
 **Remaining:** AI engine flight, complete aircraft articulation, measured carrier contact geometry and full player/deck inventory acceptance.
 **ACs:** AC-3–9.
