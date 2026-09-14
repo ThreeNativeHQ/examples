@@ -2100,9 +2100,9 @@ export class Battle {
     }
   }
 
-  /** The weapon identity a firing aircraft emits: player .50, Zero cannon/MG, other Japanese rifle. */
+  /** The weapon identity a firing aircraft emits: SBD .50 pair, TBD single cowl .30, Zero cannon/MG, other Japanese rifle. */
   gunFamily(a: Any): string {
-    if (a === this.player) return "gun50";
+    if (a === this.player) return a.airframe === "tbd" ? "gun30" : "gun50";
     if (a.airframe === "zero") {
       a.cannonToggle = !a.cannonToggle;
       return a.cannonToggle ? "cannon20" : "gun77";
@@ -3393,9 +3393,20 @@ export class Battle {
           // levels at deck height never touches: it floats the length of the ship and off the bow.
           const touch = s.deckHeight + gearClearance(p) - 3;
           desiredAlt = touch + Math.max(0, -loc.forward - GROOVE_FLARE) * GLIDE;
-          p.gear = true;
-          p.flaps = 1;
-          p.brakes = false;
+          // The assist configures the aircraft like the pilot would: gear, full flaps, brakes in —
+          // and each actuator movement sounds, on its travel edge only, like the manual keys do.
+          if (!p.gear) {
+            p.gear = true;
+            this.event("gear");
+          }
+          if (p.flaps !== 1) {
+            p.flaps = 1;
+            this.event("flap");
+          }
+          if (p.brakes) {
+            p.brakes = false;
+            this.event("flap");
+          }
           p.throttle = clamp(0.59 + (50 - (p.ias || p.speed)) * 0.027, 0.12, 0.98);
           if (loc.forward > s.deckLength / 2 - 10) {
             // A bolter goes round again on the same guidance. Handing back an unattended aircraft
@@ -3416,10 +3427,19 @@ export class Battle {
         // mushes the aircraft into the sea on the way back round.
         const state = this.approach();
         if (state.phase === "groove" || state.phase === "final") {
-          p.gear = true;
+          if (!p.gear) {
+            p.gear = true;
+            this.event("gear");
+          }
           p.autoGearPending = false;
-          p.flaps = 1;
-          p.brakes = false;
+          if (p.flaps !== 1) {
+            p.flaps = 1;
+            this.event("flap");
+          }
+          if (p.brakes) {
+            p.brakes = false;
+            this.event("flap");
+          }
           p.throttle = clamp(0.55 + (APPROACH_SPEED - (p.ias || p.speed)) * 0.025, 0.15, 0.95);
         } else {
           p.brakes = false;
@@ -3532,6 +3552,8 @@ export class Battle {
       landingAssist: null,
       throttle: 0,
     });
+    // Wheels thump onto the planks first, then the hook grabs a wire: two cues, in order.
+    this.event("land", { wire: false });
     this.event("land", { wire: true });
     this.say("LANDING SIGNAL OFFICER", "Wire caught. Power idle. Hold straight through arrestment.", true);
   }
@@ -3598,7 +3620,10 @@ export class Battle {
       p.landingAssist = s.id;
       p.autopilot = true;
       p.nav = "home";
-      p.flaps = 1;
+      if (p.flaps !== 1) {
+        p.flaps = 1;
+        this.event("flap");
+      }
       this.say("LSO", "Final approach assist engaged. Stay ready to take over. Any stick input cancels.");
       this.voice("R21", { identity: s.id });
       return true;

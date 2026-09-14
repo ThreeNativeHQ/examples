@@ -35,6 +35,20 @@ const SAMPLE = Number(process.env.MIDWAY_SAMPLE || 60);
 // at the declared supported population instead of the natural plateau. It is labelled a fixture,
 // never a natural battle; no AI/task field, inventory or cap is touched to make it pass.
 const CROWD = !!process.env.MIDWAY_CROWD;
+// The two fixtures PRD-midway-trace-20260914-performance adds, for AC-6. They are deliberately not
+// AC-23 workloads and can never print its verdict: they exist to expose the CPU the old leaf
+// `Battle.step` timer never saw. `cockpit` is real flight seen from the pilot's seat; `water-impact`
+// is a carrier under repeated water events, which is where the wave/hull queries actually cost.
+const WORKLOAD = process.env.MIDWAY_WORKLOAD || null;
+if (WORKLOAD !== null && WORKLOAD !== "cockpit" && WORKLOAD !== "water-impact")
+  throw new Error(`MIDWAY_WORKLOAD must be cockpit or water-impact, got ${JSON.stringify(WORKLOAD)}`);
+if (WORKLOAD && CROWD) throw new Error("MIDWAY_WORKLOAD and MIDWAY_CROWD are different workloads; set one");
+// Both fixtures start their sample at the same predeclared battle-time tick, after the wall-clock
+// warm-up, so a candidate is never credited for a quieter section of the same battle.
+const START_TICK = Number(process.env.MIDWAY_START_TICK || 12);
+// One scheduled water event every four battle seconds. A wall-clock timer would fire a different
+// number of events on a slower build, which is the comparison quietly measuring itself.
+const IMPACT_PERIOD = 4;
 // AC-23's approved envelope: the live-aircraft ceiling Battle enforces (`ACTIVE_CAP` in
 // src/sim/battle.ts). It is fixed and never env-overridable, because an override could only lower
 // the bar. A 30-minute natural run was measured to plateau at 22, so the current natural battle
@@ -44,6 +58,12 @@ const REQUIRED_AIRCRAFT = 68;
 // then cannot qualify.
 const REQUIRED_WARMUP = 8;
 const REQUIRED_QUALITY = "balanced";
+
+/**
+ * Baseline schema. Bumped when the recorded fields change, so a comparison can never silently read
+ * an old record that has no full-CPU series in it at all and call the missing data a match.
+ */
+const SCHEMA_VERSION = 2;
 
 /** Fields that must match for a baseline to be a matched baseline. */
 const BASELINE_FIELDS = [
@@ -60,6 +80,14 @@ const BASELINE_FIELDS = [
   "hidden",
   "workload",
 ];
+
+/**
+ * The CPU series the trace analysis showed were missing. `updateRenderCpu` is the presented-work
+ * total — scene update since the previous outer render, plus that render — and the others are its
+ * named components, reported separately so a win in one is never spread across the rest. None of
+ * them is whole-callback time: engine work outside these wrappers is not in here.
+ */
+const CPU_SERIES = ["updateRenderCpu", "sceneUpdateCpu", "worldUpdateCpu", "rippleUpdateCpu", "renderCpu"];
 
 /** The candidate's source identity, so a recorded baseline names the bytes it measured. */
 function sourceDigest() {
@@ -82,6 +110,11 @@ function isFiniteTiming(s) {
 function baselineMismatches(base, current) {
   if (!base || typeof base !== "object") return ["baseline is not an object"];
   const out = [];
+  // A record written before the full-CPU series existed describes a different measurement. Reject
+  // it by schema rather than letting `undefined` metrics compare as absent-and-therefore-fine.
+  if (base.schema !== SCHEMA_VERSION) out.push(`baseline schema ${JSON.stringify(base.schema)} != ${SCHEMA_VERSION}`);
+  for (const metric of CPU_SERIES)
+    if (!Number.isFinite(base[`${metric}P95`])) out.push(`baseline ${metric}P95 is not finite`);
   if (JSON.stringify(base.adapter) !== JSON.stringify(current.adapter))
     out.push(`adapter ${JSON.stringify(base.adapter)} != ${JSON.stringify(current.adapter)}`);
   for (const f of BASELINE_FIELDS) {
@@ -117,10 +150,136 @@ function qualificationReasons(meta, pop, relativePass) {
   return reasons;
 }
 
+/**
+ * Every way a fixture failed to be the thing it claims to measure. A cockpit sample that left the
+ * cockpit, or a water sample whose water never moved, is a missing observation: reporting its
+ * timings as if the workload had run is how a benchmark measures the wrong scene and calls it fast.
+ */
+function workloadEvidenceFailures(workload, evidence) {
+  const out = [];
+  if (evidence.status !== "playing") out.push(`battle status ${evidence.status} is not a running battle`);
+  if (!(evidence.simSeconds > 30)) out.push(`the battle clock did not advance across the sample: ${evidence.simSeconds}s`);
+  if (workload === "cockpit") {
+    if (evidence.cameraMode !== 1) out.push(`camera mode ${evidence.cameraMode} is not the cockpit`);
+    if (!(evidence.playerHp > 0)) out.push("the player crashed during the sample");
+  }
+  if (workload === "water-impact") {
+    if (!(evidence.acceptedImpacts > 0)) out.push(`the water accepted ${evidence.acceptedImpacts} impacts`);
+    if (!(evidence.whitewaterMax > 0)) out.push("no active whitewater was observed");
+    if (!(evidence.energyMax > 0)) out.push("wave energy never became positive");
+  }
+  return out;
+}
+
+/**
+ * Time every outermost call of `owner[key]`, preserving `this`, the arguments, the return value and
+ * any exception, and return the undo. A re-entrant call — the water's reflection pass and the
+ * shadow passes both re-enter `renderer.render` — is charged once, to the outer call that contains
+ * it, so the same milliseconds are never counted twice.
+ *
+ * This is the one definition. `--self-check` exercises it in node against a controlled recursive
+ * fixture, and the sample below rehydrates this exact source inside the page.
+ */
+function wrapCalls(owner, key, record) {
+  const original = owner[key];
+  let depth = 0;
+  owner[key] = function (...args) {
+    depth += 1;
+    const outer = depth === 1;
+    const started = outer ? performance.now() : 0;
+    try {
+      return original.apply(this, args);
+    } finally {
+      depth -= 1;
+      if (outer) record(performance.now() - started);
+    }
+  };
+  return () => {
+    owner[key] = original;
+  };
+}
+
+/** Median of a run's p95 values. Defined here so `--self-check` needs no bundling step. */
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const k = (sorted.length - 1) / 2;
+  return sorted.length % 2 === 1 ? sorted[k] : (sorted[k - 0.5] + sorted[k + 0.5]) / 2;
+}
+
+/** AC-6's improvement target and the per-component regression limit, in one place. */
+const IMPROVEMENT_RATIO = 0.8;
+const COMPONENT_RATIO = 1.1;
+
+/**
+ * AC-6's arithmetic: the median of the per-run p95s on each side, then one ratio per metric.
+ * Independently calculated p95 values are never added together, and a zero or missing baseline is
+ * reported as an absolute figure rather than divided into. Every fixture-matching rule the PRD
+ * names is applied first: a faster candidate measured over a different slice of the same battle,
+ * a different number of accepted impacts or a different population is not a comparison at all.
+ */
+function compareWorkload(before, after) {
+  const failures = [];
+  const lines = [];
+  if (!before.length || !after.length) return { failures: ["both sides need at least one run"], lines };
+  const reference = before[0];
+  for (const run of [...before, ...after]) {
+    const at = run.file ?? "run";
+    if (run.schema !== SCHEMA_VERSION) failures.push(`${at}: schema ${JSON.stringify(run.schema)} != ${SCHEMA_VERSION}`);
+    if (run.source?.concurrentChange) failures.push(`${at}: source changed during the sample`);
+    if (JSON.stringify(run.adapter) !== JSON.stringify(reference.adapter)) failures.push(`${at}: different adapter`);
+    for (const field of BASELINE_FIELDS)
+      if (run[field] !== reference[field])
+        failures.push(`${at}: ${field} ${JSON.stringify(run[field])} != ${JSON.stringify(reference[field])}`);
+    for (const field of ["aircraftMin", "aircraftMax", "shipsMin", "shipsMax"])
+      if (run.fixture?.[field] !== reference.fixture?.[field])
+        failures.push(`${at}: fixture ${field} ${JSON.stringify(run.fixture?.[field])} != ${JSON.stringify(reference.fixture?.[field])}`);
+    if (run.fixture?.acceptedImpacts !== reference.fixture?.acceptedImpacts)
+      failures.push(`${at}: accepted impacts ${run.fixture?.acceptedImpacts} != ${reference.fixture?.acceptedImpacts}`);
+    if (!(Math.abs((run.fixture?.simStart ?? NaN) - (reference.fixture?.simStart ?? NaN)) <= 1 / 60))
+      failures.push(`${at}: sample starts at battle time ${run.fixture?.simStart} not ${reference.fixture?.simStart} (limit 1/60 s)`);
+    if (!(Math.abs((run.fixture?.simSeconds ?? NaN) - (reference.fixture?.simSeconds ?? NaN)) <= 0.1))
+      failures.push(`${at}: sample covers ${run.fixture?.simSeconds}s of battle not ${reference.fixture?.simSeconds}s (limit 0.1 s)`);
+  }
+  for (const metric of [...CPU_SERIES, "gpu"]) {
+    const key = `${metric}P95`;
+    const baseline = median(before.map((r) => r[key]));
+    const candidate = median(after.map((r) => r[key]));
+    const target = metric === "updateRenderCpu" ? IMPROVEMENT_RATIO : COMPONENT_RATIO;
+    if (!Number.isFinite(baseline) || !Number.isFinite(candidate)) {
+      failures.push(`${metric}: nonfinite median (${baseline} -> ${candidate})`);
+      continue;
+    }
+    if (!(baseline > 0)) {
+      // No percentage exists. Report both absolutely and decide on the candidate alone.
+      lines.push(`${metric}: baseline median ${baseline} ms, candidate median ${candidate.toFixed(3)} ms — no ratio taken`);
+      if (candidate > 0) failures.push(`${metric}: baseline median is ${baseline} ms, so the ${target} ratio is undefined`);
+      continue;
+    }
+    const ratio = candidate / baseline;
+    const ok = metric === "updateRenderCpu" ? ratio <= target : ratio <= target;
+    lines.push(
+      `${metric}: ${baseline.toFixed(3)} -> ${candidate.toFixed(3)} ms p95 median (${((ratio - 1) * 100).toFixed(1)}%) ${ok ? "ok" : "FAIL"} vs ${target}x`,
+    );
+    if (!ok)
+      failures.push(
+        metric === "updateRenderCpu"
+          ? `AC-6 improvement target missed: ${(ratio * 100).toFixed(1)}% of baseline, needs <= ${IMPROVEMENT_RATIO * 100}%`
+          : `${metric} regressed to ${(ratio * 100).toFixed(1)}% of baseline, limit ${COMPONENT_RATIO * 100}%`,
+      );
+  }
+  return { failures, lines };
+}
+
 // A framework-free provable check that the fail-closed decisions above actually reject the
 // false-pass cases, including the two qualification loopholes. `--self-check`.
 if (process.argv.includes("--self-check")) {
   const cur = {
+    schema: SCHEMA_VERSION,
+    updateRenderCpuP95: 40,
+    sceneUpdateCpuP95: 20,
+    worldUpdateCpuP95: 18,
+    rippleUpdateCpuP95: 7,
+    renderCpuP95: 21,
     adapter: { vendor: "nvidia", architecture: "turing" },
     width: 1920,
     height: 1080,
@@ -188,7 +347,174 @@ if (process.argv.includes("--self-check")) {
     qualificationReasons(qualMeta, { aircraftMin: 68 }, false).some((r) => r.includes("relative")),
     "a missing relative comparison does not qualify",
   );
+
+  // The schema gate and the missing full-CPU series: a record from before this PRD is not a
+  // baseline for it, however well its old fields match.
+  const { schema: _noSchema, ...oldRecord } = cur;
+  assert.ok(
+    baselineMismatches(oldRecord, cur).some((r) => r.includes("schema")),
+    "a pre-schema baseline is rejected",
+  );
+  assert.ok(
+    baselineMismatches({ ...cur, updateRenderCpuP95: undefined }, cur).some((r) => r.includes("updateRenderCpuP95")),
+    "a baseline with no full update+render CPU series is rejected",
+  );
+  assert.ok(
+    baselineMismatches({ ...cur, renderCpuP95: NaN }, cur).some((r) => r.includes("renderCpuP95")),
+    "a nonfinite full-CPU series is rejected",
+  );
+
+  // The nested-timer rule, on a controlled fixture: a render that re-enters itself twice is one
+  // outer call and must produce exactly one observation.
+  const fixtureOwner = {
+    calls: 0,
+    render(depth) {
+      this.calls += 1;
+      if (depth > 0) this.render(depth - 1);
+      return `depth ${depth}`;
+    },
+    fail() {
+      throw new Error("render failed");
+    },
+  };
+  const observed = [];
+  const undoRender = wrapCalls(fixtureOwner, "render", (ms) => observed.push(ms));
+  assert.equal(fixtureOwner.render(2), "depth 2", "the wrapper returns the original result");
+  assert.equal(fixtureOwner.calls, 3, "the nested calls really happened, and `this` was preserved");
+  assert.equal(observed.length, 1, "a re-entrant render is charged once, to the outer call");
+  assert.ok(Number.isFinite(observed[0]) && observed[0] >= 0, "the observation is a finite duration");
+  fixtureOwner.render(0);
+  assert.equal(observed.length, 2, "a later outer call is its own observation");
+  undoRender();
+  fixtureOwner.render(0);
+  assert.equal(observed.length, 2, "the undo removes the wrapper");
+  const failures = [];
+  const undoFail = wrapCalls(fixtureOwner, "fail", (ms) => failures.push(ms));
+  assert.throws(() => fixtureOwner.fail(), /render failed/, "an exception still propagates");
+  assert.equal(failures.length, 1, "a throwing call is still observed, through the finally");
+  undoFail();
+
+  // AC-6's arithmetic.
+  assert.equal(median([3, 1, 2]), 2, "median of three is the middle value");
+  assert.equal(median([1, 3]), 2, "median of two interpolates");
+  const fixture = { aircraftMin: 12, aircraftMax: 14, shipsMin: 20, shipsMax: 20, acceptedImpacts: 14, simStart: 12, simSeconds: 60 };
+  const run = (over, fx = {}) => ({ ...cur, workload: "water-impact-fixture", requiredAircraft: 0, file: "run", fixture: { ...fixture, ...fx }, ...over });
+  const before3 = [run({ updateRenderCpuP95: 50 }), run({ updateRenderCpuP95: 52 }), run({ updateRenderCpuP95: 54 })];
+  const good = [run({ updateRenderCpuP95: 39 }), run({ updateRenderCpuP95: 40 }), run({ updateRenderCpuP95: 41 })];
+  assert.deepEqual(compareWorkload(before3, good).failures, [], "a 23% improvement with matched components passes");
+  const weak = [run({ updateRenderCpuP95: 45 }), run({ updateRenderCpuP95: 46 }), run({ updateRenderCpuP95: 47 })];
+  assert.ok(
+    compareWorkload(before3, weak).failures.some((r) => r.includes("AC-6 improvement target")),
+    "a 12% improvement does not reach the 20% target",
+  );
+  assert.ok(
+    compareWorkload(before3, good.map((r) => ({ ...r, renderCpuP95: 40 }))).failures.some((r) => r.includes("renderCpu regressed")),
+    "a component regression beyond 10% fails even when the total improved",
+  );
+  assert.ok(
+    compareWorkload(before3, good.map((r) => ({ ...r, fixture: { ...fixture, acceptedImpacts: 13 } }))).failures.some((r) =>
+      r.includes("accepted impacts"),
+    ),
+    "a different accepted-impact count is not a matched comparison",
+  );
+  assert.ok(
+    compareWorkload(before3, good.map((r) => ({ ...r, fixture: { ...fixture, simStart: 12.5 } }))).failures.some((r) =>
+      r.includes("starts at battle time"),
+    ),
+    "a candidate measured over a later slice of the battle is rejected",
+  );
+  assert.ok(
+    compareWorkload(before3, good.map((r) => ({ ...r, fixture: { ...fixture, simSeconds: 59 } }))).failures.some((r) =>
+      r.includes("covers"),
+    ),
+    "a candidate covering a different simulated duration is rejected",
+  );
+  assert.ok(
+    compareWorkload(before3, good.map((r) => ({ ...r, fixture: { ...fixture, aircraftMax: 20 } }))).failures.some((r) =>
+      r.includes("aircraftMax"),
+    ),
+    "a different observed population is rejected",
+  );
+  assert.ok(
+    compareWorkload(before3, good.map((r) => ({ ...r, source: { concurrentChange: true } }))).failures.some((r) =>
+      r.includes("source changed"),
+    ),
+    "a sample taken while the source changed is rejected",
+  );
+  assert.ok(
+    compareWorkload(before3.map((r) => ({ ...r, updateRenderCpuP95: 0 })), good).failures.some((r) => r.includes("undefined")),
+    "a zero baseline is reported absolutely, never divided into",
+  );
+  assert.ok(
+    compareWorkload(before3, good.map((r) => ({ ...r, updateRenderCpuP95: NaN }))).failures.some((r) => r.includes("nonfinite")),
+    "a nonfinite candidate median fails closed",
+  );
+
+  // A fixture whose water never actually ran is a missing observation, not a fast frame.
+  assert.ok(
+    workloadEvidenceFailures("water-impact", { acceptedImpacts: 0, whitewaterMax: 400, energyMax: 3, simSeconds: 60, status: "playing" }).some((r) =>
+      r.includes("accepted"),
+    ),
+    "a water fixture that accepted no impacts is rejected",
+  );
+  assert.ok(
+    workloadEvidenceFailures("water-impact", { acceptedImpacts: 14, whitewaterMax: 0, energyMax: 3, simSeconds: 60, status: "playing" }).some((r) =>
+      r.includes("whitewater"),
+    ),
+    "a water fixture with no active whitewater is rejected",
+  );
+  assert.ok(
+    workloadEvidenceFailures("water-impact", { acceptedImpacts: 14, whitewaterMax: 400, energyMax: 0, simSeconds: 60, status: "playing" }).some((r) =>
+      r.includes("energy"),
+    ),
+    "a water fixture whose wave energy never rose is rejected",
+  );
+  assert.deepEqual(
+    workloadEvidenceFailures("water-impact", { acceptedImpacts: 14, whitewaterMax: 400, energyMax: 3, simSeconds: 60, status: "playing" }),
+    [],
+    "a real water fixture passes",
+  );
+  assert.ok(
+    workloadEvidenceFailures("cockpit", { cameraMode: 2, playerHp: 3, status: "playing", simSeconds: 60 }).some((r) => r.includes("camera")),
+    "a cockpit fixture that left the cockpit is rejected",
+  );
+  assert.ok(
+    workloadEvidenceFailures("cockpit", { cameraMode: 1, playerHp: 3, status: "debrief", simSeconds: 60 }).some((r) => r.includes("status")),
+    "a cockpit fixture that ended in debrief is rejected",
+  );
+  assert.ok(
+    workloadEvidenceFailures("cockpit", { cameraMode: 1, playerHp: 0, status: "playing", simSeconds: 60 }).some((r) => r.includes("crashed")),
+    "a cockpit fixture whose player crashed is rejected",
+  );
+  assert.ok(
+    workloadEvidenceFailures("cockpit", { cameraMode: 1, playerHp: 3, status: "playing", simSeconds: 1 }).some((r) => r.includes("advance")),
+    "a cockpit fixture whose battle clock stalled is rejected",
+  );
   console.log("self-check PASS");
+  process.exit(0);
+}
+
+// `--compare <before,before,before> <after,after,after>`: AC-6 from recorded runs, never from a
+// single sample. It reads only files this tool wrote.
+if (process.argv.includes("--compare")) {
+  const at = process.argv.indexOf("--compare");
+  const [beforeList, afterList] = process.argv.slice(at + 1, at + 3);
+  if (!beforeList || !afterList)
+    throw new Error("--compare needs two comma-separated lists of baseline files: before and after");
+  const load = async (list) =>
+    Promise.all(
+      list
+        .split(",")
+        .filter(Boolean)
+        .map(async (file) => ({ ...JSON.parse(await readFile(file, "utf8")), file })),
+    );
+  const { failures, lines } = compareWorkload(await load(beforeList), await load(afterList));
+  console.log(lines.join("\n"));
+  if (failures.length) {
+    console.log(`AC-6 FAIL:\n  ${failures.join("\n  ")}`);
+    process.exit(1);
+  }
+  console.log("AC-6 PASS: full update+render CPU p95 median improved at least 20% with no component regression beyond 10%");
   process.exit(0);
 }
 
@@ -316,6 +642,66 @@ try {
       w.setCamera(2);
     }, REQUIRED_AIRCRAFT);
 
+  // The cockpit fixture is the ordinary game seen from the pilot's seat: the interior, its
+  // instruments and the canopy are all drawn, which is the scene the trace was recorded in. Nothing
+  // is hidden, no invulnerability is invented, and the aircraft flies on real input.
+  if (WORKLOAD === "cockpit") await page.evaluate(() => window.midway.world.setCamera(1));
+
+  // The water fixture holds a carrier under repeated water events. The first one is a real
+  // `damageShip` torpedo hit at the hull side, exactly as capture-fluid-lab.mjs makes it; every
+  // later one is the equivalent `fx('splash')` water event, so the sample keeps producing water
+  // work without sinking the same ship fifteen times to manufacture a workload. This is a fixture,
+  // not a player sortie. The schedule fires on the first fixed update to reach each four-second
+  // battle-time boundary, never on a wall-clock timer, so a slower build sees the same events.
+  //
+  // It is installed on `Battle.step` before the warm-up, so the water is already active when the
+  // sample starts. The leaf-step CPU timer installed later therefore wraps it: the injection cost
+  // lands inside about fifteen of some three thousand timed steps, identically on both sides of a
+  // comparison, and is far below the p95 rank.
+  if (WORKLOAD === "water-impact")
+    await page.evaluate((period) => {
+      const s = window.midway;
+      const b = s.battle;
+      const w = s.world;
+      const ship = b.ships.find((x) => x.team === "jp" && x.kind === "carrier" && !x.sunk);
+      if (!ship) throw new Error("the water fixture needs a live carrier to hit");
+      window.midwayFixture = { accepted: 0, events: 0, whitewaterMax: 0, energyMax: 0 };
+      // Only the observation camera is fixed, the same carrier-relative surface vantage the fluid
+      // lab uses. The game's own updateCamera still runs first, for its cost and side effects.
+      const original = w.updateCamera.bind(w);
+      w.updateCamera = function (dt, briefing, time) {
+        original(dt, briefing, time);
+        const c = Math.cos(ship.heading);
+        const sn = Math.sin(ship.heading);
+        this.camera.position.set(ship.x + c * 285 + sn * 100, 75, ship.z + sn * 285 - c * 100);
+        this.camera.up.set(0, 1, 0);
+        this.camera.fov = 48;
+        this.camera.lookAt(ship.x + c * 12, 6, ship.z + sn * 12);
+        this.camera.updateProjectionMatrix();
+        this.camera.updateMatrixWorld();
+      };
+      let next = Math.ceil(b.time / period) * period;
+      let blasted = false;
+      const origStep = b.step;
+      b.step = function (dt, input) {
+        const out = origStep.call(this, dt, input);
+        if (this.time >= next) {
+          next += period;
+          const c = Math.cos(ship.heading);
+          const sn = Math.sin(ship.heading);
+          const at = { x: ship.x + c * ship.hullBeam * 0.5, y: -3, z: ship.z + sn * ship.hullBeam * 0.5 };
+          if (!blasted && !ship.sunk) {
+            this.damageShip(ship, 120, at, "torpedo", "us", { owner: "player" });
+            blasted = true;
+          } else {
+            this.fx("splash", { ...at, waterKind: "torpedo", waterDepth: 3 }, 1.6, true);
+          }
+          window.midwayFixture.events += 1;
+        }
+        return out;
+      };
+    }, IMPACT_PERIOD);
+
   // MIDWAY_HIDE names a layer to switch off, so the cost of one can be attributed rather than
   // guessed at. It changes what is measured; a run that uses it is non-qualifying.
   if (process.env.MIDWAY_HIDE)
@@ -376,15 +762,28 @@ try {
 
   // A representative workload: turning, firing, tracers and impacts, not a static camera. The
   // damage workload holds its course instead, so the burning ship stays in frame for both runs.
-  await page.keyboard.down("Space");
-  if (!burning) await page.keyboard.down("ArrowLeft");
-  await seconds(WARMUP);
-  if (!burning) {
-    await page.keyboard.up("ArrowLeft");
-    await page.keyboard.down("ArrowRight");
+  if (WORKLOAD) {
+    // The two new fixtures burn a wall-clock warm-up — shader compilation and texture upload are
+    // wall-clock events, and a battle-time warm-up on a slow build burns a different amount of
+    // them — and then wait for the predeclared battle tick, so both sides of a comparison sample
+    // the same section of the same battle.
+    if (WORKLOAD === "cockpit") {
+      await page.keyboard.down("Space");
+      await page.keyboard.down("ArrowRight");
+    }
+    await page.waitForTimeout(WARMUP * 1000);
+    await page.waitForFunction((tick) => window.midway.battle.time >= tick, START_TICK, { timeout: 120000 });
+  } else {
+    await page.keyboard.down("Space");
+    if (!burning) await page.keyboard.down("ArrowLeft");
+    await seconds(WARMUP);
+    if (!burning) {
+      await page.keyboard.up("ArrowLeft");
+      await page.keyboard.down("ArrowRight");
+    }
   }
 
-  const result = await page.evaluate(async (sample) => {
+  const result = await page.evaluate(async ({ sample, workload, wrapSource }) => {
     const s = window.midway;
     const renderer = s.world.renderer;
     // GPU time is the figure that describes the game. Wall time is collected alongside it, but
@@ -415,8 +814,65 @@ try {
         else substeps += frame.children;
       }
     };
+    // The CPU the leaf `Battle.step` timer above cannot see, which is most of it: the trace put
+    // 32.0 s in `WorldView.update` and 86.2 s in the render wrapper across the same window that
+    // fixed steps barely appear in. Each wrapper preserves `this`, its arguments, its return value
+    // and its exceptions, and is removed again below. A nested call — the water's reflection pass
+    // and the shadow passes both re-enter `renderer.render` — is charged once, to the outer call
+    // that contains it, so a total is never double counted.
+    const series = { updateRenderCpu: [], sceneUpdateCpu: [], worldUpdateCpu: [], rippleUpdateCpu: [], renderCpu: [] };
+    const restore = [];
+    let pendingUpdate = 0;
+    // The same `wrapCalls` node just proved correct against a recursive fixture in `--self-check`,
+    // rehydrated here rather than written a second time.
+    const wrapCalls = (0, eval)(`(${wrapSource})`);
+    const wrap = (owner, key, record) => restore.push(wrapCalls(owner, key, record));
+    wrap(s, "update", (ms) => {
+      series.sceneUpdateCpu.push(ms);
+      pendingUpdate += ms;
+    });
+    wrap(s.world, "update", (ms) => series.worldUpdateCpu.push(ms));
+    wrap(s.world.ripples, "update", (ms) => series.rippleUpdateCpu.push(ms));
+    wrap(renderer, "render", (ms) => {
+      series.renderCpu.push(ms);
+      // One presented-work attempt: everything the scene updated since the last outer render, plus
+      // this render. The component series are reported beside it and never added to it.
+      series.updateRenderCpu.push(pendingUpdate + ms);
+      pendingUpdate = 0;
+    });
+
+    // One traversal, once, to name what is on the scene and which textures are being rewritten —
+    // the trace's 8.6 s of external-image uploads had no owner in it. No prototype patch, no
+    // per-frame walk and nothing left behind in the product.
+    const census = { objects: 0, meshes: 0, instanced: 0, batched: 0, clustered: 0, textures: 0 };
+    const watched = [];
+    const seenTexture = new Set();
+    s.world.scene.traverse((o) => {
+      census.objects += 1;
+      if (o.isMesh) census.meshes += 1;
+      if (o.isInstancedMesh) census.instanced += 1;
+      if (o.isBatchedMesh) census.batched += 1;
+      if (o.isClusteredMesh || o.constructor?.name === "ClusteredMesh") census.clustered += 1;
+      const materials = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const material of materials)
+        for (const [slot, value] of Object.entries(material))
+          if (value && value.isTexture && !seenTexture.has(value)) {
+            seenTexture.add(value);
+            census.textures += 1;
+            watched.push({
+              texture: value,
+              slot,
+              version: value.version,
+              kind: value.isCanvasTexture ? "canvas" : value.isDataTexture ? "data" : "image",
+              material: material.name || material.type,
+              object: o.name || o.type,
+            });
+          }
+    });
+
     const wall = [];
     const gpu = [];
+    const water = { acceptedStart: s.world.ripples.effects?.accepted ?? 0, accepted: 0, whitewaterMax: 0, energyMax: 0 };
     const pop = {
       aircraftMin: Infinity, aircraftMax: -Infinity, shipsMin: Infinity, shipsMax: -Infinity,
       renderableMin: Infinity, renderableMax: -Infinity, visibleMin: Infinity, visibleMax: -Infinity,
@@ -443,6 +899,7 @@ try {
     const timeStart = b.time;
     const ammoStart = b.player.ammo ?? null;
     const positions = new Map(b.aircraft.map((a) => [a.id, { x: a.x, y: a.y, z: a.z }]));
+    let ticks = 0;
     await new Promise((resolve) => {
       let last = performance.now();
       const stop = last + sample * 1000;
@@ -469,6 +926,15 @@ try {
         pop.visibleMin = Math.min(pop.visibleMin, visibleNow);
         pop.visibleMax = Math.max(pop.visibleMax, visibleNow);
         pop.bulletMax = Math.max(pop.bulletMax, b.bullets.length);
+        // Evidence that the water fixture's water actually moved. Sampled every thirtieth frame
+        // because `energy()` walks all 36,864 cells: reading it every frame would be the harness
+        // adding the cost it is here to measure.
+        if (workload === "water-impact" && ticks % 30 === 0) {
+          const fx = s.world.ripples.effects;
+          water.whitewaterMax = Math.max(water.whitewaterMax, fx?.whitewater?.activeCount?.() ?? 0);
+          water.energyMax = Math.max(water.energyMax, s.world.ripples.energy());
+        }
+        ticks += 1;
         try {
           await renderer.resolveTimestampsAsync("render");
           const t = renderer.info.render.timestamp;
@@ -483,12 +949,32 @@ try {
     });
     wall.shift();
     b.step = origStep;
+    for (const undo of restore) undo();
+    // The first attempt has no scene update behind it — the sample began mid-frame — so it is not a
+    // presented-work total and is dropped rather than reported as a very cheap frame.
+    series.updateRenderCpu.shift();
+    water.accepted = (s.world.ripples.effects?.accepted ?? 0) - water.acceptedStart;
+    const textureChanges = watched
+      .filter((w) => w.texture.version !== w.version)
+      .map((w) => ({ kind: w.kind, slot: w.slot, material: w.material, object: w.object, versions: w.texture.version - w.version }));
+    const evidence = {
+      status: b.status,
+      cameraMode: s.world.cameraMode,
+      playerHp: b.player.hp ?? 1,
+      acceptedImpacts: water.accepted,
+      scheduledEvents: window.midwayFixture?.events ?? 0,
+      whitewaterMax: water.whitewaterMax,
+      energyMax: water.energyMax,
+    };
     let moved = 0;
     for (const a of b.aircraft) {
       const p0 = positions.get(a.id);
       if (p0 && Math.hypot(a.x - p0.x, a.y - p0.y, a.z - p0.z) > 100) moved += 1;
     }
     const advance = { seconds: +(b.time - timeStart).toFixed(1), moved, ammoStart, ammoEnd: b.player.ammo ?? null };
+    // The exact battle-time window this sample covers. A comparison that does not match these is
+    // measuring two different sections of the same battle and crediting the difference to code.
+    const fixture = { ...evidence, simStart: +timeStart.toFixed(3), simEnd: +b.time.toFixed(3), simSeconds: +(b.time - timeStart).toFixed(3) };
     // Raw durations, not summaries: AC-23's percentiles are computed once, in node, by
     // src/sim/perf.ts. Deriving a p95 here as well would be the second implementation the
     // repository forbids.
@@ -496,6 +982,12 @@ try {
       wall,
       gpu,
       cpu,
+      series,
+      census,
+      textureChanges,
+      fixture,
+      drawingBuffer: { width: renderer.domElement.width, height: renderer.domElement.height },
+      backend: renderer.backend?.constructor?.name ?? null,
       substeps,
       draws: renderer.info.render.drawCalls,
       triangles: renderer.info.render.triangles,
@@ -514,9 +1006,9 @@ try {
         pixelRatio: renderer.getPixelRatio(),
       },
     };
-  }, SAMPLE);
-  await page.keyboard.up("Space");
-  if (!burning) await page.keyboard.up("ArrowRight");
+  }, { sample: SAMPLE, workload: WORKLOAD, wrapSource: wrapCalls.toString() });
+  if (WORKLOAD !== "water-impact") await page.keyboard.up("Space");
+  if (!burning && WORKLOAD !== "water-impact") await page.keyboard.up("ArrowRight");
 
   // AC-23's percentiles come from src/sim/perf.ts, the one documented interpolation rule; the raw
   // page series are reduced here so p50/p95/p99 and the verdict share the same arithmetic.
@@ -533,6 +1025,8 @@ try {
   const gpu = seriesStats(result.gpu);
   const cpu = seriesStats(result.cpu);
   const wall = seriesStats(result.wall);
+  // The full-CPU series, reduced by the same arithmetic as everything else.
+  const cpuStats = Object.fromEntries(CPU_SERIES.map((name) => [name, seriesStats(result.series[name] ?? [])]));
   if (process.env.MIDWAY_FRAME) {
     await page.screenshot({ path: process.env.MIDWAY_FRAME });
     console.log(`frame saved to ${process.env.MIDWAY_FRAME}`);
@@ -551,7 +1045,16 @@ try {
   });
 
   const meta = {
+    schema: SCHEMA_VERSION,
     adapter,
+    backend: result.backend,
+    browser: browser.version(),
+    // Screenshot size and the window's CSS size are not the drawing buffer; record the buffer.
+    drawingBuffer: result.drawingBuffer,
+    engineArtifact:
+      JSON.parse(await readFile(join(import.meta.dirname, "..", "package.json"), "utf8")).dependencies?.[
+        "@threenative/core"
+      ] ?? null,
     width: WIDTH,
     height: HEIGHT,
     pixelRatio: result.scene.pixelRatio,
@@ -560,10 +1063,21 @@ try {
     sample: SAMPLE,
     seed: result.seed,
     damage: burning,
-    input: burning ? "course-held + fire" : "turn-right + fire",
-    requiredAircraft: REQUIRED_AIRCRAFT,
+    input:
+      WORKLOAD === "cockpit" ? "cockpit + turn-right + fire"
+      : WORKLOAD === "water-impact" ? "none (scheduled water events)"
+      : burning ? "course-held + fire"
+      : "turn-right + fire",
+    // AC-23's declared population envelope belongs to AC-23's workload. The two fixtures added here
+    // are not that workload and do not borrow its envelope; they match on observed population
+    // instead, which `compareWorkload` requires be identical on both sides.
+    requiredAircraft: WORKLOAD ? 0 : REQUIRED_AIRCRAFT,
     hidden: process.env.MIDWAY_HIDE || null,
-    workload: CROWD ? "crowd68-fixture" : "natural",
+    workload:
+      WORKLOAD === "cockpit" ? "cockpit-flight"
+      : WORKLOAD === "water-impact" ? "water-impact-fixture"
+      : CROWD ? "crowd68-fixture"
+      : "natural",
     source: (() => {
       const after = sourceDigest();
       return {
@@ -589,9 +1103,53 @@ try {
       `gpu ${gpu.samples ? `p50 ${gpu.p50.toFixed(2)}ms (${fps(gpu.p50)} fps) | p95 ${gpu.p95.toFixed(2)}ms | p99 ${gpu.p99.toFixed(2)}ms | worst ${gpu.worst.toFixed(2)}ms over ${gpu.samples} frames` : "unavailable: this build has no timestamp-query support"}\n` +
       `battle fixed-step cpu (leaf steps) ${cpu.samples ? `p50 ${cpu.p50.toFixed(2)}ms | p95 ${cpu.p95.toFixed(2)}ms | p99 ${cpu.p99.toFixed(2)}ms | worst ${cpu.worst.toFixed(2)}ms over ${cpu.samples} steps; ${result.substeps} subdivided child calls` : "unavailable: no Battle.step observations"}\n` +
       `wall ${wall.samples ? `p50 ${wall.p50.toFixed(2)}ms | p95 ${wall.p95.toFixed(2)}ms` : "unavailable"}  ` +
-      "(presentation-bound on a virtual display; not a statement about the game)",
+      "(presentation-bound on a virtual display; not a statement about the game)\n" +
+      CPU_SERIES.map((name) => {
+        const st = cpuStats[name];
+        return `${name.padEnd(16)} ${st.samples ? `p50 ${st.p50.toFixed(2)}ms | p95 ${st.p95.toFixed(2)}ms | p99 ${st.p99.toFixed(2)}ms | worst ${st.worst.toFixed(2)}ms over ${st.samples}` : "unavailable: no observations"}`;
+      }).join("\n") +
+      `\nscene census ${JSON.stringify(result.census)}\n` +
+      `textures rewritten during the sample: ${result.textureChanges.length ? JSON.stringify(result.textureChanges) : "none"}\n` +
+      `fixture ${JSON.stringify(result.fixture)}`,
   );
+
+  // The record is written before any verdict is reached. A sample that misses a budget is still a
+  // measured result, and losing it because it failed is how a baseline quietly becomes a
+  // cherry-picked one. `passed` is stamped honestly below, after the gates have actually run.
+  const record = {
+    ...meta,
+    gpuP95: gpu.p95,
+    cpuP95: cpu.p95,
+    wallP95: wall.p95,
+    ...Object.fromEntries(CPU_SERIES.flatMap((name) => [[`${name}P95`, cpuStats[name].p95], [`${name}Samples`, cpuStats[name].samples]])),
+    population: { min: result.pop.aircraftMin, max: result.pop.aircraftMax },
+    fixture: {
+      ...result.fixture,
+      aircraftMin: result.pop.aircraftMin,
+      aircraftMax: result.pop.aircraftMax,
+      shipsMin: result.pop.shipsMin,
+      shipsMax: result.pop.shipsMax,
+    },
+    census: result.census,
+    textureChanges: result.textureChanges,
+    // Raw durations, kept so a later comparison can re-derive every statistic from the same bytes.
+    raw: { gpu: result.gpu, cpu: result.cpu, wall: result.wall, ...result.series },
+  };
+  if (process.env.MIDWAY_BASELINE_OUT) {
+    await writeFile(process.env.MIDWAY_BASELINE_OUT, JSON.stringify(record, null, 2));
+    console.log(`baseline written to ${process.env.MIDWAY_BASELINE_OUT}`);
+  }
+
   assert.deepEqual(errors, []);
+  // A fixture must have been the thing it claims to measure before its timings mean anything.
+  if (WORKLOAD) {
+    const evidenceFailures = workloadEvidenceFailures(WORKLOAD, { ...result.fixture });
+    assert.deepEqual(evidenceFailures, [], `${WORKLOAD} fixture did not run as declared: ${evidenceFailures.join("; ")}`);
+  }
+  // The new series fail closed exactly as the old ones do: a missing full-CPU observation is a
+  // broken wrapper, not a frame that cost nothing.
+  for (const name of CPU_SERIES)
+    assert.ok(isFiniteTiming(cpuStats[name]), `${name} observations resolved and finite: ${JSON.stringify(cpuStats[name])}`);
   // Missing or nonfinite observations are failures, not zeroes.
   assert.ok(isFiniteTiming(gpu), `GPU observations resolved and finite: ${JSON.stringify(gpu)}`);
   assert.ok(isFiniteTiming(cpu), `Battle fixed-step CPU observations resolved and finite: ${JSON.stringify(cpu)}`);
@@ -656,20 +1214,21 @@ try {
     relative = "PASS";
   }
   console.log(`relative: ${relative}${relative === "PASS" ? " (within 10% of the matched baseline)" : " (no matched baseline supplied via MIDWAY_BASELINE)"}`);
-  if (process.env.MIDWAY_BASELINE_OUT) {
-    await writeFile(
-      process.env.MIDWAY_BASELINE_OUT,
-      JSON.stringify({ ...meta, gpuP95: gpu.p95, cpuP95: cpu.p95, population: { min: result.pop.aircraftMin, max: result.pop.aircraftMax } }, null, 2),
-    );
-    console.log(`baseline written to ${process.env.MIDWAY_BASELINE_OUT}`);
-  }
 
-  const reasons = qualificationReasons(meta, result.pop, relative === "PASS");
-  if (reasons.length) {
-    console.log(`AC-23 NON-QUALIFYING: ${reasons.join("; ")}`);
-    if (process.env.MIDWAY_REQUIRE_QUALIFIED) assert.fail(`AC-23 not qualified: ${reasons.join("; ")}`);
+  // AC-23 is one workload's verdict. The two fixtures added for AC-6 are a different workload and
+  // must never print it: their comparison is `--compare`, over three matched runs a side.
+  if (WORKLOAD) {
+    console.log(
+      `AC-23 NOT APPLICABLE: workload ${meta.workload} is an AC-6 fixture. Compare three runs a side with --compare; AC-23 keeps MIDWAY_CROWD=1.`,
+    );
   } else {
-    console.log("PASS: AC-23 workload, declared population, absolute budgets and matched-baseline comparison all met");
+    const reasons = qualificationReasons(meta, result.pop, relative === "PASS");
+    if (reasons.length) {
+      console.log(`AC-23 NON-QUALIFYING: ${reasons.join("; ")}`);
+      if (process.env.MIDWAY_REQUIRE_QUALIFIED) assert.fail(`AC-23 not qualified: ${reasons.join("; ")}`);
+    } else {
+      console.log("PASS: AC-23 workload, declared population, absolute budgets and matched-baseline comparison all met");
+    }
   }
 } finally {
   await browser.close();

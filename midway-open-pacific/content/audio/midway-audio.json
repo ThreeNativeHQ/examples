@@ -277,6 +277,78 @@
       ]
     },
     {
+      "id": "tbd-engine-interior-idle-01",
+      "file": "audio/tbd-engine-interior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "79356edf79cea5fc8efd09768691ce320d7195a97888a268eca741c7f4b94aa7",
+          "outputHash": "5556fdcab8e3dc7a55e659007969a18e69ca3e2e3d329d676b4e8ed5f80115a1",
+          "bytes": 88115
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-interior-cruise-01",
+      "file": "audio/tbd-engine-interior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Steady cruising power with a settled mechanical drone and moderate propeller load. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Steady cruising power with a settled mechanical drone and moderate propeller load. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "c61d8c7235e295d6c6f8fa0b210a1f6e5bdad937d3375d1a16202a797374da1d",
+          "outputHash": "b5e9f70137f9989cf3ee71f5f2744d7fc7c3442d6aa5dca2dd45ff6cec440fa6",
+          "bytes": 88824
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-interior-power-01",
+      "file": "audio/tbd-engine-interior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "53ae1f829c54e04f2da03f7e3896f5b2ae7a93c66f8c6a220b7661a6f9ff6910",
+          "outputHash": "ee19a7166a843db933f2c19a7dde708c64784cf189404095f003760416f08094",
+          "bytes": 92182
+        }
+      ]
+    },
+    {
       "id": "wildcat-engine-exterior-idle-01",
       "file": "audio/wildcat-engine-exterior-idle-01.ogg",
       "seconds": 10,
@@ -925,6 +997,88 @@
           "sourceHash": "dee1890f442ce57f5d7f1232db4062ea1f23b4bcad4fd87fa114783c0177e4c8",
           "outputHash": "a1972dc89e110af6aa72bbe1ca7dad1876f88d3ddb7e935f7af38a134b6acb2d",
           "bytes": 53735
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-start",
+      "file": "audio/tbd-engine-start.ogg",
+      "seconds": 8,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator starting, mechanical starter cranking followed by several uneven combustion catches that settle into a low puttering idle, no turbine whine and no dramatic backfire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator starting, mechanical starter cranking followed by several uneven combustion catches that settle into a low puttering idle, no turbine whine and no dramatic backfire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "19af836b0b1f3d62472f275e048f9883234991168b1c67b2a060f644bfb40ba4",
+          "outputHash": "355658700ff87016df4b27dacc56d4e19a01dc55829b80d8eb4c828fc312e14f",
+          "bytes": 67505,
+          "conditioned": "trim trailing silence + short end fade, level unchanged"
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "6cc5d1f020a71b1b9c3ac64682b6ebfd8389b80ef49fc8f37d6b5d22df5ab180",
+          "outputHash": "a9d06acd4d1c4e9037fe653b25322592e2fb446d58ac0703e871abb083e98a56",
+          "bytes": 89873,
+          "conditioned": "short end fade, level unchanged"
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-stop",
+      "file": "audio/tbd-engine-stop.ogg",
+      "seconds": 6,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator shutting down from idle, uneven low exhaust putter and propeller chops spacing out as it slows naturally to rest, no turbine whine, no electronic sweep and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator shutting down from idle, uneven low exhaust putter and propeller chops spacing out as it slows naturally to rest, no turbine whine, no electronic sweep and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 6,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "6eb5d6dbb017d12f3341b04154f09e8aa2bc926c372afe67bf05d7207674f1d2",
+          "outputHash": "609ca178bfa3767acc0fd2d32d96e23d7c4af747c51dc4852045335cc5ccbf2a",
+          "bytes": 49960
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "473f4ad8b76bbe4fedb375b2f142df28e090bfa3b3aa2a2a5abc1c8ef57c3d9e",
+          "outputHash": "a2200bdf5ed245705158ef96ea5b2766a231665a1023e4b8df0737ff14a4eb22",
+          "bytes": 49512
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "46d70e3eb34d51733edc607810eb74736981c8f03f3a911869181008a1571e1a",
+          "outputHash": "c4dc4d3b69b3f8cd8cecafef92716141669b604555ad7cc36ead7b4314dcb737",
+          "bytes": 61663,
+          "conditioned": "short end fade, level unchanged"
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "51b2178c81ca364d9f42d47af7c3e8379a4bf29f0351f8f50f355e71320132ee",
+          "outputHash": "0ef51500dc137f6f46f6d5ec3b308c63b7c2e1e17caa343b0699cfc175db45ba",
+          "bytes": 38473,
+          "conditioned": "trim 0.4s leading silence, level unchanged"
         }
       ]
     },

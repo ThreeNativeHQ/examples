@@ -2,9 +2,9 @@
 import { RippleField } from "@threenative/core";
 import { ClampToEdgeWrapping, DataTexture, DataUtils, HalfFloatType, LinearFilter, RGBAFormat, Vector2 } from "three";
 import { float, smoothstep, texture, uniform, vec2 } from "three/tsl";
+import { createHullQuery } from "./hull-query.js";
 import { WaterEffects } from "./water-effects.js";
 import { oceanSwell, oceanSwellNode } from "./ocean.js";
-import { localPoint } from "../sim/math.js";
 
 export function createRipples() {
   const field = new RippleField({resolution:192,size:640,speed:22,damping:.27,foamHalfLife:7,current:{x:.22,z:.06},step:1/120,maxSteps:24});
@@ -27,22 +27,33 @@ export function createRipples() {
     return sx(u)*sx(1-u)*sx(v)*sx(1-v);
   };
   const heightAt=(x:number,z:number,t:number)=>oceanSwell(x,z,t)+field.heightAt(x,z)*rimCPU(x,z);
-  let ships:any[]=[];
-  const hullHeightAt=(x:number,z:number)=>{
-    for(const s of ships){
-      if(s.sunk||(s.kind==='sub'&&!s.surfaced))continue;
-      if(Math.abs(x-s.x)>s.hullLength||Math.abs(z-s.z)>s.hullLength)continue;
-      const l=localPoint({x,z},s);
-      const taper=Math.sqrt(Math.max(0,1-(l.forward/(s.hullLength*.5))**4));
-      if(Math.abs(l.forward)<s.hullLength*.5&&Math.abs(l.right)<s.hullBeam*.5*taper)return s.deckHeight??12;
-    }
-    return -Infinity;
+  const {cache:cacheHulls,heightAt:hullHeightAt}=createHullQuery();
+  // 147,456 half-float conversions, and the trace was paying them on every update whether the
+  // solver had changed a cell or not — and on updates that never reached a render at all. Pack on
+  // the field's own version instead, from the material's render update, so the bytes uploaded are
+  // the latest ones and each version is converted once however many passes read the texture.
+  let lastPackedVersion=-1;
+  const syncTexture=()=>{
+    if(field.version===lastPackedVersion)return;
+    lastPackedVersion=field.version;
+    // Read the arrays off the field now: the solver swaps `height` and `foam` with its scratch
+    // buffers every step, so a reference captured earlier packs the previous step's grid.
+    const h=field.height,f=field.foam,fx=field.flowX,fz=field.flowZ;
+    for(let i=0;i<n*n;i++){data[i*4]=DataUtils.toHalfFloat(h[i]!);data[i*4+1]=DataUtils.toHalfFloat(f[i]!);
+      data[i*4+2]=DataUtils.toHalfFloat(fx[i]!);data[i*4+3]=DataUtils.toHalfFloat(fz[i]!);}
+    map.needsUpdate=true;
   };
+  // The centre uniform is read by every ripple texture lookup, so the first material that actually
+  // draws water runs this before its bindings are uploaded. A scene-level `onBeforeRender` would
+  // work too and would cost the saving: engine `projection-plan.ts` treats an owned object render
+  // hook as a reason to switch scene projection off. The callback returns nothing and the uniform
+  // keeps its value; repeated reflection and shadow passes are free because of the version guard.
+  center.onRenderUpdate(()=>{syncTexture();});
   let simulationOffset=0;
   const effects=new WaterEffects(field,(x,z,t)=>heightAt(x,z,t+simulationOffset),hullHeightAt,surfaceNode);
   let seen=new Set<string>(),lastBattleTime=0,elapsed=0;
   const update=(battle:any,camera:{x:number;z:number},dt:number)=>{
-    ships=battle.ships;
+    cacheHulls(battle.ships);
     effects.whitewater.wind.x=battle.wind.x;effects.whitewater.wind.z=battle.wind.z;
     // Stop with the battle clock (including pause and debrief); no duplicate wall-time clock.
     const delta=Math.max(0,Math.min(.2,battle.time-lastBattleTime));lastBattleTime=battle.time;
@@ -67,12 +78,16 @@ export function createRipples() {
     if(seen.size>650)seen=new Set(battle.effects.map((e:any)=>e.id));
     for(const t of [...battle.torpedoes,...battle.airTorpedoes])if(t.y<=.5)field.depositFoam(t.x,t.z,2,.65*delta);
     effects.step(delta);effects.render();
-    for(let i=0;i<n*n;i++){data[i*4]=DataUtils.toHalfFloat(field.height[i]);data[i*4+1]=DataUtils.toHalfFloat(field.foam[i]);
-      data[i*4+2]=DataUtils.toHalfFloat(field.flowX[i]);data[i*4+3]=DataUtils.toHalfFloat(field.flowZ[i]);}
-    if(delta>0||incoming.length)map.needsUpdate=true;
   };
   return {field,effects,heightNode,normalNode,foamNode:(p:any)=>read(p).g,flowNode:(p:any)=>read(p).ba,heightAt,update,
     energy:()=>field.energy(),peak:()=>({high:Math.max(...field.height),low:Math.min(...field.height)}),
-    reset:()=>{effects.reset();seen.clear();lastBattleTime=0;elapsed=0;time.value=0;data.fill(0);map.needsUpdate=true;},
+    syncTexture,packedVersion:()=>lastPackedVersion,
+    // The DataTexture's own version counts uploads: `needsUpdate` bumps it, and the only thing that
+    // sets `needsUpdate` here is a pack. Gates count packs with this rather than by wrapping a
+    // function the render-update callback closed over and would never route through.
+    uploads:()=>map.version,
+    // A reset must reach the GPU: clear the packed bytes now, and force the next render to repack
+    // from the field's real arrays rather than trusting the version it happens to be on.
+    reset:()=>{effects.reset();seen.clear();lastBattleTime=0;elapsed=0;time.value=0;data.fill(0);map.needsUpdate=true;lastPackedVersion=-1;},
     dispose:()=>{effects.dispose();map.dispose();}};
 }

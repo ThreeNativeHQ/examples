@@ -91,8 +91,8 @@ runs, then `enter()` synchronously builds the world (`Midway.ts:63-81` → `new 
 | Loaded by | File | Bytes | Triangles | Materials | Images | Referenced? |
 |---|---|---:|---:|---:|---:|---|
 | `loadImportedAircraft` | aircraft.douglas-sbd3.glb | 13,489,304 | 10,416 | 21 | 61 | yes — player SBD + AI |
-| `loadImportedAircraft` | aircraft.tbd-devastator.glb | 12,990,788 | 274,771 | 4 | 3 | yes — player TBD only |
-| `loadImportedAircraft` | aircraft.tbd-devastator.ai.glb | 9,709,080 | 186,403 | 4 | 3 | yes — AI/parked TBD |
+| — (ported `makeDevastator`) | aircraft.tbd-devastator.glb | 12,990,788 | 274,771 | 4 | 3 | asset only — checks read its span/clips/parts; the drawn player TBD is the ported airframe |
+| — (ported `makeDevastator`) | aircraft.tbd-devastator.ai.glb | 9,709,080 | 186,403 | 4 | 3 | asset only — checks read it; the drawn AI/parked TBD is the ported cheap build |
 | `loadImportedAircraft` | aircraft.b5n2-kate.glb | 1,375,712 | 12,653 | 1 | 3 | yes — AI/parked Kate |
 | `loadImportedFleet` | aircraft.mitsubishi-a6m3.glb | 991,908 | 14,540 | 10 | 8 | yes — AI/parked Zero |
 | `loadImportedShips` | hornet.glb | 26,767,784 | 347,281 | 75 | 73 | yes — Enterprise **and** Hornet |

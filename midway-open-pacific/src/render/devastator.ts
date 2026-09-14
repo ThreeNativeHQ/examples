@@ -8,6 +8,7 @@
  */
 import * as T from "three";
 import { softCircleDataTexture } from "@threenative/core";
+import { emblem } from "./assets.js";
 
 const PI = Math.PI;
 const TAU = PI * 2;
@@ -77,6 +78,9 @@ function materials(): MaterialMap {
     red: new T.MeshStandardMaterial({ color: 0x701a15, emissive: 0xf92912, emissiveIntensity: 0.7, roughness: 0.18 }),
     green: new T.MeshStandardMaterial({ color: 0x164a3e, emissive: 0x23d3a1, emissiveIntensity: 0.65, roughness: 0.18 }),
     blade: new T.MeshStandardMaterial({ vertexColors: true, metalness: 0.47, roughness: 0.39, side: T.DoubleSide }),
+    // Shared national-insignia decal: Midway-era US star-in-circle, no bars. Kept in the
+    // shared map so instance disposal never releases it out from under the other airframes.
+    insignia: emblem("us"),
   };
   return shared;
 }
@@ -450,6 +454,16 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
     surfaces.push({ name, group: g, axis });
     return g;
   };
+  // US national insignia as shared-material decals: the ported TBD carries no textures,
+  // so the marks it never had go on as quads. They never cast or receive shadows.
+  const star = (parent: T.Object3D, name: string, size: number): T.Mesh => {
+    const mark = new T.Mesh(new T.PlaneGeometry(size, size), M.insignia!);
+    mark.name = name;
+    mark.castShadow = false;
+    mark.receiveShadow = false;
+    parent.add(mark);
+    return mark;
+  };
   for (const side of [-1, 1]) {
     const suffix = side < 0 ? "Port" : "Starboard";
     wingPatch(root, 0, 0.86, 0, 1, side);
@@ -480,8 +494,21 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
         12,
       );
     batch(fold);
+    // Upper-wing star on the folding outer panel, in fold-local coordinates so it folds
+    // with the wing: mid-chord clear of the flap, aileron and pitot, tilted to the dihedral.
+    const spot = wingPoint(4.8, 0.42, side, true);
+    const wingMark = star(fold, `us-insignia-wing-${suffix}`, 1.3);
+    wingMark.position.set(spot.x - off.x, spot.y - off.y + 0.035, spot.z - off.z);
+    wingMark.rotation.x = -PI / 2;
+    wingMark.rotateX(-side * 0.065);
     wingPatch(root, 0, 2.52, 0, 0.7, side, V(), true, "horizontal_stabilizer");
     hinged(root, "elevator" + suffix, 0.03, 2.49, 0.713, 1, side, V(), true);
+  }
+  for (const side of [-1, 1]) {
+    // Fuselage star on bare skin aft of the greenhouse: profile rz ≈ 0.56 at x = 1.0.
+    const hullMark = star(root, `us-insignia-fuselage-${side < 0 ? "Port" : "Starboard"}`, 0.5);
+    hullMark.position.set(1.0, -0.005, side * 0.599);
+    if (side < 0) hullMark.rotation.y = PI;
   }
 
   const finGeo = (points: number[][], offset = V(), depth = 0.12): T.BufferGeometry => {

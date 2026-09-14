@@ -68,8 +68,8 @@ export const PERSPECTIVES = {
     "Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass",
 };
 
-/** The SBD is the hero aircraft: it gets interior states as well as exterior. */
-export const INTERIOR_AIRCRAFT = ["sbd"];
+/** Both flyable Douglas airframes get interior states as well as exterior (PRD: playable => interior). */
+export const INTERIOR_AIRCRAFT = ["sbd", "tbd"];
 
 /**
  * One row per named SFX prompt. `identity` carries the PRD's evidence label:
@@ -90,6 +90,8 @@ export const SFX = [
   { id: "torpedo-release", seconds: 1, loop: false, identity: "reconstruction", prompt: "One heavy aerial torpedo released from an aircraft mounting rack, a short latch snap and weighty metal linkage clunk, no propulsion sound and no explosion." },
   { id: "sbd-engine-start", seconds: 8, loop: false, identity: "reconstruction", prompt: "A plausible 1942 nine-cylinder aircraft radial engine starting, mechanical starter activity followed by several uneven combustion catches that settle into a low idle, no dramatic backfire." },
   { id: "sbd-engine-stop", seconds: 5, loop: false, identity: "reconstruction", prompt: "A nine-cylinder aircraft radial engine shutting down from idle, combustion pulses cease and rotating machinery slows naturally to rest, no explosion." },
+  { id: "tbd-engine-start", seconds: 8, loop: false, identity: "reconstruction", prompt: "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator starting, mechanical starter cranking followed by several uneven combustion catches that settle into a low puttering idle, no turbine whine and no dramatic backfire." },
+  { id: "tbd-engine-stop", seconds: 6, loop: false, identity: "reconstruction", prompt: "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator shutting down from idle, uneven low exhaust putter and propeller chops spacing out as it slows naturally to rest, no turbine whine, no electronic sweep and no explosion." },
   { id: "engine-rough", seconds: 8, loop: true, identity: "reconstruction", prompt: "Irregular missed combustion pulses and rough mechanical vibration from a damaged aircraft radial piston engine, sustained uneven running, no explosions and no music." },
   { id: "prop-windmill", seconds: 8, loop: true, identity: "reconstruction", prompt: "An unpowered aircraft propeller turning in steady airflow, soft repetitive mechanical rotation and air swish without any combustion or exhaust." },
   { id: "airframe-hit", seconds: 1, loop: false, identity: "reconstruction", prompt: "A short burst of small hard impacts puncturing thin aluminum aircraft skin near the listener, sharp metal ticks and a brief loose-panel rattle, no large explosion." },

@@ -64,6 +64,19 @@ const STATIONS: readonly IStation[] = [
   { job: "handler, tail walker", clip: "crew.wait", band: BLUE, x: -3.2, z: 18.1, yaw: 3.1 },
 ];
 
+/**
+ * Where the five men working the aircraft stand once the deck run starts, as an offset from
+ * their station in the aircraft's frame: sideways to the deck edge, out from under the wings.
+ * The rest of the party already stands clear of the launch path and holds its station.
+ */
+const CLEAR_OFFSET: Readonly<Record<number, readonly [number, number]>> = {
+  0: [-4.6, 1.2],
+  1: [-6.2, 1.0],
+  2: [6.2, 1.0],
+  3: [-6.5, 0.7],
+  4: [6.3, 1.1],
+};
+
 /** Height of the baked rig, set by tools/blender/rig-deck-crew.py and asserted by check-fleet. */
 const SOURCE_HEIGHT = 1.83;
 
@@ -111,6 +124,9 @@ export class DeckCrew {
   readonly group = new T.Group();
   /** Public so a capture run can prove the party is not twelve men moving as one. */
   readonly sailors: ISailor[] = [];
+  private readonly base: T.Vector3[] = [];
+  /** 0 crowded round the aircraft, 1 stood clear at the deck edge; eased toward its target. */
+  private clear = 0;
 
   constructor() {
     if (!source) throw new Error("Load the deck crew before constructing the flight-deck party.");
@@ -136,6 +152,7 @@ export class DeckCrew {
           node.receiveShadow = true;
         }
       });
+      this.base.push(player.root.position.clone());
       this.attachCapBand(player.root, station.band);
       player.play(station.clip);
       // Two men on the same clip must never move as one. Phase comes from the action's start
@@ -165,8 +182,21 @@ export class DeckCrew {
     head.add(band);
   }
 
-  update(dt: number): void {
-    for (const sailor of this.sailors) sailor.player.update(dt * sailor.rate);
+  /**
+   * Advance the party's clips, easing the men around the aircraft out to the deck edge while
+   * `clearTarget` is 1 (the deck run) and back to their stations when it returns to 0.
+   */
+  update(dt: number, clearTarget = 0): void {
+    this.clear += (clearTarget - this.clear) * Math.min(1, dt * 1.8);
+    if (Math.abs(clearTarget - this.clear) < 0.002) this.clear = clearTarget;
+    const eased = this.clear * this.clear * (3 - 2 * this.clear);
+    for (const [index, sailor] of this.sailors.entries()) {
+      sailor.player.update(dt * sailor.rate);
+      const offset = CLEAR_OFFSET[index];
+      if (!offset) continue;
+      const home = this.base[index];
+      sailor.player.root.position.set(home.x + offset[0] * eased, home.y, home.z + offset[1] * eased);
+    }
   }
 
   dispose(): void {

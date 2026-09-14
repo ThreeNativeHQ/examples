@@ -5,6 +5,8 @@
  * out of the batch so live flight state can drive them.
  */
 import * as T from "three";
+import { Fn, cos, float, mix, sin, texture, uniform, uv, vec2, vec3 } from "three/tsl";
+import { MeshStandardNodeMaterial } from "three/webgpu";
 
 const PBR = [
   "olive-frame",
@@ -57,6 +59,9 @@ export async function loadCockpitMaterials(base = "/assets/cockpit/", anisotropy
         load(`${id}-orm`, `${id}-orm.png`, false),
       ]),
       load("glass-normal", "glass-normal.png", false),
+      // The artificial horizon's two baked faces. See tools/bake-attitude.mjs.
+      load("attitude-moving", "attitude-moving.png", true),
+      load("attitude-overlay", "attitude-overlay.png", true),
       ...DIALS.map((d) => load(`dial-${d}`, `dial-${d}.png`, true)),
       ...LABELS.map((l) => load(`label-${l}`, `label-${l}.png`, true)),
     ]);
@@ -171,92 +176,62 @@ export function getCockpitMaterials(): CockpitMaterials | undefined {
 }
 
 interface AttitudeFace {
-  material: T.MeshStandardMaterial;
+  material: T.Material;
   update(pitch: number, roll: number): void;
 }
 
-/** Live artificial horizon: sky/ground and pitch ladder move, the aircraft symbol stays fixed. */
-function createAttitudeFace(): AttitudeFace | undefined {
-  if (typeof document === "undefined") return undefined;
-  const size = 256;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
-  const texture = new T.CanvasTexture(canvas);
-  texture.colorSpace = T.SRGBColorSpace;
-  texture.anisotropy = 8;
-  const material = new T.MeshStandardMaterial({ map: texture, emissiveMap: texture, emissive: 0xffffff, emissiveIntensity: 0.16, roughness: 0.9, metalness: 0.02 });
+/**
+ * Live artificial horizon: sky/ground and pitch ladder move, the aircraft symbol stays fixed.
+ *
+ * It used to redraw a 256² canvas and re-upload its `CanvasTexture` on every update — an external
+ * image upload per frame for a picture that only rotates and slides. The two faces are baked once
+ * by tools/bake-attitude.mjs and the motion is two scalars: the fragment maps its own dial pixel
+ * back through the old canvas transform and reads the static backing there.
+ *
+ * `SOURCE` and `BACKING` are the old dial's pixel scale and the baked backing's size; `LADDER` is
+ * its 112 px per radian of pitch. Changing any of them means rebaking.
+ */
+const SOURCE = 256;
+const BACKING = 1024;
+const LADDER = 112;
+
+function createAttitudeFace(moving: T.Texture | undefined, overlay: T.Texture | undefined): AttitudeFace | undefined {
+  if (!moving || !overlay) return undefined;
+  const pitchUniform = uniform(0);
+  const rollUniform = uniform(0);
+  const face = Fn(() => {
+    const dial = uv();
+    // The old canvas drew in pixels with y downward and a texture is flipped on upload, so this
+    // fragment's drawn-pixel position is (u·256, (1−v)·256), and `p` is that relative to the dial
+    // centre — the same `p` the canvas transform acted on.
+    const p = vec2(dial.x.mul(SOURCE).sub(SOURCE / 2), dial.y.oneMinus().mul(SOURCE).sub(SOURCE / 2));
+    // Inverse of `translate(centre); rotate(−roll)` followed by the pitch shift inside that frame.
+    const c = cos(rollUniform);
+    const s = sin(rollUniform);
+    const back = vec2(
+      p.x.mul(c).sub(p.y.mul(s)),
+      p.x.mul(s).add(p.y.mul(c)).sub(pitchUniform.mul(LADDER)),
+    ).add(BACKING / 2);
+    const sky = texture(moving, vec2(back.x.div(BACKING), back.y.div(BACKING).oneMinus()));
+    const symbol = texture(overlay, dial);
+    // The fixed aircraft symbol and top index sit over the transformed face, exactly as the second
+    // `ctx.save()` block used to composite them.
+    return vec3(mix(sky.rgb, symbol.rgb, symbol.a));
+  })();
+  const material = new MeshStandardNodeMaterial({ roughness: 0.9, metalness: 0.02 });
   material.name = "Live artificial horizon";
-  const TAU = Math.PI * 2;
-  const cx = size / 2;
-  const cy = size / 2;
-  const R = size / 2 - 3;
+  material.colorNode = face;
+  // The old material lit the dial with `emissive: 0xffffff, emissiveIntensity: 0.16` through the
+  // same image as `emissiveMap`; that product is this node, and dropping it would put the
+  // instrument into shadow the moment the canopy did.
+  material.emissiveNode = face.mul(0.16);
   const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
   return {
     material,
     update(pitch: number, roll: number) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, size, size);
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, 0, TAU);
-      ctx.clip();
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(-clamp(roll, -Math.PI, Math.PI));
-      const shift = clamp(pitch, -1.2, 1.2) * 112;
-      ctx.fillStyle = "#39628e";
-      ctx.fillRect(-2 * R, -2 * R, 4 * R, 2 * R + shift);
-      ctx.fillStyle = "#6d5433";
-      ctx.fillRect(-2 * R, shift, 4 * R, 2 * R);
-      ctx.fillStyle = "#e9e3cd";
-      ctx.fillRect(-2 * R, shift - 1.5, 4 * R, 3);
-      ctx.strokeStyle = "#dfe6ea";
-      ctx.fillStyle = "#dfe6ea";
-      ctx.font = "500 11px monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      for (let d = -30; d <= 30; d += 10) {
-        if (d === 0) continue;
-        const y = shift - (d * 112) / 57.2958;
-        const w = Math.abs(d) === 10 ? 22 : 34;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(-w, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-        ctx.fillText(String(Math.abs(d)), -w - 12, y);
-        ctx.fillText(String(Math.abs(d)), w + 12, y);
-      }
-      ctx.restore();
-      // Fixed aircraft reference symbol and top index.
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.strokeStyle = "#f0bd49";
-      ctx.lineWidth = 3;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      ctx.moveTo(-40, 0);
-      ctx.lineTo(-12, 0);
-      ctx.lineTo(0, 10);
-      ctx.lineTo(12, 0);
-      ctx.lineTo(40, 0);
-      ctx.stroke();
-      ctx.fillStyle = "#f0bd49";
-      ctx.beginPath();
-      ctx.arc(0, 0, 3, 0, TAU);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(0, -R + 3);
-      ctx.lineTo(-6, -R + 14);
-      ctx.lineTo(6, -R + 14);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-      ctx.restore();
-      texture.needsUpdate = true;
+      // The same clamps the canvas applied, so the dial still stops rather than wrapping.
+      pitchUniform.value = clamp(pitch, -1.2, 1.2);
+      rollUniform.value = clamp(roll, -Math.PI, Math.PI);
     },
   };
 }
@@ -452,7 +427,7 @@ export function createCockpitInterior(m: CockpitMaterials): CockpitInterior {
     needles.push(ref);
     return ref;
   };
-  const attitudeFace = createAttitudeFace();
+  const attitudeFace = createAttitudeFace(m.textures["attitude-moving"], m.textures["attitude-overlay"]);
   const gauge = (type: string, x: number, y: number, r: number) => {
     const z = -0.387;
     box((r + 0.019) * 2, (r + 0.019) * 2, 0.017, [x, y, z - 0.01], m.black, 0.02);
@@ -761,7 +736,9 @@ export function createCockpitInterior(m: CockpitMaterials): CockpitInterior {
       if (mesh.isMesh) geos.add(mesh.geometry);
     });
     for (const geo of geos) geo.dispose();
-    attitudeFace?.material.map?.dispose();
+    // The two baked horizon faces are session-cached textures like every other image here, shared
+    // by every cockpit ever built; only this interior's own material is owned. Disposing the image
+    // with it left the next aircraft's dial black.
     attitudeFace?.material.dispose();
   }
 
@@ -1022,6 +999,10 @@ function createGeometryTools(Tg: typeof T, materials: CockpitMaterials, root: T.
       im.receiveShadow = true;
       im.instanceMatrix.needsUpdate = true;
       current!.add(im);
+      // Same again: every screw's placement is in the instance matrices, and the instanced mesh's
+      // own transform is final from here. Its world matrix still follows its parent.
+      im.updateMatrix();
+      im.matrixAutoUpdate = false;
     }
     return bolts.length;
   }
@@ -1078,6 +1059,13 @@ function createGeometryTools(Tg: typeof T, materials: CockpitMaterials, root: T.
         o.receiveShadow = !(o.material as T.Material).transparent;
         if ((o.material as T.Material).transparent) o.renderOrder = 10;
         group.add(o);
+        // Every vertex here was already baked through its source `matrixWorld`, so this merged
+        // mesh's own local transform is identity and can never change again. Compose it once and
+        // stop recomposing it every frame. `matrixWorldAutoUpdate` stays on, so the aircraft, the
+        // carrier under it and the camera still carry the whole cockpit exactly as before — only
+        // the local recomposition of a constant stops.
+        o.updateMatrix();
+        o.matrixAutoUpdate = false;
       }
     }
   }

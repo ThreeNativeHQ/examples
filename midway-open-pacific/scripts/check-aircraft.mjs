@@ -291,6 +291,18 @@ try {
   assert.equal(tbd.userData.torpedoLoad.visible, false, "releasing the store hides it once");
   assert.ok(tbd.userData.arrestingHook, "the Devastator carries its hook");
   assert.ok(tbd.userData.cockpit, "the Devastator publishes the pilot eye");
+  // Midway-era US star-in-circle on both builds: upper outer wings plus aft fuselage sides.
+  for (const [label, group] of [["hero", tbd], ["parked", parkedTbd]]) {
+    const marks = [];
+    group.traverse((node) => {
+      if (node.isMesh && /us-insignia/.test(node.name)) marks.push(node);
+    });
+    assert.equal(marks.length, 4, `${label} TBD carries four US marks: ${marks.map((m) => m.name)}`);
+    for (const mark of marks) {
+      assert.ok(mark.material.map, `${label} ${mark.name} has its star texture`);
+      assert.equal(mark.castShadow, false, `${label} ${mark.name} casts no shadow`);
+    }
+  }
   const count = (group) => {
     let triangles = 0;
     group.traverse((node) => {

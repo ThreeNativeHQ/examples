@@ -519,8 +519,8 @@ try {
   // the decks put another section out, without risking the whole capture on the player being shot
   // down before the frame is taken.
   await seconds(5);
-  // Neither supplied torpedo airframe is on the imported-AI path, so their clause can only be
-  // exercised if some are actually flying. Launch one each through the game's own `Battle.launch`
+  // Every torpedo airframe flies a real model, so their clause can only be exercised if some
+  // are actually flying. Launch one each through the game's own `Battle.launch`
   // rather than fabricating a record; if a deck refuses, the clause is reported as unexercised.
   const spawned = await page.evaluate(() => {
     const b = window.midway.battle;
@@ -538,8 +538,9 @@ try {
 
   const identity = await page.evaluate(() => {
     const s = window.midway;
-    // The drawn identity, read from the mesh the renderer is drawing. The Zero names itself; the
-    // imported Douglas tags itself; a procedural hull names no airframe at all, which is the point.
+    // The drawn identity, read from the mesh the renderer is drawing. Every AI mesh tags its own
+    // sim airframe (`userData.airframe`, written by `buildAircraft`), including the same-team
+    // stand-ins — the Wildcat as the Douglas, the Val as the Kate — so identity is read, not guessed.
     const drawn = (m) => (!m ? "<no-mesh>" : (m.userData.airframe ?? (m.userData.douglas ? "sbd" : null)));
     const rows = [];
     const table = {};
@@ -552,9 +553,8 @@ try {
         kind: a.kind,
         airframe: a.airframe,
         drawn: drawn(m),
-        // Procedural airframes from `makeAircraft` carry no `.name`; only the imported models do.
         // Presence of a mesh is `hasMesh`, and identity is `drawn` — conflating the two with `name`
-        // reported every procedural aircraft as undrawn.
+        // once reported every stand-in aircraft as undrawn.
         hasMesh: !!m,
         name: m?.name ?? null,
         detailed: !!m?.userData.detailed,
@@ -574,19 +574,21 @@ try {
     if (row.drawn !== null && row.drawn !== "<no-mesh>")
       assert.equal(row.drawn, row.airframe, `${row.team}/${row.kind} drawn as ${row.drawn}, not ${row.airframe}`);
   }
-  // AC-3's clause worth catching: a Devastator or Kate must never wear the Dauntless silhouette.
-  const dauntlessFallback = live.filter(
-    (r) => (r.airframe === "tbd" || r.airframe === "kate") && (r.douglas || r.drawn === "sbd" || /Devastator|SBD-3/.test(r.name || "")),
+  // AC-3's clause worth catching: a torpedo plane must never wear the Douglas silhouette. The
+  // TBD flies the Devastator and the Kate the Kate; the declared stand-ins are the Wildcat as the
+  // Douglas and the Val as the Kate, and nothing else borrows a sibling's model.
+  const douglasFallback = live.filter(
+    (r) => (r.airframe === "tbd" || r.airframe === "kate") && (r.douglas || r.drawn === "sbd" || /SBD-3/.test(r.name || "")),
   );
   assert.equal(
-    dauntlessFallback.length,
+    douglasFallback.length,
     0,
-    `no TBD/Kate is drawn with the Douglas/SBD model: ${JSON.stringify(dauntlessFallback)}`,
+    `no TBD/Kate is drawn with the Douglas/SBD model: ${JSON.stringify(douglasFallback)}`,
   );
   const tbdKate = live.filter((r) => r.airframe === "tbd" || r.airframe === "kate");
   console.log(
     "AI airframes",
-    JSON.stringify({ table: identity.table, tbdKate: tbdKate.map((r) => `${r.team}/${r.kind}/${r.airframe} -> ${r.drawn ?? "procedural"} (${r.name})`) }),
+    JSON.stringify({ table: identity.table, tbdKate: tbdKate.map((r) => `${r.team}/${r.kind}/${r.airframe} -> ${r.drawn ?? "unidentified"} (${r.name})`) }),
   );
 
   // Frame the closest cross-team pair, so the one AI frame really does hold both sides.
@@ -630,8 +632,8 @@ try {
   console.log("AI frame", JSON.stringify({ a: pair.a, b: pair.b, sep: Math.round(pair.d) }));
 
   // ---- 5. LOD loan at near and far range, and the disposal dispatch. ----------------------------
-  // Make sure an imported-capable airframe exists (Japanese fighter, or American bomber — the two
-  // the view has a real model for), through the game's own launch path if none is up yet.
+  // Make sure a sample airframe exists (Japanese fighter, or American bomber), through the
+  // game's own launch path if none is up yet.
   await page.evaluate(() => {
     const b = window.midway.battle;
     const capable = (a) => (a.team === "jp" && a.kind === "fighter") || (a.team === "us" && a.kind === "bomber");
@@ -646,7 +648,7 @@ try {
     const a = b.aircraft.find((x) => x.hp > 0 && x.mode !== "crashing" && capable(x));
     return a ? { id: a.id, team: a.team, kind: a.kind, airframe: a.airframe } : null;
   });
-  assert.ok(target, "an imported-capable AI aircraft is airborne for the LOD loan");
+  assert.ok(target, "a sample AI aircraft is airborne for the LOD loan");
 
   // Near: player inside the 1100 m grant, so the imported airframe is loaned.
   await freezeCamera();
@@ -686,7 +688,7 @@ try {
   await requireSubject("airframe-lod-near", { id: target.id });
   console.log("LOD near", JSON.stringify(nearState));
 
-  // Far: 6 km out, past the 1500 m keep, so detail is released and the procedural level rebuilt.
+  // Far: 6 km out, past the 1500 m keep, so the loan is released and the same real model rebuilt.
   await page.evaluate((id) => {
     const b = window.midway.battle;
     const a = b.aircraft.find((x) => x.id === id);
@@ -708,7 +710,7 @@ try {
     };
   }, target.id);
   assert.equal(farState.detailed, false, `beyond 1500 m the loan is released: ${JSON.stringify(farState)}`);
-  assert.ok(farState.replaced, `the released mesh is rebuilt at the procedural level: ${JSON.stringify(farState)}`);
+  assert.ok(farState.replaced, `the released mesh is rebuilt as the same real model: ${JSON.stringify(farState)}`);
   assert.equal(farState.oldDetached, true, `the released detailed mesh is detached: ${JSON.stringify(farState)}`);
   assert.equal(farState.oldGoneFromScene, true, `the released detailed mesh is out of the scene: ${JSON.stringify(farState)}`);
   await page.evaluate((id) => {
@@ -730,7 +732,7 @@ try {
   await requireSubject("airframe-lod-far", { id: target.id });
   console.log("LOD far", JSON.stringify(farState));
 
-  // The cap: park the player among every imported-capable AI and confirm the loan count stays 10.
+  // The cap: park the player among every sample AI and confirm the loan count stays 10.
   const eligible = await page.evaluate(() => {
     const b = window.midway.battle;
     const capable = (a) => (a.team === "jp" && a.kind === "fighter") || (a.team === "us" && a.kind === "bomber");

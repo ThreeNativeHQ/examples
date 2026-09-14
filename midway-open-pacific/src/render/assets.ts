@@ -156,7 +156,8 @@ function roundel(team: string): THREE.CanvasTexture {
 }
 
 const roundelM: Record<string, THREE.MeshBasicMaterial> = {};
-function emblem(team: string): THREE.MeshBasicMaterial {
+/** Shared national-insignia decal material: Midway-era US star-in-circle, no bars. */
+export function emblem(team: string): THREE.MeshBasicMaterial {
   if (!roundelM[team]) roundelM[team] = new THREE.MeshBasicMaterial({ map: roundel(team), transparent: true, depthWrite: false, side: THREE.DoubleSide });
   return roundelM[team];
 }

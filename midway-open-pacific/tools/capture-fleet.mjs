@@ -220,7 +220,9 @@ try {
   // Inventory-driven deck park: both teams, correct airframe, bounded aft slots.
   const STATION = { wildcat: 72, sbd: 88, tbd: 104, zero: 72, val: 88, kate: 104 };
   const TEAM_TYPES = { us: ["wildcat", "sbd", "tbd"], jp: ["zero", "val", "kate"] };
-  const MODEL_NAME = { tbd: /Devastator/, kate: /B5N2/, zero: /A6M3/, sbd: /SBD-3/ };
+  // Every parked type is a real model. The Wildcat stands in as the Douglas SBD and the Val as
+  // the Kate — same-team substitutions, never the procedural silhouette.
+  const MODEL_NAME = { wildcat: /SBD-3/, sbd: /SBD-3/, tbd: /Devastator/, zero: /A6M3/, val: /B5N2/, kate: /B5N2/ };
   const readPark = () =>
     page.evaluate(() => {
       const s = window.midway;
@@ -269,9 +271,8 @@ try {
     for (const p of c.parked) {
       assert.equal(p.pos[0], -1, `${c.name}/${p.type} parks on the measured aft line`);
       assert.equal(p.pos[2], STATION[p.type], `${c.name}/${p.type} parks in its own station`);
-      const imported = Object.prototype.hasOwnProperty.call(MODEL_NAME, p.type);
-      assert.equal(p.imported, imported, `${c.name}/${p.type} uses the ${imported ? "imported" : "procedural"} model`);
-      if (imported) assert.ok(MODEL_NAME[p.type].test(p.name), `${c.name}/${p.type} is the right model: ${p.name}`);
+      assert.equal(p.imported, true, `${c.name}/${p.type} uses a real model, never the procedural silhouette`);
+      assert.ok(MODEL_NAME[p.type].test(p.name), `${c.name}/${p.type} is the right model: ${p.name}`);
     }
   }
   console.log("deck park", JSON.stringify(park.map((c) => ({ name: c.name, team: c.team, parked: c.parked.map((p) => p.type) }))));

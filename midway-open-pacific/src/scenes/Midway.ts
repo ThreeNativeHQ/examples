@@ -265,6 +265,7 @@ export class Midway extends Scene<GameState, undefined> {
     this.audio.update(
       {
         cockpit: this.world.cameraMode === 1 && !this.world.followBomb,
+        airframe: p.airframe,
         onDeck: onShip,
         nearPA: nearShip,
         listener: { x: this.camPos.x, y: this.camPos.y, z: this.camPos.z },
@@ -380,7 +381,7 @@ export class Midway extends Scene<GameState, undefined> {
     }
     this.audio.start();
     this.battle.start(airborne);
-    if (!airborne) this.audio.event({ type: "engineStart" });
+    if (!airborne) this.audio.event({ type: "engineStart", airframe: this.battle.player.airframe });
     this.updateLoadoutUI();
     $("briefing").classList.add("hidden");
     $("flight-ui").classList.remove("hidden");
@@ -539,6 +540,11 @@ export class Midway extends Scene<GameState, undefined> {
         break;
       case "KeyN":
         p.flaps = p.flaps < 0.15 ? 0.33 : p.flaps < 0.7 ? 1 : 0;
+        // The SBD's dive brakes ARE its split flaps: one surface driven by
+        // max(flapPos, brakePos). A flap-up order must release the brakes too, or the
+        // panels (and their drag) stay out against the command and the wing never
+        // comes clean. The TBD has no dive brakes, so it keeps its own state.
+        if (p.flaps === 0 && p.airframe !== "tbd") p.brakes = false;
         this.audio.event({ type: "flap" });
         this.hud.toast(`FLAPS ${p.flaps === 0 ? "UP" : p.flaps < 0.7 ? "TAKEOFF" : "LANDING"}`);
         break;
@@ -568,7 +574,7 @@ export class Midway extends Scene<GameState, undefined> {
         break;
       case "KeyI":
         p.engineCut = !p.engineCut;
-        this.audio.event({ type: "engine", action: p.engineCut ? "stop" : "start" });
+        this.audio.event({ type: "engine", action: p.engineCut ? "stop" : "start", airframe: p.airframe });
         this.hud.toast(p.engineCut ? "ENGINE FUEL CUTOFF — ENGINE STOPPING / WING FIRES UNAFFECTED" : "ENGINE FUEL VALVE OPEN");
         break;
       case "KeyR":

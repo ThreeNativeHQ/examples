@@ -97,7 +97,11 @@ export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
     const distance=cameraPosition.sub(worldPos).length();
     const analytic:any=swell.normalNode({point:world,time});
     const impact:any=rippleNormal?rippleNormal(world):vec2(0);
-    const detail=float(1).div(distance.mul(.003).add(1)).mul(smoothstep(.4,4,footprint).oneMinus());
+    // How much of a wave a pixel can still resolve. Past a ~4 m footprint the swell is sub-pixel and
+    // the texture ripples mip to flat, which is what turned every sea beyond ~130 m into a mirror.
+    // The lost slope does not vanish physically, it becomes roughness — so it is spent as roughness.
+    const subpixel=smoothstep(.4,4,footprint).toVar();
+    const detail=float(1).div(distance.mul(.003).add(1)).mul(subpixel.oneMinus());
     // Both octaves reach the normal only through `detail`, so below 0.02 they are multiplied to a
     // normal shift of at most ~0.01: two texture fetches bought for something no pixel can show.
     const ripple=vec2(0,0).toVar();
@@ -114,18 +118,20 @@ export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
     // One prefiltered sky lookup now serves both the mirror term and the haze term. Past a few
     // kilometres the sea reflects that same sky it dissolves into, so the half-res mirror read
     // stops buying a distinct image; the background and this lookup share the same 0.65 intensity.
-    const sky=reflectedSky(vec3(view.x,.015,view.z).normalize());
+    const sky=reflectedSky(vec3(view.x,.015,view.z).normalize(),subpixel.mul(.45).add(.3));
     const body = vec3(.005,.030,.048).add(vec3(.004,.020,.022).mul(worldHeight.max(0)))
       .add(vec3(.014,.066,.071).mul(rippleFoam?rippleFoam(world).mul(1.6).min(1):float(0)));
     const nh = dot(normal, view.add(sun).normalize()).max(0);
     const nl = dot(normal, sun).max(.001);
     const pixelVariance = dot(normal.dFdx(), normal.dFdx()).max(dot(normal.dFdy(), normal.dFdy()));
-    const roughness = pixelVariance.mul(1.8).add(.075 ** 2).sqrt().clamp(.075, .35);
+    const roughness = pixelVariance.mul(1.8).add(.075 ** 2).sqrt().max(subpixel.mul(.20).add(.075)).min(.42);
     const offset=normal.xz.mul(.017).mul(detail);
     // Near water keeps the sharp, offset mirror. Far water uses the sky lookup above and skips the
     // half-res reflection read entirely.
+    // Crossfading on `subpixel` instead of switching on distance also removes the FAR_RANGE seam:
+    // by 8000 m the footprint is ~245 m, so the near branch already evaluates to the sky lookup.
     const mirror=sky.toVar();
-    If(distance.lessThan(FAR_RANGE), () => mirror.assign(surface.reflectionAt(offset)));
+    If(distance.lessThan(FAR_RANGE), () => mirror.assign(mix(surface.reflectionAt(offset),sky,subpixel)));
     // Beyond FAR_RANGE the seabed is more than the 14 m clamp behind every fragment a pixel wide,
     // so thickness is its maximum there and the depth read (and, below, refraction) is dead weight.
     const thickness=float(14).toVar();
@@ -136,7 +142,9 @@ export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
     const beneath=vec3(0,0,0).toVar();
     If(transmission.greaterThan(0), () => beneath.assign(surface.refractionAt(normal.xz.mul(.008)).mul(transmission)));
     const water=body.mul(transmission.oneMinus()).add(beneath.mul(vec3(.45,.72,.76)));
-    const result = mix(water, mirror, fresnel.mul(.91).add(.065).clamp(0,.96)).toVar();
+    // Rough water does not mirror at grazing angles the way a flat facet does: the microfacets that
+    // survive are not aligned with the view, so reflectance falls off with roughness.
+    const result = mix(water, mirror, fresnel.mul(.91).add(.065).mul(roughness.mul(-.9).add(1)).clamp(0,.96)).toVar();
     const a2 = roughness.pow(4);
     const distribution = a2.div(nh.pow(2).mul(a2.sub(1)).add(1).pow(2).mul(Math.PI).add(.0000002));
     const masking = nv.div(nv.mul(roughness.oneMinus()).add(roughness)).mul(nl.div(nl.mul(roughness.oneMinus()).add(roughness)));

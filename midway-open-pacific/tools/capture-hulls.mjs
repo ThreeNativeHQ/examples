@@ -203,12 +203,9 @@ try {
    * AC-22's "no blank/missing frame counts as evidence": the criterion is about whether the subject
    * reached the frame, and a person still has to look at the frame to judge the rest.
    *
-   * What this number does **not** speak about is LOD. `LOD.update` runs inside the render, against
-   * the camera the renderer is given, and this walks the graph outside that — so it reports the
-   * detailed level's triangles at both ranges and the two rows come out identical. The frames
-   * themselves do show the switch: `hull-akagi-engagement.png` at 1,955 m is plainly the procedural
-   * silhouette and `hull-akagi-close.png` at 352 m is plainly the imported hull. Read the LOD clause
-   * off the pictures, never off these counts.
+   * What this number does **not** speak about is range. Every hull draws its real model at every
+   * range — there is no procedural far level any more — so the two rows come out identical by
+   * design. Read the long-range readability off the pictures, never off these counts.
    */
   const subjectInFrame = (id) =>
     page.evaluate((id) => {

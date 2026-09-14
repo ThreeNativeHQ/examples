@@ -552,7 +552,30 @@ const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1)
 // 27 — no orphaned cues: every single cue in CUE_FILES is defined and recognized.
 {
   const definedCues = Object.keys(CUE_FILES);
-  assert.equal(definedCues.length, 72, `expected 72 catalog cues, got ${definedCues.length}`);
+  assert.equal(definedCues.length, 77, `expected 77 catalog cues, got ${definedCues.length}`);
+}
+
+// 28 — the TBD bank follows the torpedo loadout: its layers sound, the SBD bank stays silent,
+// and its start/stop cues route by airframe.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  for (let i = 0; i < 30; i += 1) step(s, bus, { cockpit: false, airframe: "tbd", rpm: 0.5, ias: 120 });
+  assert.ok(gainOf(bus, "tbdEngineExtCruise") > 0.2, "the TBD exterior engine did not sound on the torpedo loadout");
+  assert.equal(gainOf(bus, "engineExtCruise"), 0, "the SBD bank doubled the TBD engine");
+  for (let i = 0; i < 30; i += 1) step(s, bus, { cockpit: true, airframe: "tbd", rpm: 0.5, ias: 120 });
+  assert.ok(gainOf(bus, "tbdEngineIntCruise") > 0.2, "the TBD interior engine did not sound in the cockpit");
+
+  const bus2 = new FakeBus();
+  const s2 = new Soundscape(allBuffers(), bus2);
+  s2.update(listener(), false, 1 / 60);
+  s2.event({ type: "engineStart", airframe: "tbd" });
+  assert.ok(bus2.playCalls.some((c) => c.key === "tbdEngineStart"), "TBD engine start did not reach its cue");
+  bus2.listener.context.currentTime += 1.5;
+  s2.event({ type: "engine", action: "stop", airframe: "tbd" });
+  assert.ok(bus2.playCalls.some((c) => c.key === "tbdEngineStop"), "TBD engine stop did not reach its cue");
+  s2.event({ type: "engineStart" });
+  assert.ok(bus2.playCalls.some((c) => c.key === "engineStart"), "the default engine start left its SBD cue");
 }
 
 function listener(over = {}) {
@@ -575,4 +598,4 @@ function speechBuffers(entries) {
   return new Map(Object.entries(entries).map(([slug, duration]) => [`speech:${slug}`, { duration, __key: `speech:${slug}` }]));
 }
 
-console.log("check-audio: 28 checks passed");
+console.log("check-audio: 29 checks passed");

@@ -58,6 +58,9 @@ export const CUE_FILES: Record<string, string> = {
   tbdEngineExtIdle: "audio/tbd-engine-exterior-idle-01.ogg",
   tbdEngineExtCruise: "audio/tbd-engine-exterior-cruise-01.ogg",
   tbdEngineExtPower: "audio/tbd-engine-exterior-power-01.ogg",
+  tbdEngineIntIdle: "audio/tbd-engine-interior-idle-01.ogg",
+  tbdEngineIntCruise: "audio/tbd-engine-interior-cruise-01.ogg",
+  tbdEngineIntPower: "audio/tbd-engine-interior-power-01.ogg",
   wildcatEngineExtIdle: "audio/wildcat-engine-exterior-idle-01.ogg",
   wildcatEngineExtCruise: "audio/wildcat-engine-exterior-cruise-01.ogg",
   wildcatEngineExtPower: "audio/wildcat-engine-exterior-power-01.ogg",
@@ -79,6 +82,8 @@ export const CUE_FILES: Record<string, string> = {
   propWindmill: "audio/prop-windmill.ogg",
   engineStart: "audio/sbd-engine-start.ogg",
   engineStop: "audio/sbd-engine-stop.ogg",
+  tbdEngineStart: "audio/tbd-engine-start.ogg",
+  tbdEngineStop: "audio/tbd-engine-stop.ogg",
   diveBrake: "audio/sbd-dive-brake.ogg",
   buffet: "audio/airframe-buffet.ogg",
   cockpitRattle: "audio/cockpit-rattle.ogg",
@@ -128,16 +133,23 @@ const SPEECH_FILES: Record<string, string> = Object.fromEntries(
   speechSlugList().map((slug) => [`speech:${slug}`, `audio/voice/${slug}.ogg`]),
 );
 
-/** Engine layers, per perspective and operating state. */
+/** Engine layers, per perspective and operating state. The SBD bank keeps the historic keys. */
 const ENGINE_LAYERS = {
   exterior: ["engineExtIdle", "engineExtCruise", "engineExtPower"],
   interior: ["engineIntIdle", "engineIntCruise", "engineIntPower"],
+} as const;
+/** The TBD bank the player hears when flying the torpedo loadout; AI TBDs reuse the exterior side. */
+const TBD_ENGINE_LAYERS = {
+  exterior: ["tbdEngineExtIdle", "tbdEngineExtCruise", "tbdEngineExtPower"],
+  interior: ["tbdEngineIntIdle", "tbdEngineIntCruise", "tbdEngineIntPower"],
 } as const;
 const STATE_CENTERS = [0.16, 0.5, 0.9];
 
 /** The listener's state this frame. `cockpit` drives the perspective cross-fade. */
 export interface IListenerState {
   cockpit: boolean;
+  /** Player airframe id (`sbd` default); selects the SBD vs TBD engine bank. */
+  airframe?: string;
   onDeck: boolean;
   /** Within shipboard PA range; gates the `pa` channel only. */
   nearPA?: boolean;
@@ -161,6 +173,8 @@ export interface IListenerState {
  */
 export interface ISoundEvent {
   readonly type?: string;
+  /** Airframe selecting an airframe-specific cue (engine start/stop); defaults to SBD. */
+  readonly airframe?: string;
   /** Explicit cue override; a weapon family key (`gun50`, `aa25`) or asset key. */
   readonly cue?: string;
   readonly weapon?: string;
@@ -219,6 +233,8 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
   flapTravel: { volume: 0.45, cooldown: 0.5 },
   engineStart: { volume: 0.6, cooldown: 1 },
   engineStop: { volume: 0.6, cooldown: 1 },
+  tbdEngineStart: { volume: 0.6, cooldown: 1 },
+  tbdEngineStop: { volume: 0.6, cooldown: 1 },
   radioKey: { volume: 0.25, cooldown: 0.2 },
   generalAlarm: { volume: 0.8, cooldown: 3 },
   albatross: { volume: 0.5, cooldown: 8 },
@@ -381,7 +397,7 @@ export class Soundscape {
       if (!buffer) return;
       this.#loops.set(key, this.bus.music(buffer, { loop: true, volume, fade: 0.2 }));
     };
-    for (const key of [...ENGINE_LAYERS.exterior, ...ENGINE_LAYERS.interior]) start(key, 0);
+    for (const key of [...ENGINE_LAYERS.exterior, ...ENGINE_LAYERS.interior, ...TBD_ENGINE_LAYERS.exterior, ...TBD_ENGINE_LAYERS.interior]) start(key, 0);
     start("airflowExterior", 0);
     start("airflowCockpit", 0);
     start("engineRough", 0);
@@ -418,7 +434,10 @@ export class Soundscape {
     const rpm = p.rpm ?? p.throttle ?? 0;
     const dead = !!p.engineCut;
     const rough = clamp01(p.damage ?? 0);
-    for (const [perspective, keys] of Object.entries(ENGINE_LAYERS)) {
+    // The flyable Douglas bank follows the loadout: SBD by default, TBD on the torpedo loadout.
+    const banks = p.airframe === "tbd" ? TBD_ENGINE_LAYERS : ENGINE_LAYERS;
+    const idleBanks = p.airframe === "tbd" ? ENGINE_LAYERS : TBD_ENGINE_LAYERS;
+    for (const [perspective, keys] of Object.entries(banks) as Array<[string, readonly string[]]>) {
       const side = perspective === "interior" ? inside : 1 - inside;
       keys.forEach((key, i) => {
         const weight = (dead ? 0 : side * stateWeight(rpm, STATE_CENTERS[i] ?? 0.5)) * (1 - rough * 0.7);
@@ -426,6 +445,8 @@ export class Soundscape {
         this.#setRate(key, 0.78 + rpm * 0.5, 0.2);
       });
     }
+    // The parked bank stays silent so switching airframes never doubles the engine.
+    for (const keys of Object.values(idleBanks)) for (const key of keys) this.#setGain(key, 0, 0.18);
     this.#setGain("engineRough", dead ? 0 : rough * 0.8, 0.25);
     this.#setGain("propWindmill", dead && (p.ias ?? 0) > 30 ? 0.7 : 0, 0.25);
     // Buffeting is the honest replacement for a modern stall horn: it rises with stall and load.
@@ -513,12 +534,14 @@ export class Soundscape {
         return "flapTravel";
       case "wire":
         return "wireCatch";
-      case "engine":
-        return e.action === "stop" ? "engineStop" : "engineStart";
+      case "engine": {
+        const tbd = e.airframe === "tbd";
+        return e.action === "stop" ? (tbd ? "tbdEngineStop" : "engineStop") : tbd ? "tbdEngineStart" : "engineStart";
+      }
       case "engineStart":
-        return "engineStart";
+        return e.airframe === "tbd" ? "tbdEngineStart" : "engineStart";
       case "engineStop":
-        return "engineStop";
+        return e.airframe === "tbd" ? "tbdEngineStop" : "engineStop";
       case "depthCharge":
         return "depthCharge";
       case "collapse":
