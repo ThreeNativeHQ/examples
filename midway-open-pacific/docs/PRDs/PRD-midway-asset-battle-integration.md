@@ -618,6 +618,10 @@ an attack on other shipping. Update that same target record when selecting a kno
 contact; cover both an unassigned aircraft and a retask in `check-carrier-cycle.mjs` using
 copies of its already-delivered report fixture. Owns only that selection branch in `tactics.ts`
 and its regression; the concurrent flight/departure changes remain with their owner.
+**Evidence:** The focused check first failed with `null !== 'ship-8'`. The regression now passes
+for initial assignment and retask. The full carrier-cycle check passes: 84 losses and 243 cap
+refusals with every airframe conserved, informed versus blind strike launches 20 versus 0,
+stale-report drift and repeated-seed equality. Typecheck and independent review pass.
 
 **Status:** IN PROGRESS
 **Remaining:** AI engine flight, complete aircraft articulation, measured carrier contact geometry and full player/deck inventory acceptance.

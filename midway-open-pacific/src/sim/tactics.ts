@@ -131,7 +131,10 @@ export function selectNavalTarget(b: Any, a: Any): Any {
   );
   if (a.wing && b.command === "strike" && b.target) {
     const c = candidates.find((c: Any) => c.id === b.target);
-    if (c) return believedTarget(b, c);
+    if (c) {
+      a.target = c.id;
+      return believedTarget(b, c);
+    }
   }
   if (!a.target && a.section !== undefined) {
     const mate = b.aircraft.find(
