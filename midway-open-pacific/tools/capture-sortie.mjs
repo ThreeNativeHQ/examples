@@ -168,6 +168,21 @@ try {
   await seconds(1);
   await page.screenshot({ path: `${OUT}/03-approach.png` });
 
+  // Long return/contact cues must push radio messages down instead of painting over them.
+  for (const viewport of [{ width: 960, height: 560 }, { width: 1400, height: 800 }]) {
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(300);
+    const layout = await page.evaluate(() => {
+      const bounds = (selector) => document.querySelector(selector).getBoundingClientRect().toJSON();
+      return { mission: bounds('.mission'), radio: bounds('#radio-log'), instruments: bounds('.instruments') };
+    });
+    assert.ok(layout.radio.y >= layout.mission.bottom + 8, `radio clears mission at ${viewport.width}px: ${JSON.stringify(layout)}`);
+    assert.ok(layout.radio.height >= 36, `latest radio message has readable space: ${JSON.stringify(layout)}`);
+    assert.ok(layout.radio.bottom <= layout.instruments.y - 8, `radio clears instruments: ${JSON.stringify(layout)}`);
+    await page.screenshot({ path: `${OUT}/03-hud-${viewport.width}.png` });
+    log("HUD layout", { viewport, ...layout });
+  }
+
   // ---- 4. The short-sortie debrief ------------------------------------------------------------
   const arrival = await page.evaluate(() => {
     const b = window.midway.battle;

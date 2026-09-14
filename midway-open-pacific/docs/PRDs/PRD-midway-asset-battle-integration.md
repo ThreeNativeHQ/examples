@@ -503,7 +503,9 @@ but `public/assets/aircraft.*.glb` should be treated as that lane's to finish. A
 
 **Concurrent review lane (AC-7/24, 2026-09-13):** Codex `battle-review`, branch
 `codex/battle-review`, base `bc233e9`, checkout
-`/home/joao/projects/threenative/sandbox/.worktrees/battle-review` (cleanup pending).
+`/home/joao/projects/threenative/sandbox/.worktrees/battle-review` (removed after squash;
+captures preserved in the primary checkout). Further work runs directly on
+`midway/asset-battle-integration`, as requested by the user.
 Owns `src/sim/carrier-ops.ts`, its focused check and the minimum `Battle.wreckAircraft`
 timer initialization. Aircraft, hull preparation, presentation and the other lane's
 `check-carrier-cycle.mjs` edits remain with their owners. Review found that service and launch
@@ -589,7 +591,26 @@ unchanged. A missed bow clears descent guidance regardless of altitude and resto
 target. The normal-entry regression first failed with a lost result at 523.48 seconds; with the
 lineup correction it recovers at 484.93 seconds, 100% airframe and one confirmed wing hit.
 The focused low-bolter regression also failed first: final assist stayed engaged alongside the
-bow at deck height plus 2 m. Independent code review: PASS. Final browser acceptance is pending.
+bow at deck height plus 2 m. Independent code review: PASS. The wrapped WebGPU browser run
+passes on NVIDIA Turing: recon recovered in 264.27 seconds with 100% airframe; ordered-wing
+strike recovered in 374.78 seconds with one wing hit, zero player hits and 99.5% airframe.
+Both are keys-only after the briefing and below the 720-second bound, with zero console/page
+errors. Inspected both debriefs and the active return frame in
+`screenshots/battle-review-natural-final/`. The combined current-branch flight check also
+passes, with its newer battle systems producing a 594.87-second recovered wing strike.
+Repairs were squashed onto `midway/asset-battle-integration` as `b192171`.
+
+**HUD follow-up (AC-24):** The return frame exposes overlapping mission and radio text at
+960×560. Owns the mission/radio markup in `index.html`, its rules in `src/style.css`, and the
+matching browser layout assertions in `tools/capture-sortie.mjs`. Put both panels in normal
+column flow, keeping the existing viewport-dependent widths and limiting overflow above the
+instruments. Verify their measured bounds at 960×560 and 1400×800 and inspect the live frames.
+No native claim or UI rewrite is part of this repair.
+**Evidence:** Current-branch `capture-sortie.mjs` passes, including weapon credit/scars,
+pause/debrief restart and limited service. Mission-to-radio spacing is 12 px at both sizes;
+the 960×560 radio area retains 54.92 px and clears the instruments by 27 px. Inspected
+`screenshots/battle-review-hud/03-hud-{960,1400}.png`. Vite build, script syntax, whitespace
+checks and independent read-only review pass. The existing fixed radio top is removed.
 
 **Status:** IN PROGRESS
 **Remaining:** AI engine flight, complete aircraft articulation, measured carrier contact geometry and full player/deck inventory acceptance.
