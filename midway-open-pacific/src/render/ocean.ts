@@ -9,6 +9,12 @@ import {
 import { MeshBasicNodeMaterial, type Node } from "three/webgpu";
 
 /** The reference's swell spectrum; CPU and shader sample this exact same field. */
+/**
+ * The layer the water's reflection draws. An object on it is **also** on layer 0, so the main camera
+ * is unaffected and only the mirrored pass narrows.
+ */
+export const REFLECTED_LAYER = 1;
+
 export const OCEAN_BANDS = [[.54,.035,.014,.56],[.28,-.057,.041,.83],[.12,.13,.09,1.25],[.055,-.27,.18,1.74]];
 const SEA = .65;
 const swell = new WaveField({waves:OCEAN_BANDS.map(([a,kx,kz,w])=>({direction:{x:kx,z:kz},
@@ -40,7 +46,14 @@ export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
   const sizes=Array.from({length:20},()=>new Vector4());
   const shipNodes=uniformArray<"vec4">(ships,"vec4"),sizeNodes=uniformArray<"vec4">(sizes,"vec4");
   const normalMap=normalTexture();
-  const surface=new WaterSurface3D({level:0,maxThickness:14,reflection:{resolutionScale:.5}});
+  // The mirrored pass is a second draw of the world, and on this scene it is a draw-call bill, not
+  // a pixel one: at 68 airborne aircraft it submitted 911 of the frame's 1,965 calls and cost 10 ms
+  // on the one frame in five it ran, which is the whole of the AC-23 gap. Halving its resolution
+  // again moved GPU p95 by 0.22 ms, because pixels were never what it was spending. So it is told
+  // what to draw instead: the hulls and the atoll — the silhouettes a player actually reads in the
+  // water — and not sixty-eight aircraft that are a few pixels each in the mirror and half of them
+  // behind the camera. `markReflected` is the other half of this, in src/render/world.ts.
+  const surface=new WaterSurface3D({level:0,maxThickness:14,reflection:{resolutionScale:.5,layers:1<<REFLECTED_LAYER}});
 
   // Logarithmic rings keep metre-scale triangles beside the carrier and reach the horizon.
   // Ring count sets how finely the swell is sampled at range, and the ships sit at range: at

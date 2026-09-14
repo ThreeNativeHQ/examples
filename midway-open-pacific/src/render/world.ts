@@ -11,7 +11,7 @@ import { DeckCrew } from "./deck-crew.js";
 import { animateDauntless, makeDauntless } from "./dauntless.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScars } from "./model-damage.js";
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
-import { createOcean } from "./ocean.js";
+import { createOcean, REFLECTED_LAYER } from "./ocean.js";
 import { CombatParticles } from "./particles.js";
 import { createRipples } from "./ripples.js";
 import { shipMotion } from "./ship-motion.js";
@@ -121,6 +121,22 @@ const HULL_CLASS_BY_NAME: Readonly<Record<string, string>> = {
  *   at half its range, and a surfaced boat is mostly conning tower — there is no superstructure
  *   left to resolve further out.
  */
+/**
+ * Put one object and everything under it in the water's reflection.
+ *
+ * `enable` adds the layer rather than replacing layer 0, so the main camera still draws these
+ * exactly as before; the only camera that narrows is the mirrored pass's. What is marked is the
+ * hulls and the atoll — the shapes a player reads in the water. Aircraft, the deck party, tracers,
+ * spray and the parked deck load are deliberately left out: in the mirror they are a few pixels
+ * each, and the second draw of sixty-eight of them is what put AC-23's frame over budget.
+ *
+ * A ship's deck crew is added to its mesh later and inherits nothing, because layers are per
+ * object and this runs once at build time — which is the intent, not an oversight.
+ */
+function markReflected(root: T.Object3D): void {
+  root.traverse((o) => o.layers.enable(REFLECTED_LAYER));
+}
+
 const HULL_LOD_RANGE: Readonly<Record<string, number>> = {
   cruiser: 2200,
   destroyer: 2600,
@@ -346,6 +362,7 @@ export class WorldView {
           mesh.userData.parked.push(plane);
         }
       }
+      markReflected(mesh);
       this.scene.add(mesh);
       this.meshes.set(s.id, mesh);
 
@@ -354,6 +371,7 @@ export class WorldView {
     this.meshes.get(b.player.home)?.add(this.crew.group);
     const island = createMidwayAtoll();
     island.position.set(b.island.x, 0, b.island.z);
+    markReflected(island);
     this.scene.add(island);
     this.setAirframe();
   }
