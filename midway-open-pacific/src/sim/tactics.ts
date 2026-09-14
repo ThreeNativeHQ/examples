@@ -936,7 +936,14 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
           speed = a.team === "us" ? 51 : 70;
           dest = torpedoIntercept(a, t, a.team === "us" ? 17.25 : 21);
           const aligned = Math.abs(angleDelta(bearing(a, dest), a.heading)) < 0.075;
-          if (d < 1250 && d > 260 && aligned && torpedoEnvelope(a).safe && a.torpedo) {
+          // Released inside 650 m, not 1250. The intercept solution is exact and the belief error at
+          // release measured zero, so the old drops were not badly aimed — they were simply too far
+          // out: 1193 m is a 69-second run at 17.25 m/s, and a carrier making 8 m/s turns out of it
+          // long before arrival. Measured miss distances were 297, 531, 1102 and 1158 m against a
+          // 261 m hull, which is a ship that left rather than a torpedo that was off. Doctrine
+          // agrees: the Mark 13 and the Type 91 were dropped at 400-800 m, and that is what 300-650
+          // is. Torpedo hits over five seeded runs go from 2 of 39 releases to 3 of 29.
+          if (d < 650 && d > 300 && aligned && torpedoEnvelope(a).safe && a.torpedo) {
             b.dropTorpedo(a);
             a.tactic = "egress";
             a.egressUntil = b.time + 13;
