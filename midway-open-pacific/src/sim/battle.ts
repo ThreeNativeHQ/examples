@@ -24,7 +24,17 @@ import {
   DEFAULT_RESCUE_LIMITS,
   type Survivors,
 } from "./rescue.js";
-import { applyLoadout, torpedoEnvelope, updateStores, type ILoadout, LOADOUTS } from "./armament.js";
+import {
+  actualRunDepth,
+  applyLoadout,
+  torpedoEnvelope,
+  torpedoVariant,
+  torpedoVariantForAirframe,
+  updateStores,
+  type ILoadout,
+  LOADOUTS,
+} from "./armament.js";
+import { screenIntercept, stepRun } from "./torpedo-run.js";
 import {
   ASSIGNMENTS,
   concludeOperation,
@@ -66,6 +76,19 @@ import {
   type IApproach,
   type IReserve,
 } from "./recovery.js";
+import {
+  assignSector,
+  canLaunchScout,
+  pickupWindow,
+  reconnaissanceCapacity as scoutReconnaissance,
+  stepScout,
+  PICKUP_MAX_SHIP_SPEED,
+  SCOUT_FULL_FUEL,
+  SCOUT_RESERVE,
+  type ScoutAircraft,
+  type ScoutLimits,
+  type SearchSector,
+} from "./scouting.js";
 import { SPEAKERS, SPEECH, radioShipName, type ISpeechRequest } from "./radio-script.js";
 import {
   applyLaunch,
@@ -275,12 +298,14 @@ interface ISurfaceGroup extends Group {
 interface IHull {
   hullLength: number;
   hullBeam: number;
+  /** m; class draught, positive down. A torpedo running deeper than this passes under the hull. */
+  draught: number;
 }
 
 /** Class references and measured GLB extents; the repaired model is `hullBeam` wide when drawn. */
 const hullOf = (classId: string): IHull => {
   const cls = shipClass(classId);
-  return { hullLength: cls.measuredLength, hullBeam: cls.hullBeam };
+  return { hullLength: cls.measuredLength, hullBeam: cls.hullBeam, draught: cls.draught };
 };
 
 /**
@@ -290,10 +315,10 @@ const hullOf = (classId: string): IHull => {
  * them a sister ship's numbers would be the substitution this change exists to remove.
  */
 const HULLS: Readonly<Record<string, IHull>> = Object.freeze({
-  "USS Enterprise": { hullLength: 251.58, hullBeam: 32.4 }, // Yorktown class, as drawn by hornet.glb
-  "USS Hornet": { hullLength: 251.58, hullBeam: 32.4 },
+  "USS Enterprise": { hullLength: 251.58, hullBeam: 32.4, draught: 7.9 }, // Yorktown class, as drawn by hornet.glb
+  "USS Hornet": { hullLength: 251.58, hullBeam: 32.4, draught: 7.9 },
   "USS Yorktown": hullOf("yorktown"),
-  Akagi: { hullLength: 260.67, hullBeam: 31.3 }, // supplied akagi.glb
+  Akagi: { hullLength: 260.67, hullBeam: 31.3, draught: 7.55 }, // supplied akagi.glb keel depth, src/render/world.ts
   Kaga: hullOf("kaga"),
   Soryu: hullOf("soryu"),
   Hiryu: hullOf("hiryu"),
@@ -307,6 +332,30 @@ const HULLS: Readonly<Record<string, IHull>> = Object.freeze({
   "I-168": hullOf("i168"),
   "USS Nautilus": hullOf("nautilus"),
 });
+
+/** The hull class that carries cruiser scouts. Matched on measured extents, never on a ship name. */
+const SCOUT_HULL = hullOf("tone");
+
+/** Cruiser-scout sortie tuning, passed whole to `scouting.ts`. */
+const SCOUT_LIMITS: ScoutLimits = {
+  burn: 4,
+  outboundFuel: 2400,
+  searchFuel: 1800,
+  reserve: SCOUT_RESERVE,
+  pickupFuel: 300,
+};
+/** Metres a cruiser sends its scout out along a sector bearing. */
+const SCOUT_SECTOR_DEPTH = 16000;
+/** A sector may be re-flown once its last search is this old, in seconds. */
+const SCOUT_STALE_SECONDS = 900;
+/** The search altitude a scout observer is credited with, in metres. */
+const SCOUT_ALTITUDE = 2000;
+/** Metres a scout observer's own search reaches, before the visibility scale. */
+const SCOUT_SEARCH_RANGE = 9000;
+/** No scout leaves before the battle has settled, so the opening contacts stay the lookouts' own. */
+const SCOUT_LAUNCH_DELAY = 12;
+/** The states in which a scout is flying and therefore an observer. */
+const SCOUT_AIRBORNE_STATES: ReadonlySet<string> = new Set(["catapult", "outbound", "searching", "returning"]);
 
 interface IDeck {
   deckLength: number;
@@ -372,7 +421,7 @@ const SUPERSTRUCTURE_TOP = 9;
  */
 export function shipGeometry(name: string, kind: string): IHull & IDeck {
   const sub = kind === "sub";
-  const hull = HULLS[name] ?? { hullLength: sub ? 92 : 112, hullBeam: sub ? 9 : 13 };
+  const hull = HULLS[name] ?? { hullLength: sub ? 92 : 112, hullBeam: sub ? 9 : 13, draught: sub ? 4.6 : 4.5 };
   // No flight deck, so nothing overhangs: the damage volume is one box of the hull's own beam.
   if (kind !== "carrier")
     return { ...hull, deckLength: 0, deckWidth: 0, deckHeight: SUPERSTRUCTURE_TOP, deckBeam: hull.hullBeam };
@@ -548,6 +597,8 @@ export type { ILoadout };
 
 export class Battle {
   random: () => number;
+  /** A second seeded stream for scout draws, so cruiser sorties never perturb the battle's own. */
+  scoutRandom: () => number;
   seed: number;
   serial = 0;
   time = 0;
@@ -618,6 +669,7 @@ export class Battle {
 
   constructor(seed = 19420604) {
     this.random = rng(seed);
+    this.scoutRandom = rng(seed + 0x9e3779b9);
     this.seed = seed;
     this.setupFleet();
     const home = this.ships[0];
@@ -808,7 +860,11 @@ export class Battle {
     const add = (name: string, team: string, kind: string, x: number, z: number, heading = 0) => {
       const cv = kind === "carrier";
       const sub = kind === "sub";
-      const s = {
+      const geometry = shipGeometry(name, kind);
+      // A scout-carrying cruiser is found by its hull class (the Tone's measured extents), not its name.
+      const scoutCruiser =
+        kind === "cruiser" && geometry.hullLength === SCOUT_HULL.hullLength && geometry.hullBeam === SCOUT_HULL.hullBeam;
+      const s: Any = {
         id: this.id("ship"),
         name,
         team,
@@ -820,7 +876,7 @@ export class Battle {
         speed: sub ? SURFACED_MAX : cv ? 8 : 10,
         baseSpeed: sub ? SURFACED_MAX : cv ? 8 : 10,
         // Geometry, resolved before any renderer exists.
-        ...shipGeometry(name, kind),
+        ...geometry,
         hp: cv ? 340 : sub ? 90 : 145,
         maxHp: cv ? 340 : sub ? 90 : 145,
         deck: 1,
@@ -829,6 +885,10 @@ export class Battle {
         fire: 0,
         /** Flooding, as a fraction of the heavy-list threshold the deck gate reads. */
         list: 0,
+        /** Scout-carrying cruisers only: 0..1 aviation capability and their finite floatplanes. */
+        aviation: scoutCruiser ? 1 : 0,
+        scouts: null as ScoutAircraft[] | null,
+        sectors: null as SearchSector[] | null,
         /**
          * Conserved air inventory and the one straight-deck schedule, resolved here so a `Battle`
          * knows what its decks can fly before any renderer exists. Carriers only.
@@ -866,6 +926,7 @@ export class Battle {
         baseX: x,
         baseZ: z,
       };
+      if (scoutCruiser) this.equipScoutCruiser(s);
       this.ships.push(s);
       return s;
     };
@@ -1438,6 +1499,93 @@ export class Battle {
     else s.launchBlocked = null;
   }
 
+  /** One finite scout and its search sectors, built for a hull that carries them. */
+  equipScoutCruiser(s: Any): void {
+    s.scouts = [
+      {
+        id: `${s.id}-scout`,
+        homeShipId: s.id,
+        state: "aboard",
+        sectorId: null,
+        fuel: SCOUT_FULL_FUEL,
+        launchedAt: null,
+        recoveredAt: null,
+      },
+    ];
+    s.sectors = [-0.6, 0.4].map((offset, i) => {
+      const from = s.heading + offset;
+      return {
+        id: `${s.id}-sector-${i}`,
+        origin: { x: s.x, z: s.z },
+        fromBearing: from,
+        toBearing: from + Math.PI / 2,
+        depth: SCOUT_SECTOR_DEPTH,
+        lastSearchedAt: null,
+      };
+    });
+  }
+
+  /** The `scouting.ts` view of a hull: its capability, with anything under half damaged grounding it. */
+  scoutView(s: Any): { id: string; sunk: boolean; speed: number; aviation: number; aviationDamage: boolean } {
+    const aviation = clamp(s.aviation ?? 0, 0, 1);
+    return { id: s.id, sunk: !!s.sunk, speed: s.speed ?? 0, aviation, aviationDamage: aviation < 0.5 };
+  }
+
+  /**
+   * The group's remaining search endurance, summed by `scouting.ts`. A lost scout or a damaged
+   * aviation fitting lowers it; no delivered report is stored here, so none can be erased by it.
+   */
+  reconnaissanceCapacity(team = "jp"): number {
+    let total = 0;
+    for (const s of this.ships) if (s.scouts && s.team === team) total += scoutReconnaissance(s.scouts);
+    return total;
+  }
+
+  /** Where an airborne scout's report comes from: its assigned sector, advanced along the centre bearing. */
+  scoutPosition(scout: ScoutAircraft, s: Any): { x: number; z: number } {
+    const sector = (s.sectors as SearchSector[] | null)?.find((x) => x.id === scout.sectorId);
+    if (!sector) return { x: s.x, z: s.z };
+    const mid = (sector.fromBearing + sector.toBearing) / 2;
+    const reach = sector.depth * (scout.state === "searching" ? 0.75 : 0.4);
+    return { x: sector.origin.x + Math.sin(mid) * reach, z: sector.origin.z - Math.cos(mid) * reach };
+  }
+
+  /**
+   * One fixed step of the cruiser-scout sortie: burn fuel, launch a rested scout at the stalest
+   * sector, and take one back alongside when the ship is slow enough. The scout files no contact
+   * here — `observersFor` hands it to the ordinary observation sweep, so its sighting is a normal
+   * delivered report and nothing else can reach into the other side's knowledge.
+   */
+  updateScouts(dt: number): void {
+    for (const s of this.ships) {
+      if (!s.scouts || s.team !== "jp" || s.sunk) continue;
+      for (const scout of s.scouts as ScoutAircraft[]) {
+        Object.assign(scout, stepScout(scout, dt, SCOUT_LIMITS, this.scoutRandom()));
+        if (scout.state === "alongside") {
+          // `stepScout` reaches the water at the pickup fuel; `pickupWindow` answers whether the
+          // ship is slow enough, keying on the return leg that state has just left.
+          if (pickupWindow({ ...scout, state: "returning" }, this.scoutView(s)).ok) {
+            scout.state = "aboard";
+            scout.recoveredAt = this.time;
+            scout.fuel = SCOUT_FULL_FUEL;
+            scout.sectorId = null;
+          }
+          continue;
+        }
+        if (scout.state !== "aboard" || this.time < SCOUT_LAUNCH_DELAY) continue;
+        // No reconnaissance left in the group is no sortie worth launching.
+        if (this.reconnaissanceCapacity("jp") <= 0) continue;
+        const sector = assignSector(s.sectors as SearchSector[], this.time, SCOUT_STALE_SECONDS);
+        if (!sector) continue;
+        if (!canLaunchScout(this.scoutView(s), scout, this.time).ok) continue;
+        scout.state = "catapult";
+        scout.sectorId = sector.id;
+        scout.launchedAt = this.time;
+        sector.lastSearchedAt = this.time;
+      }
+    }
+  }
+
   /** Every observer of one side that could see anything at all, with its own height and reach. */
   observersFor(team: string): Any[] {
     const out: Any[] = [];
@@ -1462,6 +1610,21 @@ export class Battle {
           range: 6000 * VISIBILITY,
           delay: SHIP_REPORT_DELAY,
         });
+    for (const s of this.ships)
+      if (s.scouts && s.team === team && !s.sunk)
+        for (const scout of s.scouts as ScoutAircraft[]) {
+          if (!SCOUT_AIRBORNE_STATES.has(scout.state)) continue;
+          const at = this.scoutPosition(scout, s);
+          out.push({
+            id: `air-scout-${scout.id}`,
+            x: at.x,
+            z: at.z,
+            altitude: SCOUT_ALTITUDE,
+            range: SCOUT_SEARCH_RANGE * VISIBILITY,
+            delay: AIR_REPORT_DELAY,
+            scout: true,
+          });
+        }
     return out;
   }
 
@@ -1508,7 +1671,7 @@ export class Battle {
   fileReport(team: string, observer: Any, target: Any): void {
     const range = distance2(observer, target);
     const truth = classOf(target);
-    const { classification, confidence } = classify({ truth, range, random: this.random() });
+    const { classification, confidence } = classify({ truth, range, random: observer.scout === true ? this.scoutRandom() : this.random() });
     const identified = classification === truth;
     this.filed[team].set(target.id, this.time);
     // A damaged Midway radio only slows the U.S. side's traffic; it is the delay's sole modifier.
@@ -1963,6 +2126,10 @@ export class Battle {
       if (this.random() < 0.03) this.wreckAircraft(s, 1);
       this.fx("hit", point, 0.5);
     }
+    // A direct hit on a scout cruiser's handling area erodes its future reconnaissance. It grounds
+    // later launches; every report already on the air or delivered is untouched.
+    if (hostile && s.scouts && amount > 0 && !nearMiss && (weapon === "bomb" || weapon === "torpedo"))
+      s.aviation = clamp((s.aviation ?? 1) - amount / 300, 0, 1);
     // A friendly observer sees an enemy carrier burning; a friendly ship reports its own fire.
     if (s.team === "jp" && s.kind === "carrier" && s.fire > 0.5 && !s.burnReported) {
       s.burnReported = true;
@@ -1983,6 +2150,8 @@ export class Battle {
     if (s.sunk) return;
     s.sunk = true;
     s.speed = 0;
+    // A sunk scout cruiser loses its floatplanes; reports already delivered are not its to recall.
+    if (s.scouts) for (const scout of s.scouts as ScoutAircraft[]) { scout.state = "lost"; scout.fuel = 0; }
     // The crew is in the water where the hull went down. The seeded draw varies the count; a later
     // rescue genuinely saves fewer because exposure decays the group every step it waits.
     const crew = SURVIVOR_CREW[s.kind] ?? 100;
@@ -2113,6 +2282,7 @@ export class Battle {
     this.updateRescue(dt);
     this.updateShips(dt);
     this.updateFacilities(dt);
+    this.updateScouts(dt);
     this.updatePlayer(dt, input);
     this.observeFuel();
     this.updateRecovery();
@@ -2190,6 +2360,15 @@ export class Battle {
       // A submarine runs its own attack logic and is never station-kept; every surface hull hands
       // its helm to the group, where station keeping, course authority and evasion all resolve.
       if (s.kind !== "sub") this.steerSurface(s, dt, surface, hazards);
+      // Scout handling slows the cruiser into the water-pickup envelope unless it is evading, when
+      // survival outranks recovery and the floatplane waits on the water. This follows the helm so
+      // the group's own station-keeping speed cannot overwrite it.
+      if (
+        s.scouts &&
+        (s.evadeUntil || 0) <= this.time &&
+        (s.scouts as ScoutAircraft[]).some((sc) => sc.state === "alongside")
+      )
+        s.speed = Math.min(s.speed, PICKUP_MAX_SHIP_SPEED);
       const f = forward(s.heading);
       s.x += f.x * s.speed * dt;
       s.z += f.z * s.speed * dt;
@@ -3147,26 +3326,41 @@ export class Battle {
     return true;
   }
 
+  /**
+   * Put a torpedo in the water. Every running figure — speed, range, running depth and arming
+   * distance — comes from the launcher's own variant in ./armament.ts: an aircraft by its airframe
+   * (a TBD carries a Mark 13, a Kate a Type 91), a boat by its side (a US submarine a Mark 14, IJN
+   * torpedoes a Type 95). The release stamp in `a.stamp` is copied through untouched, as is the
+   * `owner`, so `./sortie.ts` credit can neither be granted nor revoked later.
+   */
   spawnTorpedo(a: Any, heading: number, options: Any = {}): Any {
+    const variant =
+      a.kind === "sub"
+        ? torpedoVariant(a.team === "jp" ? "type95" : "mk14")
+        : torpedoVariantForAirframe(a.airframe) ?? torpedoVariant(a.team === "jp" ? "type91" : "mk13");
+    const setting = variant.settings[0];
+    const runDepth = actualRunDepth(variant.id, options.depth ?? variant.runDepth.min);
     const f = forward(heading);
-    const air = options.aerial || false;
-    const speed = air ? (a.team === "jp" ? 21 : 17.25) : 24;
-    const t = {
+    const t: Any = {
       id: this.id("torpedo"),
+      variantId: variant.id,
       x: a.x,
-      y: -1.6,
+      y: -runDepth,
       z: a.z,
       heading,
-      vx: f.x * speed,
-      vz: f.z * speed,
-      speed,
+      runDepth,
+      vx: f.x * setting.speed,
+      vz: f.z * setting.speed,
+      speed: setting.speed,
+      range: setting.range,
       team: a.team,
       owner: a.owner || a.id,
       stamp: a.stamp ?? null,
       age: 0,
-      ttl: air ? 240 : 200,
-      run: 0,
-      armedDistance: options.armedDistance ?? (air ? 180 : 90),
+      ttl: options.aerial ? 240 : 200,
+      distanceRun: 0,
+      armedAt: null,
+      armedDistance: variant.armingDistance,
     };
     this.torpedoes.push(t);
     return t;
@@ -3337,41 +3531,25 @@ export class Battle {
     }
     this.airTorpedoes.length = liveAirTorpedoes;
     for (const t of this.torpedoes) {
-      const prev = { ...t };
-      t.x += t.vx * dt;
-      t.z += t.vz * dt;
+      const prev = { x: t.x, z: t.z };
+      // ./torpedo-run.ts advances the run: straight at the variant's speed, armed at its arming
+      // distance, stopped at its range. Depth is the weapon's own; keep it in step with `y` before
+      // the hit test so a run set deeper than a hull draws passes under it.
+      Object.assign(t, stepRun(t, dt));
+      t.runDepth = -t.y;
       t.age += dt;
       t.ttl -= dt;
-      t.run += Math.hypot(t.vx, t.vz) * dt;
-      for (const s of this.ships) {
-        if (s.sunk) continue;
-        const b = localPoint(t, s);
-        const a = localPoint(prev, s);
-        let lo = 0;
-        let hi = 1;
-        for (const [key, extent] of [["right", s.hullBeam / 2 + 1], ["forward", s.hullLength / 2]] as [string, number][]) {
-          const d = (b as Any)[key] - (a as Any)[key];
-          if (Math.abs(d) < 1e-9) {
-            if (Math.abs((a as Any)[key]) > extent) {
-              lo = 2;
-              break;
-            }
-          } else {
-            let u = (-extent - (a as Any)[key]) / d;
-            let v = (extent - (a as Any)[key]) / d;
-            if (u > v) [u, v] = [v, u];
-            lo = Math.max(lo, u);
-            hi = Math.min(hi, v);
-          }
-        }
-        if (lo <= hi && lo <= 1 && hi >= 0) {
-          const impact = { x: lerp(prev.x, t.x, Math.max(0, lo)), y: 2, z: lerp(prev.z, t.z, Math.max(0, lo)) };
-          if (t.run >= t.armedDistance) this.damageShip(s, 145, impact, "torpedo", t.team, { owner: t.owner, stamp: t.stamp });
-          else this.fx("splash", impact, 0.7);
-          t.ttl = 0;
-          break;
-        }
-      }
+      // One depth-aware screening test for the whole step: a shallow escort is passed under by a
+      // deeper-running weapon, which then carries on to the first hull it can actually reach.
+      const hitId = screenIntercept(t, prev, this.ships, null, dt);
+      if (!hitId) continue;
+      const s = this.ships.find((ship: Any) => ship.id === hitId);
+      if (!s) continue;
+      const impact = { x: t.x, y: 2, z: t.z };
+      if (t.armedAt !== null)
+        this.damageShip(s, 145, impact, "torpedo", t.team, { owner: t.owner, stamp: t.stamp });
+      else this.fx("splash", impact, 0.7);
+      t.ttl = 0;
     }
     let liveTorpedoes = 0;
     for (let i = 0; i < this.torpedoes.length; i += 1) {
