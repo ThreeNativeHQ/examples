@@ -6,7 +6,6 @@ import {
   clamp,
   distance2,
   distance3,
-  forward,
   lerp,
   onDeck,
   segmentDistance,
@@ -15,7 +14,7 @@ import {
 import { damageModifiers, initDamage, stepDamage } from "./damage.js";
 import { torpedoEnvelope, torpedoIntercept, updateStores } from "./armament.js";
 import { AircraftFlight, DECK_HEIGHT, initFlightState, steerToward, type ISteerLimits } from "./flight.js";
-import { estimatePosition, isStale, STALE_SECONDS } from "./intel.js";
+import { DRIFT_RATE, isStale, STALE_SECONDS } from "./intel.js";
 
 /**
  * `damageModifiers` returns exactly these values for an untouched airframe, and integrity only ever
@@ -65,21 +64,25 @@ const CLASS_HULL: Readonly<Record<string, { length: number; width: number }>> = 
  * to the wrong patch of sea rather than quietly reading the ship's true position.
  */
 function believedTarget(b: Any, c: Any): Any {
-  const e = estimatePosition(c, b.time);
+  // Dead-reckoned inline rather than through `estimatePosition`, which would allocate a fresh
+  // `{ x, z, radius }` for every attacker every step. `BELIEVED` is scratch, refilled here and read
+  // by `selectNavalTarget`'s caller before the next aircraft's turn.
+  const age = b.time - c.observedAt;
+  const reach = c.speed * age;
   const hull = CLASS_HULL[c.classification] ?? CLASS_HULL.unknown;
-  return {
-    ...c,
-    x: e.x,
-    z: e.z,
-    y: 0,
-    uncertainty: e.radius,
-    age: b.time - c.observedAt,
-    deckLength: hull.length,
-    deckWidth: hull.width,
-    hullLength: hull.length,
-    hullBeam: hull.width,
-    id: c.id,
-  };
+  const t = BELIEVED;
+  Object.assign(t, c);
+  t.x = c.x + Math.sin(c.heading) * reach;
+  t.z = c.z - Math.cos(c.heading) * reach;
+  t.y = 0;
+  t.uncertainty = c.errorRadius + DRIFT_RATE * age * (c.lost ? 3 : 1);
+  t.age = age;
+  t.deckLength = hull.length;
+  t.deckWidth = hull.width;
+  t.hullLength = hull.length;
+  t.hullBeam = hull.width;
+  t.id = c.id;
+  return t;
 }
 
 /**
@@ -94,10 +97,15 @@ export function strikeContact(b: Any, s: Any): Any {
   let score = Infinity;
   for (const c of known.values()) {
     if (c.lost || isStale(c, b.time, STALE_SECONDS) || !STRIKE_CLASSES.has(c.classification)) continue;
-    const e = estimatePosition(c, b.time);
-    const d = distance2(s, e);
+    // `estimatePosition` inlined: its temporary `{ x, z, radius }` was one allocation per contact.
+    const age = b.time - c.observedAt;
+    const reach = c.speed * age;
+    const ex = c.x + Math.sin(c.heading) * reach;
+    const ez = c.z - Math.cos(c.heading) * reach;
+    const er = c.errorRadius + DRIFT_RATE * age * (c.lost ? 3 : 1);
+    const d = Math.hypot(s.x - ex, s.z - ez);
     if (d > STRIKE_RADIUS) continue;
-    const rank = d + e.radius * 4 + (c.classification === "cruiser" ? 8000 : 0);
+    const rank = d + er * 4 + (c.classification === "cruiser" ? 8000 : 0);
     if (rank < score) {
       score = rank;
       best = c;
@@ -118,9 +126,11 @@ export function chooseCarrierMission(
   ready: Record<string, number>,
   commitSeconds: number,
 ): { kind: string; target: string | null; want: Record<string, number>; until: number } {
-  const threat = b.aircraft.filter(
-    (a: Any) => a.team !== s.team && a.hp > 0 && a.kind !== "recon" && distance2(a, s) < 9000,
-  ).length;
+  // Counted in place: the old `.filter(...).length` built a throwaway array of every hostile in range.
+  let threat = 0;
+  for (const a of b.aircraft) {
+    if (a.team !== s.team && a.hp > 0 && a.kind !== "recon" && distance2(a, s) < 9000) threat += 1;
+  }
   const contact = strikeContact(b, s);
   const want: Record<string, number> = {};
   // Local defence first: fighters held back over the group are fighters not escorting a strike, which
@@ -141,6 +151,31 @@ export function chooseCarrierMission(
     want,
     until: b.time + commitSeconds,
   };
+}
+
+/**
+ * The follow-up strike on the atoll, and the fallback target only: a ship contact always outranks
+ * it, which is the dilemma `Battle` orders this mission out of. A land target does not move and is
+ * not a contact, so there is no dead reckoning here — but coming at all is still a belief.
+ * `b.islandStrike` is the staff's read of the last report, never the facilities' live health, so a
+ * base already flattened keeps drawing strikes until somebody flies over and sees it. The aim point
+ * is the least damaged facility still standing, so a second wave finishes what the first left.
+ */
+function islandTarget(b: Any, a: Any): Any {
+  if (a.team !== "jp" || !(a.bombs > 0) || !b.islandStrike) return null;
+  let best: Any = null;
+  for (const f of b.facilities ?? []) {
+    if (f.health <= 0) continue;
+    if (!best || f.health > best.health) best = f;
+  }
+  if (!best) return null;
+  const t = ISLAND_AIM;
+  t.x = best.x;
+  t.z = best.z;
+  // The footprint a bomb has to land in is the facility's own, not a hull's.
+  t.deckLength = best.radius * 2;
+  t.deckWidth = best.radius * 2;
+  return t;
 }
 
 export function selectNavalTarget(b: Any, a: Any): Any {
@@ -193,10 +228,15 @@ export function selectNavalTarget(b: Any, a: Any): Any {
   }
   for (const c of candidates) {
     const committed = pressure ? pressure.get(c.id) || 0 : 0;
-    const e = estimatePosition(c, b.time);
+    // `estimatePosition` inlined; see `strikeContact`.
+    const age = b.time - c.observedAt;
+    const reach = c.speed * age;
+    const ex = c.x + Math.sin(c.heading) * reach;
+    const ez = c.z - Math.cos(c.heading) * reach;
+    const er = c.errorRadius + DRIFT_RATE * age * (c.lost ? 3 : 1);
     // An uncertain, poorly identified report is worth attacking less than a tight one. The target's
     // own damage state is deliberately absent: nobody outside that ship knows it.
-    const rank = distance2(a, e) + committed * 1150 + e.radius * 3 + (1 - c.confidence) * 3000;
+    const rank = Math.hypot(a.x - ex, a.z - ez) + committed * 1150 + er * 3 + (1 - c.confidence) * 3000;
     if (rank < score) {
       score = rank;
       best = c;
@@ -282,7 +322,12 @@ function limitsFor(a: Any): ISteerLimits {
 function contactNear(b: Any, a: Any, radius: number): boolean {
   for (const c of b.teamIntel[a.team].values()) {
     if (isStale(c, b.time, STALE_SECONDS)) continue;
-    if (distance2(a, estimatePosition(c, b.time)) < radius) return true;
+    // `estimatePosition` inlined; see `strikeContact`.
+    const age = b.time - c.observedAt;
+    const reach = c.speed * age;
+    const ex = c.x + Math.sin(c.heading) * reach;
+    const ez = c.z - Math.cos(c.heading) * reach;
+    if (Math.hypot(a.x - ex, a.z - ez) < radius) return true;
   }
   return false;
 }
@@ -304,6 +349,22 @@ const FIGHTER_CANDIDATES: Any[] = [];
 const NAVAL_CANDIDATES: Any[] = [];
 const ATTACKS = new Map<any, number>();
 const PRESSURE = new Map<any, number>();
+/**
+ * Scratch objects for one step. Each is refilled immediately before use and read before the next
+ * aircraft's turn; none is stored on an aircraft, so a stale field cannot leak into the simulation.
+ * They exist because every one of these was a fresh literal per aircraft per step.
+ */
+const SHIPS_BY_ID = new Map<Any, Any>();
+const BELIEVED: Any = {};
+/** Scratch for the island aim point, refilled per attacker like `BELIEVED`. */
+const ISLAND_AIM: Any = { id: "midway", kind: "base", team: "us", heading: 0, speed: 0, y: 0,
+                          deckLength: 0, deckWidth: 0, uncertainty: 0, age: 0 };
+const FIRE_POINT = { x: 0, y: 0, z: 0 };
+const GUN_AIM = { x: 0, y: 0, z: 0 };
+const ASTERN = { x: 0, z: 0 };
+const BOMB_POINT = { x: 0, y: 0, z: 0 };
+const BOMB_VEL = { x: 0, y: 0, z: 0 };
+const BOMB_LEAD: Any = {};
 /** The deck frame and launch stick for one `stepDeck` call; consumed synchronously, never retained. */
 const DECK_FRAME = { x: 0, y: 0, z: 0, heading: 0, speed: 0, length: 0, width: 0 };
 const DECK_CONTROLS = { pitch: 0, rudder: 0 };
@@ -455,13 +516,22 @@ function deckDeparture(b: Any, a: Any, home: Any, dt: number): void {
 export function fireClear(b: Any, a: Any, t: Any): boolean {
   const d = distance3(a, t);
   const lead = d / 950;
-  const point = { x: t.x + (t.vx || 0) * lead, y: t.y + (t.vy || 0) * lead, z: t.z + (t.vz || 0) * lead };
-  const f = forward(a.heading, a.pitch);
-  const len = distance3(a, point) || 1;
-  const dot = ((point.x - a.x) * f.x + (point.y - a.y) * f.y + (point.z - a.z) * f.z) / len;
+  // `FIRE_POINT` and the forward scalars replace a fresh point and a `forward()` result per call.
+  FIRE_POINT.x = t.x + (t.vx || 0) * lead;
+  FIRE_POINT.y = t.y + (t.vy || 0) * lead;
+  FIRE_POINT.z = t.z + (t.vz || 0) * lead;
+  const fx = Math.sin(a.heading) * Math.cos(a.pitch);
+  const fy = Math.sin(a.pitch);
+  const fz = -Math.cos(a.heading) * Math.cos(a.pitch);
+  const len = distance3(a, FIRE_POINT) || 1;
+  const dot = ((FIRE_POINT.x - a.x) * fx + (FIRE_POINT.y - a.y) * fy + (FIRE_POINT.z - a.z) * fz) / len;
   if (d > 850 || dot < 0.994 || a.ammo <= 0) return false;
-  if (b.aircraft.some((p: Any) => p.team === a.team && p.id !== a.id && p.hp > 0 && distance3(a, p) < d && segmentDistance(a, point, p) < 17))
-    return false;
+  const others = b.aircraft;
+  for (let i = 0; i < others.length; i += 1) {
+    const p = others[i];
+    if (p.team === a.team && p.id !== a.id && p.hp > 0 && distance3(a, p) < d && segmentDistance(a, FIRE_POINT, p) < 17)
+      return false;
+  }
   b.fire(a, t);
   return true;
 }
@@ -470,7 +540,9 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
   if (a.kind === "fighter" || a.kind === "recon" || !(a.rearAmmo > 0) || a.mode === "crashing") return;
   a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
   if (a.rearTimer > 0) return;
-  const f = forward(a.heading, a.pitch);
+  const fx = Math.sin(a.heading) * Math.cos(a.pitch);
+  const fy = Math.sin(a.pitch);
+  const fz = -Math.cos(a.heading) * Math.cos(a.pitch);
   // One pass for the first enemy behind the tail, in aircraft order with the player last, and the
   // range found once instead of twice. A squared reject keeps the (slow) `Math.hypot` for the rare
   // foe already in the 25–650 m envelope, which is the only place its value is used.
@@ -495,7 +567,7 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
     const d2 = dx * dx + dy * dy + dz * dz;
     if (d2 >= 422500 || d2 <= 625) continue;
     const dd = Math.hypot(dx, dy, dz);
-    if ((dx * f.x + dy * f.y + dz * f.z) / dd < -0.6 && dy / dd > -0.13) {
+    if ((dx * fx + dy * fy + dz * fz) / dd < -0.6 && dy / dd > -0.13) {
       t = e;
       d = dd;
       break;
@@ -503,23 +575,26 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
   }
   if (!t) return;
   const tt = d / 730;
-  const aim = { x: t.x + (t.vx || 0) * tt - a.x, y: t.y + (t.vy || 0) * tt - a.y, z: t.z + (t.vz || 0) * tt - a.z };
-  const len = Math.hypot(aim.x, aim.y, aim.z) || 1;
+  // `GUN_AIM` is scratch, read by the one bullet this shot emits before the next aircraft is handled.
+  GUN_AIM.x = t.x + (t.vx || 0) * tt - a.x;
+  GUN_AIM.y = t.y + (t.vy || 0) * tt - a.y;
+  GUN_AIM.z = t.z + (t.vz || 0) * tt - a.z;
+  const len = Math.hypot(GUN_AIM.x, GUN_AIM.y, GUN_AIM.z) || 1;
   a.rearTimer = 0.28;
   a.rearAmmo -= 1;
   b.event("gun", {
-    at: { x: a.x - f.x * 4, y: a.y + 0.8, z: a.z - f.z * 4 },
+    at: { x: a.x - fx * 4, y: a.y + 0.8, z: a.z - fz * 4 },
     source: a.id,
     weapon: "gun30",
   });
   b.bullets.push({
     id: b.id("bullet"),
-    x: a.x - f.x * 4,
+    x: a.x - fx * 4,
     y: a.y + 0.8,
-    z: a.z - f.z * 4,
-    vx: (aim.x / len) * 730 + (b.random() - 0.5) * 13,
-    vy: (aim.y / len) * 730 + (b.random() - 0.5) * 13,
-    vz: (aim.z / len) * 730 + (b.random() - 0.5) * 13,
+    z: a.z - fz * 4,
+    vx: (GUN_AIM.x / len) * 730 + (b.random() - 0.5) * 13,
+    vy: (GUN_AIM.y / len) * 730 + (b.random() - 0.5) * 13,
+    vz: (GUN_AIM.z / len) * 730 + (b.random() - 0.5) * 13,
     ttl: 1.1,
     team: a.team,
     owner: a.id,
@@ -561,29 +636,33 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
     return;
   }
   a.home = h.id || "midway";
-  const f = forward(h.heading || 0);
-  const astern = { x: h.x - f.x * 520, z: h.z - f.z * 520 };
+  const hh = h.heading || 0;
+  const fhx = Math.sin(hh);
+  const fhz = -Math.cos(hh);
+  // `ASTERN` is scratch: read by the `distance2` tests and by `flyAircraft` in the same branch.
+  ASTERN.x = h.x - fhx * 520;
+  ASTERN.z = h.z - fhz * 520;
   // The straight deck: a launch or another recovery in progress, or any suspended condition, keeps
   // this aircraft in the pattern. `Battle.recoverAircraft` is the same test at the moment of contact.
   const busy = (h.deckState?.occupiedUntil ?? 0) > b.time || h.deckState?.suspended != null || (h.evadeUntil || 0) > b.time;
-  if (a.tactic !== "landing" && (distance2(a, astern) > 350 || Math.abs(angleDelta(bearing(a, h), h.heading || 0)) > 0.65 || busy)) {
+  if (a.tactic !== "landing" && (distance2(a, ASTERN) > 350 || Math.abs(angleDelta(bearing(a, h), h.heading || 0)) > 0.65 || busy)) {
     a.tactic = "rtb";
     flyAircraft(
       a,
-      busy ? aimPoint(h.x + Math.sin(b.time * 0.025 + a.phase) * 1300, h.z + Math.cos(b.time * 0.025 + a.phase) * 1300) : astern,
-      busy ? 450 : Math.max(90, Math.min(900, distance2(a, astern) * 0.14)),
+      busy ? aimPoint(h.x + Math.sin(b.time * 0.025 + a.phase) * 1300, h.z + Math.cos(b.time * 0.025 + a.phase) * 1300) : ASTERN,
+      busy ? 450 : Math.max(90, Math.min(900, distance2(a, ASTERN) * 0.14)),
       a.kind === "fighter" ? 94 : 84,
       dt,
     );
     return;
   }
   a.tactic = "landing";
-  const along = (a.x - h.x) * f.x + (a.z - h.z) * f.z;
+  const along = (a.x - h.x) * fhx + (a.z - h.z) * fhz;
   // Cross the ramp at this deck's own datum, and aim just past the wires. The vertical law flies
   // towards its aim point, so an approach aimed 140 m beyond the bow arrives over the deck as high as
   // that point is distant — which is exactly what `Battle.recoverAircraft` then refuses.
   const glide = (h.id ? (h.deckHeight ?? DECK_HEIGHT) + 4 : 10) + Math.max(0, -along - 65) * 0.08;
-  flyAircraft(a, aimPoint(h.x + f.x * 45, h.z + f.z * 45), glide, 51, dt);
+  flyAircraft(a, aimPoint(h.x + fhx * 45, h.z + fhz * 45), glide, 51, dt);
   if ((distance2(a, h) < 150 && a.y < 42) || (!h.id && distance2(a, h) < 200 && a.y < 50)) {
     // The airframe goes back into that ship's inventory — counted again, unready, and carrying no
     // store. A deck that cannot take it refuses, and the aircraft goes round again.
@@ -599,9 +678,10 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
 }
 
 export function updateTacticalAircraft(b: Any, dt: number): void {
-  // Home lookup by id, built once for the fleet: every aircraft used to rescan `b.ships` for its own
-  // deck each step.
-  const shipsById = new Map<Any, Any>();
+  // Home lookup by id, refilled once per step into module scratch: every aircraft used to rescan
+  // `b.ships` for its own deck, and the old code rebuilt the Map (and its backing store) every step.
+  const shipsById = SHIPS_BY_ID;
+  shipsById.clear();
   for (const s of b.ships) if (!shipsById.has(s.id)) shipsById.set(s.id, s);
   for (const a of b.aircraft) {
     if (a.recovered || a.removed) continue;
@@ -683,11 +763,13 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       home &&
       !contactNear(b, a, 4600)
     ) {
-      const f = forward(home.heading);
+      const hh = home.heading;
+      const fhx = Math.sin(hh);
+      const fhz = -Math.cos(hh);
       a.tactic = "muster";
       flyAircraft(
         a,
-        aimPoint(home.x + f.x * 1900 + Math.sin(b.time * 0.025 + a.phase) * 650, home.z + f.z * 1900 + Math.cos(b.time * 0.025 + a.phase) * 650),
+        aimPoint(home.x + fhx * 1900 + Math.sin(b.time * 0.025 + a.phase) * 650, home.z + fhz * 1900 + Math.cos(b.time * 0.025 + a.phase) * 650),
         a.kind === "torpedo" ? 550 : 1550,
         a.kind === "torpedo" ? 80 : 94,
         dt,
@@ -740,11 +822,12 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       a.airTarget = t?.id || null;
       if (t) {
         const d = distance3(a, t);
-        const f = forward(a.heading, a.pitch);
+        const fx = Math.sin(a.heading) * Math.cos(a.pitch);
+        const fz = -Math.cos(a.heading) * Math.cos(a.pitch);
         if (d < 150 && a.tactic !== "extend") {
           a.tactic = "extend";
           a.extendUntil = b.time + 5;
-          a.extendPoint = { x: a.x + f.x * 1000, z: a.z + f.z * 1000 };
+          a.extendPoint = { x: a.x + fx * 1000, z: a.z + fz * 1000 };
         }
         if (a.tactic === "extend" && b.time < a.extendUntil) {
           dest = a.extendPoint;
@@ -775,8 +858,9 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
             : b.aircraft.find((e: Any) => e.home === a.home && e.kind !== "fighter" && e.kind !== "recon" && e.hp > 0 && e.mode === "flight");
         if (leader) {
           a.tactic = "escort";
-          const f = forward(leader.heading);
-          dest = aimPoint(leader.x - f.x * 180 + Math.cos(leader.heading) * 140 * Math.sin(a.phase), leader.z - f.z * 180 + Math.sin(leader.heading) * 140 * Math.sin(a.phase));
+          const lfx = Math.sin(leader.heading);
+          const lfz = -Math.cos(leader.heading);
+          dest = aimPoint(leader.x - lfx * 180 + Math.cos(leader.heading) * 140 * Math.sin(a.phase), leader.z - lfz * 180 + Math.sin(leader.heading) * 140 * Math.sin(a.phase));
           alt = leader.y + 110;
           speed = clamp(leader.speed + (distance2(a, leader) - 250) * 0.055, 67, 133);
         } else {
@@ -789,12 +873,13 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
     } else if (a.wing && b.command === "cover" && b.player.mode === "flight") {
       a.tactic = "formation";
       const p = b.player;
-      const f = forward(p.heading);
-      dest = aimPoint(p.x - f.x * 130 + Math.cos(p.heading) * 95 * Math.sin(a.phase), p.z - f.z * 130 + Math.sin(p.heading) * 95 * Math.sin(a.phase));
+      const pfx = Math.sin(p.heading);
+      const pfz = -Math.cos(p.heading);
+      dest = aimPoint(p.x - pfx * 130 + Math.cos(p.heading) * 95 * Math.sin(a.phase), p.z - pfz * 130 + Math.sin(p.heading) * 95 * Math.sin(a.phase));
       alt = p.y + 30;
       speed = clamp(p.speed + (distance2(a, p) - 160) * 0.1, 53, 128);
     } else {
-      const t = selectNavalTarget(b, a);
+      const t = selectNavalTarget(b, a) ?? islandTarget(b, a);
       if (!t) {
         a.tactic = "search";
         dest = a.team === "us" ? b.search : aimPoint(-500, 6300);
@@ -811,24 +896,38 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
           // is the height it is flown at, and a level bomber never gives up its altitude.
           const level = a.airframe === "kate";
           a.tactic = level ? "level-bomb" : "dive";
-          const fall = bombImpact({ ...a, y: a.y - 1.6 }, { x: a.vx, y: a.vy - 2, z: a.vz }, 20);
-          const tf = forward(t.heading);
-          const lead = { ...t, x: t.x + tf.x * t.speed * fall.time, z: t.z + tf.z * t.speed * fall.time };
+          // `BOMB_POINT`/`BOMB_VEL` replace a spread of the whole aircraft record just to pass three
+          // numbers. `BOMB_LEAD` is the lead point, refilled from the believed target.
+          BOMB_POINT.x = a.x;
+          BOMB_POINT.y = a.y - 1.6;
+          BOMB_POINT.z = a.z;
+          BOMB_VEL.x = a.vx;
+          BOMB_VEL.y = a.vy - 2;
+          BOMB_VEL.z = a.vz;
+          const fall = bombImpact(BOMB_POINT, BOMB_VEL, 20);
+          const thx = Math.sin(t.heading);
+          const thz = -Math.cos(t.heading);
+          Object.assign(BOMB_LEAD, t);
+          BOMB_LEAD.x = t.x + thx * t.speed * fall.time;
+          BOMB_LEAD.z = t.z + thz * t.speed * fall.time;
+          const lead = BOMB_LEAD;
           dest = lead;
           alt = level ? 1850 : 160;
           if (onDeck(fall, lead, 5) && a.y > 140 && a.y < 2400 && a.bombs > 0) {
             b.dropBomb(a);
             a.tactic = "egress";
             a.egressUntil = b.time + 12;
-            const f = forward(a.heading);
-            a.egressPoint = { x: a.x + f.x * 1800, z: a.z + f.z * 1800 };
+            const ex = Math.sin(a.heading);
+            const ez = -Math.cos(a.heading);
+            a.egressPoint = { x: a.x + ex * 1800, z: a.z + ez * 1800 };
             alt = 650;
           }
           if (!level && a.y < 145 && a.bombs > 0) {
             a.tactic = "egress";
             a.egressUntil = b.time + 16;
-            const f = forward(a.heading);
-            a.egressPoint = { x: a.x + f.x * 1800, z: a.z + f.z * 1800 };
+            const ex2 = Math.sin(a.heading);
+            const ez2 = -Math.cos(a.heading);
+            a.egressPoint = { x: a.x + ex2 * 1800, z: a.z + ez2 * 1800 };
             alt = 650;
           }
         } else if (a.kind === "torpedo" && d < 4200) {
@@ -841,8 +940,9 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
             b.dropTorpedo(a);
             a.tactic = "egress";
             a.egressUntil = b.time + 13;
-            const f = forward(a.heading + Math.PI / 3);
-            a.egressPoint = { x: a.x + f.x * 1900, z: a.z + f.z * 1900 };
+            const tex = Math.sin(a.heading + Math.PI / 3);
+            const tez = -Math.cos(a.heading + Math.PI / 3);
+            a.egressPoint = { x: a.x + tex * 1900, z: a.z + tez * 1900 };
             alt = 350;
           } else if (d < 230) {
             a.mode = "rtb";
