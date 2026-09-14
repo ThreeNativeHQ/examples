@@ -93,8 +93,7 @@ try {
       return {
         name: m.name,
         airframe: m.userData.airframe,
-        animated: !!m.userData.animatedAirframe,
-        imported: !!m.userData.importedAircraft,
+        devastator: !!m.userData.devastator,
         propeller: !!m.getObjectByName("propeller"),
         gear: !!m.getObjectByName("gearleft"),
         flap: !!m.getObjectByName("flapleft"),
@@ -214,7 +213,7 @@ try {
   await page.waitForFunction(() => document.getElementById("briefing").classList.contains("hidden"));
   await page.waitForTimeout(900);
   const deck = await playerReadback();
-  assert.ok(deck.imported && deck.animated, `player Devastator is the imported clip rig: ${JSON.stringify(deck)}`);
+  assert.ok(deck.devastator, `player Devastator is the ported airframe: ${JSON.stringify(deck)}`);
   assert.equal(deck.name, "Douglas TBD-1 Devastator");
   assert.equal(deck.airframe, "tbd");
   assert.ok(deck.propeller && deck.gear && deck.flap, "the supplied moving parts are present");

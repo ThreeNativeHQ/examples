@@ -9,6 +9,7 @@ import { createAirframe, createDouglas, animateDouglas, animateImportedAirframe,
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
 import { animateDauntless, makeDauntless } from "./dauntless.js";
+import { animateDevastator, disposeDevastator } from "./devastator.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScars } from "./model-damage.js";
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
 import { createOcean, REFLECTED_LAYER } from "./ocean.js";
@@ -44,6 +45,10 @@ const WORLD_UP = new T.Vector3(0, 1, 0);
  * same call cannot serve both.
  */
 function spinParked(m: T.Group, dt: number): void {
+  if (m.userData.devastator) {
+    animateDevastator(m, { rpm: 0.12 }, dt);
+    return;
+  }
   if (m.userData.propeller) {
     spinPropeller(m, 0.12, dt);
     return;
@@ -404,7 +409,8 @@ export class WorldView {
     if (this.playerMesh?.userData.airframe === type) return;
     if (this.playerMesh) {
       this.playerMesh.removeFromParent();
-      if (this.playerMesh.userData.importedAircraft) disposeAirframe(this.playerMesh);
+      if (this.playerMesh.userData.devastator) disposeDevastator(this.playerMesh);
+      else if (this.playerMesh.userData.importedAircraft) disposeAirframe(this.playerMesh);
       this.disposeModel(this.playerMesh);
     }
     // The player's Devastator is the imported TBD-1, driven by its own shipped clips; the SBD
@@ -576,7 +582,8 @@ export class WorldView {
       if (p.attitude) this.playerMesh.quaternion.set(p.attitude.x, p.attitude.y, p.attitude.z, p.attitude.w);
       else this.playerMesh.rotation.set(p.pitch, -p.heading, p.roll, "YXZ");
     }
-    if (this.playerMesh.userData.animatedAirframe) animateImportedAirframe(this.playerMesh, p, dt);
+    if (this.playerMesh.userData.devastator) animateDevastator(this.playerMesh, p, dt);
+    else if (this.playerMesh.userData.animatedAirframe) animateImportedAirframe(this.playerMesh, p, dt);
     else if (this.playerMesh.userData.importedAircraft) animateDouglas(this.playerMesh, p, dt);
     else animateDauntless(this.playerMesh, p, dt);
     updateDamageVisuals(this.playerMesh, p);
@@ -837,7 +844,8 @@ export class WorldView {
 
   /** Give up one aircraft's mesh without touching geometry another instance still shares. */
   private releaseAircraft(m: T.Object3D): void {
-    if (m.userData.douglas || m.userData.importedAircraft) disposeAirframe(m as T.Group);
+    if (m.userData.devastator) disposeDevastator(m as T.Group);
+    else if (m.userData.douglas || m.userData.importedAircraft) disposeAirframe(m as T.Group);
     this.disposeModel(m);
   }
 

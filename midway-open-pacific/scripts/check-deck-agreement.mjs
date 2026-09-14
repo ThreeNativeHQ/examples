@@ -90,7 +90,10 @@ const RECORDED_DECKS = {
   "USS Enterprise": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
   "USS Hornet": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
   Akagi: { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 31.3 },
-  "USS Yorktown": { deckLength: 240, deckWidth: 20, deckHeight: 12.54, deckBeam: 32 },
+  // CV-5 is drawn from the supplied `hornet.glb` sister hull (src/render/imported-ships.ts), so she
+  // carries CV-6 and CV-8's deck. The retired `carrier.yorktown.glb` measured 240 x 32 / 12.54 and
+  // remains a correct import; it is simply no longer the model this ship is drawn from.
+  "USS Yorktown": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
   Kaga: { deckLength: 230, deckWidth: 18, deckHeight: 15.76, deckBeam: 52 },
   Soryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.89, deckBeam: 34 },
   Hiryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.92, deckBeam: 40 },
@@ -211,8 +214,8 @@ claim("AC-6 a diversion recovers on the second deck's own datum and corridor", (
   b.playerFlight.reset();
   assert.equal(b.goHome(), deck, "H must route to the surviving friendly deck");
   assert.equal(b.recoveryCarrier, deck, "the recovery carrier must be the diverted deck");
-  // The band clears the lower deck's gate and is 7+ m below the taller launch deck's datum, so a
-  // fleet-wide datum from the launch deck would refuse this legitimate approach.
+  // The band clears the diverted deck's gate; the launch deck is a different hull, astern of the
+  // parked aircraft's own carrier, so it is outside its envelope as well.
   assert.equal(finalReady(b.player, deck), true, "the band must be inside the diverted deck's envelope");
   assert.equal(finalReady(b.player, launchedFrom), false, "and outside the launch deck's envelope");
   const a = b.approach();
@@ -239,7 +242,11 @@ claim("AC-6 a diversion recovers on the second deck's own datum and corridor", (
     `the aircraft must rest on ${deck.name}'s own ${deck.deckHeight} m deck: y ${b.player.y.toFixed(2)}, expected ${expected.toFixed(2)} ` +
       `(a fleet-wide 22.00 m would float it ${(22 - expected).toFixed(2)} m above the deck)`,
   );
-  assert.ok(b.player.y < launchedFrom.deckHeight - 2, "and must not use the launch deck's datum");
+  // FIX 1's basis: CV-5 now draws her sister hull, so her datum equals the launch deck's and the
+  // old "below the taller launch deck" contrast cannot exist. The diversion still reads the diverted
+  // ship's own corrected record: its 20.06 m datum, not the retired model's 12.54 m.
+  assert.equal(deck.deckHeight, launchedFrom.deckHeight, "CV-5 now carries her sisters' datum");
+  assert.equal(deck.deckHeight, 20.06, "the corrected Yorktown-class datum, not the retired model's 12.54 m");
   const local = {
     right: (b.player.x - deck.x) * Math.cos(deck.heading) + (b.player.z - deck.z) * Math.sin(deck.heading),
     forward: (b.player.x - deck.x) * Math.sin(deck.heading) - (b.player.z - deck.z) * Math.cos(deck.heading),

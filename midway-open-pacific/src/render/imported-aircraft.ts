@@ -18,7 +18,8 @@ import {
 } from "./cockpit-detail.js";
 import { createDauntlessGear } from "./dauntless.js";
 import { createZero } from "./imported-fleet.js";
-import { makeTorpedoModel } from "./model-damage.js";
+import { disposeDevastator, makeDevastator } from "./devastator.js";
+export { animateDevastator, disposeDevastator, makeDevastator } from "./devastator.js";
 
 /** The detailed interior is a real-metre cockpit, scaled into the Douglas canopy opening. */
 const COCKPIT_SCALE = 0.52;
@@ -36,8 +37,6 @@ const COCKPIT_POSITION: [number, number, number] = [0, 0.342, -2.482];
  * backfaces are culled from inside). The exterior is never hidden and no canopy is re-authored.
  */
 const TBD_COCKPIT_POSITION: [number, number, number] = [0, 2.2116, -3.182];
-/** Measured TBD belly is 0.4 m above the wheel datum; the store hangs from it, clear of the deck. */
-const TBD_TORPEDO_POSITION: [number, number, number] = [0, 0.33, -0.3];
 
 const surfaceClips = [
   "flight.pitch-up",
@@ -63,11 +62,6 @@ const DOUGLAS_URL = "/assets/aircraft.douglas-sbd3.glb";
  * Nose direction is measured per file rather than assumed — see createAirframe.
  */
 const IMPORTS = {
-  tbd1: {
-    name: "Douglas TBD-1 Devastator",
-    hero: "/assets/aircraft.tbd-devastator.glb",
-    ai: "/assets/aircraft.tbd-devastator.ai.glb",
-  },
   b5n2: {
     name: "Nakajima B5N2",
     hero: "/assets/aircraft.b5n2-kate.glb",
@@ -415,6 +409,8 @@ export function createAirframe(id: AirframeId, detail: "hero" | "ai", animated =
   // The Dauntless and the Zero keep the constructors that measured them; only their propeller is
   // republished here, so one animator can find any airframe's propeller the same way.
   if (id === "sbd3") return createDouglas();
+  // The Devastator is drawn from the ported standalone airframe, not a supplied GLB.
+  if (id === "tbd1") return makeDevastator();
   if (id === "a6m3") {
     const zero = createZero();
     zero.userData.propeller = requirePropeller(zero, ZERO_PROPELLER, "Mitsubishi A6M3", "aircraft.mitsubishi-a6m3.glb");
@@ -503,12 +499,6 @@ export function createAirframe(id: AirframeId, detail: "hero" | "ai", animated =
       actions.set(clip.name, action);
     }
     let torpedo: T.Object3D | undefined;
-    if (id === "tbd1") {
-      torpedo = makeTorpedoModel();
-      torpedo.position.set(...TBD_TORPEDO_POSITION);
-      root.add(torpedo);
-      root.userData.torpedoLoad = torpedo;
-    }
     const instrumentRoot = new T.Group();
     instrumentRoot.name = "TBD live cockpit instruments";
     const cockpitMaterials = getCockpitMaterials();
@@ -640,6 +630,10 @@ export function animateImportedAirframe(
 export function disposeAirframe(group: T.Group): void {
   if (instances.has(group)) {
     disposeDouglas(group);
+    return;
+  }
+  if (group.userData.devastator) {
+    disposeDevastator(group);
     return;
   }
   const rig = animatedImports.get(group);

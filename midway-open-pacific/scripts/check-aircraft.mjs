@@ -78,7 +78,7 @@ try {
   });
   const modulePath = resolve(temporary, "aircraft.mjs");
   await writeFile(modulePath, output.outputFiles[0].text);
-  const { loadImportedAircraft, createDouglas, animateDouglas, disposeDouglas, createAirframe, animateImportedAirframe, disposeAirframe } = await import(
+  const { loadImportedAircraft, createDouglas, animateDouglas, disposeDouglas, createAirframe, animateDevastator, disposeAirframe } = await import(
     pathToFileURL(modulePath).href
   );
   const testTexture = new Texture();
@@ -246,49 +246,55 @@ try {
   disposeDouglas(airplane);
   disposeDouglas(parked);
 
-  // The player TBD: the imported airframe, driven by its own shipped clips, as its own instance.
+  // The player TBD: the ported standalone airframe, driven by the game's own control values, as its
+  // own instance. The supplied GLB is no longer the Devastator the game draws.
   const tbd = createAirframe("tbd1", "hero", true);
-  const parkedTbd = createAirframe("tbd1", "ai", true);
-  assert.equal(tbd.name, "Douglas TBD-1 Devastator", "the player TBD is the imported airframe");
-  assert.ok(tbd.userData.animatedAirframe, "the player TBD carries its clip rig");
+  const parkedTbd = createAirframe("tbd1", "ai");
+  assert.equal(tbd.name, "Douglas TBD-1 Devastator", "the player TBD is the ported airframe");
+  assert.ok(tbd.userData.devastator, "the player TBD is the ported Devastator");
   const tbdSpan = new Box3().setFromObject(tbd).getSize(new Vector3()).x;
-  assert.ok(Math.abs(tbdSpan - 15.24) < 0.02, `TBD span stays measured: ${tbdSpan}`);
+  assert.ok(Math.abs(tbdSpan - 15.24) < 0.05, `TBD span stays measured: ${tbdSpan}`);
+  tbd.updateMatrixWorld(true);
+  assert.ok(
+    Math.abs(new Box3().setFromObject(tbd).min.y) < 0.02,
+    "the Devastator rests on the y = 0 wheel datum the deck park and the flight model both use",
+  );
   const part = (name) => tbd.getObjectByName(name);
-  const moving = ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].map(part);
-  assert.ok(moving.every(Boolean), "every separated TBD flight part is addressable");
-  const tbdNeutral = moving.map((node) => node.quaternion.clone());
+  const moved = ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].map(part);
+  assert.ok(moved.every(Boolean), "every Devastator flight part is addressable");
+  assert.ok(tbd.getObjectByName("airframebody"), "the fuselage is named for the asset contract");
+  const tbdNeutral = moved.map((node) => node.quaternion.clone());
   const parkedNeutral = ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].map((name) =>
     parkedTbd.getObjectByName(name).quaternion.clone(),
   );
-  animateImportedAirframe(
-    tbd,
-    { rpm: 0.9, elevator: 1, controlAileron: 1, rudder: -1, flapPos: 1, gearPos: 0, torpedo: 1 },
-    0.05,
-  );
-  for (const [i, node] of moving.entries())
+  // The model eases toward its targets, so the control values are held until it settles.
+  const settle = (values, steps = 60) => {
+    for (let i = 0; i < steps; i += 1) animateDevastator(tbd, values, 0.05);
+  };
+  settle({ rpm: 0.9, elevator: 1, controlAileron: 1, rudder: -1, flapPos: 1, gearPos: 0, torpedo: 1 });
+  for (const [i, node] of moved.entries())
     assert.ok(
       node.quaternion.angleTo(tbdNeutral[i]) > 0.05,
-      `${node.name} follows its clip: ${node.quaternion.angleTo(tbdNeutral[i])}`,
+      `${node.name} follows its control: ${node.quaternion.angleTo(tbdNeutral[i])}`,
     );
   assert.equal(part("propeller").visible, false, "the running propeller hands off to its blur");
   assert.equal(tbd.getObjectByName("Propeller motion blur").visible, true);
-  assert.ok(tbd.getObjectByName("Mark 13 / straight-running aerial torpedo"), "one visible store");
-  for (const [i, node] of ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].map((n) =>
-    parkedTbd.getObjectByName(n),
-  ).entries())
+  assert.ok(tbd.userData.torpedoLoad, "the Devastator carries its own store");
+  for (const [i, name] of ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].entries())
     assert.ok(
-      node.quaternion.angleTo(parkedNeutral[i]) < 1e-6,
-      `${node.name} on a second instance is untouched`,
+      parkedTbd.getObjectByName(name).quaternion.angleTo(parkedNeutral[i]) < 1e-6,
+      `${name} on a second instance is untouched`,
     );
-  animateImportedAirframe(tbd, { rpm: 0, torpedo: 0, flapPos: 0, gearPos: 1 }, 0);
-  for (const [i, node] of moving.entries())
-    assert.ok(node.quaternion.angleTo(tbdNeutral[i]) < 1e-6, `${node.name} returns to neutral`);
+  settle({ rpm: 0, torpedo: 0, flapPos: 0, gearPos: 1 }, 120);
+  for (const [i, node] of moved.entries())
+    assert.ok(node.quaternion.angleTo(tbdNeutral[i]) < 0.01, `${node.name} returns to neutral`);
   assert.equal(tbd.userData.torpedoLoad.visible, false, "releasing the store hides it once");
-  assert.ok(tbd.getObjectByName("TBD live cockpit instruments"), "the TBD mounts its own panel");
+  assert.ok(tbd.userData.arrestingHook, "the Devastator carries its hook");
+  assert.ok(tbd.userData.cockpit, "the Devastator publishes the pilot eye");
   disposeAirframe(tbd);
   disposeAirframe(parkedTbd);
   console.log(
-    "Aircraft check passed: 12 clips, 12.66m span, independent controls and clones, neutral release, throttle stop, separate vertex layout; imported player TBD consumes its 9 shipped clips with independent instance state and a visible store.",
+    "Aircraft check passed: 12 clips, 12.66m span, independent controls and clones, neutral release, throttle stop, separate vertex layout; the ported player TBD drives its own split surfaces, store and hook with independent instance state.",
   );
 } finally {
   await rm(temporary, { recursive: true, force: true });

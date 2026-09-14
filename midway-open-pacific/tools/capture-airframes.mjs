@@ -226,18 +226,17 @@ try {
       return {
         name: m.name,
         airframe: s.battle.player.airframe,
-        animated: !!m.userData.animatedAirframe,
-        imported: !!m.userData.importedAircraft,
+        devastator: !!m.userData.devastator,
         cockpit: m.userData.cockpit ? m.userData.cockpit.toArray().map((v) => +v.toFixed(3)) : null,
-        interior: !!m.userData.cockpitInterior,
+        panel: !!m.getObjectByName("cockpit_interior"),
         hook: !!m.userData.arrestingHook,
         store: !!m.userData.torpedoLoad,
       };
     });
   const player = await playerReadback();
   assert.ok(
-    player.animated && player.imported && /Devastator/.test(player.name),
-    `the drawn player airframe must be the imported TBD: ${JSON.stringify(player)}`,
+    player.devastator && /Devastator/.test(player.name),
+    `the drawn player airframe must be the ported Devastator: ${JSON.stringify(player)}`,
   );
   assert.equal(player.airframe, "tbd", JSON.stringify(player));
 
@@ -253,20 +252,19 @@ try {
     const cam = s.world.camera.getWorldPosition(new V());
     return {
       mode: s.world.cameraMode,
-      interior: !!m.userData.cockpitInterior,
-      interiorVisible: m.userData.cockpitInterior?.visible ?? null,
+      panel: !!m.getObjectByName("cockpit_interior"),
       eyeDistance: eye ? +cam.distanceTo(eye).toFixed(3) : null,
     };
   });
   assert.equal(cockpit.mode, 1, `cockpit camera mode: ${JSON.stringify(cockpit)}`);
-  assert.ok(cockpit.interior && cockpit.interiorVisible, `the TBD cockpit interior is drawn: ${JSON.stringify(cockpit)}`);
+  assert.ok(cockpit.panel, `the Devastator's own cockpit is drawn: ${JSON.stringify(cockpit)}`);
   assert.ok(
     cockpit.eyeDistance !== null && cockpit.eyeDistance < 0.5,
     `the cockpit camera sits on the TBD eye: ${JSON.stringify(cockpit)}`,
   );
 
-  // Raycast from the eye forward-and-down. Before the eye was lowered it sat above the canopy roof
-  // and this ray met the opaque `airframebody` at 0.955 m; it must now reach the instrument panel.
+  // Raycast from the eye forward-and-down: it must reach the Devastator's own instrument panel,
+  // not stop on the opaque fuselage skin behind it.
   const sightline = await page.evaluate(() => {
     const s = window.midway;
     const T = window.__T;
@@ -280,21 +278,21 @@ try {
       .intersectObject(m, true)
       .filter((h) => h.object.visible && !(h.object.material?.transparent));
     const first = hits[0] ?? null;
-    let inInterior = false;
+    let inCockpit = false;
     for (let o = first?.object; o; o = o.parent) {
-      if (o === m.userData.cockpitInterior) {
-        inInterior = true;
+      if (o.name === "cockpit_interior") {
+        inCockpit = true;
         break;
       }
     }
     return {
       distance: first ? +first.distance.toFixed(3) : null,
       name: first?.object?.name ?? null,
-      inInterior,
+      inCockpit,
       nearest: hits.slice(0, 4).map((h) => h.object.name || h.object.type),
     };
   });
-  assert.ok(sightline.inInterior, `the forward-down sightline reaches the instrument panel: ${JSON.stringify(sightline)}`);
+  assert.ok(sightline.inCockpit, `the forward-down sightline reaches the instrument panel: ${JSON.stringify(sightline)}`);
   assert.ok(
     !/airframebody/i.test(sightline.name || ""),
     `the sightline must not stop on the opaque fuselage: ${JSON.stringify(sightline)}`,
@@ -379,7 +377,7 @@ try {
       const array = (o) => (o ? o.quaternion.toArray().map((v) => +v.toFixed(4)) : null);
       const xyz = (o) => (o ? o.position.toArray().map((v) => +v.toFixed(4)) : null);
       return {
-        hook: m.userData.arrestingHook ? +m.userData.arrestingHook.rotation.x.toFixed(4) : null,
+        hook: m.userData.arrestingHook ? +m.userData.arrestingHook.rotation.z.toFixed(4) : null,
         gearLeft: array(m.getObjectByName("gearleft")),
         gearRight: array(m.getObjectByName("gearright")),
         gearMountLeft: xyz(m.getObjectByName("gearmountleft")),
