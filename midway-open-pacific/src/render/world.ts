@@ -504,9 +504,16 @@ export class WorldView {
       );
       this.camera.fov = 70;
     } else {
-      const distance = this.cameraMode === 2 ? 58 : 18;
+      // A stationary aircraft on its deck sits ahead of the aft deck park, so a centreline chase
+      // camera lands inside that parked row and its near wing/body fills the frame. While the
+      // wheels are down on deck the view is taken abeam (port, clear of the island) and above,
+      // still in the aircraft's own moving frame; rolling launch and airborne chase are unchanged.
+      const onDeck =
+        !briefing && (p.mode === "deck" || p.mode === "arrest" || p.mode === "service");
+      const wide = this.cameraMode === 2;
+      const distance = onDeck ? (wide ? 26 : 13) : wide ? 58 : 18;
       const sign = this.rear ? 1 : -1;
-      const up = this.cameraMode === 2 ? 12 : 4.2;
+      const up = onDeck ? (wide ? 9 : 5.5) : wide ? 12 : 4.2;
       if (!this.lookActive) {
         this.lookYaw *= Math.exp(-dt * 7);
         this.lookPitch *= Math.exp(-dt * 7);
@@ -515,16 +522,17 @@ export class WorldView {
       // a head. Without this the chase views simply ignored right-drag, which the controls claimed
       // to support; the look target slides onto the aircraft as the orbit opens so the framing
       // stays on the machine rather than on empty sky ahead of it.
-      this.orbit.set(f.x * distance * sign, f.y * distance * sign + up, f.z * distance * sign);
+      if (onDeck) this.orbit.set(-axes.r.x * distance, up, -axes.r.z * distance);
+      else this.orbit.set(f.x * distance * sign, f.y * distance * sign + up, f.z * distance * sign);
       this.orbit.applyAxisAngle(WORLD_UP, -this.lookYaw);
       this.orbitAxis.set(this.orbit.z, 0, -this.orbit.x);
       if (this.orbitAxis.lengthSq() > 1e-6)
         this.orbit.applyAxisAngle(this.orbitAxis.normalize(), -this.lookPitch);
       this.targetCamera.set(p.x + this.orbit.x, p.y + this.orbit.y, p.z + this.orbit.z);
       const framing = 1 - Math.min(1, (Math.abs(this.lookYaw) + Math.abs(this.lookPitch)) * 2.2);
-      const lead = (this.rear ? -35 : 40) * framing;
-      this.look.set(p.x + f.x * lead, p.y + f.y * lead + 1.5, p.z + f.z * lead);
-      this.camera.fov = this.cameraMode === 2 ? 60 : 56;
+      const lead = onDeck ? framing * 3 : (this.rear ? -35 : 40) * framing;
+      this.look.set(p.x + f.x * lead, p.y + f.y * lead + (onDeck ? 1.2 : 1.5), p.z + f.z * lead);
+      this.camera.fov = wide ? 60 : 56;
     }
     if (this.playerMesh.userData.crew) this.playerMesh.userData.crew[0].visible = !cockpit;
     // The detailed interior and the supplied canopy shell are alternatives: show the interior in

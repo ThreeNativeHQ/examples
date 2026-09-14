@@ -40,6 +40,31 @@ gltf.buffers[0].uri =
   "data:application/octet-stream;base64," + bytes.subarray(28 + length).toString("base64");
 globalThis.ProgressEvent = class {};
 const loaded = await new GLTFLoader().parseAsync(JSON.stringify(gltf), "");
+
+/** Parse another shipped GLB the same texture-less way, for the imported-airframe animations. */
+const stripGlb = async (asset) => {
+  const raw = await readFile(new URL(asset, import.meta.url));
+  const header = raw.readUInt32LE(12);
+  const model = JSON.parse(raw.subarray(20, 20 + header));
+  for (const material of model.materials) {
+    delete material.normalTexture;
+    delete material.occlusionTexture;
+    delete material.emissiveTexture;
+    if (material.pbrMetallicRoughness) {
+      delete material.pbrMetallicRoughness.baseColorTexture;
+      delete material.pbrMetallicRoughness.metallicRoughnessTexture;
+    }
+  }
+  delete model.textures;
+  delete model.images;
+  model.buffers[0].uri =
+    "data:application/octet-stream;base64," + raw.subarray(28 + header).toString("base64");
+  return new GLTFLoader().parseAsync(JSON.stringify(model), "");
+};
+const tbdSource = await stripGlb("../public/assets/aircraft.tbd-devastator.glb");
+assert.equal(tbdSource.animations.length, 9, "the TBD ships one clip per moving part");
+const tbdParts = ["aileronleft", "aileronright", "elevator", "flapleft", "flapright", "gearleft", "gearright", "propeller", "rudder"];
+for (const name of tbdParts) assert.ok(tbdSource.scene.getObjectByName(name), `TBD ships a separated ${name}`);
 await mkdir("node_modules/.cache", { recursive: true });
 const temporary = await mkdtemp(resolve("node_modules/.cache/aircraft-check-"));
 try {
@@ -53,14 +78,14 @@ try {
   });
   const modulePath = resolve(temporary, "aircraft.mjs");
   await writeFile(modulePath, output.outputFiles[0].text);
-  const { loadImportedAircraft, createDouglas, animateDouglas, disposeDouglas } = await import(
+  const { loadImportedAircraft, createDouglas, animateDouglas, disposeDouglas, createAirframe, animateImportedAirframe, disposeAirframe } = await import(
     pathToFileURL(modulePath).href
   );
   const testTexture = new Texture();
   const sourceMesh = loaded.scene.getObjectByName("defaultMaterial_node_18");
   sourceMesh.material.map = testTexture;
   await loadImportedAircraft({
-    assets: { model: async () => loaded },
+    assets: { model: async (url) => (/tbd-devastator/.test(String(url)) ? tbdSource : loaded) },
     renderer: { raw: { getMaxAnisotropy: () => 8 } },
   });
   assert.equal(
@@ -220,8 +245,50 @@ try {
   assert.ok(propeller.quaternion.equals(stopped), "a stopped propeller does not advance");
   disposeDouglas(airplane);
   disposeDouglas(parked);
+
+  // The player TBD: the imported airframe, driven by its own shipped clips, as its own instance.
+  const tbd = createAirframe("tbd1", "hero", true);
+  const parkedTbd = createAirframe("tbd1", "ai", true);
+  assert.equal(tbd.name, "Douglas TBD-1 Devastator", "the player TBD is the imported airframe");
+  assert.ok(tbd.userData.animatedAirframe, "the player TBD carries its clip rig");
+  const tbdSpan = new Box3().setFromObject(tbd).getSize(new Vector3()).x;
+  assert.ok(Math.abs(tbdSpan - 15.24) < 0.02, `TBD span stays measured: ${tbdSpan}`);
+  const part = (name) => tbd.getObjectByName(name);
+  const moving = ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].map(part);
+  assert.ok(moving.every(Boolean), "every separated TBD flight part is addressable");
+  const tbdNeutral = moving.map((node) => node.quaternion.clone());
+  const parkedNeutral = ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].map((name) =>
+    parkedTbd.getObjectByName(name).quaternion.clone(),
+  );
+  animateImportedAirframe(
+    tbd,
+    { rpm: 0.9, elevator: 1, controlAileron: 1, rudder: -1, flapPos: 1, gearPos: 0, torpedo: 1 },
+    0.05,
+  );
+  for (const [i, node] of moving.entries())
+    assert.ok(
+      node.quaternion.angleTo(tbdNeutral[i]) > 0.05,
+      `${node.name} follows its clip: ${node.quaternion.angleTo(tbdNeutral[i])}`,
+    );
+  assert.equal(part("propeller").visible, false, "the running propeller hands off to its blur");
+  assert.equal(tbd.getObjectByName("Propeller motion blur").visible, true);
+  assert.ok(tbd.getObjectByName("Mark 13 / straight-running aerial torpedo"), "one visible store");
+  for (const [i, node] of ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].map((n) =>
+    parkedTbd.getObjectByName(n),
+  ).entries())
+    assert.ok(
+      node.quaternion.angleTo(parkedNeutral[i]) < 1e-6,
+      `${node.name} on a second instance is untouched`,
+    );
+  animateImportedAirframe(tbd, { rpm: 0, torpedo: 0, flapPos: 0, gearPos: 1 }, 0);
+  for (const [i, node] of moving.entries())
+    assert.ok(node.quaternion.angleTo(tbdNeutral[i]) < 1e-6, `${node.name} returns to neutral`);
+  assert.equal(tbd.userData.torpedoLoad.visible, false, "releasing the store hides it once");
+  assert.ok(tbd.getObjectByName("TBD live cockpit instruments"), "the TBD mounts its own panel");
+  disposeAirframe(tbd);
+  disposeAirframe(parkedTbd);
   console.log(
-    "Aircraft check passed: 12 clips, 12.66m span, independent controls and clones, neutral release, throttle stop, separate vertex layout.",
+    "Aircraft check passed: 12 clips, 12.66m span, independent controls and clones, neutral release, throttle stop, separate vertex layout; imported player TBD consumes its 9 shipped clips with independent instance state and a visible store.",
   );
 } finally {
   await rm(temporary, { recursive: true, force: true });
