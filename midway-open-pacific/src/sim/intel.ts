@@ -124,11 +124,16 @@ function horizonMetres(observerAltitude: number, targetAltitude: number): number
   return (HORIZON_KM * Math.sqrt(Math.max(0, observerAltitude)) + HORIZON_KM * Math.sqrt(Math.max(0, targetAltitude))) * 1000;
 }
 
+/**
+ * Visibility scales the range actually achieved rather than gating it on and off: haze reduces how
+ * far a lookout can pick a hull out of the sea by degrees, it does not blind him past a threshold.
+ * The horizon caps that scaled range independently, because a clear day never lets you see past it.
+ */
 export function canObserve(args: ObserveArgs): boolean {
   if (args.visibility <= 0) return false;
   if (args.targetAltitude < -args.sightDepth) return false;
   const range = distance2(args.observer, args.target);
-  if (range > args.rangeLimit) return false;
+  if (range > args.rangeLimit * args.visibility) return false;
   return range <= horizonMetres(args.observerAltitude, args.targetAltitude);
 }
 

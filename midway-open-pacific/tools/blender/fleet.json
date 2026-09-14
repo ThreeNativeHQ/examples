@@ -49,9 +49,10 @@
       "draught": 7.9,
       "flip": false,
       "budget": 700000,
-      "sourceTriangles": 1875769,
+      "sourceTriangles": 688672,
       "class": "Yorktown CV-5",
-      "heightSource": "DANFS hull figure plus the hornet.glb masthead envelope"
+      "heightSource": "DANFS hull figure plus the hornet.glb masthead envelope",
+      "note": "The Yorktown is simplified by error bound rather than to a triangle target, so its count is what an 0.0001 error tolerance yields, not a number chosen in advance."
     },
     {
       "id": "cruiser.tone",
@@ -74,10 +75,12 @@
       "height": 38.0,
       "draught": 6.1,
       "flip": true,
-      "budget": 50000,
-      "sourceTriangles": 47991,
+      "budget": 55000,
+      "sourceTriangles": 51552,
       "class": "Supplied Mogami-labelled model (byte-identical to Tone source)",
-      "heightSource": "shares the Tone hull envelope; the two classes were close in freeboard"
+      "heightSource": "shares the Tone hull envelope; the two classes were close in freeboard",
+      "derivedFrom": "cruiser.tone",
+      "note": "Budget above Tone's because the derived aft turrets add geometry the donor hull does not carry."
     },
     {
       "id": "destroyer.kagero",
@@ -145,5 +148,5 @@
       "heightSource": "body diameter; the supplied body is close to the real fineness ratio"
     }
   ],
-  "_derived": "The supplied Mogami and Tone GLBs are byte-identical. Preserve both sources; the previous turret derivation duplicated an aft mast onto the foredeck and has been removed from the import path."
+  "_derived": "cruiser.mogami is not a separate supplied model: the supplied Mogami GLB is byte-identical to the Tone GLB and the geometry is a Tone. tools/blender/derive-mogami.py copies the after pair of forward turrets, mirrors them to face aft and sets them on the quarterdeck, so the class reads as a Mogami instead of the same hull drawn twice. It moves vertices; it scales nothing."
 }

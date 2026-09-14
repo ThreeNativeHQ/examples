@@ -38,8 +38,12 @@ const BAND = 3;
 /** Centreline step for the profile, and station step for the corridor, in metres. */
 const PROFILE_STEP = 1;
 const STATION_STEP = 5;
-/** The narrowest deck that is still a corridor: half a Devastator's 15.24 m span, plus a little. */
-const MIN_HALF = 8;
+/**
+ * Half the narrowest rectangle still worth calling a corridor. A TBD-1 spans 15.24 m, so at 14 m a
+ * wingtip already overhangs the corridor it is lined up in; a station with less deck than this ends
+ * the corridor rather than narrowing it, and one with more only sets how wide the corridor can be.
+ */
+const MIN_HALF = 7;
 /** A triangle this close to horizontal is deck rather than hull side or funnel. */
 const FLAT = Math.cos((20 * Math.PI) / 180);
 
@@ -142,8 +146,9 @@ export function measureDeck(root) {
   };
 
   // The corridor runs from amidships out to the last station on both sides that still has deck at
-  // least MIN_HALF metres each side of the centreline: half a Devastator's 15.24 m span plus a
-  // little. It is symmetric because `onDeck` measures the rectangle from the ship's own centre.
+  // least MIN_HALF metres each side of the centreline, and is then as wide as the narrowest of those
+  // stations. Length first, because a deck run is what a launch actually needs; the width follows
+  // from the deck the run crosses. It is symmetric because `onDeck` measures it from the ship's centre.
   const stations = [];
   for (let z = 0; z <= box.max.z; z += STATION_STEP) stations.push(stationAt(z));
   for (let z = -STATION_STEP; z >= box.min.z; z -= STATION_STEP) stations.unshift(stationAt(z));
@@ -180,7 +185,9 @@ export function measureDeck(root) {
     deckPlanBeam: +(2 * plan).toFixed(1),
     length: +(box.max.z - box.min.z).toFixed(2),
     beam: +(box.max.x - box.min.x).toFixed(2),
-    stations: inside,
+    corridorFrom: -half,
+    corridorTo: half,
+    stations,
   };
 }
 
@@ -208,7 +215,7 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/^.*?(?=
         .map((s) =>
           s.y === null
             ? `${s.z}:nodeck`
-            : `${s.z}:${s.y.toFixed(2)}/${s.port}|${s.starboard}${
+            : `${s.z <= m.corridorTo && s.z >= m.corridorFrom ? "*" : ""}${s.z}:${s.y.toFixed(2)}/${s.port}|${s.starboard}${
                 s.clearPort < s.port || s.clearStarboard < s.starboard
                   ? ` (clear ${s.clearPort}|${s.clearStarboard})`
                   : ""

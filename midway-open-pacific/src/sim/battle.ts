@@ -111,10 +111,15 @@ export const MAX_IMPACTS = 8;
  * the renderer patched them in while building meshes, so the numbers depended on a `WorldView`
  * having been constructed. They are now three named things:
  *
- * - `hullLength`/`hullBeam`: the damage and collision volume, and the outline that is drawn. For a
- *   carrier that is the flight-deck plan, because the overhanging deck is what a bomb meets first.
- * - `deckLength`/`deckWidth`: the launch and recovery corridor, carriers only. Narrower than the
- *   hull: the flight model rolls an aircraft down these numbers and calls an overrun from them.
+ * - `hullLength`/`hullBeam`: the hull at the waterline, and the outline that is drawn. This is the
+ *   lower half of the damage volume: a weapon that goes down outboard of the hull hits the sea.
+ * - `deckBeam`: the drawn flight deck's own plan, which overhangs that hull — 26 m each side of
+ *   Kaga's centreline against a 32.5 m waterline beam. It is the upper half of the damage volume,
+ *   because at and above deck height the deck is what a bomb meets first. Every hull without a
+ *   flight deck carries its own `hullBeam` here and answers as one box, as it always did.
+ * - `deckLength`/`deckWidth`: the launch and recovery corridor, carriers only. Narrower than both
+ *   of the above: the flight model rolls an aircraft down these numbers and calls an overrun from
+ *   them, so it is deck an aircraft can actually use, not deck a bomb can hit.
  * - `deckHeight`: the horizontal surface above the sea — a carrier's own flight deck datum, and for
  *   every other hull the superstructure plane the weapon code has always used.
  */
@@ -156,30 +161,50 @@ interface IDeck {
   deckLength: number;
   deckWidth: number;
   deckHeight: number;
+  deckBeam: number;
 }
 
-/** A carrier class's corridor is its own hull reference; the datum is measured from the GLB. */
-const deckOf = (classId: string, deckHeight: number): IDeck => {
-  const cls = shipClass(classId);
-  return { deckLength: cls.hullLength, deckWidth: cls.hullBeam, deckHeight };
-};
-
 /**
- * Flight decks by ship name. Enterprise, Hornet and Akagi were surveyed by raycasting their own
- * tapered decks (tools/capture-deck.mjs), which is where the conservative 220x20 corridor and the
- * 20.06 m datum come from. The imported carriers take their corridor from the class reference and
- * their datum from the shipped GLB. These must stay equal to `DECKS` in src/render/imported-ships.ts,
- * which is the same table on the render side; that file's owner should import this one instead.
+ * Flight decks by ship name. Every number is raycast off the model the ship is actually drawn with.
+ *
+ * Enterprise, Hornet and Akagi were surveyed in the running game (tools/capture-deck.mjs), which is
+ * where their conservative 220 x 20 m corridor and 20.06 m datum come from. The four imported hulls
+ * are surveyed the same way but off the shipped bytes and with no browser, by
+ * `node tools/measure-decks.mjs`, which prints every station this table was filled from:
+ *
+ * - `deckLength` x `deckWidth` is the longest run of deck through amidships with at least 7 m of
+ *   deck each side of the centreline, made symmetric about the ship's origin because `onDeck`
+ *   measures the corridor from there, and then as wide as the narrowest station it crosses. It is a
+ *   measurement of the deck, not of the ship: the class hull length and waterline beam that used to
+ *   stand in here gave Kaga a 247.65 x 32.5 m launch rectangle — the whole ship, bow overhang and
+ *   island included.
+ * - `deckBeam` is the widest the drawn deck reaches, for the upper half of the damage volume.
+ * - `deckHeight` is the deck's own elevation **in the world**: the midpoint of the range the deck
+ *   covers along the corridor, less the class draught, because `src/render/world.ts` sinks each
+ *   imported hull by its draught to put its waterline rather than its keel on the sea. The
+ *   `keel + datum` column of the survey is therefore not this number; the subtraction is shown per
+ *   ship below. The three supplied models are not sunk and keep the datum they were surveyed at.
+ *
+ * A single datum cannot describe a deck that slopes, and three of these four do: the residual is
+ * reported as sheer per ship, and tools/capture-deck.mjs holds the datum to the centre of it rather
+ * than pretending 0.1 m at every station (PRD-midway-asset-battle-integration AC-2).
+ *
+ * `src/render/imported-ships.ts` used to hold a second copy of this table. It does not any more: two
+ * copies of a measurement is how they drift.
  */
 const CARRIER_DECKS: Readonly<Record<string, IDeck>> = Object.freeze({
-  "USS Enterprise": { deckLength: 220, deckWidth: 20, deckHeight: 20.06 },
-  "USS Hornet": { deckLength: 220, deckWidth: 20, deckHeight: 20.06 },
-  "USS Yorktown": deckOf("yorktown", 20.45),
+  "USS Enterprise": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
+  "USS Hornet": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
   // Akagi's original stern deck slopes down ~1.4 m; the datum is its central deck.
-  Akagi: { deckLength: 220, deckWidth: 20, deckHeight: 20.06 },
-  Kaga: deckOf("kaga", 23.47),
-  Soryu: deckOf("soryu", 20.42),
-  Hiryu: deckOf("hiryu", 20.6),
+  Akagi: { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 31.3 },
+  // Measured: deck 20.20..20.68 over the corridor, midpoint 20.44, less 7.9 m draught.
+  "USS Yorktown": { deckLength: 240, deckWidth: 20, deckHeight: 12.54, deckBeam: 32 },
+  // Measured: deck 22.91..23.61, midpoint 23.26, less 7.5 m draught.
+  Kaga: { deckLength: 230, deckWidth: 18, deckHeight: 15.76, deckBeam: 52 },
+  // Measured: deck 20.30..20.68, midpoint 20.49, less 7.6 m draught.
+  Soryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.89, deckBeam: 34 },
+  // Measured: deck 19.91..21.50, midpoint 20.71, less 7.8 m draught.
+  Hiryu: { deckLength: 210, deckWidth: 18, deckHeight: 12.91, deckBeam: 40 },
 });
 
 /** The plane a weapon strikes on a ship with no flight deck. What the hit code always assumed. */
@@ -193,7 +218,9 @@ const SUPERSTRUCTURE_TOP = 9;
 export function shipGeometry(name: string, kind: string): IHull & IDeck {
   const sub = kind === "sub";
   const hull = HULLS[name] ?? { hullLength: sub ? 92 : 112, hullBeam: sub ? 9 : 13 };
-  if (kind !== "carrier") return { ...hull, deckLength: 0, deckWidth: 0, deckHeight: SUPERSTRUCTURE_TOP };
+  // No flight deck, so nothing overhangs: the damage volume is one box of the hull's own beam.
+  if (kind !== "carrier")
+    return { ...hull, deckLength: 0, deckWidth: 0, deckHeight: SUPERSTRUCTURE_TOP, deckBeam: hull.hullBeam };
   const deck = CARRIER_DECKS[name];
   if (!deck) throw new Error(`no flight deck geometry for carrier: ${name}`);
   return { ...hull, ...deck };

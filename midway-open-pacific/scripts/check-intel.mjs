@@ -165,4 +165,87 @@ const base = (over = {}) =>
   );
 }
 
-console.log("check-intel: 10 checks passed");
+// 11 — visibility scales the range achieved rather than gating it on and off.
+{
+  const args = {
+    observer: { x: 0, z: 0 },
+    target: { x: 8000, z: 0 },
+    observerAltitude: 30,
+    targetAltitude: 0,
+    rangeLimit: 10000,
+    visibility: 1,
+    sightDepth: 20,
+  };
+  assert.equal(canObserve(args), true, "visibility 1 sees a target just inside rangeLimit");
+  assert.equal(canObserve({ ...args, visibility: 0.5 }), false, "visibility 0.5 halves the range and misses the same target");
+  assert.equal(
+    canObserve({ ...args, target: { x: 4000, z: 0 }, visibility: 0.5 }),
+    true,
+    "visibility 0.5 still sees a target at half the range",
+  );
+}
+
+// 12 — zero visibility observes nothing, even a target at zero range.
+{
+  const args = {
+    observer: { x: 0, z: 0 },
+    target: { x: 0, z: 0 },
+    observerAltitude: 30,
+    targetAltitude: 0,
+    rangeLimit: 30000,
+    visibility: 0,
+    sightDepth: 20,
+  };
+  assert.equal(canObserve(args), false, "visibility 0 must observe nothing at point-blank range");
+  assert.equal(canObserve({ ...args, target: { x: 500, z: 0 } }), false, "visibility 0 must observe nothing at any range");
+}
+
+// 13 — the horizon still caps even a full-visibility observer.
+{
+  const args = {
+    observer: { x: 0, z: 0 },
+    target: { x: 8000, z: 0 },
+    observerAltitude: 2,
+    targetAltitude: 0,
+    rangeLimit: 30000,
+    visibility: 1,
+    sightDepth: 20,
+  };
+  assert.equal(canObserve(args), false, "a low observer cannot see past its horizon at visibility 1");
+}
+
+// 14 — the depth gate is independent of visibility.
+{
+  const args = {
+    observer: { x: 0, z: 0 },
+    target: { x: 500, z: 0 },
+    observerAltitude: 30,
+    targetAltitude: -50,
+    rangeLimit: 30000,
+    visibility: 1,
+    sightDepth: 20,
+  };
+  assert.equal(canObserve(args), false, "a deep submarine stays unseen at full visibility");
+}
+
+// 15 — canObserve is pure: identical calls agree and no argument is mutated.
+{
+  const observer = Object.freeze({ x: 0, z: 0 });
+  const target = Object.freeze({ x: 4000, z: 0 });
+  const args = Object.freeze({
+    observer,
+    target,
+    observerAltitude: 30,
+    targetAltitude: 0,
+    rangeLimit: 10000,
+    visibility: 0.5,
+    sightDepth: 20,
+  });
+  const first = canObserve(args);
+  const second = canObserve(args);
+  assert.equal(first, second, "identical calls must return identical results");
+  assert.deepEqual(observer, { x: 0, z: 0 }, "canObserve must not mutate the observer");
+  assert.deepEqual(target, { x: 4000, z: 0 }, "canObserve must not mutate the target");
+}
+
+console.log("check-intel: 15 checks passed");

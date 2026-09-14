@@ -4,7 +4,7 @@ import { shipClass } from "../sim/catalog.js";
 import { attitudeAxes } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { ellipsoid, mat, wakeTexture, makeAircraft, makeShip } from "./assets.js";
-import { createCarrier, createIjnCarrier, DECKS, shipModelFor } from "./imported-ships.js";
+import { type CarrierModelId, createCarrier, createIjnCarrier, shipModelFor } from "./imported-ships.js";
 import { createAirframe, createDouglas, animateDouglas, disposeDouglas, spinPropeller } from "./imported-aircraft.js";
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
@@ -37,16 +37,30 @@ function importedAircraftFor(a: { team: string; kind: string }): (() => T.Group)
 const WORLD_UP = new T.Vector3(0, 1, 0);
 
 /**
- * The model a US carrier is drawn with. Its hull, corridor and deck datum are already on the ship
- * record, resolved by `Battle.setupFleet`; this view only picks the geometry that matches them, and
- * writes nothing back. Yorktown draws its own hull rather than a second Hornet, because the
- * simulation carries Yorktown's own 246.8 m hull and 20.45 m deck and the two must agree.
+ * The model each carrier is drawn with, and the catalog class that model was measured as. Its hull,
+ * corridor and deck datum are already on the ship record, resolved by `Battle.setupFleet`; this view
+ * only picks the geometry that matches them, and writes nothing back. Yorktown draws its own hull
+ * rather than a second Hornet, because the simulation carries Yorktown's own hull and deck datum and
+ * the two must agree.
+ *
+ * `classId` is present exactly where the hull is an imported one, and it is what sinks the model by
+ * that class's draught: the importer bakes the keel on y = 0, so a hull left where it loads floats
+ * with its whole anti-fouling band above the sea. The three supplied models have no class and are
+ * not sunk, because they already bake the waterline at y = 0 — `tools/inspect-glb.mjs` measures
+ * `hornet.glb` at min.y -4.14 and `akagi.glb` at -7.55, which is their draught, below it.
  */
-function carrierModelId(ship: any): keyof typeof DECKS {
-  if (ship.name === "USS Enterprise") return "enterprise";
-  if (ship.name === "USS Yorktown") return "yorktown";
-  return "hornet";
-}
+const CARRIER_MODEL: Readonly<Record<string, { id: CarrierModelId; classId?: string }>> = {
+  "USS Enterprise": { id: "enterprise" },
+  "USS Hornet": { id: "hornet" },
+  Akagi: { id: "akagi" },
+  "USS Yorktown": { id: "yorktown", classId: "yorktown" },
+  Kaga: { id: "kaga", classId: "kaga" },
+  Soryu: { id: "soryu", classId: "soryu" },
+  Hiryu: { id: "hiryu", classId: "hiryu" },
+};
+
+/** How far below the sea a hull's own keel sits: the class draught, or nothing where none applies. */
+const draughtOf = (classId: string | undefined): number => (classId ? shipClass(classId).draught : 0);
 
 /**
  * The catalog class each non-carrier ship belongs to, so the imported hull can stand in for the
@@ -217,18 +231,17 @@ export class WorldView {
         mesh.add(lod);
         mesh.userData.importedShip = true;
       } else if (s.kind === "carrier") {
-        const japanese = s.team !== "us";
-        const id = japanese ? "akagi" : carrierModelId(s);
-        const detailed = japanese ? createIjnCarrier(s.name) : createCarrier(id);
-        // A carrier does NOT get the draught offset the escorts get above, and this is deliberate.
-        // Its flight deck is the one drawn surface the simulation also stands on: `deckHeight` is
-        // measured from the keel, the player's aircraft is placed in world space at that height by
-        // the flight model, and the deck park and the deck crew below are positioned at it too.
-        // Because the keel sits on y = 0, world y = deckHeight IS the drawn deck. Lowering the
-        // hull by its 7.5-7.9 m draught would drop the drawn deck that far while the simulation
-        // kept landing aircraft at the old datum, so recovery would touch down in mid-air. Moving
-        // it needs `deckHeight` in src/sim/battle.ts to move with it, which is not this file.
-        // Until then a carrier floats high and that is the lesser of the two wrongs.
+        const model = CARRIER_MODEL[s.name];
+        const detailed = model ? createCarrier(model.id) : createIjnCarrier(s.name);
+        // A carrier floats at its draught like everything else above. The reason it could not
+        // before is that its flight deck is the one drawn surface the simulation also stands on:
+        // the imported models are surveyed from the keel, so sinking the hull moves the drawn deck
+        // away from a `deckHeight` measured in the same frame and recovery would touch down in mid
+        // air. `CARRIER_DECKS` in src/sim/battle.ts now carries each imported deck datum in the
+        // world's frame — the surveyed elevation less this same draught — so the two move together
+        // and `sink` is the only place the two frames meet.
+        const sink = draughtOf(model?.classId);
+        detailed.position.y = -sink;
         const lod = new T.LOD();
         lod.addLevel(detailed, 0);
         lod.addLevel(mesh, 1200);
@@ -259,10 +272,11 @@ export class WorldView {
         // The import lands the TBD's wheels on y = 0, so a station is the deck datum with nothing
         // added. The +1.82 m and the 0.22 rad nose-up were corrections for the gear-up Douglas
         // source, and only Enterprise applied them — which left Yorktown's park sunk 1.82 m into
-        // its own flight deck.
-        for (let i = 0; i < (s.team === "us" ? (id === "enterprise" ? 2 : 3) : 0); i++) {
+        // its own flight deck. `sink` is added back because the park is a child of the hull, which
+        // has just been lowered by it: `deckHeight` is in the world's frame, this is not.
+        for (let i = 0; i < (s.team === "us" ? (model?.id === "enterprise" ? 2 : 3) : 0); i++) {
           const plane = createAirframe("tbd1", "ai");
-          plane.position.set(-1, s.deckHeight, 72 + i * 16);
+          plane.position.set(-1, s.deckHeight + sink, 72 + i * 16);
           detailed.add(plane);
           mesh.userData.parked.push(plane);
         }

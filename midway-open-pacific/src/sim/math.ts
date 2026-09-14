@@ -52,13 +52,32 @@ export function onDeck(
   return inRect(p, s, s.deckLength, s.deckWidth, margin);
 }
 
-/** Inside the ship's hull plan: the damage volume, and the outline that is actually drawn. */
+/**
+ * Inside the ship's damage volume: two boxes, not one, because a carrier's flight deck genuinely
+ * overhangs its hull. At and above the deck the plan is the deck's own beam — that is the surface a
+ * bomb meets first, and 5.5 m of Kaga's drawn deck each side used to be unhittable. Below it the
+ * plan is the hull's waterline beam, so a bomb that goes down outboard of the ship hits the sea
+ * rather than the overhang it passed under. Widening one box would have done the second harm to fix
+ * the first. Fore and aft the two rectangles share `hullLength`: these decks overhang athwartships,
+ * and every one of them is shorter than its own hull at the bow.
+ *
+ * A ship with no flight deck has `deckBeam === hullBeam` and answers as a single box, which is what
+ * it always did.
+ */
 export function overHull(
-  p: { x: number; z: number },
-  s: { x: number; z: number; heading: number; hullBeam: number; hullLength: number },
+  p: { x: number; y: number; z: number },
+  s: {
+    x: number;
+    z: number;
+    heading: number;
+    hullBeam: number;
+    hullLength: number;
+    deckBeam: number;
+    deckHeight: number;
+  },
   margin = 0,
 ): boolean {
-  return inRect(p, s, s.hullLength, s.hullBeam, margin);
+  return inRect(p, s, s.hullLength, p.y >= s.deckHeight ? s.deckBeam : s.hullBeam, margin);
 }
 export function segmentDistance(
   a: { x: number; y: number; z: number },

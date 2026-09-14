@@ -1,4 +1,4 @@
-/** Supplied carriers, exported with Blender MCP: metres, bow -Z, deck Y=20.06. */
+/** Supplied and imported carrier hulls: metres, bow -Z. Their decks are measured in src/sim/battle.ts. */
 import type { ICtx } from "@threenative/core";
 import * as T from "three";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
@@ -16,34 +16,6 @@ import {
   createToneCruiser,
   createYorktown,
 } from "./imported-fleet.js";
-
-/**
- * Flight decks, in metres: `length` by `width` is the launch rectangle, `visualLength` the hull a
- * player sees, `height` the deck above the keel.
- *
- * Enterprise, Hornet and Akagi were surveyed by raycasting their own tapered decks
- * (tools/capture-deck.mjs), which is where their conservative 220x20 corridor comes from. The
- * imported carriers take their rectangle from the class references in src/sim/catalog.ts and their
- * deck datum from the shipped GLB, as the elevation carrying the largest upward-facing triangle
- * area — a method that reproduces Hornet's surveyed 20.06 m to within 0.10 m. A class reference is
- * not a survey, so an imported carrier that ever becomes the player's home deck wants the raycast
- * pass first.
- */
-export const DECKS = {
-  enterprise: { length: 220, width: 20, visualLength: 251.58, height: 20.06 },
-  hornet: { length: 220, width: 20, visualLength: 251.58, height: 20.06 },
-  // Akagi's original stern deck slopes down ~1.4m; height is its central deck datum.
-  akagi: { length: 220, width: 20, visualLength: 260.67, height: 20.06 },
-  kaga: deck("kaga", 23.47),
-  soryu: deck("soryu", 20.42),
-  hiryu: deck("hiryu", 20.6),
-  yorktown: deck("yorktown", 20.45),
-} as const;
-
-function deck(classId: string, height: number) {
-  const cls = shipClass(classId);
-  return { length: cls.hullLength, width: cls.hullBeam, visualLength: cls.measuredLength, height };
-}
 
 let hornet: GLTF;
 let mitchell: GLTF;
@@ -99,7 +71,14 @@ function supplied(source: GLTF | undefined, name: string): T.Group {
   return model;
 }
 
-const CARRIER_MODELS: Record<keyof typeof DECKS, () => T.Group> = {
+/**
+ * The seven carrier models, by id. There is no deck table here any more: the corridor, the deck
+ * datum and the deck plan are one measurement, they live on the ship record that `Battle` resolves
+ * through `shipGeometry` before any mesh exists, and src/render/world.ts reads them from there. This
+ * file used to carry a second copy of all three, with a comment in each file saying they had to stay
+ * equal — which is how a measurement drifts.
+ */
+const CARRIER_MODELS = {
   // The supplied Hornet contains the detailed Enterprise-1944 hull. Use that WWII
   // sister-ship geometry for CV-6; the CVN-80's single 1K atlas fails close deck views.
   enterprise: () => supplied(hornet, "USS Enterprise"),
@@ -109,7 +88,10 @@ const CARRIER_MODELS: Record<keyof typeof DECKS, () => T.Group> = {
   soryu: createSoryu,
   hiryu: createHiryu,
   yorktown: createYorktown,
-};
+} as const;
+
+/** One of the seven carriers this game draws. */
+export type CarrierModelId = keyof typeof CARRIER_MODELS;
 
 /** An IJN carrier by ship name. Anything but the four named ships falls back to the Akagi hull. */
 export function createIjnCarrier(name: string): T.Group {
@@ -117,7 +99,7 @@ export function createIjnCarrier(name: string): T.Group {
   return own ? own() : supplied(akagi, `IJN ${name}`);
 }
 
-export function createCarrier(id: keyof typeof DECKS): T.Group {
+export function createCarrier(id: CarrierModelId): T.Group {
   return CARRIER_MODELS[id]();
 }
 
