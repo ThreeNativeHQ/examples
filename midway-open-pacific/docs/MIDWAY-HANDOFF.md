@@ -234,6 +234,17 @@ node scripts/check-flight.mjs
 node scripts/check-aircraft.mjs
 node tools/check-carrier-assets.mjs
 node scripts/check-audio.mjs
+node scripts/check-geometry.mjs
+node scripts/check-intel.mjs
+node scripts/check-naval.mjs
+node scripts/check-carrier-ops.mjs
+node scripts/check-submarine.mjs
+node scripts/check-facilities.mjs
+node scripts/check-armament.mjs
+node scripts/check-sortie-kinds.mjs
+node scripts/check-carrier-cycle.mjs
+node tools/check-catalog.mjs
+node tools/check-fleet.mjs
 node node_modules/create-threenative/dist/threenative.js doctor
 ```
 
