@@ -33,9 +33,10 @@ Capability discovery: WaveField (CPU/TSL swell), RippleField (wave/foam/flow; no
 ## Verification log
 - `node scripts/check-fluid.mjs`, `node tools/probe-ocean.mjs`, `pnpm typecheck` and `pnpm exec vite build` all pass on the integrated `midway/asset-battle-integration` tree.
 - `tools/capture-fluid-lab.mjs` passed on NVIDIA Turing WebGPU with `"errors": []`, driving the real `Battle.updateWeapons` path for torpedo, bomb, deep and pause/reset cases.
+- `playtests/launch.playtest.json` passed against an isolated server on the integrated tree: startup ready, briefing → deck → launch, 0 console errors, 0 network errors, 0 runtime diagnostics.
 - The requested DeepSeek 4.1 Flash refactor was applied to the four owned render files (`whitewater.ts`, `water-effects.ts`, `ripples.ts`, `ship-motion.ts`): allocation-free emits and stats, dead fields/imports removed, nearest-impact min-scan instead of a sort. Appearance and fixed-step behaviour were preserved and all gates re-passed.
 - MIT attribution for the ported reference is kept in `docs/fluid-lab-LICENSE.txt`.
-- Remaining unverified: desktop/Android/iOS targets, a full input-driven gameplay regression, and a sustained-impact frame budget. Deep blasts remain evidence-record driven; no depth charge auto-deployment is claimed.
+- Remaining unverified: desktop/Android/iOS native targets and a sustained-impact frame budget (no AC-23-style measurement was taken with a live plume). Deep blasts remain evidence-record driven; no depth charge auto-deployment is claimed.
 
 ## Workspace
 Owner/session: Codex fluid-lab (integrated by OpenCode). Primary `/home/joao/projects/threenative/sandbox`; branch `midway/asset-battle-integration`, squash commit `ec29694`. The original `codex/fluid-lab` checkout at `/home/joao/projects/threenative/sandbox/.worktrees/fluid-lab` still holds the pre-integration snapshot and other agents' uncommitted work; it is retained pending owner/cleanup authorization.
