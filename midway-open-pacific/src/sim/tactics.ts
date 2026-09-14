@@ -215,7 +215,7 @@ function limitsFor(a: Any): ISteerLimits {
     case "torpedo-run":
       return { bank: 0.6, climb: 6, floor: 6, lead: 550, leadMax: 550, sink: 32 };
     case "landing":
-      return { bank: 0.5, climb: 5, floor: 6, sink: 5.5 };
+      return { bank: 0.5, climb: 5, floor: 6, sink: 12 };
     case "ditching":
       return { bank: 0.4, climb: 2, floor: 0, sink: 4 };
     case "evade":
@@ -270,7 +270,16 @@ function flyAircraft(a: Any, dest: Any, alt: number, targetSpeed: number, dt: nu
   // Power is trimmed, not scheduled: a proportional lever droops, and a torpedo bomber that settles
   // six knots above its release limit never drops. `throttle` is the engine's own state field — there
   // is no throttle control input — and the engine lags `rpm` towards it, which damps this.
-  a.throttle = clamp(a.throttle + (targetSpeed - (a.ias || a.speed)) * dt * 0.06, 0, 1);
+  // Power is trimmed, not scheduled, and it answers to height as well as to speed. A throttle that
+  // watches airspeed alone is satisfied by a descent: an aircraft held at approach speed below its
+  // glide path mushes into the sea at part power with the stick doing nothing, because attitude
+  // cannot buy energy the engine is not delivering.
+  a.throttle = clamp(
+    a.throttle +
+      ((targetSpeed - (a.ias || a.speed)) * 0.06 + clamp(alt - a.y, -20, 20) * 0.05) * dt,
+    0,
+    1,
+  );
   // With the engine gone the aircraft glides: no floor to hold, no climb to command, so it really
   // does trade height for speed instead of being held up by a minimum-speed rule.
   const limits: ISteerLimits =
@@ -305,7 +314,7 @@ function deckDeparture(b: Any, a: Any, home: Any, dt: number): void {
       deckOffset: Math.max(-(home.deckLength / 2) + 6, -(home.deckLength / 2) + 10 - 14 * ahead),
       deckRun: "spotted",
       deckSpeed: 0,
-      flaps: 0.33,
+      flaps: 0.6,
       gear: true,
       heading: home.heading,
       pitch: 0.22,
@@ -334,7 +343,13 @@ function deckDeparture(b: Any, a: Any, home: Any, dt: number): void {
     // The deck is a moving, turning frame: a ship under helm rotates the corridor out from under an
     // aircraft that holds its launch heading, and the run then ends as a lateral overrun at half
     // flying speed. Steer down the deck instead.
-    { pitch: 0, rudder: clamp(angleDelta(home.heading, a.heading) * 6, -1, 1) },
+    {
+      // Rotate late: the engine's own tail-rise schedule only reaches for the nose past 42 m/s, which
+      // a loaded torpedo aircraft never sees on a deck, and holding the stick back from a standstill
+      // buys angle of attack at a drag price that costs more roll than it gains lift.
+      pitch: a.speed > 24 ? 1 : 0,
+      rudder: clamp(angleDelta(home.heading, a.heading) * 6, -1, 1),
+    },
   );
   if (departure !== null) {
     // `stepDeck` reports the departure but the game owns `mode`; without this the aircraft stays
@@ -434,7 +449,11 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
   }
   a.tactic = "landing";
   const along = (a.x - h.x) * f.x + (a.z - h.z) * f.z;
-  flyAircraft(a, { x: h.x + f.x * 140, z: h.z + f.z * 140 }, h.id ? 22 + Math.max(0, -along - 65) * 0.08 : 10, 51, dt);
+  // Cross the ramp at this deck's own datum, and aim just past the wires. The vertical law flies
+  // towards its aim point, so an approach aimed 140 m beyond the bow arrives over the deck as high as
+  // that point is distant — which is exactly what `Battle.recoverAircraft` then refuses.
+  const glide = (h.id ? (h.deckHeight ?? DECK_HEIGHT) + 4 : 10) + Math.max(0, -along - 65) * 0.08;
+  flyAircraft(a, { x: h.x + f.x * 45, z: h.z + f.z * 45 }, glide, 51, dt);
   if ((distance2(a, h) < 150 && a.y < 42) || (!h.id && distance2(a, h) < 200 && a.y < 50)) {
     // The airframe goes back into that ship's inventory — counted again, unready, and carrying no
     // store. A deck that cannot take it refuses, and the aircraft goes round again.
@@ -478,6 +497,14 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
     const flight = flightOf(a);
     stepDamage(a, dt);
     if (a.hp <= 0) {
+      b.planeDestroyed(a, a.lastAttacker);
+      continue;
+    }
+    // Below the surface, wherever it was going. This used to sit after the tactical steering, which
+    // the return, muster and egress branches all skip with a `continue`, so a damaged aircraft could
+    // fly home at minus fifteen metres.
+    if (a.y < 1 && a.mode !== "launch") {
+      a.hp = 0;
       b.planeDestroyed(a, a.lastAttacker);
       continue;
     }
@@ -633,12 +660,16 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
         a.tactic = "ingress";
         alt = a.kind === "torpedo" ? 450 : 1850;
         if (a.kind === "bomber" && d < 2250) {
-          a.tactic = "dive";
+          // A Nakajima B5N with bombs aboard attacked from level flight; only the Aichi and the
+          // Douglas dived. The release solution is the same ballistic one either way — what differs
+          // is the height it is flown at, and a level bomber never gives up its altitude.
+          const level = a.airframe === "kate";
+          a.tactic = level ? "level-bomb" : "dive";
           const fall = bombImpact({ ...a, y: a.y - 1.6 }, { x: a.vx, y: a.vy - 2, z: a.vz }, 20);
           const tf = forward(t.heading);
           const lead = { ...t, x: t.x + tf.x * t.speed * fall.time, z: t.z + tf.z * t.speed * fall.time };
           dest = lead;
-          alt = 160;
+          alt = level ? 1850 : 160;
           if (onDeck(fall, lead, 5) && a.y > 140 && a.y < 2400 && a.bombs > 0) {
             b.dropBomb(a);
             a.tactic = "egress";
@@ -647,7 +678,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
             a.egressPoint = { x: a.x + f.x * 1800, z: a.z + f.z * 1800 };
             alt = 650;
           }
-          if (a.y < 145 && a.bombs > 0) {
+          if (!level && a.y < 145 && a.bombs > 0) {
             a.tactic = "egress";
             a.egressUntil = b.time + 16;
             const f = forward(a.heading);
@@ -675,10 +706,6 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       }
     }
     flyAircraft(a, dest || home || b.search, alt, speed, dt);
-    if (a.y < 1) {
-      a.hp = 0;
-      b.planeDestroyed(a, a.lastAttacker);
-    }
   }
   b.aircraft = b.aircraft.filter((a: Any) => !a.removed && !a.recovered);
 }

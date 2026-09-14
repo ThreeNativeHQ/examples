@@ -92,6 +92,25 @@ import {
   rng,
   wrap,
 } from "./math.js";
+import {
+  avoidanceHeading,
+  chooseTask,
+  clearOfHazard,
+  courseAuthority,
+  rejoinCourse,
+  stationTarget,
+  steerToStation,
+  type ICourseShip,
+  type IHazard,
+  type ISteerLimits,
+} from "./naval.js";
+import {
+  coverageLost,
+  groupCourse,
+  reformAfter,
+  type FormationStation,
+  type Group,
+} from "./formation.js";
 
 type Any = any;
 
@@ -261,9 +280,10 @@ const OPS_INTERVAL = 1;
 const TRACK_SECONDS = 25;
 
 /**
- * Dawn over the Pacific, 1942: clear but hazy. `intel.canObserve` treats `visibility` as an on/off
- * gate rather than scaling with it, so the haze is applied here as a shortened `rangeLimit` and the
- * flag is passed as well — a later scaling implementation in the module needs no change here.
+ * Dawn over the Pacific, 1942: clear but hazy. `intel.canObserve` now scales the range limit by this
+ * (`range > rangeLimit * visibility`), so every `rangeLimit` below is the observer's own unreduced
+ * limit. Shortening it here as well, which is what this file did while the module treated visibility
+ * as an on/off gate, applied the haze twice and let a lookout see visibility-squared as far.
  */
 const VISIBILITY = 0.85;
 
@@ -1752,6 +1772,36 @@ export class Battle {
   strikeComplete = false;
 
   updateShips(dt: number): void {
+    // Formation identity, resolved lazily and once: a carrier guides its own group and each other
+    // hull takes the nearest friendly carrier as its guide. This is data on the hull; it moves
+    // nothing. A carrier's id is its group id, so `stationTarget` can find the guide by lookup.
+    for (const c of this.ships) if (c.kind === "carrier" && !c.groupId) c.groupId = c.id;
+    const SCREEN = [
+      { offsetX: 800, offsetZ: -300 },
+      { offsetX: -800, offsetZ: -300 },
+      { offsetX: 500, offsetZ: -1000 },
+      { offsetX: -500, offsetZ: -1000 },
+      { offsetX: 0, offsetZ: -1300 },
+    ];
+    for (const s of this.ships) {
+      if (s.kind === "carrier" || s.groupId) continue;
+      let guide: Any = null;
+      let nearest = Infinity;
+      for (const c of this.ships) {
+        if (c.kind !== "carrier" || c.team !== s.team || c.sunk) continue;
+        const d = distance2(s, c);
+        if (d < nearest) {
+          nearest = d;
+          guide = c;
+        }
+      }
+      if (!guide) continue;
+      const taken = this.ships.filter((o: Any) => o !== s && o.groupId === guide.id && o.station).length;
+      const slot = SCREEN[taken % SCREEN.length];
+      s.groupId = guide.id;
+      s.station = { shipId: s.id, groupId: guide.id, offsetX: slot.offsetX, offsetZ: slot.offsetZ };
+    }
+    const hazards = [{ x: this.island.x, z: this.island.z, radius: 4200 }];
     for (const s of this.ships) {
       if (s.sunk) {
         s.sink = Math.min(1, s.sink + dt * 0.012);
@@ -1760,6 +1810,34 @@ export class Battle {
       }
       updateEvasion(this, s, dt);
       s.speed = s.baseSpeed * (0.35 + 0.65 * s.engine);
+      // A station-kept escort holds its present heading in the evader's cruise slot, so the
+      // non-evading half of `updateEvasion` cannot pull the other way and cancel the station turn
+      // applied below. While an evasion is live the slot is left alone, so the evasion is untouched.
+      if (s.station && s.kind !== "sub" && !((s.evadeUntil || 0) > this.time)) s.cruiseHeading = s.heading;
+      // An escort that has a station and is not evading steers for it in the guide's moving frame.
+      // Evasion above keeps priority: while `evadeUntil` is in the future this is skipped entirely.
+      // A submarine runs its own attack logic and is never station-kept.
+      if (s.station && s.kind !== "sub" && !((s.evadeUntil || 0) > this.time)) {
+        const guide = this.ships.find((o: Any) => o.id === s.groupId);
+        if (guide) {
+          const target = stationTarget(guide.x, guide.z, guide.heading, s.station);
+          const limits = { maxSpeed: s.baseSpeed * (0.35 + 0.65 * s.engine), turnRate: 0.045, slowRadius: 700 };
+          const steer = steerToStation(s, target, dt, limits);
+          // Avoidance is applied to the desired station heading, never as a snap, so a close
+          // contact bends the track while the turn-rate limit still bounds every step.
+          const avoid = avoidanceHeading(s, this.ships.filter((o: Any) => o !== s && !o.sunk), 45, 350);
+          s.heading = wrap(avoid === null ? steer.heading : avoid);
+          s.speed = steer.speed;
+        }
+      }
+      // The guide keeps clear of the atoll: if its track would be inside the reef within the next
+      // ninety seconds it turns away, rate-limited, rather than leading the formation aground.
+      if (s.kind === "carrier") {
+        const track = forward(s.heading);
+        if (!clearOfHazard(s.x + track.x * s.speed * 90, s.z + track.z * s.speed * 90, hazards, 600)) {
+          s.heading = wrap(s.heading + clamp(angleDelta(wrap(bearing(s, this.island) + Math.PI), s.heading), -0.02 * dt, 0.02 * dt));
+        }
+      }
       const f = forward(s.heading);
       s.x += f.x * s.speed * dt;
       s.z += f.z * s.speed * dt;

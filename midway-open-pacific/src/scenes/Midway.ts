@@ -408,7 +408,7 @@ export class Midway extends Scene<GameState, undefined> {
     const can = p.mode === "deck" && (p.deckSpeed || 0) < 0.5;
     $("selected-aircraft").textContent = LOADOUTS[p.loadout || "bomb"].name;
     $("aircraft-tag-title").textContent = torpedo ? "DOUGLAS TBD DEVASTATOR" : "DOUGLAS SBD DAUNTLESS";
-    $("aircraft-tag-role").textContent = torpedo ? "TORPEDO BOMBER · PROCEDURAL TBD-INSPIRED MODEL" : "SCOUT BOMBER · BOMBING SQUADRON SIX";
+    $("aircraft-tag-role").textContent = torpedo ? "TORPEDO BOMBER · DOUGLAS TBD-1 DEVASTATOR" : "SCOUT BOMBER · BOMBING SQUADRON SIX";
     $("loadout-note").textContent = torpedo ? "Low, slow, straight run · 1 aerial torpedo · no dive brakes" : "Steep dive attack · perforated dive brakes · lighter wing stores";
     for (const id of ["bomb", "torpedo"]) {
       const el = $("loadout-" + id);

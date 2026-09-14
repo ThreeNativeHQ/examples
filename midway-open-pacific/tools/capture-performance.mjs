@@ -6,15 +6,101 @@
  * and burns a warm-up before it records anything, and reports the distribution rather than an
  * average — a mean hides exactly the stutters a player notices. It names the GPU it ran on and
  * says what else was drawing at the time, because a benchmark that does not is not evidence.
+ *
+ * It reports whether the run actually qualifies for AC-23, rather than announcing a pass for any
+ * run: the approved workload, the declared population envelope, finite observations, the absolute
+ * budgets and a matched baseline are all required before "PASS" is printed. An attribution run
+ * (reduced resolution/time, a hidden layer) reports its metrics but is explicitly non-qualifying.
  */
 import assert from "node:assert/strict";
+import { readFile, writeFile } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const URL = process.env.MIDWAY_URL || "http://127.0.0.1:5198";
-const WIDTH = Number(process.env.MIDWAY_WIDTH || 1672);
-const HEIGHT = Number(process.env.MIDWAY_HEIGHT || 941);
+// AC-23 fixes the workload at 1920x1080 for a 60-second sample; the env overrides stay for
+// attribution runs, which are reported but never qualify.
+const WIDTH = Number(process.env.MIDWAY_WIDTH || 1920);
+const HEIGHT = Number(process.env.MIDWAY_HEIGHT || 1080);
 const WARMUP = Number(process.env.MIDWAY_WARMUP || 8);
-const SAMPLE = Number(process.env.MIDWAY_SAMPLE || 20);
+const SAMPLE = Number(process.env.MIDWAY_SAMPLE || 60);
+// The live-aircraft ceiling Battle.enforces (`ACTIVE_CAP` in src/sim/battle.ts). A 30-minute
+// natural run was measured to plateau at 22 active aircraft, so 68 is a declared envelope the
+// current natural battle does not reach; a run below it is labelled non-qualifying, not faked up.
+const REQUIRED_AIRCRAFT = Number(process.env.MIDWAY_REQUIRED_AIRCRAFT || 68);
+
+/** Fields that must match for a baseline to be a matched baseline. */
+const BASELINE_FIELDS = [
+  "width",
+  "height",
+  "pixelRatio",
+  "quality",
+  "warmup",
+  "sample",
+  "seed",
+  "damage",
+  "input",
+  "requiredAircraft",
+];
+
+/** A timing series is an observation only if it has samples and a finite p95. */
+function isFiniteTiming(s) {
+  return !!s && Number.isInteger(s.samples) && s.samples > 0 && Number.isFinite(s.p95);
+}
+
+/** Every way `base` fails to match the current run's workload metadata, including missing keys. */
+function baselineMismatches(base, current) {
+  if (!base || typeof base !== "object") return ["baseline is not an object"];
+  const out = [];
+  if (JSON.stringify(base.adapter) !== JSON.stringify(current.adapter))
+    out.push(`adapter ${JSON.stringify(base.adapter)} != ${JSON.stringify(current.adapter)}`);
+  for (const f of BASELINE_FIELDS) {
+    if (base[f] === undefined) out.push(`baseline missing ${f}`);
+    else if (base[f] !== current[f]) out.push(`${f} ${JSON.stringify(base[f])} != ${JSON.stringify(current[f])}`);
+  }
+  for (const f of ["gpuP95", "cpuP95"]) if (!Number.isFinite(base[f])) out.push(`baseline ${f} is not finite`);
+  return out;
+}
+
+// A framework-free provable check that the two fail-closed decisions above actually reject a bad
+// input. `node tools/capture-performance.mjs --self-check`.
+if (process.argv.includes("--self-check")) {
+  const cur = {
+    adapter: { vendor: "nvidia", architecture: "turing" },
+    width: 1920,
+    height: 1080,
+    pixelRatio: 1,
+    quality: "balanced",
+    warmup: 8,
+    sample: 60,
+    seed: 19420604,
+    damage: false,
+    input: "turn-right + fire",
+    requiredAircraft: 68,
+    gpuP95: 6.8,
+    cpuP95: 0.7,
+  };
+  assert.deepEqual(baselineMismatches(cur, cur), [], "an identical baseline matches");
+  assert.ok(
+    baselineMismatches({ ...cur, width: 1280 }, cur).some((r) => r.includes("width")),
+    "a different width is rejected",
+  );
+  const { width: _drop, ...noWidth } = cur;
+  assert.ok(
+    baselineMismatches(noWidth, cur).some((r) => r.includes("missing width")),
+    "a missing width is rejected",
+  );
+  assert.ok(
+    baselineMismatches({ ...cur, cpuP95: NaN }, cur).some((r) => r.includes("cpuP95")),
+    "a nonfinite baseline timing is rejected",
+  );
+  assert.ok(
+    !isFiniteTiming(null) && !isFiniteTiming({ samples: 0, p95: 1 }) && !isFiniteTiming({ samples: 3, p95: NaN }),
+    "missing or nonfinite observations are rejected",
+  );
+  assert.ok(isFiniteTiming({ samples: 3, p95: 1 }), "a finite observation is accepted");
+  console.log("self-check PASS");
+  process.exit(0);
+}
 
 const browser = await chromium.launch({
   headless: false,
@@ -71,7 +157,7 @@ try {
   };
 
   // MIDWAY_HIDE names a layer to switch off, so the cost of one can be attributed rather than
-  // guessed at. It changes what is measured and is never how a reported figure is produced.
+  // guessed at. It changes what is measured; a run that uses it is non-qualifying.
   if (process.env.MIDWAY_HIDE)
     await page.evaluate((what) => {
       const w = window.midway.world;
@@ -145,14 +231,45 @@ try {
     // on a virtual display it measures how fast the window can be presented, which is a property
     // of the capture rig and not of the game.
     renderer.trackTimestamp = true;
+    // The CPU gate is the cost of one Battle fixed step, not of a frame or of rAF wall spacing.
+    // Nothing in the engine reports per-substep Battle time, and extracting it from a frame delta
+    // would fold render/update/overlay into it, so time the method itself. A call's exclusive cost
+    // is pushed only when it made no recursive call, so each leaf fixed step is measured once and
+    // a subdividing parent's aggregate is never charged (it is counted in `substeps` instead).
+    const b = s.battle;
+    const cpu = [];
+    const stack = [];
+    let substeps = 0;
+    const origStep = b.step;
+    b.step = function (dt, input) {
+      const frame = { children: 0 };
+      if (stack.length) stack[stack.length - 1].children += 1;
+      stack.push(frame);
+      const t0 = performance.now();
+      try {
+        return origStep.call(this, dt, input);
+      } finally {
+        stack.pop();
+        const ms = performance.now() - t0;
+        if (frame.children === 0) cpu.push(ms);
+        else substeps += frame.children;
+      }
+    };
     const wall = [];
     const gpu = [];
+    const pop = { aircraftMin: Infinity, aircraftMax: -Infinity, shipsMin: Infinity, shipsMax: -Infinity };
     await new Promise((resolve) => {
       let last = performance.now();
       const stop = last + sample * 1000;
       const tick = async (now) => {
         wall.push(now - last);
         last = now;
+        const liveAircraft = b.activeAircraft;
+        const liveShips = b.ships.reduce((n, x) => n + (!x.sunk ? 1 : 0), 0);
+        pop.aircraftMin = Math.min(pop.aircraftMin, liveAircraft);
+        pop.aircraftMax = Math.max(pop.aircraftMax, liveAircraft);
+        pop.shipsMin = Math.min(pop.shipsMin, liveShips);
+        pop.shipsMax = Math.max(pop.shipsMax, liveShips);
         try {
           await renderer.resolveTimestampsAsync("render");
           const t = renderer.info.render.timestamp;
@@ -166,6 +283,7 @@ try {
       requestAnimationFrame(tick);
     });
     wall.shift();
+    b.step = origStep;
     const stats = (series) => {
       if (!series.length) return null;
       const sorted = [...series].sort((a, b) => a - b);
@@ -181,12 +299,19 @@ try {
     return {
       wall: stats(wall),
       gpu: stats(gpu),
+      cpu: stats(cpu),
+      substeps,
       draws: renderer.info.render.drawCalls,
       triangles: renderer.info.render.triangles,
+      memory: { ...renderer.info.memory },
+      heap: performance.memory?.usedJSHeapSize ?? null,
+      pop,
+      seed: b.seed,
       scene: {
-        aircraft: s.battle.aircraft.length,
-        ships: s.battle.ships.filter((x) => !x.sunk).length,
-        bullets: s.battle.bullets.length,
+        aircraft: b.aircraft.length,
+        airborne: b.aircraft.filter((a) => a.mode !== "launch").length,
+        ships: b.ships.filter((x) => !x.sunk).length,
+        bullets: b.bullets.length,
         meshes: s.world.meshes.size,
         quality: s.world.quality,
         pixelRatio: renderer.getPixelRatio(),
@@ -208,22 +333,86 @@ try {
     return { impacts, scars, burningShips: fires };
   });
 
+  const meta = {
+    adapter,
+    width: WIDTH,
+    height: HEIGHT,
+    pixelRatio: result.scene.pixelRatio,
+    quality: result.scene.quality,
+    warmup: WARMUP,
+    sample: SAMPLE,
+    seed: result.seed,
+    damage: burning,
+    input: burning ? "course-held + fire" : "turn-right + fire",
+    requiredAircraft: REQUIRED_AIRCRAFT,
+  };
+
   const fps = (ms) => +(1000 / ms).toFixed(1);
-  console.log(`workload: ${burning ? "burning carriers, course held" : "clean sky, turning"} ${JSON.stringify(damage)}`);
+  console.log(`workload: ${burning ? "burning carriers, course held" : "crowded battle, turning"} ${JSON.stringify(damage)}`);
+  console.log(`workload metadata: ${JSON.stringify(meta)}`);
   console.log(
     "adapter " + JSON.stringify(adapter) + "\n" +
       `resolution ${WIDTH}x${HEIGHT} at pixel ratio ${result.scene.pixelRatio}, quality ${result.scene.quality}\n` +
       `scene ${JSON.stringify(result.scene)}\n` +
-      `draw calls ${result.draws}, triangles ${result.triangles}\n` +
-      `gpu ${result.gpu ? `median ${result.gpu.p50}ms (${fps(result.gpu.p50)} fps) | p95 ${result.gpu.p95}ms | worst ${result.gpu.worst}ms over ${result.gpu.samples} frames` : "unavailable: this build has no timestamp-query support"}\n` +
+      `active aircraft min/max ${result.pop.aircraftMin}/${result.pop.aircraftMax}, ships ${result.pop.shipsMin}/${result.pop.shipsMax}\n` +
+      `draw calls ${result.draws}, triangles ${result.triangles}, memory ${JSON.stringify(result.memory)}, jsHeap ${result.heap}\n` +
+      `gpu ${result.gpu ? `median ${result.gpu.p50}ms (${fps(result.gpu.p50)} fps) | p95 ${result.gpu.p95}ms | p99 ${result.gpu.p99}ms | worst ${result.gpu.worst}ms over ${result.gpu.samples} frames` : "unavailable: this build has no timestamp-query support"}\n` +
+      `battle fixed-step cpu (leaf steps) ${result.cpu ? `p50 ${result.cpu.p50}ms | p95 ${result.cpu.p95}ms | p99 ${result.cpu.p99}ms | worst ${result.cpu.worst}ms over ${result.cpu.samples} steps; ${result.substeps} subdivided child calls` : "unavailable: no Battle.step observations"}\n` +
       `wall median ${result.wall.p50}ms | p95 ${result.wall.p95}ms  ` +
       "(presentation-bound on a virtual display; not a statement about the game)",
   );
   assert.deepEqual(errors, []);
-  assert.ok(result.gpu, "GPU timestamps resolved; wall time alone cannot measure this");
-  // A floor, not a target: this only fails if the game's own GPU work has become unplayable.
-  assert.ok(result.gpu.p50 < 16.7, `median GPU frame under 16.7ms: ${result.gpu.p50}ms`);
-  console.log("PASS: steady-state GPU frame timing recorded on a named hardware adapter");
+  // Missing or nonfinite observations are failures, not zeroes.
+  assert.ok(isFiniteTiming(result.gpu), `GPU observations resolved and finite: ${JSON.stringify(result.gpu)}`);
+  assert.ok(isFiniteTiming(result.cpu), `Battle fixed-step CPU observations resolved and finite: ${JSON.stringify(result.cpu)}`);
+  assert.ok(
+    result.scene.aircraft > 0 && result.scene.ships > 0,
+    `the sample has a live population: ${JSON.stringify(result.scene)}`,
+  );
+  // The AC-23 absolute budgets are checked on the distributions, not on an average. A failing
+  // absolute target is an explicit performance gap; it cannot be excused by a relative pass.
+  assert.ok(result.gpu.p95 <= 16.7, `GPU p95 at or under 16.7ms: ${result.gpu.p95}ms`);
+  assert.ok(result.cpu.p95 <= 4, `Battle fixed-step CPU p95 at or under 4ms: ${result.cpu.p95}ms`);
+
+  // The relative clause of AC-23 compares a matched run on the same named adapter. The baseline is
+  // a recorded figure, never an empty workspace: MIDWAY_BASELINE points at a JSON file this tool
+  // wrote, and every workload field must match before its timings are compared. MIDWAY_BASELINE_OUT
+  // writes this run out for the next comparison.
+  let relative = "UNVERIFIED";
+  if (process.env.MIDWAY_BASELINE) {
+    const base = JSON.parse(await readFile(process.env.MIDWAY_BASELINE, "utf8"));
+    const mismatches = baselineMismatches(base, meta);
+    assert.deepEqual(mismatches, [], `matched baseline required: ${mismatches.join("; ")}`);
+    for (const [metric, value] of [["gpuP95", result.gpu.p95], ["cpuP95", result.cpu.p95]])
+      assert.ok(
+        value <= base[metric] * 1.1,
+        `${metric} regression over 10% against matched baseline: ${value}ms vs ${base[metric]}ms`,
+      );
+    relative = "PASS";
+  }
+  console.log(`relative: ${relative}${relative === "PASS" ? " (within 10% of the matched baseline)" : " (no matched baseline supplied via MIDWAY_BASELINE)"}`);
+  if (process.env.MIDWAY_BASELINE_OUT) {
+    await writeFile(
+      process.env.MIDWAY_BASELINE_OUT,
+      JSON.stringify({ ...meta, gpuP95: result.gpu.p95, cpuP95: result.cpu.p95, population: { min: result.pop.aircraftMin, max: result.pop.aircraftMax } }, null, 2),
+    );
+    console.log(`baseline written to ${process.env.MIDWAY_BASELINE_OUT}`);
+  }
+
+  const reasons = [];
+  if (WIDTH !== 1920 || HEIGHT !== 1080) reasons.push(`resolution ${WIDTH}x${HEIGHT} is not 1920x1080`);
+  if (SAMPLE !== 60) reasons.push(`sample ${SAMPLE}s is not 60s`);
+  if (meta.pixelRatio !== 1) reasons.push(`pixel ratio ${meta.pixelRatio} is not 1`);
+  if (process.env.MIDWAY_HIDE) reasons.push(`MIDWAY_HIDE=${process.env.MIDWAY_HIDE} disables a layer`);
+  if (result.pop.aircraftMax < REQUIRED_AIRCRAFT)
+    reasons.push(`observed peak ${result.pop.aircraftMax} active aircraft below declared envelope ${REQUIRED_AIRCRAFT}`);
+  if (relative !== "PASS") reasons.push("relative \u226410% clause UNVERIFIED");
+  if (reasons.length) {
+    console.log(`AC-23 NON-QUALIFYING: ${reasons.join("; ")}`);
+    if (process.env.MIDWAY_REQUIRE_QUALIFIED) assert.fail(`AC-23 not qualified: ${reasons.join("; ")}`);
+  } else {
+    console.log("PASS: AC-23 workload, declared population, absolute budgets and matched-baseline comparison all met");
+  }
 } finally {
   await browser.close();
 }

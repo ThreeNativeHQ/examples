@@ -18,10 +18,21 @@ import {
 } from "./cockpit-detail.js";
 import { createDauntlessGear } from "./dauntless.js";
 import { createZero } from "./imported-fleet.js";
+import { makeTorpedoModel } from "./model-damage.js";
 
 /** The detailed interior is a real-metre cockpit, scaled into the Douglas canopy opening. */
 const COCKPIT_SCALE = 0.52;
 const COCKPIT_POSITION: [number, number, number] = [0, 0.342, -2.482];
+
+/**
+ * The same real-metre interior, fitted to the imported TBD's own greenhouse. `COCKPIT_POSITION` is
+ * the panel origin; the shared `EYE` sits 1.42 x 0.52 m above and 1.6 x 0.52 m behind it, so the
+ * position is the measured pilot eye (0, 3.45, -2.35) less that offset. It is a shared instrument
+ * panel, not the SBD's canopy or bomb-aimer sight, and no exterior canopy is hidden for it.
+ */
+const TBD_COCKPIT_POSITION: [number, number, number] = [0, 2.712, -3.182];
+/** Measured TBD belly is 0.4 m above the wheel datum; the store hangs from it, clear of the deck. */
+const TBD_TORPEDO_POSITION: [number, number, number] = [0, 0.33, -0.3];
 
 const surfaceClips = [
   "flight.pitch-up",
@@ -79,6 +90,24 @@ const instances = new WeakMap<
     interior: CockpitInterior | undefined;
     actions: Map<string, T.AnimationAction>;
     gear: ReturnType<typeof createDauntlessGear>;
+  }
+>();
+
+/**
+ * The clip-driven rig built for an imported airframe that the game flies itself (the player TBD).
+ *
+ * The supplied GLB separates the moving parts and ships one clip per motion, so the real work is a
+ * mixer over the clone and a mapping from the sim's control values to clip weights and times. Kept
+ * apart from `instances`, which is the Douglas' hand-built animator and gear.
+ */
+const animatedImports = new WeakMap<
+  T.Group,
+  {
+    mixer: T.AnimationMixer;
+    actions: Map<string, T.AnimationAction>;
+    instrumentRoot: T.Group;
+    interior: CockpitInterior | undefined;
+    torpedo: T.Object3D | undefined;
   }
 >();
 
@@ -344,7 +373,7 @@ export function disposeDouglas(root: T.Group): void {
  * mapping can quietly hand back the wrong silhouette. `ai` is the reduced-detail build where the
  * airframe has one; where it does not, the same model serves both and says so here.
  */
-export function createAirframe(id: AirframeId, detail: "hero" | "ai"): T.Group {
+export function createAirframe(id: AirframeId, detail: "hero" | "ai", animated = false): T.Group {
   // The Dauntless and the Zero keep the constructors that measured them; only their propeller is
   // republished here, so one animator can find any airframe's propeller the same way.
   if (id === "sbd3") return createDouglas();
@@ -418,6 +447,49 @@ export function createAirframe(id: AirframeId, detail: "hero" | "ai"): T.Group {
   root.userData.prop = propeller;
   root.userData.propAngle = 0;
   root.userData.propBlur = blur;
+
+  // The one imported airframe the player flies: build the clip rig, the visible store and the
+  // shared instrument panel. AI and parked instances stay on the cheap generic prop/gear path,
+  // so a strike's worth of TBDs do not each carry a mixer and a cockpit.
+  if (animated) {
+    const spin = gltf.animations.find((clip) => clip.name === "propeller.spin");
+    if (!spin) throw new Error(`${airframe.name} (${url}) has no propeller.spin clip to drive.`);
+    const mixer = new T.AnimationMixer(model);
+    const actions = new Map<string, T.AnimationAction>();
+    for (const clip of gltf.animations) {
+      const action = mixer.clipAction(clip);
+      action.play();
+      // Surfaces, flaps and gear hold the time the animator writes; only the propeller runs free.
+      action.paused = clip.name !== "propeller.spin";
+      action.setEffectiveWeight(clip.name === "propeller.spin" ? 1 : 0);
+      actions.set(clip.name, action);
+    }
+    let torpedo: T.Object3D | undefined;
+    if (id === "tbd1") {
+      torpedo = makeTorpedoModel();
+      torpedo.position.set(...TBD_TORPEDO_POSITION);
+      root.add(torpedo);
+      root.userData.torpedoLoad = torpedo;
+    }
+    const instrumentRoot = new T.Group();
+    instrumentRoot.name = "TBD live cockpit instruments";
+    const cockpitMaterials = getCockpitMaterials();
+    const interior = cockpitMaterials ? createCockpitInterior(cockpitMaterials) : undefined;
+    if (interior) {
+      interior.root.scale.setScalar(COCKPIT_SCALE);
+      interior.root.position.set(...TBD_COCKPIT_POSITION);
+      instrumentRoot.add(interior.root);
+      root.userData.cockpit = new T.Vector3(
+        TBD_COCKPIT_POSITION[0] + interior.eye[0] * COCKPIT_SCALE,
+        TBD_COCKPIT_POSITION[1] + interior.eye[1] * COCKPIT_SCALE,
+        TBD_COCKPIT_POSITION[2] + interior.eye[2] * COCKPIT_SCALE,
+      );
+      root.userData.cockpitInterior = instrumentRoot;
+    }
+    root.add(instrumentRoot);
+    root.userData.animatedAirframe = true;
+    animatedImports.set(root, { mixer, actions, instrumentRoot, interior, torpedo });
+  }
   return root;
 }
 
@@ -455,17 +527,88 @@ export function spinPropeller(group: T.Group, rpmNormalised: number, dt: number)
 }
 
 /**
+ * Drive one player-flown imported airframe from the sim's control values.
+ *
+ * The supplied clips are each a single axis, keyed from rest at time 0, so a control value maps to
+ * a clip time (gear, flaps) or to a time on whichever of an opposed pair has the sign. Every
+ * action lives on this group's own mixer, so two TBDs at different throttle, flap or gear settings
+ * never share a transform, and `dt = 0` freezes the propeller.
+ */
+export function animateImportedAirframe(
+  root: T.Group,
+  p: {
+    rpm?: number;
+    throttle?: number;
+    elevator?: number;
+    controlAileron?: number;
+    aileron?: number;
+    rudder?: number;
+    flapPos?: number;
+    gearPos?: number;
+    torpedo?: number;
+  },
+  dt: number,
+): void {
+  const rig = animatedImports.get(root);
+  if (!rig) throw new Error(`${root.name || "This object"} has no imported animation rig.`);
+  const action = (name: string): T.AnimationAction => {
+    const found = rig.actions.get(name);
+    if (!found) throw new Error(`${root.name} is missing its ${name} clip.`);
+    return found;
+  };
+  const hold = (name: string, value: number): void => {
+    const a = action(name);
+    a.enabled = true;
+    a.setEffectiveWeight(1);
+    a.time = a.getClip().duration * T.MathUtils.clamp(value, 0, 1);
+  };
+  const opposed = (positive: string, negative: string, value: number): void => {
+    const v = T.MathUtils.clamp(value, -1, 1);
+    hold(v >= 0 ? positive : negative, Math.abs(v));
+    action(v >= 0 ? negative : positive).setEffectiveWeight(0);
+  };
+  const rpm = Math.max(0, p.rpm ?? p.throttle ?? 0);
+  action("propeller.spin").setEffectiveTimeScale(rpm * 26);
+  opposed("flight.pitch-up", "flight.pitch-down", p.elevator ?? 0);
+  opposed("flight.roll-right", "flight.roll-left", p.controlAileron ?? p.aileron ?? 0);
+  opposed("flight.rudder-right", "flight.rudder-left", p.rudder ?? 0);
+  // gear.retract runs deployed (time 0) to stowed (full), so gearPos 1 = down = time 0.
+  hold("gear.retract", 1 - T.MathUtils.clamp(p.gearPos ?? 1, 0, 1));
+  hold("flaps.deploy", p.flapPos ?? 0);
+  const blur = root.userData.propBlur as T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial> | undefined;
+  if (blur) {
+    root.userData.propeller!.visible = rpm < 0.38;
+    blur.visible = rpm > 0.15;
+    blur.material.opacity = Math.min(1, rpm * 2.5);
+  }
+  if (rig.torpedo) rig.torpedo.visible = (p.torpedo ?? 0) > 0;
+  rig.interior?.update(p);
+  rig.mixer.update(dt);
+}
+
+/**
  * Give back what this one aircraft owns, and nothing else.
  *
  * Geometry, materials and textures come from the shared GLTF that `ctx.assets` owns and outlive
- * every instance, so only the blur disc built for this group is disposed. Procedural parts another
- * constructor built for its own instance stay in that instance's `userData.owned`, where the
- * scene's model disposal already gives them back.
+ * every instance, so only the blur disc, the per-instance panel and the visible store built for
+ * this group are disposed. Procedural parts another constructor built for its own instance stay in
+ * that instance's `userData.owned`, where the scene's model disposal already gives them back.
  */
 export function disposeAirframe(group: T.Group): void {
   if (instances.has(group)) {
     disposeDouglas(group);
     return;
+  }
+  const rig = animatedImports.get(group);
+  if (rig) {
+    // The clips belong to the shared GLTF; only this mixer's bindings and this instance's own
+    // panel and store are ours to give back.
+    rig.mixer.stopAllAction();
+    const mixerRoot = rig.mixer.getRoot();
+    if (mixerRoot) rig.mixer.uncacheRoot(mixerRoot);
+    rig.interior?.dispose();
+    rig.torpedo?.traverse((node) => (node as T.Mesh).geometry?.dispose());
+    animatedImports.delete(group);
   }
   const blur = group.userData.propBlur as
     | T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>

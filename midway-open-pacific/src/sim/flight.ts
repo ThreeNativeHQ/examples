@@ -321,7 +321,12 @@ export function steerToward(
   desiredAlt: number,
   limits: ISteerLimits = {},
 ): IFlightControls {
-  const bankLimit = limits.bank ?? 0.62;
+  // Manoeuvre margin. Just off a deck an aircraft is barely flying, and neither a steep bank nor a
+  // strong climb is available to it: a controller that asks anyway rolls or stalls it into the sea
+  // before it has accelerated. Both authorities taper with speed instead of switching off at a
+  // threshold, so slow flight is flown gently rather than abandoned.
+  const margin = clamp(((a.ias || a.speed) - 30) / 40, 0.25, 1);
+  const bankLimit = (limits.bank ?? 0.62) * margin;
   const desiredBank = clamp(angleDelta(bearing(a, aim), a.heading) * 0.9, -bankLimit, bankLimit);
   const currentBank = -a.roll;
   const turn = clamp((desiredBank - currentBank) * 2.5 - a.rollRate * 0.7, -1, 1);
@@ -329,16 +334,17 @@ export function steerToward(
   // error: the same law then flies a cruise leg, a dive-bombing run and a groove, because a short
   // lookahead is exactly what makes a dive steep.
   const reach = clamp(distance2(a, aim), limits.lead ?? 250, limits.leadMax ?? Infinity);
+  const commanded = limits.climb ?? 8;
+  const climbLimit = commanded > 0 ? commanded * margin : commanded;
   let desiredVY = clamp(
     ((desiredAlt - a.y) / reach) * Math.max(30, Math.hypot(a.vx, a.vz)),
     -(limits.sink ?? 12),
-    limits.climb ?? 8,
+    climbLimit,
   );
-  // The floor is the height the aircraft will not descend through, and the deeper it is the harder
-  // the law climbs out of it: a fixed 2 m/s does not recover a torpedo bomber that has already sunk
-  // to the wave tops.
+  // The floor is the height the aircraft will not knowingly descend through, and the deeper it is the
+  // harder the law climbs out — up to what the aircraft can actually deliver, never past it.
   if (limits.floor !== undefined && a.y < limits.floor)
-    desiredVY = Math.max(desiredVY, 2 + (limits.floor - a.y));
+    desiredVY = Math.max(desiredVY, Math.min(climbLimit, 2 + (limits.floor - a.y) * 0.5));
   // A banked aircraft needs more than 1 g to hold its height; the engine takes that as the load the
   // stick is asking for, so the bank compensation and the height error arrive on the same channel.
   const baseLoad = clamp(1 / Math.max(0.45, Math.cos(currentBank)), 1, 2.2);
