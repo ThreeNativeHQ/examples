@@ -3,8 +3,8 @@ import { reflectedSky, SUN_DIRECTION } from "./environment.js";
 import { WaveField, WaterSurface3D } from "@threenative/core";
 import { BufferGeometry, Float32BufferAttribute, Mesh, Vector2, Vector4, DoubleSide, DataTexture, RepeatWrapping, LinearFilter, LinearMipmapLinearFilter } from "three";
 import {
-  Fn, cameraPosition, dot, float, mix, mx_noise_float, mx_worley_noise_vec2, positionGeometry, texture, vec2,
-  reflect, smoothstep, uniform, uniformArray, varying, vec3,
+  Fn, If, cameraPosition, dot, float, mix, mx_noise_float, mx_worley_noise_vec2, positionGeometry, texture, vec2,
+  smoothstep, uniform, uniformArray, varying, vec3,
 } from "three/tsl";
 import { MeshBasicNodeMaterial, type Node } from "three/webgpu";
 
@@ -17,6 +17,8 @@ export const REFLECTED_LAYER = 1;
 
 export const OCEAN_BANDS = [[.54,.035,.014,.56],[.28,-.057,.041,.83],[.12,.13,.09,1.25],[.055,-.27,.18,1.74]];
 const SEA = .65;
+/** Past this many metres the sea is sky and haze, not a mirror, so the viewport reads stop paying. */
+const FAR_RANGE = 8000;
 const swell = new WaveField({waves:OCEAN_BANDS.map(([a,kx,kz,w])=>({direction:{x:kx,z:kz},
   wavelength:2*Math.PI/Math.hypot(kx,kz),amplitude:a*SEA,speed:w,detail:true}))});
 export const oceanSwell = (x:number,z:number,time:number) => swell.sample(x,z,time).height;
@@ -95,19 +97,24 @@ export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
     const distance=cameraPosition.sub(worldPos).length();
     const analytic:any=swell.normalNode({point:world,time});
     const impact:any=rippleNormal?rippleNormal(world):vec2(0);
-    const micro=texture(normalMap,world.mul(vec2(.022,.045)).add(vec2(time.mul(.006),time.mul(.003))));
-    const finer=texture(normalMap,world.mul(vec2(.10,.075)).add(vec2(time.mul(-.014),time.mul(.009))));
-    const ripple=micro.rg.mul(2).sub(1).add(finer.rg.mul(2).sub(1).mul(.32));
     const detail=float(1).div(distance.mul(.003).add(1)).mul(smoothstep(.4,4,footprint).oneMinus());
+    // Both octaves reach the normal only through `detail`, so below 0.02 they are multiplied to a
+    // normal shift of at most ~0.01: two texture fetches bought for something no pixel can show.
+    const ripple=vec2(0,0).toVar();
+    If(detail.greaterThan(.02), () => {
+      const micro=texture(normalMap,world.mul(vec2(.022,.045)).add(vec2(time.mul(.006),time.mul(.003))));
+      const finer=texture(normalMap,world.mul(vec2(.10,.075)).add(vec2(time.mul(-.014),time.mul(.009))));
+      ripple.assign(micro.rg.mul(2).sub(1).add(finer.rg.mul(2).sub(1).mul(.32)));
+    });
     const normal=vec3(analytic.x.div(analytic.y).sub(impact.x).add(ripple.x.mul(.47).mul(detail)),
       1,analytic.z.div(analytic.y).sub(impact.y).add(ripple.y.mul(.47).mul(detail))).normalize().toVar();
     const view = cameraPosition.sub(vec3(world.x, worldHeight, world.y)).normalize().toVar();
     const nv = dot(normal, view).max(.001);
     const fresnel = nv.oneMinus().pow(5).mul(.97963).add(.02037);
-    const skyColor = reflectedSky;
-    const reflection = reflect(view.negate(), normal);
-    const facing = dot(normal, sun).mul(.5).add(.5).clamp(0, 1);
-    const scatter = dot(view, sun.negate()).max(0).pow(3).mul(worldHeight.add(1).max(0)).mul(.14);
+    // One prefiltered sky lookup now serves both the mirror term and the haze term. Past a few
+    // kilometres the sea reflects that same sky it dissolves into, so the half-res mirror read
+    // stops buying a distinct image; the background and this lookup share the same 0.65 intensity.
+    const sky=reflectedSky(vec3(view.x,.015,view.z).normalize());
     const body = vec3(.005,.030,.048).add(vec3(.004,.020,.022).mul(worldHeight.max(0)))
       .add(vec3(.014,.066,.071).mul(rippleFoam?rippleFoam(world).mul(1.6).min(1):float(0)));
     const nh = dot(normal, view.add(sun).normalize()).max(0);
@@ -115,10 +122,19 @@ export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
     const pixelVariance = dot(normal.dFdx(), normal.dFdx()).max(dot(normal.dFdy(), normal.dFdy()));
     const roughness = pixelVariance.mul(1.8).add(.075 ** 2).sqrt().clamp(.075, .35);
     const offset=normal.xz.mul(.017).mul(detail);
-    const mirror=surface.reflectionAt(offset);
-    const thickness=surface.thicknessAt();
+    // Near water keeps the sharp, offset mirror. Far water uses the sky lookup above and skips the
+    // half-res reflection read entirely.
+    const mirror=sky.toVar();
+    If(distance.lessThan(FAR_RANGE), () => mirror.assign(surface.reflectionAt(offset)));
+    // Beyond FAR_RANGE the seabed is more than the 14 m clamp behind every fragment a pixel wide,
+    // so thickness is its maximum there and the depth read (and, below, refraction) is dead weight.
+    const thickness=float(14).toVar();
+    If(distance.lessThan(FAR_RANGE), () => thickness.assign(surface.thicknessAt()));
     const transmission=thickness.div(4).oneMinus().max(0).pow(2);
-    const beneath=surface.refractionAt(normal.xz.mul(.008)).mul(transmission);
+    // Refraction only contributes where transmission is non-zero, which is water shallower than 4 m.
+    // Over the deep open sea it is multiplied by zero after the read, so skip the read itself.
+    const beneath=vec3(0,0,0).toVar();
+    If(transmission.greaterThan(0), () => beneath.assign(surface.refractionAt(normal.xz.mul(.008)).mul(transmission)));
     const water=body.mul(transmission.oneMinus()).add(beneath.mul(vec3(.45,.72,.76)));
     const result = mix(water, mirror, fresnel.mul(.91).add(.065).clamp(0,.96)).toVar();
     const a2 = roughness.pow(4);
@@ -167,7 +183,7 @@ export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
     const rim=smoothstep(.10,.23,cell.x).mul(smoothstep(.23,.34,cell.x).oneMinus());
     const froth=mix(vec3(.32,.45,.46),vec3(.69,.78,.78),grain.mul(.85).add(rim.mul(.2)).clamp());
     result.assign(mix(result,froth,coverage.mul(pore.mul(.88).oneMinus()).mul(.96)));
-    const haze=skyColor(vec3(view.x,.015,view.z).normalize());
+    const haze=sky;
     const above=mix(result,haze,distance.mul(-.00006).exp().oneMinus());
     return cameraPosition.y.lessThan(0).select(vec3(.02,.17,.20).add(above.mul(.38)),above);
   })();

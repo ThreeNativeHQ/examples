@@ -67,8 +67,48 @@ natural battle at 22 aircraft, 7.77 ms the crowd68 fixture. Same-fixture, that c
 draw calls 2,905 → 1,965 and p95 17.82 → 17.80 ms. The mesh merge stands on its own; that p50
 comparison does not.
 
-## What would close it
+## What closed the absolute target
 
-Reduce what a sea pixel costs, or how many sea pixels there are — not what is drawn in the mirror and
-not the foam. The viewport-texture reads are the first suspects, then the two `reflectedSky` samples.
-This is a look-sensitive change and is not attempted here.
+The viewport reads were the right suspects. Four range gates in the ocean fragment, each bought with
+the arithmetic that makes it invisible rather than with a tolerance:
+
+- the two normal-map octaves reach the normal only through `detail`, so below `detail` 0.02 they
+  shift it by at most ~0.01 — two texture fetches for something no pixel can show;
+- past 8 km the sea reflects the same sky it dissolves into, so one prefiltered sky lookup serves
+  both the mirror and the haze term and the half-res mirror read stops being taken;
+- past that range the seabed is further behind every fragment than the 14 m thickness clamp, so the
+  depth read is dead weight and thickness is its maximum by construction;
+- refraction is multiplied by a transmission that is zero in water deeper than 4 m, so over the open
+  sea the read was taken and then multiplied away.
+
+Three dead locals went with them — `reflection`, `facing` and `scatter` were declared and never
+referenced, so TSL never compiled them into the shader at all.
+
+Measured on the same fixture, adapter and seed:
+
+| | before | after |
+|---|---|---|
+| GPU p95 | 17.76 ms | **13.79 / 14.30 ms** over two runs |
+| GPU p50 | 7.97 ms | 12.33 / 12.49 ms |
+| worst | 17.94 ms | 14.58 ms |
+| distribution | bimodal, `7:101 8:144 18:62` | one cluster |
+| fixed-step CPU p95 | 1.10 ms | 1.30 ms |
+
+**The absolute target is met**: GPU p95 under 16.7 ms and CPU p95 under 4 ms, at 68/68 active
+aircraft. The two modes are gone — what used to be a fifth of frames paying double is now one tight
+cluster, and the p50 rose because the cheap frames were cheap only for being sea-light. Total work
+per frame is more even; the worst case, which is what the criterion gates on, fell by 3.5 ms.
+
+Near water is unchanged and was checked by eye: hull reflections, wake and ripple detail are the same
+in the close captures. Far water is flatter, which is the change.
+
+## What is still not met
+
+The relative clause. Against the branch-point baseline the harness reports:
+
+    gpuP95 regressed 27.5% against matched baseline: 13.773984ms vs 10.807264ms (limit 10%)
+
+That is honest and expected: the baseline at `c13e184` did not draw the eleven imported hulls, the
+cruiser scouts, or anything else this PRD adds. The workload fields match — same adapter, resolution,
+seed, population envelope — but the *content* grew, and the criterion asks for both halves. So AC-23
+is not met: the absolute target passes and the ≤10% comparison does not.
