@@ -118,6 +118,8 @@ import { shipClass } from "./catalog.js";
 import {
   baseAviationLost,
   damageFacility,
+  japaneseFollowUp,
+  observedCapability,
   radarWarning,
   radioDelivery,
   repairPlan,
@@ -126,6 +128,8 @@ import {
   type Facility,
   type FacilityKind,
   type FacilityRates,
+  type FollowUp,
+  type ObservedSnapshot,
 } from "./facilities.js";
 import {
   AircraftFlight,
@@ -247,6 +251,8 @@ const FACILITY_WORK_PER_SECOND = 1 / 15;
 const FACILITY_WORK_CAP = 3;
 /** A facility with no crew on it this tick still burns: the constant step rates, reused, never built. */
 const NO_REPAIR_RATES: FacilityRates = { repair: 0, burn: FACILITY_BURN_RATE };
+/** Reported capability at or above this still justifies a repeat island strike. */
+const FOLLOW_UP_THRESHOLD = 0.5;
 
 /** Any surface escort, by class, never by name: destroyers and cruisers stand the screen. */
 function isEscort(s: Any): boolean {
@@ -617,6 +623,25 @@ export class Battle {
   facilities: Facility[] = [];
   /** Banked repair work, in facility-slots, capped at `FACILITY_WORK_CAP`. */
   facilityWork = 0;
+  /** What the Japanese last *reported* about Midway, by facility id. Never the live health. */
+  observedFacilities: ObservedSnapshot = {};
+  /** Facility reports still in transit: each applies to `observedFacilities` at `at`. */
+  facilityReports: Array<{ at: number; snapshot: ObservedSnapshot }> = [];
+  /**
+   * A delivered report the staff have not yet answered. A follow-up is a decision taken *on* a
+   * report, so exactly one strike can be ordered per report that arrives — a standing intention
+   * instead would hold every Japanese deck on the island for the whole battle and the carriers
+   * would never be answered, which is the opposite of the dilemma this models.
+   */
+  followUpPending = false;
+  /** Whether the Japanese staff still think Midway is worth striking again, and why. */
+  get followUp(): FollowUp {
+    return japaneseFollowUp(observedCapability(this.facilities, this.observedFacilities), FOLLOW_UP_THRESHOLD);
+  }
+  /** True while a repeat strike on the atoll is the standing Japanese intention. */
+  get islandStrike(): boolean {
+    return this.facilities.length > 0 && this.followUp.worthwhile;
+  }
   effects: Any[] = [];
   /** Reused per step so the hot path never allocates a fresh list: surface hulls, the per-ship
    *  separation list and the repair slots. Cleared before each use, never read across a step. */
@@ -966,6 +991,7 @@ export class Battle {
       repairProgress: 0,
       repairBlocked: null,
     }));
+    for (const f of this.facilities) this.observedFacilities[f.id] = f.health;
     this.setupSurfaceGroups();
   }
 
@@ -1476,6 +1502,16 @@ export class Battle {
         ready[role] = (s.air.stores[store] ?? 0) > 0 ? (s.air.ready[airframe] ?? 0) : 0;
       }
       s.mission = chooseCarrierMission(this, s, ready, COMMIT_SECONDS);
+      // The Nagumo decision: with no ship contact to answer, a Japanese deck arms for the island
+      // again — but only while the *reported* capability still says the base is working.
+      if (s.team === "jp" && !s.mission.target && this.followUpPending && this.islandStrike) {
+        this.followUpPending = false;
+        s.mission = {
+          ...s.mission,
+          kind: "island-strike",
+          want: { ...s.mission.want, bomber: Math.min(ready.bomber, 3), fighter: Math.min(ready.fighter, (s.mission.want.fighter ?? 0) + 2) },
+        };
+      }
     }
     const want: Record<string, number> = s.mission?.want ?? {};
     let role: string | null = null;
@@ -1667,6 +1703,30 @@ export class Battle {
     }
   }
 
+  /**
+   * What the Japanese can see of the atoll, filed as a report rather than read off the island. A
+   * facility no observer could pick out is simply absent from the snapshot, so its last report
+   * survives untouched — the decision this feeds must be allowed to run on stale knowledge, which
+   * is the whole of the Nagumo problem. The delay is the fastest observer's, because one aircraft
+   * already on its way home does not wait for a slower lookout.
+   */
+  observeFacilities(): void {
+    if (!this.facilities.length) return;
+    const snapshot: ObservedSnapshot = {};
+    let delay = Infinity;
+    for (const o of this.observersFor("jp")) {
+      for (const f of this.facilities) {
+        if (f.id in snapshot) continue;
+        if (!canObserve({ observer: o, target: f, observerAltitude: o.altitude, targetAltitude: 0,
+                          rangeLimit: o.range, visibility: VISIBILITY, sightDepth: SIGHT_DEPTH })) continue;
+        snapshot[f.id] = f.health;
+        delay = Math.min(delay, o.delay);
+      }
+    }
+    if (!Object.keys(snapshot).length) return;
+    this.facilityReports.push({ at: this.time + delay, snapshot });
+  }
+
   /** Classify what was seen by the range it was seen at, date it, and put it on the air. */
   fileReport(team: string, observer: Any, target: Any): void {
     const range = distance2(observer, target);
@@ -1707,6 +1767,13 @@ export class Battle {
    * reports on the same hull wins. An identification once made is never lost to a vaguer sighting.
    */
   deliverReports(): void {
+    for (let i = this.facilityReports.length - 1; i >= 0; i -= 1) {
+      const r = this.facilityReports[i];
+      if (r.at > this.time) continue;
+      Object.assign(this.observedFacilities, r.snapshot);
+      this.facilityReports.splice(i, 1);
+      this.followUpPending = true;
+    }
     if (!this.reports.length) return;
     const waiting: IReport[] = [];
     for (const r of this.reports) {
@@ -2302,6 +2369,7 @@ export class Battle {
     if (this.opsTick <= 0) {
       this.opsTick = OPS_INTERVAL;
       this.observeFleet();
+      this.observeFacilities();
       this.deliverReports();
       for (const s of this.ships) if (s.kind === "carrier" && !s.sunk && s.air) this.updateCarrier(s);
       this.updateOperation();
