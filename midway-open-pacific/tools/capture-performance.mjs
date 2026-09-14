@@ -17,7 +17,10 @@
  * on a free port, and point MIDWAY_URL at it; never copy the source tree or create a worktree.
  */
 import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { chromium } from "playwright";
 
 const URL = process.env.MIDWAY_URL || "http://127.0.0.1:5198";
@@ -27,6 +30,10 @@ const WIDTH = Number(process.env.MIDWAY_WIDTH || 1920);
 const HEIGHT = Number(process.env.MIDWAY_HEIGHT || 1080);
 const WARMUP = Number(process.env.MIDWAY_WARMUP || 8);
 const SAMPLE = Number(process.env.MIDWAY_SAMPLE || 60);
+// The crowd fixture fills the battle to ACTIVE_CAP through Battle.launch only, so the sample runs
+// at the declared supported population instead of the natural plateau. It is labelled a fixture,
+// never a natural battle; no AI/task field, inventory or cap is touched to make it pass.
+const CROWD = !!process.env.MIDWAY_CROWD;
 // AC-23's approved envelope: the live-aircraft ceiling Battle enforces (`ACTIVE_CAP` in
 // src/sim/battle.ts). It is fixed and never env-overridable, because an override could only lower
 // the bar. A 30-minute natural run was measured to plateau at 22, so the current natural battle
@@ -50,7 +57,20 @@ const BASELINE_FIELDS = [
   "input",
   "requiredAircraft",
   "hidden",
+  "workload",
 ];
+
+/** The candidate's source identity, so a recorded baseline names the bytes it measured. */
+function sourceDigest() {
+  const cwd = join(import.meta.dirname, "..");
+  try {
+    const head = execSync("git rev-parse HEAD", { cwd }).toString().trim();
+    const diff = execSync("git diff HEAD -- . ; git ls-files --others --exclude-standard -- .", { cwd }).toString();
+    return { head, diffDigest: createHash("sha256").update(diff).digest("hex").slice(0, 12) };
+  } catch {
+    return { head: null, diffDigest: null };
+  }
+}
 
 /** A timing series is an observation only if it has samples and a finite p95. */
 function isFiniteTiming(s) {
@@ -112,6 +132,7 @@ if (process.argv.includes("--self-check")) {
     input: "turn-right + fire",
     requiredAircraft: 68,
     hidden: null,
+    workload: "crowd68-fixture",
     population: { min: 68, max: 70 },
     gpuP95: 6.8,
     cpuP95: 0.7,
@@ -170,6 +191,10 @@ if (process.argv.includes("--self-check")) {
   process.exit(0);
 }
 
+// Checkout refs at the start of the run; the digest is not an exact fingerprint of the loaded
+// module bytes (a dev server may transform them), and concurrent edits are disclosed below.
+const checkoutBefore = sourceDigest();
+
 const browser = await chromium.launch({
   headless: false,
   args: [
@@ -223,6 +248,48 @@ try {
       timeout: Math.max(30000, n * 4000),
     });
   };
+
+  // MIDWAY_CROWD is the explicitly labelled population fixture, not a natural battle. It fills to
+  // ACTIVE_CAP through the public Battle.launch entry, consuming each carrier's real finite
+  // inventory; no aircraft record, task/AI field, inventory count or cap is synthesised, no layer
+  // is hidden, and the player keeps its normal flight state and normal input. Only camera framing
+  // is decoupled: the game's own `updateCamera` still runs for its side effects, then a fixed
+  // observation vantage is applied. Mesh LOD/range visibility stays the game's player-relative
+  // decision, so the render counts below are measured from real scene meshes, not positions.
+  if (CROWD)
+    await page.evaluate((cap) => {
+      const b = window.midway.battle;
+      const w = window.midway.world;
+      const carriers = b.ships.filter((s) => s.kind === "carrier" && !s.sunk && s.air);
+      const roles = ["fighter", "bomber", "torpedo"];
+      let guard = 0;
+      while (b.activeAircraft < cap && guard < 40000) {
+        for (const s of carriers) {
+          if (b.activeAircraft >= cap) break;
+          for (const role of roles) {
+            const before = b.activeAircraft;
+            b.launch(s, role);
+            if (b.activeAircraft > before) break;
+          }
+        }
+        b.step(1 / 60, {});
+        guard += 1;
+      }
+      const air = b.aircraft.filter((a) => a.hp > 0);
+      const cx = air.reduce((n, a) => n + a.x, 0) / Math.max(1, air.length);
+      const cz = air.reduce((n, a) => n + a.z, 0) / Math.max(1, air.length);
+      const orig = w.updateCamera.bind(w);
+      w.updateCamera = function (dt, briefing, time) {
+        orig(dt, briefing, time);
+        this.camera.position.set(cx, 5000, cz + 8000);
+        this.camera.up.set(0, 1, 0);
+        this.camera.fov = 60;
+        this.camera.lookAt(cx, 100, cz);
+        this.camera.updateProjectionMatrix();
+        this.camera.updateMatrixWorld();
+      };
+      w.setCamera(2);
+    }, REQUIRED_AIRCRAFT);
 
   // MIDWAY_HIDE names a layer to switch off, so the cost of one can be attributed rather than
   // guessed at. It changes what is measured; a run that uses it is non-qualifying.
@@ -325,7 +392,32 @@ try {
     };
     const wall = [];
     const gpu = [];
-    const pop = { aircraftMin: Infinity, aircraftMax: -Infinity, shipsMin: Infinity, shipsMax: -Infinity };
+    const pop = {
+      aircraftMin: Infinity, aircraftMax: -Infinity, shipsMin: Infinity, shipsMax: -Infinity,
+      renderableMin: Infinity, renderableMax: -Infinity, visibleMin: Infinity, visibleMax: -Infinity,
+      bulletMax: 0,
+    };
+    // Honest render evidence, from real scene meshes: `renderable` is the game's own
+    // player-relative visibility decision (mesh exists, its whole ancestor chain is visible — the
+    // same `range < 18000` rule WorldView applies); `visible` additionally requires the mesh to
+    // project inside the camera frustum via Three's own `Vector3.project`. A position-based count
+    // would overstate both.
+    const cam = s.world.camera;
+    const tmp = cam.position.clone();
+    const renderable = (a) => {
+      const m = s.world.meshes.get(a.id);
+      if (!m || !m.visible) return null;
+      for (let o = m.parent; o; o = o.parent) if (!o.visible) return null;
+      return m;
+    };
+    const inFrustum = (m) => {
+      m.getWorldPosition(tmp);
+      tmp.project(cam);
+      return tmp.x >= -1 && tmp.x <= 1 && tmp.y >= -1 && tmp.y <= 1 && tmp.z >= -1 && tmp.z <= 1;
+    };
+    const timeStart = b.time;
+    const ammoStart = b.player.ammo ?? null;
+    const positions = new Map(b.aircraft.map((a) => [a.id, { x: a.x, y: a.y, z: a.z }]));
     await new Promise((resolve) => {
       let last = performance.now();
       const stop = last + sample * 1000;
@@ -334,10 +426,24 @@ try {
         last = now;
         const liveAircraft = b.activeAircraft;
         const liveShips = b.ships.reduce((n, x) => n + (!x.sunk ? 1 : 0), 0);
+        let renderableNow = 0;
+        let visibleNow = 0;
+        for (const a of b.aircraft) {
+          if (a.hp <= 0) continue;
+          const m = renderable(a);
+          if (!m) continue;
+          renderableNow += 1;
+          if (inFrustum(m)) visibleNow += 1;
+        }
         pop.aircraftMin = Math.min(pop.aircraftMin, liveAircraft);
         pop.aircraftMax = Math.max(pop.aircraftMax, liveAircraft);
         pop.shipsMin = Math.min(pop.shipsMin, liveShips);
         pop.shipsMax = Math.max(pop.shipsMax, liveShips);
+        pop.renderableMin = Math.min(pop.renderableMin, renderableNow);
+        pop.renderableMax = Math.max(pop.renderableMax, renderableNow);
+        pop.visibleMin = Math.min(pop.visibleMin, visibleNow);
+        pop.visibleMax = Math.max(pop.visibleMax, visibleNow);
+        pop.bulletMax = Math.max(pop.bulletMax, b.bullets.length);
         try {
           await renderer.resolveTimestampsAsync("render");
           const t = renderer.info.render.timestamp;
@@ -352,6 +458,12 @@ try {
     });
     wall.shift();
     b.step = origStep;
+    let moved = 0;
+    for (const a of b.aircraft) {
+      const p0 = positions.get(a.id);
+      if (p0 && Math.hypot(a.x - p0.x, a.y - p0.y, a.z - p0.z) > 100) moved += 1;
+    }
+    const advance = { seconds: +(b.time - timeStart).toFixed(1), moved, ammoStart, ammoEnd: b.player.ammo ?? null };
     const stats = (series) => {
       if (!series.length) return null;
       const sorted = [...series].sort((a, b) => a - b);
@@ -374,6 +486,7 @@ try {
       memory: { ...renderer.info.memory },
       heap: performance.memory?.usedJSHeapSize ?? null,
       pop,
+      advance,
       seed: b.seed,
       scene: {
         aircraft: b.aircraft.length,
@@ -388,6 +501,10 @@ try {
   }, SAMPLE);
   await page.keyboard.up("Space");
   if (!burning) await page.keyboard.up("ArrowRight");
+  if (process.env.MIDWAY_FRAME) {
+    await page.screenshot({ path: process.env.MIDWAY_FRAME });
+    console.log(`frame saved to ${process.env.MIDWAY_FRAME}`);
+  }
   const damage = await page.evaluate(() => {
     const b = window.midway.battle;
     let impacts = 0;
@@ -414,16 +531,28 @@ try {
     input: burning ? "course-held + fire" : "turn-right + fire",
     requiredAircraft: REQUIRED_AIRCRAFT,
     hidden: process.env.MIDWAY_HIDE || null,
+    workload: CROWD ? "crowd68-fixture" : "natural",
+    source: (() => {
+      const after = sourceDigest();
+      return {
+        headBefore: checkoutBefore.head,
+        headAfter: after.head,
+        diffBefore: checkoutBefore.diffDigest,
+        diffAfter: after.diffDigest,
+        concurrentChange: checkoutBefore.head !== after.head || checkoutBefore.diffDigest !== after.diffDigest,
+      };
+    })(),
   };
 
   const fps = (ms) => +(1000 / ms).toFixed(1);
-  console.log(`workload: ${burning ? "burning carriers, course held" : "crowded battle, turning"} ${JSON.stringify(damage)}`);
+  console.log(`workload: ${CROWD ? "crowd68 fixture (Battle.launch to cap)" : burning ? "burning carriers, course held" : "crowded battle, turning"} ${JSON.stringify(damage)}`);
   console.log(`workload metadata: ${JSON.stringify(meta)}`);
   console.log(
     "adapter " + JSON.stringify(adapter) + "\n" +
       `resolution ${WIDTH}x${HEIGHT} at pixel ratio ${result.scene.pixelRatio}, quality ${result.scene.quality}\n` +
       `scene ${JSON.stringify(result.scene)}\n` +
-      `active aircraft min/max ${result.pop.aircraftMin}/${result.pop.aircraftMax}, ships ${result.pop.shipsMin}/${result.pop.shipsMax}\n` +
+      `active aircraft min/max ${result.pop.aircraftMin}/${result.pop.aircraftMax}, renderable meshes ${result.pop.renderableMin}/${result.pop.renderableMax}, in-frustum ${result.pop.visibleMin}/${result.pop.visibleMax}, ships ${result.pop.shipsMin}/${result.pop.shipsMax}\n` +
+      `advancing ${result.advance.seconds}s of sim, ${result.advance.moved}/${result.pop.aircraftMax} actors moved >100m, bullets seen ${result.pop.bulletMax}, ammo ${result.advance.ammoStart}->${result.advance.ammoEnd}\n` +
       `draw calls ${result.draws}, triangles ${result.triangles}, memory ${JSON.stringify(result.memory)}, jsHeap ${result.heap}\n` +
       `gpu ${result.gpu ? `median ${result.gpu.p50}ms (${fps(result.gpu.p50)} fps) | p95 ${result.gpu.p95}ms | p99 ${result.gpu.p99}ms | worst ${result.gpu.worst}ms over ${result.gpu.samples} frames` : "unavailable: this build has no timestamp-query support"}\n` +
       `battle fixed-step cpu (leaf steps) ${result.cpu ? `p50 ${result.cpu.p50}ms | p95 ${result.cpu.p95}ms | p99 ${result.cpu.p99}ms | worst ${result.cpu.worst}ms over ${result.cpu.samples} steps; ${result.substeps} subdivided child calls` : "unavailable: no Battle.step observations"}\n` +
@@ -445,6 +574,10 @@ try {
     `render observations present: ${result.draws} draws, ${result.triangles} triangles`,
   );
   assert.ok(result.memory.total > 0, `memory observation present: ${JSON.stringify(result.memory)}`);
+  // The sample must be a running battle, not a frozen frame: the simulation clock advanced and
+  // live actors changed position. This fails if a fixture ever disables gameplay to look calm.
+  assert.ok(result.advance.seconds > SAMPLE * 0.5, `simulation advanced across the sample: ${result.advance.seconds}s`);
+  assert.ok(result.advance.moved > 0, `live actors advanced across the sample: ${result.advance.moved} moved`);
   // The AC-23 absolute budgets are checked on the distributions, not on an average. A failing
   // absolute target is an explicit performance gap; it cannot be excused by a relative pass.
   assert.ok(result.gpu.p95 <= 16.7, `GPU p95 at or under 16.7ms: ${result.gpu.p95}ms`);
