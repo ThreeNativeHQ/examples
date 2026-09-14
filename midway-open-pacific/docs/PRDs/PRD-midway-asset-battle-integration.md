@@ -466,8 +466,36 @@ three visible scars and a frozen recovered debrief; setup and recovery are injec
 so this is not a keys-only recovered sortie. Inspected `screenshots/battle-review/{02-burning-carrier,
 03-approach,04-debrief}.png` and launch frames on NVIDIA Turing WebGPU, served at port 5317.
 
-AC-7 remains open: player fuel/rearm accounting, complete aircraft identity/damage/diversion
-accounting and visual inventory acceptance are not established by these focused repairs.
+AC-7 remains open: complete player/AI aircraft identity, damage/diversion accounting and visual
+inventory acceptance are not established by these focused repairs.
+
+**Second review slice (AC-7/24):** Same `battle-review` owner/checkout, after the first
+five-file correction was integrated and pushed as `5b2e02d`. Confirmed through `Battle.recover`
+and `Battle.step`: an empty carrier raised player fuel from 10% to 100%, and reselecting bombs
+restored three with zero stores. Player refuelling now transfers only available fuel, independent
+of ordnance; gun refills spend one ammunition load, while full guns spend none. Deck selections
+are idempotent, refuse empty racks and return complete unused prior loads. Inventory counts whole
+mission loads: partial racks are expended rather than introducing fractional dispatch inventory.
+A refusal is displayed beside the selector, including while the manual is open.
+
+The keys-only recon run completed and recovered in **264.25 simulated seconds**, using T, R, H,
+L and normal transit acceleration, with 100% airframe and a frozen successful result. The combined
+runner then failed at `capture-sortie-runs.mjs:142`: the debrief intercepted the pause menu's
+restart button. `showOverlay/hideOverlays` now hide the debrief while a menu is open and restore
+the same result on close. The browser regression checks this round trip and clicks the actual
+restart control. The original recon evidence is valid; carrier-strike completion remains pending.
+A rerun was deliberately interrupted for the modal-warning correction and is not acceptance.
+
+**Evidence:** `check-carrier-ops.mjs` first failed `expected 10, got 100`; it now proves empty,
+partial and full fuel transfers, depleted and supplied gun magazines (including zero debit for
+full guns), same-loadout no-op, rejected swaps and returned full loads. `check-flight.mjs` passes
+both airframes' launches/maneuvers, payload, credit, recovery/diversion and short-sortie checks.
+Independent review: PASS; the requested positive ammunition-debit regression was added and passes.
+`capture-sortie.mjs` additionally checks the real pause/debrief restart, empty-carrier service and
+refused paused loadout selection: **PASS**, fuel 9.998%, zero bombs, original selection restored
+and the stock warning visible beside it in the inspected `screenshots/battle-review-resupply/05-limited-service.png`.
+Final `pnpm typecheck` and `pnpm exec vite build` pass. This slice owns
+`battle.ts`, `Midway.ts`, `check-carrier-ops.mjs`, `capture-sortie.mjs` and this checkpoint only.
 
 **Status:** IN PROGRESS
 **Remaining:** AI engine flight, complete aircraft articulation, measured carrier contact geometry and full player/deck inventory acceptance.

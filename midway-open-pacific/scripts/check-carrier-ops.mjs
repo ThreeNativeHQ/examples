@@ -180,4 +180,41 @@ assert.equal(carrier.air.stores.torpedo, 1, "Battle service must retain the last
 assert.ok(battle.launch(carrier, "torpedo"), "the serviced aircraft must fly with that last torpedo");
 assert.equal(carrier.air.stores.torpedo, 0);
 
-console.log("check-carrier-ops: conservation, single store charging, independent service clock, shortages and Battle recovery/service/relaunch hold");
+// Player service must obey the same finite carrier fuel, independently of its bomb rack.
+for (const [carrierFuel, bombs, expectedFuel, ammo, fullGuns] of [[0, 2, 10, 0, false], [0.25, 0, 35, 0, false], [2, 1, 100, 1, false], [2, 1, 100, 2, true]]) {
+  const b = new ops.Battle(11);
+  b.selectAssignment("operation");
+  b.start();
+  const h = b.home;
+  b.player.fuel = 10;
+  b.player.bombs = 0;
+  b.player.ammo = fullGuns ? 1400 : 12;
+  b.player.rearAmmo = fullGuns ? 240 : 7;
+  h.air.fuel = carrierFuel;
+  h.air.stores.bomb = bombs;
+  h.air.stores.ammo = ammo;
+  b.recover(h);
+  for (let i = 0; i < 800 && b.player.mode === "service"; i++) b.step(1 / 60, {});
+  assert.equal(b.player.mode, "deck", "finite supplies must still finish deck service");
+  assert.ok(Math.abs(b.player.fuel - expectedFuel) < 1e-6,
+    `player fuel must come from the carrier: expected ${expectedFuel}, got ${b.player.fuel}`);
+  assert.ok(Math.abs(h.air.fuel - (carrierFuel - (expectedFuel - 10) / 100)) < 1e-6,
+    "carrier must spend only the fuel actually transferred");
+  assert.equal(b.player.bombs, bombs > 0 ? 3 : 0);
+  assert.deepEqual([b.player.ammo, b.player.rearAmmo], ammo ? [1400, 240] : [12, 7], "gun refill requires ammunition stores");
+  assert.equal(h.air.stores.ammo, ammo && !fullGuns ? ammo - 1 : ammo, "one gun refill costs one store; full guns cost nothing");
+  const stock = JSON.stringify(h.air.stores);
+  const payload = b.player.bombs;
+  assert.equal(b.selectLoadout("bomb"), true);
+  assert.equal(b.player.bombs, payload, "selecting the current loadout must never replenish it");
+  assert.equal(JSON.stringify(h.air.stores), stock, "selecting the current loadout consumes nothing");
+  h.air.stores.torpedo = 0;
+  assert.equal(b.selectLoadout("torpedo"), false, "an empty torpedo rack must refuse a deck swap");
+  assert.equal(b.player.loadout, "bomb", "a refused swap must retain the actual airframe and stores");
+  h.air.stores.torpedo = 1;
+  assert.equal(b.selectLoadout("torpedo"), true);
+  assert.equal(h.air.stores.torpedo, 0, "the deck swap must spend the loaded torpedo");
+  assert.equal(h.air.stores.bomb, bombs, "a complete unused bomb load is returned on a deck swap");
+}
+
+console.log("check-carrier-ops: carrier and player stores, fuel, service clocks and Battle recovery/relaunch hold");

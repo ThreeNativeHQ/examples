@@ -502,8 +502,26 @@ export class Battle {
 
   selectLoadout(id: string): boolean {
     const p = this.player;
-    if (!["briefing", "playing"].includes(this.status) || p.mode !== "deck" || (p.deckSpeed || 0) >= 0.5 || !["bomb", "torpedo"].includes(id))
+    if (!["briefing", "playing"].includes(this.status) || p.mode !== "deck" || (p.deckSpeed || 0) >= 0.5 || !["bomb", "torpedo"].includes(id)) {
+      this.event("notice", { text: "LOADOUT LOCKED — STOP ON DECK FIRST" });
       return false;
+    }
+    if (p.loadout === id) return true;
+    if (this.status === "playing") {
+      const air = this.home?.air;
+      const family = storeFamilyOf(LOADOUTS[id].airframe);
+      if (!air || (air.stores[family] ?? 0) < 1) {
+        this.event("notice", { text: `NO ${family === "torpedo" ? "TORPEDOES" : "BOMBS"} ABOARD — LOADOUT UNCHANGED` });
+        return false;
+      }
+      air.stores[family] -= 1;
+      const old = LOADOUTS[p.loadout];
+      // ponytail: inventory counts complete mission loads; partial returned racks are expended.
+      if (old && p.bombs === old.bombs && p.torpedo === old.torpedo) {
+        const returned = storeFamilyOf(old.airframe);
+        air.stores[returned] = (air.stores[returned] ?? 0) + 1;
+      }
+    }
     const ok = applyLoadout(p, id);
     if (ok) this.playerFlight.setAirframe(p.airframe);
     return ok;
@@ -1796,9 +1814,6 @@ export class Battle {
       if (p.serviceTime <= 0) {
         Object.assign(p, {
           hp: 100,
-          fuel: 100,
-          ammo: 1400,
-          rearAmmo: 240,
           rearTimer: 0,
           bombs: 3,
           mode: "deck",
@@ -1819,15 +1834,26 @@ export class Battle {
         // The player rearms out of the same finite stores as every other aircraft on the ship. With
         // the racks empty the aircraft still flies; it just has nothing to drop.
         const family = storeFamilyOf(p.airframe);
+        const supplies = [];
         if (h.air) {
+          const fuel = Math.min(Math.max(0, 100 - p.fuel), Math.max(0, h.air.fuel) * 100 / FUEL_PER_LAUNCH);
+          p.fuel += fuel;
+          h.air.fuel = Math.max(0, h.air.fuel - fuel * FUEL_PER_LAUNCH / 100);
+          if (p.fuel < 100) supplies.push(`Fuel ${Math.floor(p.fuel)}% — carrier tanks exhausted.`);
+          if (p.ammo < 1400 || p.rearAmmo < 240) {
+            if ((h.air.stores.ammo ?? 0) >= 1) {
+              h.air.stores.ammo -= 1;
+              p.ammo = 1400;
+              p.rearAmmo = 240;
+            } else supplies.push("No gun ammunition available; remaining rounds retained.");
+          }
           if ((h.air.stores[family] ?? 0) > 0) {
             h.air.stores[family] -= 1;
-            h.air.fuel = Math.max(0, h.air.fuel - FUEL_PER_LAUNCH);
           } else {
             p.bombs = 0;
             p.torpedo = 0;
             updateStores(p);
-            this.say("DECK CREW", `No ${family === "torpedo" ? "torpedoes" : "bombs"} left aboard. You are going up empty.`, true);
+            supplies.push(`No ${family === "torpedo" ? "torpedoes" : "bombs"} left aboard. Racks empty.`);
           }
         }
         this.playerFlight.setAirframe(p.airframe);
@@ -1835,7 +1861,7 @@ export class Battle {
         p.killCredited = false;
         this.playerFlight.reset();
         this.stats.sorties += 1;
-        this.say("DECK CREW", "Refueled, repaired and rearmed. Takeoff flaps set. Advance power when ready.");
+        this.say("DECK CREW", `${supplies.length ? `Repairs complete. ${supplies.join(" ")}` : "Refueled, repaired and rearmed."} Takeoff flaps set. Advance power when ready.`, supplies.length > 0);
         if (this.strikeComplete) {
           this.status = "won";
           this.reason = "Enemy carrier aviation neutralized. You brought your crew home.";
