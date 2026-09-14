@@ -273,6 +273,7 @@ export class Midway extends Scene<GameState, undefined> {
         rpm: p.rpm ?? p.throttle ?? 0,
         throttle: p.throttle ?? 0,
         ias: p.ias ?? p.speed ?? 0,
+        brakes: p.brakes,
       },
       this.paused || b.status !== "playing",
       dt,
@@ -376,6 +377,7 @@ export class Midway extends Scene<GameState, undefined> {
     }
     this.audio.start();
     this.battle.start(airborne);
+    if (!airborne) this.audio.event({ type: "engineStart" });
     this.updateLoadoutUI();
     $("briefing").classList.add("hidden");
     $("flight-ui").classList.remove("hidden");
@@ -520,6 +522,7 @@ export class Midway extends Scene<GameState, undefined> {
           break;
         }
         p.brakes = !p.brakes;
+        this.audio.event({ type: "flap" });
         this.hud.toast(`DIVE BRAKES ${p.brakes ? "EXTENDED" : "RETRACTED"}`);
         break;
       case "KeyG":
@@ -528,10 +531,12 @@ export class Midway extends Scene<GameState, undefined> {
           break;
         }
         this.battle.toggleGear();
+        this.audio.event({ type: "gear" });
         this.hud.toast(`LANDING GEAR ${p.gear ? "DOWN" : "UP"}`);
         break;
       case "KeyN":
         p.flaps = p.flaps < 0.15 ? 0.33 : p.flaps < 0.7 ? 1 : 0;
+        this.audio.event({ type: "flap" });
         this.hud.toast(`FLAPS ${p.flaps === 0 ? "UP" : p.flaps < 0.7 ? "TAKEOFF" : "LANDING"}`);
         break;
       case "KeyU":
@@ -560,6 +565,7 @@ export class Midway extends Scene<GameState, undefined> {
         break;
       case "KeyI":
         p.engineCut = !p.engineCut;
+        this.audio.event({ type: "engine", action: p.engineCut ? "stop" : "start" });
         this.hud.toast(p.engineCut ? "ENGINE FUEL CUTOFF — ENGINE STOPPING / WING FIRES UNAFFECTED" : "ENGINE FUEL VALVE OPEN");
         break;
       case "KeyR":

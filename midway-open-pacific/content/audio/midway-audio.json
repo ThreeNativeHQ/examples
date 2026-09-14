@@ -1304,6 +1304,81 @@
       ]
     },
     {
+      "id": "bomb-underwater",
+      "file": "audio/bomb-underwater.ogg",
+      "seconds": 6,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One conventional aerial bomb detonating well below the surface of open seawater, heard from above: a deep muffled thud with the blast crack filtered away by the water, a low pressure whump, then a delayed swelling surge as it reaches the surface, no ringing metal and no splash at the start. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One conventional aerial bomb detonating well below the surface of open seawater, heard from above: a deep muffled thud with the blast crack filtered away by the water, a low pressure whump, then a delayed swelling surge as it reaches the surface, no ringing metal and no splash at the start. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 6,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "25b7c1e91cabafb32a72843d2b0b82c6d430abd8994ab3c3d6e4b4055c5b1805",
+          "outputHash": "202ec2e50f0c453f33aca919fb06addfa9b43f039ef98038032b9f8dc572c65e",
+          "bytes": 55702
+        }
+      ]
+    },
+    {
+      "id": "depth-charge",
+      "file": "audio/depth-charge.ogg",
+      "seconds": 7,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One naval depth charge detonating deep underwater, heard on the escort above: a heavy dull concussion with almost no high frequency, a long low rumble carried up through the water, then a slow rising surge, no metallic clang and no sonar ping. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One naval depth charge detonating deep underwater, heard on the escort above: a heavy dull concussion with almost no high frequency, a long low rumble carried up through the water, then a slow rising surge, no metallic clang and no sonar ping. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 7,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "79e7550419f7141d4a69047726d6d7f457c8b7d6c43395dd19afdb7a3f54845c",
+          "outputHash": "2a33b8561a179955e651145e8e985517ab383c5e62be8d5f98a3d92925c960f3",
+          "bytes": 62769
+        }
+      ]
+    },
+    {
+      "id": "water-column-fall",
+      "file": "audio/water-column-fall.ogg",
+      "seconds": 5,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "A tall column of seawater thrown up by an explosion falling back onto the open sea, broad heavy sheets of falling water and hard irregular splashing that fades into settling foam, no explosive blast at any point and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A tall column of seawater thrown up by an explosion falling back onto the open sea, broad heavy sheets of falling water and hard irregular splashing that fades into settling foam, no explosive blast at any point and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 5,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "1b725e0ea6314ebeb006ab6b3d24f40573de7d595d99806884d0dc1ec6b6ebbf",
+          "outputHash": "a92fac38d0bdd438bf85b5d460fc8fa87a7ea53586a6d75bca73446f0faedf14",
+          "bytes": 57027
+        }
+      ]
+    },
+    {
       "id": "torpedo-hit",
       "file": "audio/torpedo-hit.ogg",
       "seconds": 6,

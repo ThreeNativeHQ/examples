@@ -13,6 +13,7 @@ import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScar
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
 import { createOcean } from "./ocean.js";
 import { CombatParticles } from "./particles.js";
+import { createRipples } from "./ripples.js";
 
 /**
  * The imported airframe for an AI aircraft, where the game has one.
@@ -35,6 +36,20 @@ function importedAircraftFor(a: { team: string; kind: string }): (() => T.Group)
 
 /** Reused so the per-frame camera orbit allocates nothing. */
 const WORLD_UP = new T.Vector3(0, 1, 0);
+
+/**
+ * Idle a parked aircraft's propeller. Imported airframes publish a `propeller` (and often a blur
+ * disc); the procedural ones publish only the `prop` group every other aircraft animates, so the
+ * same call cannot serve both.
+ */
+function spinParked(m: T.Group, dt: number): void {
+  if (m.userData.propeller) {
+    spinPropeller(m, 0.12, dt);
+    return;
+  }
+  const prop = m.userData.prop as T.Object3D | undefined;
+  if (prop) prop.rotation.z += dt * 28;
+}
 
 /**
  * The model each carrier is drawn with, and the catalog class that model was measured as. Its hull,
@@ -79,6 +94,8 @@ const draughtOf = (classId: string | undefined): number => (classId ? shipClass(
 const HULL_CLASS_BY_NAME: Readonly<Record<string, string>> = {
   Tone: "tone",
   Chikuma: "tone", // Tone class; the two sisters were near-identical at Midway
+  Mogami: "mogami",
+  Mikuma: "mogami", // Mogami class; the derived hull is the only one that flies it
   Arashi: "kagero",
   Nowaki: "kagero",
   "USS Hammann": "hammann",
@@ -107,6 +124,63 @@ const HULL_LOD_RANGE: Readonly<Record<string, number>> = {
   cruiser: 2200,
   destroyer: 2600,
   sub: 1300,
+};
+
+/**
+ * The parked deck load, by the simulation's own airframe name.
+ *
+ * The park is a bounded sample of the same `s.air.ready` inventory the launch gate spends, not a
+ * second air count: one instance per airframe a ship actually carries. The models are the ones the
+ * game already loads — the imported TBD, Kate and Zero, the imported Douglas for the SBD, and the
+ * procedural fighter/bomber for the two airframes with no source asset. The id is explicit so no
+ * team/kind guess can park a B-25 or an enemy type on a deck.
+ */
+const PARK_FACTORY: Readonly<Record<string, () => T.Group>> = {
+  wildcat: () => makeAircraft("us", "fighter", false),
+  sbd: () => createAirframe("sbd3", "ai"),
+  tbd: () => createAirframe("tbd1", "ai"),
+  zero: () => createAirframe("a6m3", "ai"),
+  val: () => makeAircraft("jp", "bomber", false),
+  kate: () => createAirframe("b5n2", "ai"),
+};
+
+/**
+ * How far a parked airframe's origin stands above its wheel contact, in metres.
+ *
+ * The import contract lands the TBD's and Kate's wheels on y = 0, so their root is the contact
+ * datum. The other three are not: the Douglas main wheels reach -1.84 m below its root
+ * (`createDauntlessGear`: leg -0.3, wheel -1.19, radius 0.35), the Zero's reach -1.87 m
+ * (`createZero`: wheel -1.55, radius 0.32), and the procedural hull's reach -2.36 m
+ * (`makeAircraft`: wheel -1.85, radius 0.51). A station adds this back so every type rests on the
+ * same deck plane instead of sinking its undercarriage into it.
+ */
+const PARK_GROUND: Readonly<Record<string, number>> = {
+  wildcat: 2.36,
+  sbd: 1.84,
+  tbd: 0,
+  zero: 1.87,
+  val: 2.36,
+  kate: 0,
+};
+
+/**
+ * One aft parking station per airframe, in ship-local metres.
+ *
+ * The park is spotted aft of the launch spot because the deck is narrow abeam and no aircraft is
+ * drawn folded; a machine parked beside the launch lane hangs a wingtip over the sea. The three
+ * stations are the row the old TBD park used, measured against the tightest deck edge
+ * (`tools/capture-deck.mjs` finds port -10.6 m abreast z = 100): the widest parked airframe is the
+ * Kate at 15.5 m, whose port tip at x = -1 reaches -8.75 m, 1.85 m inside the edge. Each airframe
+ * has its own station so two types can never share a slot, and a carrier carries only its own
+ * team's three, so the three slots are always distinct and 16 m apart in z.
+ */
+const PARK_STATION: Readonly<Record<string, number>> = {
+  wildcat: 72,
+  sbd: 88,
+  tbd: 104,
+  zero: 72,
+  val: 88,
+  kate: 104,
 };
 
 export interface IWorldHost {
@@ -143,6 +217,7 @@ export class WorldView {
   tracerPositions = new Float32Array(1000 * 6);
   tracerColors = new Float32Array(1000 * 6);
   particles!: CombatParticles;
+  ripples!: ReturnType<typeof createRipples>;
   lookYaw = 0;
   lookPitch = 0;
   lookActive = false;
@@ -180,6 +255,7 @@ export class WorldView {
     this.sunDir = SUN_DIRECTION.clone();
     this.wakeTex = wakeTexture();
     this.makeSky();
+    this.ripples = createRipples();
     this.makeOcean();
     this.makeWorld();
     this.makeTracers();
@@ -197,7 +273,7 @@ export class WorldView {
   }
 
   makeOcean(): void {
-    this.ocean = createOcean();
+    this.ocean = createOcean({ rippleHeight: this.ripples.heightNode, rippleFoam: this.ripples.foamNode });
     this.sea = this.ocean.mesh;
     this.scene.add(this.sea);
   }
@@ -249,34 +325,16 @@ export class WorldView {
         mesh.add(lod);
         mesh.userData.importedShip = true;
         mesh.userData.parked = [];
-        // The park is Devastators. VT-6, VT-8 and VT-3 flew TBD-1s off these three decks on the
-        // morning of 4 June; the B-25s that used to stand on Hornet had been flown off her for
-        // Tokyo two months earlier and never came back aboard, so they were scenery, not a strike
-        // type. `ai` is the reduced-detail build of the same airframe, 11,640 triangles against
-        // the hero's 38,800 (tools/inspect-glb.mjs), which is what it exists for.
-        //
-        // The park is spotted aft, behind the launch spot, because it has to be: the deck is 32 m
-        // across at its widest and none of these aircraft is drawn with its wings folded, so a
-        // machine parked abeam the launch lane hangs a wingtip over the sea. The clearance is
-        // against the surveyed edges, not the nominal 32 m. tools/capture-deck.mjs raycasts the
-        // deck at z = 55 / 78 / 100 and finds port -12.8 / -12.8 / -10.6 and starboard
-        // +12.8 / +12.6 / +12.6, so the park's three stations are governed by the narrowest of
-        // them, the -10.6 m port edge abreast z = 100:
-        //
-        //   TBD-1 span 15.24 m (public/assets/aircraft.tbd-devastator.ai.glb, tools/inspect-glb.mjs)
-        //   half-span 7.62 m against the SBD's 6.33 m, so the old x = -4.5 station would put this
-        //   wing at -12.12 m, over the edge at both of the two aft stations, and is abandoned.
-        //   At x = -1: port tip -8.62 m, 1.98 m clear of the tightest edge; starboard tip
-        //   +6.62 m, 5.98 m clear. Measured back off the built scene, not only computed here.
-        //
-        // The import lands the TBD's wheels on y = 0, so a station is the deck datum with nothing
-        // added. The +1.82 m and the 0.22 rad nose-up were corrections for the gear-up Douglas
-        // source, and only Enterprise applied them — which left Yorktown's park sunk 1.82 m into
-        // its own flight deck. `sink` is added back because the park is a child of the hull, which
-        // has just been lowered by it: `deckHeight` is in the world's frame, this is not.
-        for (let i = 0; i < (s.team === "us" ? (model?.id === "enterprise" ? 2 : 3) : 0); i++) {
-          const plane = createAirframe("tbd1", "ai");
-          plane.position.set(-1, s.deckHeight + sink, 72 + i * 16);
+        // The park draws this ship's own ready inventory, one airframe per type it carries. A type
+        // that leaves the ready line — launched, wrecked, written off — hides its own parked
+        // aircraft and nothing else; the surviving types stay spotted. `ai` is the reduced build
+        // where the airframe has one. `sink` is added back because the park is a child of the hull,
+        // which has just been lowered by it, while `deckHeight` is in the world's frame.
+        for (const type in PARK_STATION) {
+          if ((s.air?.ready?.[type] ?? 0) <= 0) continue;
+          const plane = PARK_FACTORY[type]();
+          plane.userData.simAirframe = type;
+          plane.position.set(-1, s.deckHeight + sink + PARK_GROUND[type], PARK_STATION[type]);
           detailed.add(plane);
           mesh.userData.parked.push(plane);
         }
@@ -341,6 +399,7 @@ export class WorldView {
     this.followBomb = false;
     this.lookYaw = this.lookPitch = 0;
     this.particles.reset();
+    this.ripples.reset();
     for (const [id, m] of this.meshes) if (id.startsWith("air-")) {
       this.scene.remove(m);
       this.disposeModel(m);
@@ -365,15 +424,19 @@ export class WorldView {
     for (const s of b.ships) {
       const m = this.meshes.get(s.id);
       if (!m) continue;
-      m.position.set(s.x, s.kind === "sub" && !s.surfaced ? -7 : s.y, s.z);
+      // Depth already became y through `subY` in the simulation; the renderer never converts it.
+      m.position.set(s.x, s.y, s.z);
       m.rotation.set(Math.sin(time * 0.3 + s.baseZ) * 0.004, -s.heading, s.sunk ? s.sink * 0.35 : Math.sin(time * 0.22 + s.baseX) * 0.004 + (1 - s.hp / s.maxHp) * 0.035);
       m.visible = s.sink < 0.95;
       const d = distance2(s, p);
       updateShipScars(m, s, d, this.quality);
-      for (const [i, a] of ((m.userData.parked ?? []) as T.Object3D[]).entries()) {
-        a.visible = d < 1900 && i < Math.ceil(s.reserve / 2);
+      for (const a of (m.userData.parked ?? []) as T.Group[]) {
+        const type = a.userData.simAirframe as string;
+        // The park is the ready line: an airframe with none ready is below in the hangar, so its
+        // parked instance hides and the other types stay spotted.
+        a.visible = d < 1900 && (s.air?.ready?.[type] ?? 0) > 0;
         // Turning over on the spot, waiting for the flag. One airframe, one animator.
-        spinPropeller(a as T.Group, 0.12, dt);
+        spinParked(a, dt);
       }
       if (m.userData.elevator) (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
 
@@ -458,6 +521,7 @@ export class WorldView {
     this.playerMesh.visible = b.status !== "lost";
     this.updateProjectiles();
     this.updateCamera(dt, briefing, time);
+    this.ripples.update(b, this.camera.position, dt);
     this.particles.update(b, this.camera.position);
     this.ocean.update(this.camera.position, time, b.ships);
     this.sun.position.copy(this.sunDir).multiplyScalar(500).add(this.playerMesh.getWorldPosition(this.tmp));

@@ -14,7 +14,10 @@ const WAVES = [
   [.99, -.12, 9.4, .08], [.70, .71, 4.8, .035],
 ];
 
-export function createOcean() {
+export function createOcean({ rippleHeight, rippleFoam }: {
+  rippleHeight?: (point: Node<"vec2">) => Node<"float">;
+  rippleFoam?: (point: Node<"vec2">) => Node<"float">;
+} = {}) {
   const origin = uniform(new Vector2());
   const time = uniform(0);
   const sun = vec3(SUN_DIRECTION);
@@ -64,6 +67,7 @@ export function createOcean() {
   const height = Fn(() => {
     const h = float(0).toVar();
     for (const field of fields) h.addAssign(field.heightNode({ point, time }));
+    if (rippleHeight) h.addAssign(rippleHeight(point));
     return h;
   })();
   material.positionNode = vec3(positionGeometry.x, height, positionGeometry.z);
@@ -130,6 +134,7 @@ export function createOcean() {
         wake.mul(.8).add(wash.mul(.55)).add(hullWash.mul(.6)).mul(noise.mul(.62).add(.38)),
       );
     }
+    if (rippleFoam) foam.addAssign(rippleFoam(world));
     // Aerated water is the brightest thing in a wartime photograph of a task force at speed —
     // a wake reads as white against deep blue, not as a slightly paler shade of the sea.
     // Crest foam reaches this same colour but only at .14 strength, so whitecaps stay subtle.

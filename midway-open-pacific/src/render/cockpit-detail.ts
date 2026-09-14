@@ -196,11 +196,13 @@ function createAttitudeFace(): AttitudeFace | undefined {
   return {
     material,
     update(pitch: number, roll: number) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, size, size);
       ctx.save();
       ctx.beginPath();
       ctx.arc(cx, cy, R, 0, TAU);
       ctx.clip();
+      ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(-clamp(roll, -Math.PI, Math.PI));
       const shift = clamp(pitch, -1.2, 1.2) * 112;
@@ -229,6 +231,7 @@ function createAttitudeFace(): AttitudeFace | undefined {
       }
       ctx.restore();
       // Fixed aircraft reference symbol and top index.
+      ctx.save();
       ctx.translate(cx, cy);
       ctx.strokeStyle = "#f0bd49";
       ctx.lineWidth = 3;
@@ -251,6 +254,7 @@ function createAttitudeFace(): AttitudeFace | undefined {
       ctx.lineTo(6, -R + 14);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
       ctx.restore();
       texture.needsUpdate = true;
     },

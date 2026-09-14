@@ -252,6 +252,7 @@ export function updateGunnery(b: Any, s: Any, dt: number): void {
         damage: 4,
       });
     b.fx("muzzle", origin, 0.4);
-    b.event("aa", { at: origin, source: s.id, weapon: s.team === "us" ? "aa20" : "aa25", kind: "light" });
+    const usLight = s.kind === "carrier" && b.random() < 0.4 ? "aa11" : "aa20";
+    b.event("aa", { at: origin, source: s.id, weapon: s.team === "us" ? usLight : "aa25", kind: "light" });
   }
 }

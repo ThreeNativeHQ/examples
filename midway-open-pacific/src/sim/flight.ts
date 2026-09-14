@@ -13,7 +13,7 @@ import {
   gearClearance,
   setAttitude,
 } from "@threenative/core";
-import type { IAircraftAirframe, IFlightControls, IFlightState } from "@threenative/core";
+import type { IAircraftAirframe, IFlightControls, IFlightModifiers, IFlightState } from "@threenative/core";
 import { damageModifiers } from "./damage.js";
 import { angleDelta, bearing, clamp, distance2 } from "./math.js";
 
@@ -195,8 +195,8 @@ export class AircraftFlight {
     return this.#model.gearClearance();
   }
 
-  step(dt: number, controls: IFlightControls): void {
-    this.#model.step(dt, controls, damageModifiers(this.state));
+  step(dt: number, controls: IFlightControls, modifiers?: IFlightModifiers): void {
+    this.#model.step(dt, controls, modifiers ?? damageModifiers(this.state));
   }
 
   stepDeck(
@@ -320,6 +320,7 @@ export function steerToward(
   aim: { x: number; z: number },
   desiredAlt: number,
   limits: ISteerLimits = {},
+  out: { autopilot?: boolean; pitch?: number; rudder?: number; turn?: number } = {},
 ): IFlightControls {
   // Manoeuvre margin. Just off a deck an aircraft is barely flying, and neither a steep bank nor a
   // strong climb is available to it: a controller that asks anyway rolls or stalls it into the sea
@@ -342,9 +343,11 @@ export function steerToward(
     climbLimit,
   );
   // The floor is the height the aircraft will not knowingly descend through, and the deeper it is the
-  // harder the law climbs out — up to what the aircraft can actually deliver, never past it.
+  // harder the law climbs out — up to the tactic's own commanded climb, never past it. Capping the
+  // floor push at the speed-tapered `climbLimit` instead left a slow aircraft (margin down to 0.25)
+  // unable to climb out at all, which is what denied the ordered wing its torpedo and dive runs.
   if (limits.floor !== undefined && a.y < limits.floor)
-    desiredVY = Math.max(desiredVY, Math.min(climbLimit, 2 + (limits.floor - a.y) * 0.5));
+    desiredVY = Math.max(desiredVY, Math.min(commanded, 2 + (limits.floor - a.y) * 0.5));
   // A banked aircraft needs more than 1 g to hold its height; the engine takes that as the load the
   // stick is asking for, so the bank compensation and the height error arrive on the same channel.
   const baseLoad = clamp(1 / Math.max(0.45, Math.cos(currentBank)), 1, 2.2);
@@ -352,5 +355,9 @@ export function steerToward(
   // The engine's trimmed angle of attack reaches past the critical one, so a load command held
   // through a stall keeps the aircraft stalled. Stop pulling instead.
   if ((a.stall ?? 0) > 0.35) pitch = Math.min(pitch, 0);
-  return { autopilot: true, pitch, rudder: 0, turn };
+  out.autopilot = true;
+  out.pitch = pitch;
+  out.rudder = 0;
+  out.turn = turn;
+  return out;
 }

@@ -156,14 +156,24 @@ export function selectNavalTarget(b: Any, a: Any): Any {
   }
   let best: Any = null;
   let score = Infinity;
+  // How many teammates are already committed to each contact, counted once instead of once per
+  // candidate: the pressure term is the same for every candidate and reads only live aircraft.
+  let pressure: Map<Any, number> | null = null;
+  if (candidates.length > 0) {
+    pressure = PRESSURE;
+    pressure.clear();
+    for (const other of b.aircraft) {
+      if (other.id === a.id || other.team !== a.team || !(other.bombs + other.torpedo > 0)) continue;
+      if (other.target == null) continue;
+      pressure.set(other.target, (pressure.get(other.target) || 0) + 1);
+    }
+  }
   for (const c of candidates) {
-    const pressure = b.aircraft.filter(
-      (other: Any) => other.id !== a.id && other.team === a.team && other.target === c.id && other.bombs + other.torpedo > 0,
-    ).length;
+    const committed = pressure ? pressure.get(c.id) || 0 : 0;
     const e = estimatePosition(c, b.time);
     // An uncertain, poorly identified report is worth attacking less than a tight one. The target's
     // own damage state is deliberately absent: nobody outside that ship knows it.
-    const rank = distance2(a, e) + pressure * 1150 + e.radius * 3 + (1 - c.confidence) * 3000;
+    const rank = distance2(a, e) + committed * 1150 + e.radius * 3 + (1 - c.confidence) * 3000;
     if (rank < score) {
       score = rank;
       best = c;
@@ -178,18 +188,40 @@ export function selectNavalTarget(b: Any, a: Any): Any {
 
 export function chooseFighterTarget(b: Any, a: Any): Any {
   const home = b.ships.find((s: Any) => s.id === a.home);
-  const candidates = b.aircraft.filter(
-    (e: Any) => e.team !== a.team && e.hp > 0 && e.mode !== "launch" && distance3(e, a) < 3500,
-  );
-  if (a.team === "jp" && b.player.mode === "flight" && b.player.hp > 0 && distance3(a, b.player) < 3500)
-    candidates.push(b.player);
+  // Gather candidates with a squared-range reject, so only the handful actually in range pay for a
+  // `Math.hypot`. The order is the aircraft order the old `.filter()` produced, with the player last.
+  const candidates = FIGHTER_CANDIDATES;
+  candidates.length = 0;  for (const e of b.aircraft) {
+    if (e.team === a.team || e.hp <= 0 || e.mode === "launch") continue;
+    const dx = e.x - a.x;
+    const dy = e.y - a.y;
+    const dz = e.z - a.z;
+    if (dx * dx + dy * dy + dz * dz < 12250000) candidates.push(e);
+  }
+  if (a.team === "jp" && b.player.mode === "flight" && b.player.hp > 0) {
+    const dx = b.player.x - a.x;
+    const dy = b.player.y - a.y;
+    const dz = b.player.z - a.z;
+    if (dx * dx + dy * dy + dz * dz < 12250000) candidates.push(b.player);
+  }
   let best: Any = null;
   let score = -Infinity;
+  // How many of this aircraft's own side are already chasing each target, tabulated once rather than
+  // by rescanning the whole fleet for every candidate.
+  let attacks: Map<Any, number> | null = null;
+  if (candidates.length > 0) {
+    attacks = ATTACKS;
+    attacks.clear();
+    for (const f of b.aircraft) {
+      if (f.team === a.team && f !== a && f.airTarget != null)
+        attacks.set(f.airTarget, (attacks.get(f.airTarget) || 0) + 1);
+    }
+  }
   for (const e of candidates) {
     const d = distance3(a, e);
     const strike = e.kind === "bomber" || e.kind === "torpedo";
-    const danger = home && distance2(e, home) < 4800;
-    const attacking = b.aircraft.filter((f: Any) => f.team === a.team && f !== a && f.airTarget === e.id).length;
+    const danger = home ? (e.x - home.x) * (e.x - home.x) + (e.z - home.z) * (e.z - home.z) < 23040000 : false;
+    const attacking = attacks ? attacks.get(e.id) || 0 : 0;
     let rank = (strike ? 2500 : 0) + (danger ? 1400 : 0) - d - attacking * 1050 + (a.airTarget === e.id ? 500 : 0);
     if (a.wing && distance3(e, b.player) < 900) rank += 1400;
     if (e.kind === "fighter" && e.airTarget === a.id) rank += 900;
@@ -204,28 +236,50 @@ export function chooseFighterTarget(b: Any, a: Any): Any {
 /**
  * How far each tactic lets the controller depart from straight and level. These are the game's
  * tactical envelopes, not the airframe's: the engine decides whether the aircraft can actually
- * deliver what is asked, and refuses by stalling or sinking rather than by clamping.
+ * deliver what is asked, and refuses by stalling or sinking rather than by clamping. The envelopes
+ * are constants, so they are shared frozen objects rather than rebuilt for every aircraft every step.
  */
+const TACTIC_LIMITS: Readonly<Record<string, ISteerLimits>> = Object.freeze({
+  // A fixed aim distance, so the run-in descends to release height at once instead of easing down
+  // over the whole approach and arriving over the ship still too high to drop.
+  "torpedo-run": Object.freeze({ bank: 0.6, climb: 6, floor: 6, lead: 550, leadMax: 550, sink: 32 }),
+  ditching: Object.freeze({ bank: 0.4, climb: 2, floor: 0, sink: 4 }),
+  dive: Object.freeze({ bank: 0.9, climb: 8, floor: 55, lead: 80, sink: 115 }),
+  evade: Object.freeze({ bank: 1.1, climb: 12, floor: 55, sink: 30 }),
+  landing: Object.freeze({ bank: 0.5, climb: 5, floor: 6, sink: 12 }),
+});
+const FIGHTER_LIMITS: ISteerLimits = Object.freeze({ bank: 1.02, climb: 11, floor: 55, sink: 18 });
+const ATTACKER_LIMITS: ISteerLimits = Object.freeze({ bank: 0.73, climb: 8, floor: 55, sink: 12 });
+
 function limitsFor(a: Any): ISteerLimits {
-  switch (a.tactic) {
-    case "dive":
-      return { bank: 0.9, climb: 8, floor: 55, lead: 80, sink: 115 };
-    // A fixed aim distance, so the run-in descends to release height at once instead of easing down
-    // over the whole approach and arriving over the ship still too high to drop.
-    case "torpedo-run":
-      return { bank: 0.6, climb: 6, floor: 6, lead: 550, leadMax: 550, sink: 32 };
-    case "landing":
-      return { bank: 0.5, climb: 5, floor: 6, sink: 12 };
-    case "ditching":
-      return { bank: 0.4, climb: 2, floor: 0, sink: 4 };
-    case "evade":
-      return { bank: 1.1, climb: 12, floor: 55, sink: 30 };
-    default:
-      return a.kind === "fighter"
-        ? { bank: 1.02, climb: 11, floor: 55, sink: 18 }
-        : { bank: 0.73, climb: 8, floor: 55, sink: 12 };
-  }
+  return TACTIC_LIMITS[a.tactic] ?? (a.kind === "fighter" ? FIGHTER_LIMITS : ATTACKER_LIMITS);
 }
+
+/** Is any live report this aircraft believes within `radius`? A loop, so no array is built per step. */
+function contactNear(b: Any, a: Any, radius: number): boolean {
+  for (const c of b.teamIntel[a.team].values()) {
+    if (isStale(c, b.time, STALE_SECONDS)) continue;
+    if (distance2(a, estimatePosition(c, b.time)) < radius) return true;
+  }
+  return false;
+}
+
+/** Module scratch for `flyAircraft`: reused, never retained past the synchronous engine step. */
+const GLIDE_LIMITS: ISteerLimits = {};
+const FLY_AIM = { x: 0, z: 0 };
+const FLY_CONTROLS = { autopilot: false, pitch: 0, rudder: 0, turn: 0 };
+const ZERO_AVOID = { x: 0, z: 0 };
+/** Reused only for a steer aim that is consumed within the same iteration; never stored on an aircraft. */
+const DEST = { x: 0, z: 0 };
+function aimPoint(x: number, z: number): { x: number; z: number } {
+  DEST.x = x;
+  DEST.z = z;
+  return DEST;
+}
+/** Reused candidate buffers and count maps: the AI is single-threaded and never retains them. */
+const FIGHTER_CANDIDATES: Any[] = [];
+const ATTACKS = new Map<any, number>();
+const PRESSURE = new Map<any, number>();
 
 /**
  * One aircraft's engine flight, built on first use. Everything the engine requires is finite before
@@ -259,8 +313,9 @@ function flyAircraft(a: Any, dest: Any, alt: number, targetSpeed: number, dt: nu
   if (!dest) return;
   const fl = flightOf(a);
   const m = damageModifiers(a);
-  const avoid = a.avoid || { x: 0, z: 0 };
-  const aim = { x: dest.x + avoid.x, z: dest.z + avoid.z };
+  const avoid = a.avoid || ZERO_AVOID;
+  FLY_AIM.x = dest.x + avoid.x;
+  FLY_AIM.z = dest.z + avoid.z;
   const slow = a.tactic === "landing" || a.tactic === "torpedo-run";
   // Configuration follows the tactic: flaps for slow flight and the climb-out, dive brakes to hold a
   // dive-bomber's speed inside its release window, wheels only to land.
@@ -282,9 +337,17 @@ function flyAircraft(a: Any, dest: Any, alt: number, targetSpeed: number, dt: nu
   );
   // With the engine gone the aircraft glides: no floor to hold, no climb to command, so it really
   // does trade height for speed instead of being held up by a minimum-speed rule.
-  const limits: ISteerLimits =
-    m.power < 0.12 ? { ...limitsFor(a), climb: -2, floor: undefined } : limitsFor(a);
-  fl.step(dt, steerToward(a, aim, alt, limits));
+  let limits = limitsFor(a);
+  if (m.power < 0.12) {
+    GLIDE_LIMITS.bank = limits.bank;
+    GLIDE_LIMITS.climb = -2;
+    GLIDE_LIMITS.floor = undefined;
+    GLIDE_LIMITS.lead = limits.lead;
+    GLIDE_LIMITS.leadMax = limits.leadMax;
+    GLIDE_LIMITS.sink = limits.sink;
+    limits = GLIDE_LIMITS;
+  }
+  fl.step(dt, steerToward(a, FLY_AIM, alt, limits, FLY_CONTROLS), m);
 }
 
 /**
@@ -379,14 +442,31 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
   a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
   if (a.rearTimer > 0) return;
   const f = forward(a.heading, a.pitch);
-  const foes = b.aircraft.filter((e: Any) => e.team !== a.team && e.hp > 0);
-  if (a.team === "jp" && b.player.mode === "flight") foes.push(b.player);
-  const t = foes.find((e: Any) => {
-    const d = distance3(a, e);
-    return d < 650 && d > 25 && ((e.x - a.x) * f.x + (e.y - a.y) * f.y + (e.z - a.z) * f.z) / (d || 1) < -0.6 && (e.y - a.y) / d > -0.13;
-  });
+  // One pass for the first enemy behind the tail, in aircraft order with the player last, and the
+  // range found once instead of twice. A squared reject keeps the (slow) `Math.hypot` for the rare
+  // foe already in the 25–650 m envelope, which is the only place its value is used.
+  let t: Any = null;
+  let d = 0;
+  const consider = (e: Any): boolean => {
+    const dx = e.x - a.x;
+    const dy = e.y - a.y;
+    const dz = e.z - a.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 >= 422500 || d2 <= 625) return false;
+    const dd = Math.hypot(dx, dy, dz);
+    if ((dx * f.x + dy * f.y + dz * f.z) / (dd || 1) < -0.6 && dy / dd > -0.13) {
+      t = e;
+      d = dd;
+      return true;
+    }
+    return false;
+  };
+  for (const e of b.aircraft) {
+    if (e.team === a.team || e.hp <= 0) continue;
+    if (consider(e)) break;
+  }
+  if (!t && a.team === "jp" && b.player.mode === "flight") consider(b.player);
   if (!t) return;
-  const d = distance3(a, t);
   const tt = d / 730;
   const aim = { x: t.x + (t.vx || 0) * tt - a.x, y: t.y + (t.vy || 0) * tt - a.y, z: t.z + (t.vz || 0) * tt - a.z };
   const len = Math.hypot(aim.x, aim.y, aim.z) || 1;
@@ -469,6 +549,10 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
 }
 
 export function updateTacticalAircraft(b: Any, dt: number): void {
+  // Home lookup by id, built once for the fleet: every aircraft used to rescan `b.ships` for its own
+  // deck each step.
+  const shipsById = new Map<Any, Any>();
+  for (const s of b.ships) if (!shipsById.has(s.id)) shipsById.set(s.id, s);
   for (const a of b.aircraft) {
     if (a.recovered || a.removed) continue;
     if (a.mode === "crashing") {
@@ -513,7 +597,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
     a.gunTimer = Math.max(0, a.gunTimer - dt);
     a.attackCooldown = Math.max(0, a.attackCooldown - dt);
     rearGunner(b, a, dt);
-    const home = b.ships.find((s: Any) => s.id === a.home);
+    const home = shipsById.get(a.home);
     // The deck datum is a construction-time option, so the wrapper is rebound only when the aircraft's
     // own deck changes — a diversion to a carrier a metre lower otherwise rolls and lands on the
     // previous ship's deck height.
@@ -547,9 +631,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       b.time < (a.musterUntil || 0) &&
       !(a.wing && b.player.mode === "flight") &&
       home &&
-      ![...b.teamIntel[a.team].values()].some(
-        (c: Any) => !isStale(c, b.time, STALE_SECONDS) && distance2(a, estimatePosition(c, b.time)) < 4600,
-      )
+      !contactNear(b, a, 4600)
     ) {
       const f = forward(home.heading);
       a.tactic = "muster";
@@ -571,24 +653,31 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       navigateHome(b, a, dt);
       continue;
     }
-    a.avoid = { x: 0, z: 0 };
+    const avoid = a.avoid || (a.avoid = { x: 0, z: 0 });
+    avoid.x = 0;
+    avoid.z = 0;
     for (const other of b.aircraft) {
       if (other === a || other.hp <= 0) continue;
-      const d = distance3(a, other);
-      if (d > 1 && d < 75) {
-        const gain = ((75 - d) * 14) / d;
-        a.avoid.x += (a.x - other.x) * gain;
-        a.avoid.z += (a.z - other.z) * gain;
-      }
+      const dx = a.x - other.x;
+      const dz = a.z - other.z;
+      const dy = a.y - other.y;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      // Only the handful inside the 75 m separation bubble need a distance; everyone else is
+      // rejected on the squared value, which is what makes this all-pairs scan affordable.
+      if (d2 <= 1 || d2 >= 5625) continue;
+      const d = Math.hypot(dx, dy, dz);
+      const gain = ((75 - d) * 14) / d;
+      avoid.x += dx * gain;
+      avoid.z += dz * gain;
     }
     let dest: Any;
     let alt = 1400;
     let speed = a.kind === "fighter" ? 117 : a.kind === "torpedo" ? 84 : a.kind === "recon" ? 83 : 103;
     if (a.kind === "recon") {
       a.tactic = "scouting";
-      dest = a.team === "us" ? b.search : { x: -500, y: 1000, z: 6300 };
+      dest = a.team === "us" ? b.search : aimPoint(-500, 6300);
       alt = 1300;
-      if (distance2(a, dest) < 1300) dest = { x: dest.x + Math.sin(b.time * 0.018 + a.phase) * 2800, z: dest.z + Math.cos(b.time * 0.018 + a.phase) * 2800 };
+      if (distance2(a, dest) < 1300) dest = aimPoint(dest.x + Math.sin(b.time * 0.018 + a.phase) * 2800, dest.z + Math.cos(b.time * 0.018 + a.phase) * 2800);
     } else if (a.kind === "fighter") {
       const t = chooseFighterTarget(b, a);
       a.airTarget = t?.id || null;
@@ -607,7 +696,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
         } else {
           a.tactic = "intercept";
           const lead = clamp(d / 250, 0, 2.1);
-          dest = { x: t.x + (t.vx || 0) * lead, z: t.z + (t.vz || 0) * lead };
+          dest = aimPoint(t.x + (t.vx || 0) * lead, t.z + (t.vz || 0) * lead);
           alt = t.y;
           fireClear(b, a, t);
           const threat = b.aircraft.find(
@@ -615,10 +704,10 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
           );
           if (threat && a.y > 220) {
             a.tactic = "evade";
-            dest = {
-              x: a.x + Math.sin(a.heading + (Math.sin(b.time * 0.45 + a.phase) > 0 ? 1.1 : -1.1)) * 900,
-              z: a.z - Math.cos(a.heading + (Math.sin(b.time * 0.45 + a.phase) > 0 ? 1.1 : -1.1)) * 900,
-            };
+            dest = aimPoint(
+              a.x + Math.sin(a.heading + (Math.sin(b.time * 0.45 + a.phase) > 0 ? 1.1 : -1.1)) * 900,
+              a.z - Math.cos(a.heading + (Math.sin(b.time * 0.45 + a.phase) > 0 ? 1.1 : -1.1)) * 900,
+            );
             alt = a.y - 130;
           }
         }
@@ -630,13 +719,13 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
         if (leader) {
           a.tactic = "escort";
           const f = forward(leader.heading);
-          dest = { x: leader.x - f.x * 180 + Math.cos(leader.heading) * 140 * Math.sin(a.phase), z: leader.z - f.z * 180 + Math.sin(leader.heading) * 140 * Math.sin(a.phase) };
+          dest = aimPoint(leader.x - f.x * 180 + Math.cos(leader.heading) * 140 * Math.sin(a.phase), leader.z - f.z * 180 + Math.sin(leader.heading) * 140 * Math.sin(a.phase));
           alt = leader.y + 110;
           speed = clamp(leader.speed + (distance2(a, leader) - 250) * 0.055, 67, 133);
         } else {
           a.tactic = "CAP";
           const h = home || b.search;
-          dest = { x: h.x + Math.sin(b.time * 0.018 + a.phase) * 1500, z: h.z + Math.cos(b.time * 0.018 + a.phase) * 1500 };
+          dest = aimPoint(h.x + Math.sin(b.time * 0.018 + a.phase) * 1500, h.z + Math.cos(b.time * 0.018 + a.phase) * 1500);
           alt = 1350 + Math.sin(a.phase) * 250;
         }
       }
@@ -644,16 +733,16 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       a.tactic = "formation";
       const p = b.player;
       const f = forward(p.heading);
-      dest = { x: p.x - f.x * 130 + Math.cos(p.heading) * 95 * Math.sin(a.phase), z: p.z - f.z * 130 + Math.sin(p.heading) * 95 * Math.sin(a.phase) };
+      dest = aimPoint(p.x - f.x * 130 + Math.cos(p.heading) * 95 * Math.sin(a.phase), p.z - f.z * 130 + Math.sin(p.heading) * 95 * Math.sin(a.phase));
       alt = p.y + 30;
       speed = clamp(p.speed + (distance2(a, p) - 160) * 0.1, 53, 128);
     } else {
       const t = selectNavalTarget(b, a);
       if (!t) {
         a.tactic = "search";
-        dest = a.team === "us" ? b.search : { x: -500, z: 6300 };
+        dest = a.team === "us" ? b.search : aimPoint(-500, 6300);
         alt = a.kind === "torpedo" ? 700 : 1750;
-        if (distance2(a, dest) < 1800) dest = { x: dest.x + Math.sin(b.time * 0.012 + a.phase) * 2300, z: dest.z + Math.cos(b.time * 0.012 + a.phase) * 2300 };
+        if (distance2(a, dest) < 1800) dest = aimPoint(dest.x + Math.sin(b.time * 0.012 + a.phase) * 2300, dest.z + Math.cos(b.time * 0.012 + a.phase) * 2300);
       } else {
         const d = distance2(a, t);
         dest = t;
@@ -707,5 +796,14 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
     }
     flyAircraft(a, dest || home || b.search, alt, speed, dt);
   }
-  b.aircraft = b.aircraft.filter((a: Any) => !a.removed && !a.recovered);
+  // Rebuild the roster only when something actually left it; the common step removes nobody, and a
+  // fresh 68-element array every step is pure garbage.
+  let anyGone = false;
+  for (const a of b.aircraft) {
+    if (a.removed || a.recovered) {
+      anyGone = true;
+      break;
+    }
+  }
+  if (anyGone) b.aircraft = b.aircraft.filter((a: Any) => !a.removed && !a.recovered);
 }

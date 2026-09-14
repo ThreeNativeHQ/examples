@@ -56,6 +56,10 @@ export class Hud {
     this.toastUntil = performance.now() + 3800;
   }
 
+  isCockpit(): boolean {
+    return this.view?.cameraMode === 1 && !this.view?.followBomb;
+  }
+
   update(dt: number, speed = 1): void {
     const b = this.b;
     const p = b.player;
@@ -88,7 +92,9 @@ export class Hud {
     $("torpedo-guide").classList.toggle("hidden", !(p.loadout === "torpedo" && p.torpedo && p.mode === "flight"));
     $("torpedo-guide").classList.toggle("ready", envelope.safe);
     $("torpedo-guide").textContent = envelope.safe ? "RELEASE ENVELOPE ✓ / 180 M ARMING RUN" : `TORPEDO: ${envelope.problems.join(" · ")}`;
-    $("aero-readout").textContent = `G ${(p.gforce ?? 1).toFixed(1)} · AOA ${((p.aoa || 0) * 57.3).toFixed(0)}° · VSI ${Math.round(((p.vy || 0) * 196.85) / 50) * 50} FT/M`;
+    $("aero-readout").textContent = this.isCockpit()
+      ? `G ${(p.gforce ?? 1).toFixed(1)} · AOA ${((p.aoa || 0) * 57.3).toFixed(0)}°`
+      : `G ${(p.gforce ?? 1).toFixed(1)} · AOA ${((p.aoa || 0) * 57.3).toFixed(0)}° · VSI ${Math.round(((p.vy || 0) * 196.85) / 50) * 50} FT/M`;
     $("flag-flaps").textContent = p.flapPos < 0.1 ? "FLAPS UP" : p.flapPos < 0.6 ? "FLAPS T/O" : "FLAPS LAND";
     $("flight-label").textContent = speed > 1 ? "TRANSIT 3×" : `${p.loadout === "torpedo" ? "TBD" : "SBD"} / ${b.command.toUpperCase()}`;
     const nav = b.navigationPoint;
@@ -293,7 +299,7 @@ export class Hud {
         c.lineTo(vel.x, vel.y - 13);
         c.stroke();
       }
-      if (p.bombs > 0) {
+      if (p.bombs > 0 && (!this.isCockpit() || p.pitch < -0.15 || p.brakes)) {
         const impact = bombImpact({ x: p.x, y: p.y - 1.6, z: p.z }, { x: p.vx, y: p.vy - 2, z: p.vz }, 20);
         const a = this.view.project(impact);
         if (a.visible) {
@@ -392,6 +398,7 @@ export class Hud {
 
   /** The bottom-left instrument bank: two brass dials and the vertical throttle/fuel/airframe gauges. */
   drawGauges(): void {
+    if (this.isCockpit()) return;
     const p = this.b.player;
     const h = innerHeight;
     const compact = innerWidth < 1200;

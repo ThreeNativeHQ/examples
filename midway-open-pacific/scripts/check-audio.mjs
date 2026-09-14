@@ -8,7 +8,7 @@
  * engine's own tests; this file covers the game's choices. Uses the esbuild vite already installs.
  * Run: node scripts/check-audio.mjs
  */
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -106,12 +106,32 @@ const bufferFor = (key) => ({ duration: 1, __key: key, sampleRate: 48000 });
 const allBuffers = () => new Map(Object.keys(CUE_FILES).map((key) => [key, bufferFor(key)]));
 const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1);
 
-// 0 — every cue the code names is actually packaged; a typo is silence the game never reports.
+// 0 — bidirectional packaging check: no orphan audio/voice files on disk, no missing files in code.
 {
-  const missing = Object.entries(CUE_FILES).filter(([, path]) => !existsSync(resolve(root, "public/assets", path)));
-  assert.equal(missing.length, 0, `cue code names an unpackaged file: ${missing.map(([k, p]) => `${k} -> ${p}`).join(", ")}`);
+  const cuePaths = new Set(Object.values(CUE_FILES).map((p) => resolve(root, "public/assets", p)));
+  const speechPaths = new Set(speechSlugList().map((slug) => resolve(root, "public/assets/audio/voice", `${slug}.ogg`)));
+
+  const missingCues = Object.entries(CUE_FILES).filter(([, path]) => !existsSync(resolve(root, "public/assets", path)));
+  assert.equal(missingCues.length, 0, `cue code names an unpackaged file: ${missingCues.map(([k, p]) => `${k} -> ${p}`).join(", ")}`);
+
   const missingSpeech = speechSlugList().filter((slug) => !existsSync(resolve(root, "public/assets/audio/voice", `${slug}.ogg`)));
   assert.equal(missingSpeech.length, 0, `speech script names an unpackaged clip: ${missingSpeech.join(", ")}`);
+
+  // Detect orphan files in public/assets/audio
+  const audioDir = resolve(root, "public/assets/audio");
+  const diskAudioFiles = readdirSync(audioDir, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith(".ogg"))
+    .map((e) => resolve(audioDir, e.name));
+  const orphanAudio = diskAudioFiles.filter((p) => !cuePaths.has(p));
+  assert.equal(orphanAudio.length, 0, `orphan audio files on disk (not in CUE_FILES): ${orphanAudio.map((p) => p.replace(root + "/", "")).join(", ")}`);
+
+  // Detect orphan files in public/assets/audio/voice
+  const voiceDir = resolve(root, "public/assets/audio/voice");
+  const diskVoiceFiles = readdirSync(voiceDir, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith(".ogg"))
+    .map((e) => resolve(voiceDir, e.name));
+  const orphanVoice = diskVoiceFiles.filter((p) => !speechPaths.has(p));
+  assert.equal(orphanVoice.length, 0, `orphan voice files on disk (not in speech): ${orphanVoice.map((p) => p.replace(root + "/", "")).join(", ")}`);
 }
 
 // 1 — load() keeps the successes, drops the failures, and never throws on a missing file.
@@ -467,6 +487,74 @@ const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1)
   assert.equal(bus.playAtCalls.filter((c) => c.key === "fuelFire").length, 12, "the 12-emitter budget was not enforced");
 }
 
+// 25 — dive-brake and cockpit-rattle continuous layers respond to real flight state.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  for (let i = 0; i < 20; i += 1) step(s, bus, { cockpit: false, brakes: false, ias: 140 });
+  assert.equal(gainOf(bus, "diveBrake"), 0, "dive brake sounded while retracted");
+  for (let i = 0; i < 20; i += 1) step(s, bus, { cockpit: false, brakes: true, ias: 140 });
+  assert.ok(gainOf(bus, "diveBrake") > 0.3, "dive brake did not sound when extended at speed");
+
+  for (let i = 0; i < 20; i += 1) step(s, bus, { cockpit: false, damage: 0.8, stall: 0.8 });
+  assert.equal(gainOf(bus, "cockpitRattle"), 0, "cockpit rattle sounded in external view");
+  for (let i = 0; i < 20; i += 1) step(s, bus, { cockpit: true, damage: 0.8, stall: 0.8 });
+  assert.ok(gainOf(bus, "cockpitRattle") > 0.1, "cockpit rattle did not sound inside under stress");
+}
+
+// 26 — all event types map to valid cues with no orphan audio mappings.
+{
+  const bus = new FakeBus();
+  const s = new Soundscape(allBuffers(), bus);
+  s.update(listener({ listener: { x: 0, y: 0, z: 0 } }), false, 0);
+
+  const events = [
+    { type: "gear" },
+    { type: "flap" },
+    { type: "wire" },
+    { type: "engineStart" },
+    { type: "engineStop" },
+    { type: "bulletNear" },
+    { type: "depthCharge" },
+    { type: "collapse" },
+    { type: "secondary" },
+    { type: "torpedoEntry" },
+    { type: "steelHit" },
+    { type: "splash", fragments: true },
+    { type: "land", wire: true },
+    { type: "aa", weapon: "aa11" },
+  ];
+
+  for (const e of events) {
+    bus.listener.context.currentTime += 1;
+    s.event(e);
+  }
+  const keys = new Set(bus.playCalls.map((c) => c.key));
+  for (const expected of [
+    "gearTravel",
+    "flapTravel",
+    "wireCatch",
+    "engineStart",
+    "engineStop",
+    "bulletNear",
+    "depthCharge",
+    "hullCollapse",
+    "secondaryBlast",
+    "torpedoEntry",
+    "steelHit",
+    "waterFragments",
+    "aa11",
+  ]) {
+    assert.ok(keys.has(expected), `event routing missing or unhooked cue: ${expected}`);
+  }
+}
+
+// 27 — no orphaned cues: every single cue in CUE_FILES is defined and recognized.
+{
+  const definedCues = Object.keys(CUE_FILES);
+  assert.equal(definedCues.length, 72, `expected 72 catalog cues, got ${definedCues.length}`);
+}
+
 function listener(over = {}) {
   return { cockpit: false, onDeck: false, engineCut: false, damage: 0, rpm: 0.5, throttle: 0.5, ias: 120, ...over };
 }
@@ -487,4 +575,4 @@ function speechBuffers(entries) {
   return new Map(Object.entries(entries).map(([slug, duration]) => [`speech:${slug}`, { duration, __key: `speech:${slug}` }]));
 }
 
-console.log("check-audio: 25 checks passed");
+console.log("check-audio: 28 checks passed");

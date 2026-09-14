@@ -42,7 +42,7 @@ const { Battle, SHIP_CLASSES, finalReady, FINAL, lineUpLimit, approach, onDeck, 
 
 // ---- 1 — a pure Battle already knows how big every ship is, and the numbers are the catalog's.
 const b = new Battle();
-assert.equal(b.ships.length, 17, "the fleet is still seventeen hulls");
+assert.equal(b.ships.length, 19, "the fleet is the seventeen original hulls plus the two support cruisers");
 for (const s of b.ships) {
   assert.ok(Number.isFinite(s.hullLength) && s.hullLength > 20, `${s.name}: hull length ${s.hullLength}`);
   assert.ok(Number.isFinite(s.hullBeam) && s.hullBeam > 5, `${s.name}: hull beam ${s.hullBeam}`);
@@ -58,6 +58,8 @@ const FROM_CATALOG = {
   Hiryu: "hiryu",
   Tone: "tone",
   Chikuma: "tone",
+  Mogami: "mogami",
+  Mikuma: "mogami",
   Arashi: "kagero",
   Nowaki: "kagero",
   "USS Hammann": "hammann",
