@@ -460,7 +460,6 @@ export function makeShip(ship: any): THREE.Group {
   const deck = new THREE.Mesh(hullGeometry(ship.hullLength * (cv ? 1 : 0.92), ship.hullBeam, cv ? 1.4 : 1, cv), wood);
   deck.position.y = cv ? ship.deckHeight : sub ? 3.5 : 9;
   body.add(deck);
-  const parked: THREE.Object3D[] = [];
   const elevator = new THREE.Group();
   if (cv) {
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(ship.hullBeam, ship.hullLength), new THREE.MeshStandardMaterial({ map: deckTexture(jp), roughness: 0.94, metalness: 0 }));
@@ -503,13 +502,19 @@ export function makeShip(ship: any): THREE.Group {
         rod(body, [x, 16, z], [x * 1.13, 18, z - 4], 0.16, black);
         rod(body, [x + 0.4, 16, z], [x * 1.13 + 0.4, 18, z - 4], 0.16, black);
       }
+    // The deck park of the *silhouette*. These six go into `body`, so `consolidate` folds them into
+    // the hull's own material batches — they used to be added straight to `root`, where six
+    // unmerged procedural airframes cost 138 of this model's 146 draw calls and were never hidden,
+    // because the visibility rule in src/render/world.ts reads `simAirframe` off the wrapper's own
+    // park list and these carry none. Six of them in one frame was 876 draws for 89k triangles.
+    // Nothing is lost by merging: this model IS the far LOD, drawn beyond 1200 m, and the near view
+    // has the imported hull with the real inventory-driven park spotted on it.
     for (let i = 0; i < 6; i += 1) {
       const p = makeAircraft(ship.team, i % 2 ? "bomber" : "fighter", false);
       p.scale.setScalar(0.72);
       p.position.set(i % 2 ? -11 : 11, 22.1, 37 + Math.floor(i / 2) * 20);
       p.rotation.y = i % 2 ? 0.16 : -0.16;
-      root.add(p);
-      parked.push(p);
+      body.add(p);
     }
     box(elevator, 14, 0.65, 18, 0, 0, 0, dark);
     elevator.position.set(0, 19.9, -68);
@@ -546,7 +551,7 @@ export function makeShip(ship: any): THREE.Group {
     }
   }
   root.add(consolidate(body));
-  root.userData = { parked, elevator };
+  root.userData = { elevator };
   return root;
 }
 
