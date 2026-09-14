@@ -17,6 +17,26 @@ import { torpedoEnvelope, torpedoIntercept, updateStores } from "./armament.js";
 import { AircraftFlight, DECK_HEIGHT, initFlightState, steerToward, type ISteerLimits } from "./flight.js";
 import { estimatePosition, isStale, STALE_SECONDS } from "./intel.js";
 
+/**
+ * `damageModifiers` returns exactly these values for an untouched airframe, and integrity only ever
+ * falls. Sharing one frozen object saves an allocation for every undamaged aircraft every step.
+ */
+const NEUTRAL_MODIFIERS = Object.freeze({ controls: 1, drag: 0, lift: 1, power: 1, roll: 0 });
+function modifiersFor(a: Any): { power: number; lift: number; drag: number; roll: number; controls: number } {
+  const d = a.damage;
+  if (
+    !d ||
+    (!a.engineCut &&
+      d.engine.integrity === 1 &&
+      d.leftWing.integrity === 1 &&
+      d.rightWing.integrity === 1 &&
+      d.fuselage.integrity === 1 &&
+      d.tail.integrity === 1)
+  )
+    return NEUTRAL_MODIFIERS;
+  return damageModifiers(a);
+}
+
 type Any = any;
 
 /** Classifications an aircraft or a boat will spend a weapon on. Not "small", and not "unknown". */
@@ -189,8 +209,8 @@ export function selectNavalTarget(b: Any, a: Any): Any {
   return null;
 }
 
-export function chooseFighterTarget(b: Any, a: Any): Any {
-  const home = b.ships.find((s: Any) => s.id === a.home);
+export function chooseFighterTarget(b: Any, a: Any, shipsById?: Map<Any, Any>): Any {
+  const home = shipsById ? shipsById.get(a.home) : b.ships.find((s: Any) => s.id === a.home);
   // Gather candidates with a squared-range reject, so only the handful actually in range pay for a
   // `Math.hypot`. The order is the aircraft order the old `.filter()` produced, with the player last.
   const candidates = FIGHTER_CANDIDATES;
@@ -319,7 +339,7 @@ function flightOf(a: Any): AircraftFlight {
 function flyAircraft(a: Any, dest: Any, alt: number, targetSpeed: number, dt: number): void {
   if (!dest) return;
   const fl = flightOf(a);
-  const m = damageModifiers(a);
+  const m = modifiersFor(a);
   const avoid = a.avoid || ZERO_AVOID;
   FLY_AIM.x = dest.x + avoid.x;
   FLY_AIM.z = dest.z + avoid.z;
@@ -716,7 +736,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       alt = 1300;
       if (distance2(a, dest) < 1300) dest = aimPoint(dest.x + Math.sin(b.time * 0.018 + a.phase) * 2800, dest.z + Math.cos(b.time * 0.018 + a.phase) * 2800);
     } else if (a.kind === "fighter") {
-      const t = chooseFighterTarget(b, a);
+      const t = chooseFighterTarget(b, a, shipsById);
       a.airTarget = t?.id || null;
       if (t) {
         const d = distance3(a, t);
