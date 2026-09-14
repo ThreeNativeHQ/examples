@@ -5,6 +5,7 @@ import {
   aircraftHit,
   aircraftWorld,
   applyAircraftHit,
+  classCapacity,
   damageSummary,
   initDamage,
   stepDamage,
@@ -13,6 +14,16 @@ import {
   ZONE_POSITIONS,
   type DamageZone,
 } from "./damage.js";
+import {
+  ASSIST_FACTOR,
+  assistBenefit,
+  assistCost,
+  canAssist,
+  detach,
+  stepRescue,
+  DEFAULT_RESCUE_LIMITS,
+  type Survivors,
+} from "./rescue.js";
 import { applyLoadout, torpedoEnvelope, updateStores, type ILoadout, LOADOUTS } from "./armament.js";
 import {
   ASSIGNMENTS,
@@ -98,6 +109,7 @@ import {
   clearOfHazard,
   courseAuthority,
   rejoinCourse,
+  rescueWindow,
   stationTarget,
   type FormationStation,
   steerToStation,
@@ -152,6 +164,24 @@ const SURFACE_LOOKAHEAD = 30;
 const MIN_SEPARATION = 900;
 /** A ship arcs back onto its station for this long after an evasion rather than resuming instantly. */
 const REJOIN_SECONDS = 8;
+
+/** Escort rescue and alongside thresholds. Any qualifying escort, never a named hull. */
+const RESCUE_RANGE = 6000;
+const RESCUE_MIN_COUNT = 5;
+const RESCUE_ABANDON_SECONDS = 300;
+/** Furthest an escort will leave the screen to work alongside a damaged carrier. */
+const ASSIST_RANGE = 5000;
+/** Closing range at which an escort counts as alongside and its pumps take effect. */
+const ASSIST_DISTANCE = 220;
+/** A running torpedo this close to the carrier is a detected threat that aborts the alongside. */
+const ASSIST_THREAT_RANGE = 2500;
+/** Crew a hull of each class puts in the water, before the seeded draw varies it. */
+const SURVIVOR_CREW: Record<string, number> = { carrier: 420, cruiser: 200, destroyer: 140, sub: 40 };
+
+/** Any surface escort, by class, never by name: destroyers and cruisers stand the screen. */
+function isEscort(s: Any): boolean {
+  return s.kind === "destroyer" || s.kind === "cruiser";
+}
 
 /** A surface group: `formation.Group` plus the coverage its absent escorts have removed. */
 interface ISurfaceGroup extends Group {
@@ -465,6 +495,8 @@ export class Battle {
   bombs: Any[] = [];
   torpedoes: Any[] = [];
   airTorpedoes: Any[] = [];
+  /** Boatloads in the water from sunk hulls; a recovered group leaves once emptied. */
+  survivors: Survivors[] = [];
   effects: Any[] = [];
   /** What the player's own crew knows: their sightings, and the reports the fleet has passed them. */
   contacts = new Map<string, IReport>();
@@ -851,7 +883,7 @@ export class Battle {
     }
   }
 
-  fx(type: string, p: Any, size = 1): void {
+  fx(type: string, p: Any, size = 1, underwater = false): void {
     this.effects.push({
       id: this.id("fx"),
       type,
@@ -859,6 +891,7 @@ export class Battle {
       y: p.y ?? 0,
       z: p.z,
       size,
+      underwater,
       age: 0,
       life: type === "muzzle" ? 0.18 : type === "splash" ? 5 : type === "flak" ? 8 : type === "hit" ? 1.5 : 9,
     });
@@ -1741,6 +1774,17 @@ export class Battle {
     if (s.sunk) return;
     s.sunk = true;
     s.speed = 0;
+    // The crew is in the water where the hull went down. The seeded draw varies the count; a later
+    // rescue genuinely saves fewer because exposure decays the group every step it waits.
+    const crew = SURVIVOR_CREW[s.kind] ?? 100;
+    this.survivors.push({
+      id: this.id("survivors"),
+      x: s.x,
+      z: s.z,
+      since: this.time,
+      fromShipId: s.id,
+      count: Math.max(10, Math.round(crew * (0.6 + this.random() * 0.4))),
+    });
     this.fx("explosion", s, 5);
     this.say("BATTLE CONTROL", `${s.name} is going down.`, true);
     if (s.team === "us") this.voice("R15", { ship: radioShipName(s.name), identity: s.id });
@@ -1793,6 +1837,7 @@ export class Battle {
     this.time += dt;
     for (const fx of this.effects) fx.age += dt;
     this.effects = this.effects.filter((f) => f.age < f.life);
+    this.updateRescue(dt);
     this.updateShips(dt);
     this.updatePlayer(dt, input);
     this.observeFuel();
@@ -1922,10 +1967,164 @@ export class Battle {
       }
       const absent = group.memberIds.filter((id) => {
         const m = this.byId(id);
-        return !m || m.sunk || (m.evadeUntil || 0) > this.time;
+        return !m || m.sunk || (m.evadeUntil || 0) > this.time || !!m.assist;
       });
       group.coverageLost = coverageLost(group, absent);
     }
+  }
+
+  /**
+   * Survivors, rescue and the alongside, all through `rescue.ts`. Exposure and pickup run every
+   * step, so a group left in the water loses people before it is reached; the alongside is gated by
+   * `canAssist`, its pumps are `assistBenefit` and its cost is `assistCost`. No hull is named: an
+   * escort is any destroyer or cruiser and a carrier is any damaged friendly one.
+   */
+  updateRescue(dt: number): void {
+    const now = this.time;
+    for (const s of this.ships) {
+      if (s.sunk) continue;
+      if (s.assist) {
+        const carrier = this.byId(s.assist.carrierId);
+        if (!carrier || carrier.sunk) {
+          this.recordAssistAbort(s, detach(s.assist, "carrier lost", now));
+          continue;
+        }
+        const check = canAssist(this.escortView(s), this.carrierView(carrier), this.threatsNear(carrier));
+        if (!check.ok) {
+          // A detected torpedo threat is the abort that must be recorded, reason and time.
+          this.recordAssistAbort(s, detach(s.assist, check.reason, now));
+          continue;
+        }
+        if (distance2(s, carrier) <= ASSIST_DISTANCE) {
+          s.assist = { ...s.assist, phase: "alongside" };
+          // Assisting gives up the screen station: the ship is tied to the carrier's flank.
+          s.station = null;
+          s.stationSlot = null;
+          const cost = assistCost(this.escortView(s));
+          s.manoeuvrable = cost.manoeuvrable;
+          s.screenCoverageLost = cost.screenCoverageLost;
+          const benefit = assistBenefit(this.carrierView(carrier), this.escortView(s), dt);
+          carrier.list = Math.max(0, (carrier.list ?? 0) - benefit.floodingDelta);
+          if ((carrier.fire ?? 0) > 0) carrier.fire = Math.max(0, carrier.fire - benefit.fireDelta);
+          s.assistBenefit = benefit;
+        } else {
+          s.assist = { ...s.assist, phase: "approaching" };
+        }
+        continue;
+      }
+      if (s.rescue) {
+        const step = stepRescue(
+          s.rescue,
+          { x: s.x, z: s.z, speed: s.speed },
+          this.survivors,
+          dt,
+          DEFAULT_RESCUE_LIMITS,
+        );
+        s.rescue = step.state;
+        this.survivors = step.survivors;
+        if (s.rescue.phase === "done" || s.rescue.phase === "aborted") {
+          s.recovered = (s.recovered ?? 0) + s.rescue.recovered;
+          this.endTask(s);
+        }
+        continue;
+      }
+      // An escort takes a new job only when its screen station is its sole duty.
+      if (!isEscort(s) || !s.task || s.task.task !== "station") continue;
+      const carrier = this.assistCandidate(s);
+      if (carrier) {
+        s.assist = { carrierId: carrier.id, phase: "approaching", startedAt: now };
+        s.task = { task: "assist", targetId: carrier.id, startedAt: now, reason: "alongside damaged carrier" };
+        continue;
+      }
+      const window = rescueWindow(this.survivors, now, {
+        fromX: s.x,
+        fromZ: s.z,
+        range: RESCUE_RANGE,
+        minCount: RESCUE_MIN_COUNT,
+        abandonAfter: RESCUE_ABANDON_SECONDS,
+      });
+      if (!window) continue;
+      // One escort per group, so the exposure decay is not applied several times over per step.
+      if (this.ships.some((o: Any) => o.rescue && o.rescue.targetId === window.targetId)) continue;
+      s.rescue = { targetId: window.targetId, phase: "approaching", startedAt: now, recovered: 0 };
+      s.task = { task: "rescue", targetId: window.targetId, startedAt: now, reason: "survivors in the water" };
+    }
+    // A group recovered down to nothing is no longer in the water.
+    this.survivors = this.survivors.filter((g) => g.count > 0.5);
+  }
+
+  /** The rescue module's view of an escort: its screen contribution is the whole station. */
+  escortView(s: Any): Any {
+    return { id: s.id, neededElsewhere: false, assistFactor: ASSIST_FACTOR, screenCoverage: 1 };
+  }
+
+  /**
+   * The rescue module's damage view of a hull. `Battle` tracks a ship as hp plus the live `list`
+   * and `fire` severities and its class capacity, not a `damage.ts` zone record, so the flooding
+   * rate the alongside offsets is the hull's own list and its fire rate its own fire.
+   */
+  carrierView(s: Any): Any {
+    return {
+      id: s.id,
+      sunk: !!s.sunk,
+      damage: {
+        hull: clamp(1 - s.hp / (s.maxHp || s.hp || 1), 0, 1),
+        propulsion: 0,
+        fire: Math.max(0, s.fire ?? 0),
+        aviation: 0,
+        weapons: 0,
+        flooding: Math.max(0, s.list ?? 0),
+        fireRate: Math.max(0, s.fire ?? 0),
+        capacity: classCapacity(s.kind),
+      },
+    };
+  }
+
+  /** A running hostile torpedo near the carrier: the one detected threat that aborts an alongside. */
+  threatsNear(carrier: Any): Any[] {
+    return this.torpedoes
+      .filter((t: Any) => t.team !== carrier.team && distance2(t, carrier) <= ASSIST_THREAT_RANGE)
+      .map((t: Any) => ({ kind: "torpedo", team: t.team, x: t.x, z: t.z }));
+  }
+
+  /** The nearest damaged friendly carrier in reach that no other escort is already working. */
+  assistCandidate(escort: Any): Any {
+    let best: Any = null;
+    let nearest = ASSIST_RANGE;
+    for (const c of this.ships) {
+      if (c.kind !== "carrier" || c.team !== escort.team || c.sunk) continue;
+      if (this.ships.some((o: Any) => o !== escort && o.assist && o.assist.carrierId === c.id)) continue;
+      const d = distance2(escort, c);
+      if (d >= nearest) continue;
+      if (!canAssist(this.escortView(escort), this.carrierView(c), this.threatsNear(c)).ok) continue;
+      best = c;
+      nearest = d;
+    }
+    return best;
+  }
+
+  /** Drop a finished rescue/assist and send the escort back to reform on the screen. */
+  endTask(s: Any): void {
+    s.rescue = null;
+    s.assist = null;
+    s.task = null;
+    this.rejoinScreen(s);
+  }
+
+  /** Record why an alongside ended, then send the escort back to the screen. */
+  recordAssistAbort(s: Any, left: Any): void {
+    s.assistAbort = left;
+    if (left.reason === "torpedo threat detected") {
+      this.say("BATTLE CONTROL", `${s.name} breaks off alongside — torpedo threat.`, true);
+    }
+    s.assist = null;
+    s.task = null;
+    this.rejoinScreen(s);
+  }
+
+  rejoinScreen(s: Any): void {
+    const group = this.surfaceGroups.find((gr) => gr.id === s.groupId);
+    if (group) group.reform = true;
   }
 
   /**
@@ -1975,7 +2174,28 @@ export class Battle {
     let heading = s.heading;
     let speed = base;
 
-    if (s.guide) {
+    const rescueGroup = s.rescue ? this.survivors.find((g: Any) => g.id === s.rescue.targetId) : null;
+    const assistCarrier = s.assist ? this.byId(s.assist.carrierId) : null;
+    if (rescueGroup) {
+      // Bear down on the boatload; `steerToStation` bleeds speed off inside its slow radius, which
+      // is what lets `stepRescue` recover people once the ship is close and slow.
+      const steer = steerToStation(s, { x: rescueGroup.x, z: rescueGroup.z }, dt, limits);
+      heading = steer.heading;
+      speed = steer.speed;
+      s.cruiseHeading = heading;
+    } else if (assistCarrier && !assistCarrier.sunk) {
+      const station: FormationStation = {
+        shipId: s.id,
+        groupId: s.groupId,
+        offsetX: (assistCarrier.hullBeam ?? 30) / 2 + 40,
+        offsetZ: 0,
+      };
+      const alongside = stationTarget(assistCarrier.x, assistCarrier.z, assistCarrier.heading, station);
+      const steer = steerToStation(s, alongside, dt, limits);
+      heading = steer.heading;
+      speed = steer.speed;
+      s.cruiseHeading = heading;
+    } else if (s.guide) {
       if (group) {
         const planned = groupCourse(
           group,
@@ -2620,8 +2840,10 @@ export class Battle {
         this.damageShip(hit, b.damage || 155, point, "bomb", b.team, { owner: b.owner, stamp: b.stamp });
         b.dead = true;
       } else if (b.y <= 0) {
-        this.fx("splash", b, 3.5);
-        this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: b.y, z: b.z } });
+        // A heavy bomb that misses the hull is fused to burst under the surface, not on it. The
+        // sea is what the crew hears and sees: a deep concussion first, the column a moment later.
+        this.fx("splash", b, 3.5, true);
+        this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: b.y, z: b.z }, material: "underwater" });
         for (const s of this.ships) {
           const l = localPoint(b, s);
           const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.hullBeam / 2), Math.max(0, Math.abs(l.forward) - s.hullLength / 2));
