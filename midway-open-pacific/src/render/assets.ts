@@ -438,6 +438,42 @@ const CARRIER_PROFILES: Record<string, CarrierProfile> = {
   "USS Hornet": { side: 1, funnelSide: 1, hull: 0.99, beam: 0.99, island: 0.97, islandHeight: 0.98, funnels: [-15], funnelTilt: 0 },
 };
 
+/**
+ * Turn a wheeled airframe into a catapult floatplane: wheels off, a central float on a pylon and a
+ * small one under each wing.
+ *
+ * The cruisers' scouts are Aichi E13A-type floatplanes in everything the simulation does with them —
+ * catapulted off the quarterdeck, recovered alongside by crane, lost if they run dry over water — and
+ * drawing them on wheels contradicts every one of those. The dimensions are the airframe's own:
+ * `makeAircraft` puts the wheels at y = -1.85 and the wing tips near x = +/-5, so the hull sits where
+ * the gear was and the wing floats stand under the outer panel.
+ */
+export function addFloats(plane: THREE.Group): THREE.Group {
+  const gear = plane.userData.gear as THREE.Object3D | undefined;
+  if (gear) gear.visible = false;
+  const grey = mat(0x9aa3a0);
+  const dark = mat(0x4a5558);
+  const floats = new THREE.Group();
+  // Main float: a long body under the fuselage on two struts, with a shallow bow rise.
+  const hull = box(floats, 0.86, 0.62, 7.4, 0, -1.95, 0.1, grey);
+  hull.rotation.x = 0.02;
+  box(floats, 0.9, 0.22, 1.5, 0, -1.72, -3.3, grey).rotation.x = -0.22;
+  box(floats, 0.66, 0.2, 1.1, 0, -2.2, 3.3, dark);
+  for (const x of [-0.62, 0.62]) {
+    rod(floats, [x, -0.35, -0.6], [x * 0.55, -1.66, -0.9], 0.09, dark);
+    rod(floats, [x, -0.35, 1.5], [x * 0.55, -1.66, 1.2], 0.09, dark);
+  }
+  // Wing floats, one under each outer panel.
+  for (const x of [-4.3, 4.3]) {
+    box(floats, 0.46, 0.36, 2.5, x, -1.28, 0.2, grey);
+    rod(floats, [x, -0.18, -0.5], [x, -1.12, -0.5], 0.07, dark);
+    rod(floats, [x, -0.18, 0.9], [x, -1.12, 0.9], 0.07, dark);
+  }
+  plane.add(floats);
+  plane.userData.floats = floats;
+  return plane;
+}
+
 export function makeShip(ship: any): THREE.Group {
   const root = new THREE.Group();
   const body = new THREE.Group();

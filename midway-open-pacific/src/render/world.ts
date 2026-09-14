@@ -3,7 +3,7 @@ import * as T from "three";
 import { shipClass } from "../sim/catalog.js";
 import { attitudeAxes } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
-import { ellipsoid, mat, wakeTexture, makeAircraft, makeShip } from "./assets.js";
+import { addFloats, ellipsoid, mat, wakeTexture, makeAircraft, makeShip } from "./assets.js";
 import { type CarrierModelId, createCarrier, createIjnCarrier, shipModelFor } from "./imported-ships.js";
 import { createAirframe, createDouglas, animateDouglas, animateImportedAirframe, disposeAirframe, spinPropeller } from "./imported-aircraft.js";
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
@@ -137,6 +137,11 @@ function markReflected(root: T.Object3D): void {
   root.traverse((o) => o.layers.enable(REFLECTED_LAYER));
 }
 
+/** Scratch for one scout's seat on its ship, refilled per scout. */
+const SCOUT_SEAT = new T.Vector3();
+/** Where a flying scout is drawn. `SCOUT_ALTITUDE` in the simulation is its observation height. */
+const SCOUT_DRAW_ALTITUDE = 2000;
+
 const HULL_LOD_RANGE: Readonly<Record<string, number>> = {
   cruiser: 2200,
   destroyer: 2600,
@@ -211,6 +216,8 @@ export class WorldView {
   battle: any;
   host: IWorldHost;
   meshes = new Map<string, T.Object3D>();
+  /** One drawn floatplane per cruiser scout, by the scout's own id. */
+  scouts = new Map<string, T.Group>();
   fxMeshes = new Map<string, T.Object3D>();
   bombMeshes = new Map<string, T.Object3D>();
   torpMeshes = new Map<string, T.Object3D>();
@@ -362,6 +369,19 @@ export class WorldView {
           mesh.userData.parked.push(plane);
         }
       }
+      // A cruiser that carries scouts gets one drawn floatplane per scout. The simulation has flown
+      // these since the AC-11 wiring went in — launched from the catapult, searched a sector, filed
+      // a report, come back alongside — and none of it was visible, because nothing in this folder
+      // drew a scout at all. A capture of Tone showed her catapult empty while her scout sat aboard.
+      if (s.scouts?.length) {
+        for (const scout of s.scouts) {
+          const plane = addFloats(makeAircraft(s.team, "recon", false));
+          plane.scale.setScalar(0.86);
+          markReflected(plane);
+          this.scene.add(plane);
+          this.scouts.set(scout.id, plane);
+        }
+      }
       markReflected(mesh);
       this.scene.add(mesh);
       this.meshes.set(s.id, mesh);
@@ -455,6 +475,11 @@ export class WorldView {
       m.position.set(s.x + motion.x, s.y + motion.y, s.z + motion.z);
       m.rotation.set(motion.pitch, -s.heading, s.sunk ? s.sink * .35 : motion.roll + (s.list ?? 0), "YXZ");
       m.visible = s.sink < 0.95;
+      // The scouts this hull carries, each drawn where its own state puts it. Aboard and alongside
+      // are on the ship and ride her motion; the airborne states are over the sector the simulation
+      // is searching, at the same `SCOUT_ALTITUDE` the observation sweep files reports from. A lost
+      // scout is not drawn, because it is not there.
+      if (s.scouts?.length) this.placeScouts(s, m as T.Object3D);
       const d = distance2(s, p);
       // The park is a visual LOD: it is worth drawing while the camera is close, wherever the
       // player is, exactly as the hull's own LOD range is read from the camera. A carrier a
@@ -768,6 +793,43 @@ export class WorldView {
     }
     m.userData.kind = a.kind;
     return m;
+  }
+
+  /**
+   * Draw this hull's scouts where the simulation has them.
+   *
+   * The states come straight from `src/sim/scouting.ts` and nothing is inferred: "aboard" and
+   * "alongside" sit on the ship, the four airborne states fly, and "lost" is not drawn. An airborne
+   * scout is placed at `Battle.scoutPosition` — the same sector midpoint its reports are filed
+   * from — so what a player sees and what the other side's intelligence says came from one place.
+   * Heading follows the track out and back, which is the only cue that tells outbound from
+   * returning at this range.
+   */
+  private placeScouts(ship: any, hull: T.Object3D): void {
+    for (const scout of ship.scouts as Array<{ id: string; state: string }>) {
+      const plane = this.scouts.get(scout.id);
+      if (!plane) continue;
+      if (scout.state === "lost") {
+        plane.visible = false;
+        continue;
+      }
+      plane.visible = true;
+      if (scout.state === "aboard" || scout.state === "alongside") {
+        // On the quarterdeck, in the hull's own frame, so she carries it through pitch and roll.
+        // Alongside is in the water off the quarter, waiting on the crane.
+        const aboard = scout.state === "aboard";
+        SCOUT_SEAT.set(aboard ? 0 : ship.hullBeam * 0.62, aboard ? (ship.deckHeight ?? 9) + 0.6 : 0.6, ship.hullLength * 0.3);
+        hull.localToWorld(SCOUT_SEAT);
+        plane.position.copy(SCOUT_SEAT);
+        plane.rotation.set(0, -ship.heading, 0);
+        continue;
+      }
+      const at = this.battle.scoutPosition(scout, ship);
+      plane.position.set(at.x, SCOUT_DRAW_ALTITUDE, at.z);
+      // Facing along the leg it is flying: out from the ship, or back towards her.
+      const towards = scout.state === "returning" ? { x: ship.x - at.x, z: ship.z - at.z } : { x: at.x - ship.x, z: at.z - ship.z };
+      plane.rotation.set(0, -Math.atan2(towards.x, -towards.z), 0);
+    }
   }
 
   /** Give up one aircraft's mesh without touching geometry another instance still shares. */
