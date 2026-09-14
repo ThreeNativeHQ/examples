@@ -164,6 +164,11 @@ const SURFACE_LOOKAHEAD = 30;
 const MIN_SEPARATION = 900;
 /** A ship arcs back onto its station for this long after an evasion rather than resuming instantly. */
 const REJOIN_SECONDS = 8;
+/** A support group's own route: arrival at its destination and its hold anchor, in metres. */
+const SUPPORT_APPROACH_RADIUS = 1200;
+const SUPPORT_HOLD_RADIUS = 600;
+/** A support guide whose engine falls below this retires along its withdrawal bearing. */
+const SUPPORT_WITHDRAW_ENGINE = 0.75;
 
 /** Escort rescue and alongside thresholds. Any qualifying escort, never a named hull. */
 const RESCUE_RANGE = 6000;
@@ -183,11 +188,27 @@ function isEscort(s: Any): boolean {
   return s.kind === "destroyer" || s.kind === "cruiser";
 }
 
+/**
+ * A detached support group's own route. Plain state read by the guide's helm: approach the
+ * destination, hold at the anchor, and retire along the bearing once damaged. No carrier steers
+ * this group and nothing branches on a ship's name to decide any of it.
+ */
+interface ISupportRoute {
+  /** The approach waypoint made for while the group is fit. */
+  destination: { x: number; z: number };
+  /** The loiter anchor used once the destination is reached. */
+  hold: { x: number; z: number };
+  /** The course retired along once the group is damaged, radians like `Group.course`. */
+  withdrawBearing: number;
+}
+
 /** A surface group: `formation.Group` plus the coverage its absent escorts have removed. */
 interface ISurfaceGroup extends Group {
   coverageLost: number;
   /** Set when an evasion ended and `reformAfter` still has to restore the held stations. */
   reform: boolean;
+  /** Present on a detached support group; a carrier screen has none. */
+  route?: ISupportRoute;
 }
 
 /**
@@ -236,6 +257,8 @@ const HULLS: Readonly<Record<string, IHull>> = Object.freeze({
   Hiryu: hullOf("hiryu"),
   Tone: hullOf("tone"),
   Chikuma: hullOf("tone"),
+  Mogami: hullOf("mogami"),
+  Mikuma: hullOf("mogami"),
   Arashi: hullOf("kagero"),
   Nowaki: hullOf("kagero"),
   "USS Hammann": hullOf("hammann"),
@@ -749,6 +772,14 @@ export class Battle {
     add("Nowaki", "jp", "destroyer", -7350, -7800, 2.85);
     add("I-168", "jp", "sub", -2100, 3000, 0.05);
     add("USS Nautilus", "us", "sub", -8000, -6400, 1.65);
+    // The Mogami-class supporting cruisers (PRD AC-15). They sail in their own detached group on the
+    // approach/hold/withdraw route built in `setupSupportGroup`, west of the atoll and between the
+    // two carrier forces, so a later recon or anti-shipping sortie has a real target there that is
+    // neither a carrier nor behind the player. Marked here; `setupSurfaceGroups` reads the mark.
+    const mogami: Any = add("Mogami", "jp", "cruiser", -9300, 0, 1.75);
+    const mikuma: Any = add("Mikuma", "jp", "cruiser", -9650, -600, 1.75);
+    mogami.support = true;
+    mikuma.support = true;
     this.setupSurfaceGroups();
   }
 
@@ -2199,7 +2230,7 @@ export class Battle {
       if (group) {
         const planned = groupCourse(
           group,
-          { kind: "transit", course: wrap(s.cruiseHeading ?? s.heading), speed: base, guideX: s.x, guideZ: s.z },
+          { kind: "transit", course: this.supportCourse(group, s), speed: base, guideX: s.x, guideZ: s.z },
           hazards,
           { maxSpeed: base || 1, lookahead: GROUP_LOOKAHEAD, margin: GROUP_MARGIN, step: GROUP_STEP },
         );
@@ -2280,6 +2311,23 @@ export class Battle {
   }
 
   /**
+   * The course a group's guide should steer. A normal screen holds its committed `cruiseHeading`;
+   * a detached support group instead advances its own route — toward its destination, then its hold
+   * anchor, and along its withdrawal bearing once its engine is damaged — with no carrier input.
+   */
+  supportCourse(group: ISurfaceGroup, guide: Any): number {
+    const route = group.route;
+    if (!route) return wrap(guide.cruiseHeading ?? guide.heading);
+    if (guide.engine < SUPPORT_WITHDRAW_ENGINE) return wrap(route.withdrawBearing);
+    const toDestination = Math.hypot(guide.x - route.destination.x, guide.z - route.destination.z);
+    if (toDestination > SUPPORT_APPROACH_RADIUS)
+      return Math.atan2(route.destination.x - guide.x, -(route.destination.z - guide.z));
+    const toHold = Math.hypot(guide.x - route.hold.x, guide.z - route.hold.z);
+    if (toHold > SUPPORT_HOLD_RADIUS) return Math.atan2(route.hold.x - guide.x, -(route.hold.z - guide.z));
+    return wrap(guide.heading);
+  }
+
+  /**
    * Form each team's surface escorts into carrier groups. The guide is the nearest carrier, decided
    * by position rather than name; the stations come from `formation.reformAfter`, so the offsets are
    * the module's tables, not a second copy. Pure data: nothing here moves a ship.
@@ -2301,6 +2349,15 @@ export class Battle {
       s.wasEvading = false;
       s.rejoinUntil = 0;
       s.task = { task: "station", targetId: null, startedAt: 0, reason: "station keeping" };
+      // A marked support hull is left out of every carrier screen and picked up by
+      // `setupSupportGroup` below; every other surface ship is assigned exactly as before.
+      if (s.support) {
+        s.groupId = null;
+        s.guide = false;
+        s.station = null;
+        s.stationSlot = null;
+        continue;
+      }
       let best: ISurfaceGroup | null = null;
       let nearest = Infinity;
       for (const g of this.surfaceGroups) {
@@ -2323,6 +2380,9 @@ export class Battle {
         s.stationSlot = null;
       }
     }
+    // Build the detached support group before the shared station pass, so its members receive
+    // stations through the same `reformAfter` table as every screen.
+    this.setupSupportGroup(surface.filter((s: Any) => s.support));
     for (const group of this.surfaceGroups) {
       const assigned = reformAfter(group, group.memberIds.map((id) => ({ id, slot: null })), 0);
       for (const a of assigned) {
@@ -2332,6 +2392,41 @@ export class Battle {
         s.stationSlot = a.slot;
       }
     }
+  }
+
+  /**
+   * One detached support group: its own guide and route, outside every carrier screen. The route is
+   * plain data read by the guide's helm in `supportCourse`, so the group advances itself and a
+   * carrier never steers it.
+   */
+  setupSupportGroup(ships: Any[]): void {
+    if (!ships.length) return;
+    const guide = ships[0];
+    const group: ISurfaceGroup = {
+      id: `group-${guide.id}`,
+      guideId: guide.id,
+      memberIds: [],
+      formationId: "line-ahead",
+      course: wrap(guide.heading),
+      speed: guide.baseSpeed,
+      coverageLost: 0,
+      reform: false,
+      route: {
+        // Approach a standoff west of the atoll, hold there, and retire west if damaged. Its own
+        // sector, between the two carrier forces and clear of the reef.
+        destination: { x: -6200, z: 500 },
+        hold: { x: -5600, z: 700 },
+        withdrawBearing: -Math.PI / 2,
+      },
+    };
+    guide.groupId = group.id;
+    guide.guide = true;
+    for (const s of ships.slice(1)) {
+      s.groupId = group.id;
+      s.guide = false;
+      group.memberIds.push(s.id);
+    }
+    this.surfaceGroups.push(group);
   }
 
   updatePlayer(dt: number, input: Any): void {
