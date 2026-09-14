@@ -4,11 +4,11 @@
 **Complexity:** 7 (HIGH); risk override: none.
 **Owner:** Midway game implementation lane.
 **Depends on:** Current sortie/recovery behavior; asset corrections in Phase 1.
-**Progress:** Phase 1 complete with two recorded gaps; Phases 3-5 have their pure simulation modules written and checked but not yet wired into `Battle`; Phase 2 render wiring in flight.
+**Progress:** Phase 1 remains partial on measured geometry/moving-part gaps. Phase 2 has render identity, pure ship geometry and a working carrier inventory cycle; AI engine-flight migration remains open. Phase 3 intelligence is wired, while naval/facility integration and Phases 4–5 remain incomplete.
 **Platforms:** WebGPU web acceptance. Desktop/Android/iOS remain unverified unless their target playtests run.
 **Estimate:** 95–150 engineering hours, including asset preparation, AI tuning and playthroughs. Significant remodelling can exceed this estimate; reassess after Phase 1.
 
-Planning only. No game source or supplied assets were changed. Use this repository's existing `docs/PRDs/` convention and keep acceptance here; no parallel task ledger. Complexity comprises 11+ implementation files (+3), new naval/intelligence behavior (+2), and interacting operational state (+2). No engine package release is currently assumed.
+Implementation is under way. Keep acceptance in this existing PRD; no parallel task ledger. Complexity comprises 11+ implementation files (+3), new naval/intelligence behavior (+2), and interacting operational state (+2). No engine package release is currently assumed.
 
 ## Outcome and decisions to review
 
@@ -264,9 +264,10 @@ Status as of 2026-09-13, so the table below is read as a plan with a position ra
 alone: the Dauntless fallback is gone and airframe identity is explicit (AC-3); renderer-written sim
 bounds are gone and hull, deck corridor and per-carrier deck datum are three separate things
 initialised before any render (AC-6); torpedo variants and per-airframe guns are distinct in
-`armament.ts` and the new assignment kinds are in `sortie.ts`, both still awaiting their `Battle`
-consumers. The modulo launch sequence, the generic reserve of twelve, the radius-detect intelligence,
-the straight-line fleet and the sine-timer submarines are all still in `battle.ts`.
+`armament.ts` and the new assignment kinds are in `sortie.ts`, with their remaining consumers tracked below.
+`Battle.launch/updateCarrier` use finite airframes/stores, `observeFleet/deliverReports` use delayed
+reports, and `selectNavalTarget` consumes estimates. Straight-line fleet movement and sine-timer
+submarines remain in `battle.ts`.
 
 
 | Capability | Reachable consumer / files | Replacement and acceptance |
@@ -310,7 +311,7 @@ Unchecked items below are **future implementation acceptance**, not missing plan
   frame shows it: the imported hulls float with their whole anti-fouling band above the sea. The
   previously shipped assets bake the waterline at y = 0 and put the keel below it (`akagi.glb`
   measures `min.y = -7.55`, `hornet.glb` `-4.14`), while the new imports put the keel at y = 0 and
-  nothing lowers them by their draught. Frames per carrier are in `screenshots/deck-*.png`. Length within 0.050% worst case and beam, height, keel datum and bow direction asserted by `node tools/check-catalog.mjs` and `node tools/check-fleet.mjs` against the shipped bytes; repairs documented per class in `src/sim/catalog.ts` and cited in `docs/reference-dimensions.md`; silhouettes, island sides, screws and markings inspected in orthographic renders, including the VT-6 `6-T-6` Devastator and the AI-301 Kate. NOT YET PROVEN: the 0.1 m agreement at gear contact, deck corridor and weapon collision stations, which needs `tools/capture-deck.mjs` extended to the new hulls.
+  nothing lowers them by their draught. Frames per carrier are in `screenshots/deck-*.png`. Length within 0.050% worst case and beam, height, keel datum and bow direction asserted by `node tools/check-catalog.mjs` and `node tools/check-fleet.mjs` against the shipped bytes; repairs documented per class in `src/sim/catalog.ts` and cited in `docs/reference-dimensions.md`; silhouettes, island sides, screws and markings inspected in orthographic renders, including the VT-6 `6-T-6` Devastator and the AI-301 Kate. NOT YET PROVEN: the 0.1 m agreement at gear contact, deck corridor and weapon collision stations, which the extended `tools/capture-deck.mjs` now measures and rejects.
 - [ ] **AC-3 [local; actor: implementation agent]:** Choosing TBD from the real briefing produces a TBD in deck, chase and cockpit views. AI TBD/Kate and parked examples use their correct airframes across LOD; no Dauntless fallback or stale animation/disposal dispatch. Evidence: pending.
 - [ ] **AC-4 [local; actor: implementation agent]:** Each new aircraft demonstrates startup/cruise/cut prop states, correct gear/hook/surface motion and independent instance state. A real release removes one visible store, creates one weapon and changes payload once. Inspect close captures through the full moving-part range. Evidence: pending.
 - [ ] **AC-5 [local; actor: implementation agent]:** Through `Battle.step`, loaded TBD and Kate execute stable engine-driven ingress, legal torpedo release and recovery; Kate also executes level bombing. Power/control damage changes flight, no universal minimum-speed flight survives engine loss, and AI no longer uses the old motion integrator. Evidence: pending.
@@ -318,7 +319,7 @@ Unchecked items below are **future implementation acceptance**, not missing plan
 ### Carrier operation
 
 - [ ] **AC-6 [local; actor: implementation agent]:** Pure Battle initialization already has the same hull/deck geometry used after WorldView construction. Player recovery/diversion to Yorktown and another friendly deck agrees with `finalReady`/HUD cues and actual geometry. Evidence: pending.
-- [ ] **AC-7 [local; actor: implementation agent]:** Launch/recover/service cycles conserve airframe identities, reduce fuel/ordnance, respect deck occupancy and do not spend stores on a blocked launch. Damaged inventory and diversions persist; the visual deck park matches the inventory. Evidence: pending.
+- [ ] **AC-7 [local; actor: implementation agent]:** Launch/recover/service cycles conserve airframe identities, reduce fuel/ordnance, respect deck occupancy and do not spend stores on a blocked launch. Damaged inventory and diversions persist; the visual deck park matches the inventory. Evidence: partial; see the concurrent review checkpoint in Phase 2 for the tested carrier-cycle repairs and remaining player/identity/visual gaps.
 - [ ] **AC-8 [local; actor: implementation agent]:** Changing one carrier's ready aircraft, fresh contacts or stores changes its next mission. CAP versus escort commitment is observable; no name-specific counterstrike or modulo-only spawn remains. Evidence: pending.
 - [ ] **AC-9 [local; actor: implementation agent]:** Evasion, damaged corridor/heavy list and occupied deck suspend operations with readable reasons; restoring a legitimately repairable condition reopens limited operations without restoring destroyed hull/stores. Evidence: pending.
 
@@ -352,7 +353,8 @@ Unchecked items below are **future implementation acceptance**, not missing plan
 
 ### Phase 1 — Correct, measurable source assets (18–30 hours)
 
-**Status:** DONE (2026-09-13), with the two gaps recorded in the checkpoint below.
+**Status:** PARTIAL
+**Remaining:** AC-2 geometry disagreements and AC-4 moving-part preparation; see the checkpoint below.
 **ACs:** AC-1–2; prepare AC-4/22/23.
 **Files:** `tools/blender/` conversion source, existing GLB checks, `public/assets/` derivatives, new `src/sim/catalog.ts`, asset credits.
 
@@ -426,11 +428,49 @@ but `public/assets/aircraft.*.glb` should be treated as that lane's to finish. A
    AC-4 cannot close until these are cut by hand.
 2. **AC-2's 0.1 m station agreement is unproven.** Length, beam, height, keel datum and bow
    direction are asserted; gear contact, deck corridor and weapon collision stations still need the
-   raycasting pass in `tools/capture-deck.mjs` extended to the new hulls.
+   raycasting disagreements reported under AC-2 resolved on the shipped hulls.
 
 ### Phase 2 — Flyable aircraft and working carrier decks (28–44 hours)
 
-**Status:** IN PROGRESS. Render identity and pure hull geometry are in; the carrier cycle is not.
+**Concurrent review lane (AC-7/24, 2026-09-13):** Codex `battle-review`, branch
+`codex/battle-review`, base `bc233e9`, checkout
+`/home/joao/projects/threenative/sandbox/.worktrees/battle-review` (cleanup pending).
+Owns `src/sim/carrier-ops.ts`, its focused check and the minimum `Battle.wreckAircraft`
+timer initialization. Aircraft, hull preparation, presentation and the other lane's
+`check-carrier-cycle.mjs` edits remain with their owners. Review found that service and launch
+both spend ordnance, and deck activity restarts hangar work. Fix scope: charge stores once at
+dispatch, track hangar work independently of deck occupancy, and let supplied aircraft/repairs
+progress when another airframe's ordnance is exhausted. Extend `check-carrier-ops.mjs`, run
+the existing Battle cycle regression, type/build checks and wrapped launch/sortie playtests.
+Capability search returned `FlightModel` for physical departure, with no matching inventory or
+maintenance mechanism; these fixes stay in the existing pure gameplay module.
+
+**Review evidence:** Against `bc233e9` plus this lane's five-file diff, the focused check first
+failed with `service must leave the store for dispatch` (0 versus 1); it now passes 50 cycles
+spending exactly 50 stores, independent hangar timing, mixed-stock/repair progress, and a real
+`Battle.step` recovery/service/relaunch sequence using the final torpedo. `check-carrier-cycle.mjs`
+passes its 12-minute conservation run (59 aircraft lost, 526 cap refusals), contact interventions
+and repeated-seed equality. `pnpm typecheck` and `pnpm exec vite build` pass (existing dependency
+namespace/chunk-size warnings remain). Independent read-only review: PASS.
+
+The first launch runner result was **false evidence of launch**: its click at (183,542) missed
+the moved button, and both screenshots still showed the briefing while diagnostics passed.
+`playtests/launch.playtest.json` now clicks (183,603) at its declared 1280×720 viewport and checks
+briefing dismissal, the flight-only HUD instruction, cockpit camera state, and no loss/debrief.
+Those assertions reject the original click. The cockpit intentionally hides the center-tip, so
+its text checks flight state and the captured frame checks appearance. Corrected launch run: **PASS**, all four HUD assertions and diagnostics pass on NVIDIA Turing
+WebGPU; the takeoff frame shows 118 kt and 205 ft, and the cockpit frame shows the active flight.
+Earlier diagnostics-only launch results below establish boot health only.
+The wrapped `capture-sortie.mjs` passes with three credited deck hits, one uncredited near miss,
+three visible scars and a frozen recovered debrief; setup and recovery are injected by that tool,
+so this is not a keys-only recovered sortie. Inspected `screenshots/battle-review/{02-burning-carrier,
+03-approach,04-debrief}.png` and launch frames on NVIDIA Turing WebGPU, served at port 5317.
+
+AC-7 remains open: player fuel/rearm accounting, complete aircraft identity/damage/diversion
+accounting and visual inventory acceptance are not established by these focused repairs.
+
+**Status:** IN PROGRESS
+**Remaining:** AI engine flight, complete aircraft articulation, measured carrier contact geometry and full player/deck inventory acceptance.
 **ACs:** AC-3–9.
 **Files:** `flight.ts`, `armament.ts`, `battle.ts`, `tactics.ts`, `recovery.ts`; existing imported render loaders, `world.ts`, `model-damage.ts`, relevant HUD/camera wiring.
 
@@ -448,19 +488,21 @@ Adopt explicit airframe/model identity and one animation/disposal path per famil
   `spinPropeller` keeps its rotation state per instance so two aircraft at different RPM cannot
   share a transform. `DECKS` gains kaga, soryu, hiryu and yorktown, their deck datum measured from
   the shipped GLB by a method that reproduces Hornet's surveyed 20.06 m to within 0.10 m.
-- **AC-6 is met.** `Battle` initialises every hull from the catalog before any render exists, and
+- **AC-6 is partially evidenced.** `Battle` initialises every hull from the catalog before any render exists, and
   `world.ts:sizeCarrier` no longer writes simulation state. The two overloaded fields are now three
   named ones — `hullLength`/`hullBeam` for the damage and collision volume, `deckLength`/`deckWidth`
   for the launch and recovery corridor, and a per-carrier `deckHeight` — and every consumer was
   updated, including `math.ts:onDeck`, which had been serving both meanings from one rectangle.
   `recovery.ts:finalReady` reads the selected deck's own datum and remains the single gate.
   `node scripts/check-geometry.mjs` reports 17 hulls sized before any render, five distinct deck
-  datums, and that no render module assigns a geometry field.
+  datums, and that no render module assigns a geometry field. This proves pure initialization,
+  not actual geometry agreement or player diversion/recovery on Yorktown and another friendly deck;
+  AC-6 stays open for those required observations.
 
-The game still boots and flies on all of this: `playtests/launch.playtest.json` passes on the
-committed tree against a real WebGPU adapter — startup ready at 7.1 s, zero runtime diagnostics,
-`"pass": true` — which is the first end-to-end confirmation that the new hulls, the geometry rename
-and the airframe identity change have not broken the running game. Note that the dev server must be
+Historical startup evidence: the then-current `playtests/launch.playtest.json` reported ready
+at 7.1 s and zero runtime diagnostics on WebGPU. It asserted no flight behavior; the review above
+subsequently found that its click could miss the button. This result proves boot health only,
+not launch, and is superseded for flight by the corrected scenario and inspected frames. Note that the dev server must be
 started with `--host 127.0.0.1`: Vite binds IPv6 only by default and the runner's
 `http://127.0.0.1:<port>` is then refused with `TN_PLAYTEST_PAGE_UNREACHABLE`, which reads as a
 broken game and is not one.
@@ -500,22 +542,23 @@ rather than scaling range, so `Battle` passes a reduced range limit instead; and
 `canLaunch` with no matching `canRecover`, so recovery occupancy is gated in `Battle` on
 `deck.occupiedUntil`. Both belong in the modules later.
 
-The game still runs on all of it: `playtests/launch.playtest.json` passes against a real WebGPU
-adapter with the carrier cycle, the contact model and the imported hulls all live — ready at 8.0 s,
-zero console, network and runtime errors. One caution for whoever runs it next: a first attempt
+Historical startup evidence: the then-current diagnostics-only launch scenario reported ready
+at 8.0 s on WebGPU with zero console, network and runtime errors. It does not establish that the
+briefing was dismissed or the battle advanced; use the corrected scenario above for launch proof. One caution for whoever runs it next: a first attempt
 reported `TN_PLAYTEST_RUNNER_FAILED`, which was the harness colliding with another browser capture
 holding the display, not the game. `tools/capture-lock.sh` serialises them; re-run rather than
 believing the first red.
 
-Not done: AC-5, the migration of AI aircraft onto the engine `FlightModel`. `carrier-ops.ts` exists, is checked and is
-committed, but `Battle.launch` still draws on the generic reserve of twelve and `updateShips` still
-picks types by the modulo sequence. AI flight has not moved onto the engine `FlightModel` (AC-5).
+Not done: AC-5, the migration of AI aircraft onto the engine `FlightModel`. The generic reserve
+and modulo launch sequence were replaced by the carrier cycle described above; they are not
+remaining work.
 
 **Checkpoint:** partial; see above.
 
 ### Phase 3 — Scouts, surface agendas and useful Midway targets (18–28 hours)
 
-**Status:** MODULES WRITTEN, NOT WIRED. `src/sim/intel.ts`, `src/sim/naval.ts` and `src/sim/facilities.ts` exist, are checked by `scripts/check-intel.mjs`, `check-naval.mjs` and `check-facilities.mjs`, and are committed. `Battle` does not call any of them yet, so none of AC-10 to AC-15 is met.
+**Status:** IN PROGRESS
+**Progress:** Intelligence is consumed by `Battle.observeFleet/deliverReports` and tactical targeting. `naval.ts` and `facilities.ts` have focused checks but no live Battle wiring. Full AC-10–15 acceptance remains open, including submarine perception, cruiser scouts, navigation, facilities and player target access.
 **ACs:** AC-10–15.
 **Files:** new `intel.ts`/`naval.ts`; `battle.ts`, `tactics.ts`, `gunnery.ts`, `sortie.ts`; imported-fleet/world and HUD/scene target wiring.
 
@@ -526,7 +569,8 @@ Implement reports before adding strategic targeting. Add finite cruiser scouts, 
 
 ### Phase 4 — Submarines, ASW and saving a carrier (18–28 hours)
 
-**Status:** MODULE WRITTEN, NOT WIRED. `src/sim/submarine.ts` holds depth with an explicit downward sign, battery, tubes and reloads, hydrophone bearings without range or identity, and depth charges that damage by three-dimensional separation. `scripts/check-submarine.mjs` passes. `Battle` still surfaces boats on the sine timer and still reads the nearest live enemy carrier directly, so none of AC-16 to AC-18 is met.
+**Status:** NOT STARTED
+**Preparation:** Module written, not wired. `src/sim/submarine.ts` holds depth with an explicit downward sign, battery, tubes and reloads, hydrophone bearings without range or identity, and depth charges that damage by three-dimensional separation. `scripts/check-submarine.mjs` passes. `Battle` still surfaces boats on the sine timer and still reads the nearest live enemy carrier directly, so none of AC-16 to AC-18 is met.
 **ACs:** AC-16–18.
 **Files:** `naval.ts`, `battle.ts`, `gunnery.ts`, `armament.ts`; imported-fleet/model-damage/world/ocean; existing event-based audio as needed.
 
@@ -537,7 +581,8 @@ Replace sine surfacing and unlimited direct-world attack loops. Add depth/contac
 
 ### Phase 5 — Assignments, variable outcomes and full battle proof (12–18 hours)
 
-**Status:** NOT STARTED, beyond the surface-strike and fleet-support records being added to `src/sim/sortie.ts`.
+**Status:** NOT STARTED
+**Preparation:** Surface-strike and fleet-support records exist in `src/sim/sortie.ts`.
 **ACs:** AC-19–24; integrated acceptance of all prior ACs.
 **Files:** `sortie.ts`, `Midway.ts`, `hud.ts`, affected radio/audio text, role captures, existing performance/lifecycle checks and this PRD.
 
@@ -567,8 +612,8 @@ bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/c
 
 Use the installed `git-worktree` manager if implementation needs isolation. Resolve the owning sandbox checkout, check-ignore its `.worktrees/<task>/` before creation, reuse the executing task checkout and follow required cleanup on completion. This planning turn created no worktree or browser/dev-server process. No native run, current baseline, gameplay implementation gate or asset license approval is claimed by this document.
 
-## Planning check and next action
+## Original planning check (historical)
 
-The attachment, all thirteen GLBs/eight PNGs, current consumer paths, engine capabilities and primary/museum historical references are accounted for. Source probes and private model renders completed; the duplicate cruiser and class/variant uncertainties are recorded as explicit preparation work. All implementation criteria remain unchecked, with named owners and runnable future proof. An OpenCode DeepSeek v4.1 Flash review identified the missing Hammann PNG, additional existing escorts, shared B-25 parking and migration risks; corrections are incorporated. Review suggestions about controls/deck fields were reconciled against the installed declarations rather than copied. Document checks passed for inventory coverage, criterion/phase IDs, status, fences and whitespace. No game build or playtest was run merely to validate prose.
+The attachment, all thirteen GLBs/eight PNGs, current consumer paths, engine capabilities and primary/museum historical references are accounted for. Source probes and private model renders completed; the duplicate cruiser and class/variant uncertainties are recorded as explicit preparation work. At the original planning checkpoint, all implementation criteria were unchecked, with named owners and runnable future proof. An OpenCode DeepSeek v4.1 Flash review identified the missing Hammann PNG, additional existing escorts, shared B-25 parking and migration risks; corrections are incorporated. Review suggestions about controls/deck fields were reconciled against the installed declarations rather than copied. Document checks passed for inventory coverage, criterion/phase IDs, status, fences and whitespace. No game build or playtest was run merely to validate prose.
 
-Review the five decisions at the top. Approval plus an instruction to implement starts Phase 1; changing the playable side, geographic scale or realism scope should happen before asset/AI work begins.
+Implementation is already authorized and in progress. Continue from the open acceptance criteria above; the original planning checkpoint is not an outstanding approval request.

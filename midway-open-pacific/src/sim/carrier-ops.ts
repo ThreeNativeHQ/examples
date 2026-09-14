@@ -18,6 +18,8 @@ export interface CarrierAir {
    * airframe completes service, so the type has to be kept here.
    */
   servicing: Record<string, number>;
+  /** Hangar work has its own clock; launches and later recoveries cannot restart it. */
+  serviceSince?: number;
   stores: Record<string, number>;
   fuel: number;
 }
@@ -69,6 +71,7 @@ function cloneAir(air: CarrierAir): CarrierAir {
     ready: copyCounts(air.ready),
     damaged: copyCounts(air.damaged),
     servicing: copyCounts(air.servicing),
+    serviceSince: air.serviceSince,
     stores: copyCounts(air.stores),
     fuel: air.fuel,
   };
@@ -152,6 +155,7 @@ export function applyRecovery(
   damaged: boolean,
 ): { air: CarrierAir; deck: DeckState } {
   const next = cloneAir(air);
+  if (totalCount(next.servicing) + totalCount(next.damaged) === 0) next.serviceSince = now;
   next.airframes[airframe] = (next.airframes[airframe] ?? 0) + 1;
   const bucket = damaged ? next.damaged : next.servicing;
   bucket[airframe] = (bucket[airframe] ?? 0) + 1;
@@ -162,9 +166,9 @@ export function applyRecovery(
 }
 
 /**
- * Complete one service or repair once its interval has elapsed. Service consumes one store of the
- * airframe's family to make it ready; with no store the aircraft stays unready in `servicing`,
- * which is the recorded reason. A repair takes longer and can write the airframe off permanently.
+ * Complete one service or repair once its interval has elapsed. Service checks that ordnance is
+ * available; dispatch charges it once in applyLaunch. An empty rack holds only that airframe's
+ * service, not other types or repairs. A repair can write the airframe off permanently.
  */
 export function stepService(
   air: CarrierAir,
@@ -174,20 +178,17 @@ export function stepService(
   roll: number,
 ): { air: CarrierAir; deck: DeckState } {
   const next = cloneAir(air);
-  const elapsed = now - deck.since;
+  const elapsed = now - (next.serviceSince ?? deck.since);
 
-  const serviceType = firstPositive(next.servicing);
+  const serviceType = Object.keys(next.servicing).find(
+    (type) => next.servicing[type] > 0 && (next.stores[storeFamily(type)] ?? 0) > 0,
+  );
   if (serviceType && elapsed >= times.serviceSeconds) {
-    const family = storeFamily(serviceType);
-    if ((next.stores[family] ?? 0) > 0) {
-      next.stores[family] -= 1;
-      next.servicing[serviceType] -= 1;
-      next.ready[serviceType] = (next.ready[serviceType] ?? 0) + 1;
-      const more = totalCount(next.servicing) > 0 || totalCount(next.damaged) > 0;
-      return { air: next, deck: { ...deck, mode: more ? "servicing" : "available", since: now } };
-    }
-    // Keep `since` so the moment a store arrives the service can finish.
-    return { air: next, deck: { ...deck } };
+    next.servicing[serviceType] -= 1;
+    next.ready[serviceType] = (next.ready[serviceType] ?? 0) + 1;
+    next.serviceSince = now;
+    const more = totalCount(next.servicing) > 0 || totalCount(next.damaged) > 0;
+    return { air: next, deck: { ...deck, mode: deck.occupiedUntil > now ? deck.mode : more ? "servicing" : "available" } };
   }
 
   const damagedType = firstPositive(next.damaged);
@@ -195,8 +196,9 @@ export function stepService(
     next.damaged[damagedType] -= 1;
     if (roll < REPAIR_FAIL_CHANCE) next.airframes[damagedType] -= 1;
     else next.servicing[damagedType] = (next.servicing[damagedType] ?? 0) + 1;
+    next.serviceSince = now;
     const more = totalCount(next.servicing) > 0 || totalCount(next.damaged) > 0;
-    return { air: next, deck: { ...deck, mode: more ? "servicing" : "available", since: now } };
+    return { air: next, deck: { ...deck, mode: deck.occupiedUntil > now ? deck.mode : more ? "servicing" : "available" } };
   }
 
   return { air: next, deck: { ...deck } };

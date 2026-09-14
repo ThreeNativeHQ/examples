@@ -1010,6 +1010,7 @@ export class Battle {
   wreckAircraft(s: Any, n: number): void {
     if (!s.air) return;
     const air = s.air;
+    if (!deckHasWork(air)) air.serviceSince = this.time;
     for (let i = 0; i < n; i += 1) {
       let pick: string | null = null;
       for (const airframe in air.ready) if (air.ready[airframe] > 0 && (!pick || air.ready[airframe] > air.ready[pick])) pick = airframe;
