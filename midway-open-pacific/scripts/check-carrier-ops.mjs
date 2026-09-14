@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import { build } from "esbuild";
 
 const { outputFiles } = await build({
-  entryPoints: ["src/sim/carrier-ops.ts"],
+  stdin: { contents: 'export * from "./src/sim/carrier-ops.ts"; export { Battle } from "./src/sim/battle.ts";',
+    loader: "ts", resolveDir: process.cwd() },
   bundle: true,
   platform: "node",
   format: "esm",
@@ -65,6 +66,7 @@ for (let i = 0; i < 50; i += 1) {
 }
 assert.equal(ops.totalAircraft(a) + airborne, conserved, "conservation broke over the run");
 assert.equal(a.ready.sbd, 1, "the fifty-first launch should find a ready aircraft");
+assert.equal(a.stores.bomb, 950, "fifty sorties must spend fifty stores, including all service cycles");
 
 // At the active cap the launch is refused and nothing is consumed.
 const capAir = air();
@@ -91,8 +93,8 @@ assert.equal(ops.suspendReason({ deck: 0.1 }), "deck damage");
 assert.equal(ops.suspendReason({ deck: 1, list: 0 }), null);
 assert.equal(ops.suspendReason(null), null);
 
-// A recovered aircraft cannot launch until it has been serviced, and service spends a store.
-let ra = air({ ready: {}, stores: { bomb: 2 } });
+// The last store must fly one sortie, even after recovery/service. Charge only at dispatch.
+let ra = air({ ready: {}, stores: { bomb: 1 } });
 let rd = deck();
 const returned = ops.applyRecovery(ra, rd, "sbd", 0, TIMES, false);
 ra = returned.air;
@@ -101,8 +103,32 @@ assert.equal(ops.canLaunch(ra, rd, "sbd", "bomb", 100, 0, 68).ok, false, "a reco
 const readyAgain = ops.stepService(ra, rd, 2, TIMES, 0.99);
 ra = readyAgain.air;
 rd = readyAgain.deck;
-assert.equal(ra.stores.bomb, 1, "service must consume one store");
+assert.equal(ra.stores.bomb, 1, "service must leave the store for dispatch, not charge it twice");
 assert.equal(ops.canLaunch(ra, rd, "sbd", "bomb", 100, 0, 68).ok, true, "service must make it ready");
+assert.equal(ops.applyLaunch(ra, rd, "sbd", "bomb", 100, TIMES).air.stores.bomb, 0,
+  "the last store must allow exactly one launch after service");
+
+// A second recovery cannot restart work on the first aircraft, or it never finishes on a busy deck.
+const firstReturn = ops.applyRecovery(air({ ready: {} }), deck(), "sbd", 0, TIMES, false);
+const secondReturn = ops.applyRecovery(firstReturn.air, firstReturn.deck, "sbd", 1, TIMES, false);
+const underway = ops.stepService(secondReturn.air, secondReturn.deck, 2, TIMES, 0.99);
+assert.equal(underway.air.ready.sbd, 1, "another recovery must not delay existing hangar work");
+assert.equal(underway.air.servicing.sbd, 1, "the second aircraft still needs its own service interval");
+
+// Launch traffic also leaves the hangar's clock alone.
+const withFighter = ops.applyRecovery(air({ ready: { wildcat: 1 }, airframes: { wildcat: 1 } }), deck(), "sbd", 0, TIMES, false);
+const traffic = ops.applyLaunch(withFighter.air, { ...withFighter.deck, mode: "available" }, "wildcat", "ammo", 1, TIMES);
+assert.equal(ops.stepService(traffic.air, traffic.deck, 2, TIMES, 0.99).air.ready.sbd, 1,
+  "a launch must not delay existing hangar work");
+
+// Missing torpedoes must not strand a supplied bomber or stop an independent repair.
+const mixed = air({ ready: {}, airframes: { tbd: 1, sbd: 1, wildcat: 1 },
+  servicing: { tbd: 1, sbd: 1 }, damaged: { wildcat: 1 }, stores: { bomb: 1 } });
+const supplied = ops.stepService(mixed, deck(), 2, TIMES, 0.99);
+assert.equal(supplied.air.ready.sbd, 1, "a torpedo shortage must not block bomber service");
+const repaired = ops.stepService(supplied.air, supplied.deck, 7, TIMES, 0.99);
+assert.equal(repaired.air.damaged.wildcat, 0, "a torpedo shortage must not block repairs");
+assert.equal(repaired.air.servicing.wildcat, 1);
 
 // With no store the aircraft stays unready, and then finishes the moment one arrives.
 const empty = ops.stepService(
@@ -128,4 +154,30 @@ assert.equal(fixed.servicing.sbd, 1);
 assert.doesNotThrow(() => ops.applyLaunch(freeze(air()), freeze(deck()), "sbd", "bomb", 0, TIMES));
 assert.doesNotThrow(() => ops.applyRecovery(freeze(air()), freeze(deck()), "sbd", 0, TIMES, false));
 
-console.log("check-carrier-ops: conservation, stores, gates, suspension, service and repair hold");
+// Battle owns the same clock: a second real recovery must not postpone the first aircraft's
+// service. This isolates the maintenance boundary, not the feasibility of an AI landing approach.
+const battle = new ops.Battle(7);
+const carrier = battle.home;
+carrier.air.ready = { wildcat: 1, tbd: 1 };
+carrier.air.airframes = { ...carrier.air.ready };
+carrier.air.stores.torpedo = 2;
+battle.start();
+battle.player.mode = "spectator";
+const fighter = battle.aircraft.find((a) => a.home === carrier.id);
+const advanceTo = (time) => { while (battle.time < time) battle.step(1 / 30, {}); };
+advanceTo(7);
+const torpedoPlane = battle.launch(carrier, "torpedo");
+assert.ok(torpedoPlane);
+advanceTo(35);
+assert.equal(battle.recoverAircraft(carrier, torpedoPlane), true);
+torpedoPlane.recovered = true; // navigateHome normally clears the caller's airborne record.
+advanceTo(100);
+assert.equal(battle.recoverAircraft(carrier, fighter), true);
+fighter.recovered = true;
+advanceTo(338); // 300 seconds of service plus the one-second operational cadence.
+assert.equal(carrier.air.ready.tbd, 1, "Battle.step must finish the first service despite a later recovery");
+assert.equal(carrier.air.stores.torpedo, 1, "Battle service must retain the last torpedo for dispatch");
+assert.ok(battle.launch(carrier, "torpedo"), "the serviced aircraft must fly with that last torpedo");
+assert.equal(carrier.air.stores.torpedo, 0);
+
+console.log("check-carrier-ops: conservation, single store charging, independent service clock, shortages and Battle recovery/service/relaunch hold");

@@ -13,7 +13,7 @@
       "label": "take-the-deck",
       "at": {
         "x": 183,
-        "y": 542
+        "y": 603
       },
       "release": true
     },
@@ -54,6 +54,12 @@
     }
   ],
   "assert": {
+    "hud": [
+      { "id": "briefing", "visible": false },
+      { "id": "center-tip", "textIncludes": "RAISES THE NOSE" },
+      { "id": "btn-camera", "textIncludes": "WIDE VIEW" },
+      { "id": "debrief", "visible": false, "allowTrivial": "Surviving the launch must keep the loss/debrief overlay hidden, as it was before takeoff." }
+    ],
     "diagnostics": {
       "noConsoleErrors": true,
       "noNetworkErrors": true,
