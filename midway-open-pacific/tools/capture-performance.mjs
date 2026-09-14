@@ -21,6 +21,7 @@ import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { build } from "esbuild";
 import { chromium } from "playwright";
 
 const URL = process.env.MIDWAY_URL || "http://127.0.0.1:5198";
@@ -190,6 +191,30 @@ if (process.argv.includes("--self-check")) {
   console.log("self-check PASS");
   process.exit(0);
 }
+
+// AC-23's statistics and absolute verdict live in src/sim/perf.ts and are used from there, never
+// re-derived here: a p95 computed two ways is how a performance claim drifts. Node cannot import
+// TypeScript directly, so bundle the pure module the way scripts/check-perf.mjs does. The dynamic
+// import is an expression, so it runs only after the `--self-check` fast path above has exited.
+const { percentile, verdict, regression, format, REGRESSION_LIMIT_PCT } = await import(
+  `data:text/javascript,${encodeURIComponent(
+    (
+      await build({
+        stdin: {
+          contents: 'export * from "./src/sim/perf.ts";',
+          loader: "ts",
+          resolveDir: join(import.meta.dirname, ".."),
+        },
+        bundle: true,
+        format: "esm",
+        platform: "node",
+        target: "node20",
+        write: false,
+        logLevel: "silent",
+      })
+    ).outputFiles[0].text,
+  )}`
+);
 
 // Checkout refs at the start of the run; the digest is not an exact fingerprint of the loaded
 // module bytes (a dev server may transform them), and concurrent edits are disclosed below.
@@ -464,22 +489,13 @@ try {
       if (p0 && Math.hypot(a.x - p0.x, a.y - p0.y, a.z - p0.z) > 100) moved += 1;
     }
     const advance = { seconds: +(b.time - timeStart).toFixed(1), moved, ammoStart, ammoEnd: b.player.ammo ?? null };
-    const stats = (series) => {
-      if (!series.length) return null;
-      const sorted = [...series].sort((a, b) => a - b);
-      const at = (q) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
-      return {
-        samples: sorted.length,
-        p50: +at(0.5).toFixed(2),
-        p95: +at(0.95).toFixed(2),
-        p99: +at(0.99).toFixed(2),
-        worst: +sorted[sorted.length - 1].toFixed(2),
-      };
-    };
+    // Raw durations, not summaries: AC-23's percentiles are computed once, in node, by
+    // src/sim/perf.ts. Deriving a p95 here as well would be the second implementation the
+    // repository forbids.
     return {
-      wall: stats(wall),
-      gpu: stats(gpu),
-      cpu: stats(cpu),
+      wall,
+      gpu,
+      cpu,
       substeps,
       draws: renderer.info.render.drawCalls,
       triangles: renderer.info.render.triangles,
@@ -501,6 +517,22 @@ try {
   }, SAMPLE);
   await page.keyboard.up("Space");
   if (!burning) await page.keyboard.up("ArrowRight");
+
+  // AC-23's percentiles come from src/sim/perf.ts, the one documented interpolation rule; the raw
+  // page series are reduced here so p50/p95/p99 and the verdict share the same arithmetic.
+  const seriesStats = (series) => {
+    const n = series.length;
+    return {
+      samples: n,
+      p50: percentile(series, 0.5),
+      p95: percentile(series, 0.95),
+      p99: percentile(series, 0.99),
+      worst: n ? series.reduce((m, x) => (x > m ? x : m), Number.NEGATIVE_INFINITY) : Number.NaN,
+    };
+  };
+  const gpu = seriesStats(result.gpu);
+  const cpu = seriesStats(result.cpu);
+  const wall = seriesStats(result.wall);
   if (process.env.MIDWAY_FRAME) {
     await page.screenshot({ path: process.env.MIDWAY_FRAME });
     console.log(`frame saved to ${process.env.MIDWAY_FRAME}`);
@@ -554,15 +586,15 @@ try {
       `active aircraft min/max ${result.pop.aircraftMin}/${result.pop.aircraftMax}, renderable meshes ${result.pop.renderableMin}/${result.pop.renderableMax}, in-frustum ${result.pop.visibleMin}/${result.pop.visibleMax}, ships ${result.pop.shipsMin}/${result.pop.shipsMax}\n` +
       `advancing ${result.advance.seconds}s of sim, ${result.advance.moved}/${result.pop.aircraftMax} actors moved >100m, bullets seen ${result.pop.bulletMax}, ammo ${result.advance.ammoStart}->${result.advance.ammoEnd}\n` +
       `draw calls ${result.draws}, triangles ${result.triangles}, memory ${JSON.stringify(result.memory)}, jsHeap ${result.heap}\n` +
-      `gpu ${result.gpu ? `median ${result.gpu.p50}ms (${fps(result.gpu.p50)} fps) | p95 ${result.gpu.p95}ms | p99 ${result.gpu.p99}ms | worst ${result.gpu.worst}ms over ${result.gpu.samples} frames` : "unavailable: this build has no timestamp-query support"}\n` +
-      `battle fixed-step cpu (leaf steps) ${result.cpu ? `p50 ${result.cpu.p50}ms | p95 ${result.cpu.p95}ms | p99 ${result.cpu.p99}ms | worst ${result.cpu.worst}ms over ${result.cpu.samples} steps; ${result.substeps} subdivided child calls` : "unavailable: no Battle.step observations"}\n` +
-      `wall median ${result.wall.p50}ms | p95 ${result.wall.p95}ms  ` +
+      `gpu ${gpu.samples ? `p50 ${gpu.p50.toFixed(2)}ms (${fps(gpu.p50)} fps) | p95 ${gpu.p95.toFixed(2)}ms | p99 ${gpu.p99.toFixed(2)}ms | worst ${gpu.worst.toFixed(2)}ms over ${gpu.samples} frames` : "unavailable: this build has no timestamp-query support"}\n` +
+      `battle fixed-step cpu (leaf steps) ${cpu.samples ? `p50 ${cpu.p50.toFixed(2)}ms | p95 ${cpu.p95.toFixed(2)}ms | p99 ${cpu.p99.toFixed(2)}ms | worst ${cpu.worst.toFixed(2)}ms over ${cpu.samples} steps; ${result.substeps} subdivided child calls` : "unavailable: no Battle.step observations"}\n` +
+      `wall ${wall.samples ? `p50 ${wall.p50.toFixed(2)}ms | p95 ${wall.p95.toFixed(2)}ms` : "unavailable"}  ` +
       "(presentation-bound on a virtual display; not a statement about the game)",
   );
   assert.deepEqual(errors, []);
   // Missing or nonfinite observations are failures, not zeroes.
-  assert.ok(isFiniteTiming(result.gpu), `GPU observations resolved and finite: ${JSON.stringify(result.gpu)}`);
-  assert.ok(isFiniteTiming(result.cpu), `Battle fixed-step CPU observations resolved and finite: ${JSON.stringify(result.cpu)}`);
+  assert.ok(isFiniteTiming(gpu), `GPU observations resolved and finite: ${JSON.stringify(gpu)}`);
+  assert.ok(isFiniteTiming(cpu), `Battle fixed-step CPU observations resolved and finite: ${JSON.stringify(cpu)}`);
   assert.ok(
     result.scene.aircraft > 0 && result.scene.ships > 0,
     `the sample has a live population: ${JSON.stringify(result.scene)}`,
@@ -578,10 +610,32 @@ try {
   // live actors changed position. This fails if a fixture ever disables gameplay to look calm.
   assert.ok(result.advance.seconds > SAMPLE * 0.5, `simulation advanced across the sample: ${result.advance.seconds}s`);
   assert.ok(result.advance.moved > 0, `live actors advanced across the sample: ${result.advance.moved} moved`);
-  // The AC-23 absolute budgets are checked on the distributions, not on an average. A failing
-  // absolute target is an explicit performance gap; it cannot be excused by a relative pass.
-  assert.ok(result.gpu.p95 <= 16.7, `GPU p95 at or under 16.7ms: ${result.gpu.p95}ms`);
-  assert.ok(result.cpu.p95 <= 4, `Battle fixed-step CPU p95 at or under 4ms: ${result.cpu.p95}ms`);
+
+  // Everything AC-23 requires on one record, decided by the single verdict from src/sim/perf.ts. A
+  // relative pass can never excuse a failing absolute target here, and a missing/nonfinite p95
+  // (NaN) fails closed. This is the only place the absolute budgets are applied.
+  const measurement = {
+    fixedStepCpuP95: cpu.p95,
+    gpuP95: gpu.p95,
+    wallFrameP95: wall.p95,
+    triangles: result.triangles,
+    drawCalls: result.draws,
+    memoryMB: result.memory.total / (1024 * 1024),
+    activeAircraft: result.pop.aircraftMax,
+    activeShips: result.pop.shipsMax,
+    adapterName:
+      [adapter.vendor, adapter.architecture, adapter.device, adapter.description].filter(Boolean).join("/") ||
+      JSON.stringify(adapter),
+    width: WIDTH,
+    height: HEIGHT,
+    sampleSeconds: SAMPLE,
+  };
+  const absolute = verdict(measurement, { gpuP95: 16.7, fixedStepCpuP95: 4 });
+  console.log(format(measurement, absolute));
+  assert.ok(
+    absolute.pass,
+    `AC-23 absolute performance gap: ${absolute.failures.join(", ")} \u2014 ${format(measurement, absolute)}`,
+  );
 
   // The relative clause of AC-23 compares a matched run on the same named adapter. The baseline is
   // a recorded figure, never an empty workspace: MIDWAY_BASELINE points at a JSON file this tool
@@ -592,18 +646,20 @@ try {
     const base = JSON.parse(await readFile(process.env.MIDWAY_BASELINE, "utf8"));
     const mismatches = baselineMismatches(base, meta);
     assert.deepEqual(mismatches, [], `matched baseline required: ${mismatches.join("; ")}`);
-    for (const [metric, value] of [["gpuP95", result.gpu.p95], ["cpuP95", result.cpu.p95]])
+    for (const [metric, value] of [["gpuP95", gpu.p95], ["cpuP95", cpu.p95]]) {
+      const drift = regression(value, base[metric]);
       assert.ok(
-        value <= base[metric] * 1.1,
-        `${metric} regression over 10% against matched baseline: ${value}ms vs ${base[metric]}ms`,
+        !drift.regressed,
+        `${metric} regressed ${drift.pct.toFixed(1)}% against matched baseline: ${value}ms vs ${base[metric]}ms (limit ${REGRESSION_LIMIT_PCT}%)`,
       );
+    }
     relative = "PASS";
   }
   console.log(`relative: ${relative}${relative === "PASS" ? " (within 10% of the matched baseline)" : " (no matched baseline supplied via MIDWAY_BASELINE)"}`);
   if (process.env.MIDWAY_BASELINE_OUT) {
     await writeFile(
       process.env.MIDWAY_BASELINE_OUT,
-      JSON.stringify({ ...meta, gpuP95: result.gpu.p95, cpuP95: result.cpu.p95, population: { min: result.pop.aircraftMin, max: result.pop.aircraftMax } }, null, 2),
+      JSON.stringify({ ...meta, gpuP95: gpu.p95, cpuP95: cpu.p95, population: { min: result.pop.aircraftMin, max: result.pop.aircraftMax } }, null, 2),
     );
     console.log(`baseline written to ${process.env.MIDWAY_BASELINE_OUT}`);
   }
