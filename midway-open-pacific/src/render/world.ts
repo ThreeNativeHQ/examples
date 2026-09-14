@@ -4,7 +4,7 @@ import { shipClass } from "../sim/catalog.js";
 import { attitudeAxes } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { addFloats, ellipsoid, mat, wakeTexture } from "./assets.js";
-import { type CarrierModelId, createCarrier, createIjnCarrier, shipModelFor } from "./imported-ships.js";
+import { type CarrierModelId, createCarrier, createIjnCarrier, createMitchell, shipModelFor } from "./imported-ships.js";
 import { createAirframe, createDouglas, animateDouglas, animateImportedAirframe, disposeAirframe, spinPropeller } from "./imported-aircraft.js";
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
@@ -241,6 +241,8 @@ export class WorldView {
   sea!: T.Mesh;
   crew!: DeckCrew;
   playerMesh!: T.Group;
+  /** Fixed eye point for the crash settle, chosen once at the moment of impact. */
+  private wreckEye: T.Vector3 | null = null;
   tracers!: T.LineSegments;
   tracerPositions = new Float32Array(1000 * 6);
   tracerColors = new Float32Array(1000 * 6);
@@ -346,6 +348,7 @@ export class WorldView {
         mesh.add(detailed);
         mesh.userData.importedShip = true;
         mesh.userData.parked = [];
+        mesh.userData.decor = [];
         // The park draws this ship's own ready inventory, one airframe per type it carries. A type
         // that leaves the ready line — launched, wrecked, written off — hides its own parked
         // aircraft and nothing else; the surviving types stay spotted. `ai` is the reduced build
@@ -358,6 +361,15 @@ export class WorldView {
           plane.position.set(-1, s.deckHeight + sink + PARK_GROUND[type], PARK_STATION[type]);
           detailed.add(plane);
           mesh.userData.parked.push(plane);
+        }
+        // A decorative B-25 on US decks, spotted aft of the park. Dressing only: no simAirframe,
+        // never in `parked`, engines off. Ahistorical for June 1942 (Doolittle sailed in April).
+        if (s.team === "us") {
+          const mitchell = createMitchell();
+          mitchell.position.set(-1, s.deckHeight + sink, 120);
+          mitchell.userData.decorative = true;
+          detailed.add(mitchell);
+          mesh.userData.decor.push(mitchell);
         }
       } else {
         throw new Error(`no model for ship: ${s.name} (${s.team} ${s.kind})`);
@@ -490,6 +502,8 @@ export class WorldView {
         // Turning over on the spot, waiting for the flag. One airframe, one animator.
         spinParked(a, dt);
       }
+      // Decorative deck dressing follows the same visual LOD with no inventory tie.
+      for (const d of (m.userData.decor ?? []) as T.Group[]) d.visible = camD < 1900;
       if (m.userData.elevator) (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
 
     }
@@ -584,7 +598,9 @@ export class WorldView {
     else if (this.playerMesh.userData.animatedAirframe) animateImportedAirframe(this.playerMesh, p, dt);
     else animateDouglas(this.playerMesh, p, dt);
     updateDamageVisuals(this.playerMesh, p);
-    this.playerMesh.visible = b.status !== "lost";
+    // The wreck is under the splash from the moment it hits: the airframe goes with the impact,
+    // not two seconds later when the report opens.
+    this.playerMesh.visible = b.status !== "lost" && p.mode !== "wreck";
     this.updateProjectiles();
     this.updateCamera(dt, briefing, time);
     // The eye below the surface is in a different medium: the dawn sky behind a submerged hull
@@ -616,6 +632,27 @@ export class WorldView {
     const u = axes.u;
     const ownBomb = [...this.battle.bombs, ...this.battle.airTorpedoes, ...this.battle.torpedoes].filter((a: any) => a.owner === "player").at(-1);
     let cockpit = false;
+    // The wreck is in the water and the camera is not: it stops at the surface, backs off and
+    // watches the splash from outside it rather than descending into its own plume.
+    if (p.mode === "wreck") {
+      if (!this.wreckEye) {
+        const dx = this.camera.position.x - p.x;
+        const dz = this.camera.position.z - p.z;
+        const len = Math.hypot(dx, dz) || 1;
+        this.wreckEye = new T.Vector3(p.x + (dx / len) * 85, 46, p.z + (dz / len) * 85);
+      }
+      this.targetCamera.copy(this.wreckEye);
+      this.look.set(p.x, 3, p.z);
+      this.camera.fov = 58;
+      this.camera.position.lerp(this.targetCamera, 1 - Math.exp(-dt * 2.6));
+      this.camera.up.set(0, 1, 0);
+      this.camera.near = 0.35;
+      this.camera.lookAt(this.look);
+      this.camera.updateProjectionMatrix();
+      this.camera.updateMatrixWorld();
+      return;
+    }
+    this.wreckEye = null;
     if (briefing) {
       const focus = this.playerMesh.getWorldPosition(this.tmp);
       this.targetCamera.set(focus.x + 17 + Math.sin(time * 0.055) * 2, focus.y + 6.5, focus.z + 21);

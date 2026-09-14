@@ -9,6 +9,7 @@
 import * as T from "three";
 import { softCircleDataTexture } from "@threenative/core";
 import { emblem } from "./assets.js";
+import { createCockpitInterior, getCockpitMaterials, type CockpitInterior } from "./cockpit-detail.js";
 
 const PI = Math.PI;
 const TAU = PI * 2;
@@ -323,6 +324,10 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
   prop.position.x = -5.22;
   root.add(prop);
   parts.propeller = prop;
+  // Tip radius by construction: the blades below extend to r, so the blur disc and any
+  // clearance check can use the swept disc rather than a bounding box of three static blades
+  // parked 120° apart, which understates the diameter by nearly a fifth.
+  let tipRadius = 0.5;
   for (let blade = 0; blade < 3; blade++) {
     const p: number[] = [];
     const uv: number[] = [];
@@ -333,6 +338,7 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
     for (let i = 0; i <= n; i++) {
       const f = i / n;
       const r = 0.2 + f * 1.49;
+      tipRadius = Math.max(tipRadius, r);
       const width = (0.09 + 0.105 * Math.sin(PI * f) ** 0.8) * Math.min(1, (1.04 - f) * 15);
       const twist = 0.47 - f * 0.4;
       for (let j = 0; j <= k; j++) {
@@ -359,6 +365,7 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
   }
   ball(0.22, [0, 0, 0], M.steel, prop, [1.1, 1, 1]);
   rod([-0.3, 0, 0], [0.1, 0, 0], 0.105, M.steel, prop, 0.17, 24);
+  prop.userData.tipRadius = tipRadius;
 
   const wingStations: Station[] = [
     [0, -2.6, 3.9], [0.8, -2.55, 3.86], [2.35, -2.32, 3.52], [5.9, -1.5, 2.42], [6.9, -1.08, 1.93],
@@ -800,7 +807,14 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
 
 const instances = new WeakMap<
   T.Group,
-  { model: DevastatorModel; propeller: T.Group; blur: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>; torpedo: T.Object3D }
+  {
+    model: DevastatorModel;
+    propeller: T.Group;
+    blades: T.Object3D;
+    blur: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>;
+    torpedo: T.Object3D;
+    interior?: CockpitInterior;
+  }
 >();
 
 /**
@@ -814,7 +828,16 @@ const instances = new WeakMap<
  */
 const WHEEL_DROP = 1.82;
 
-export function makeDevastator(detail: "hero" | "ai" = "hero"): T.Group {
+/**
+ * The detailed interior is a real-metre cockpit shrunk into a canopy opening; the SBD and the
+ * imported TBD both mount it at this scale, so the Devastator does too rather than growing a
+ * second set of gauges. Its position is derived, not tuned: the rig's own eye is put exactly on
+ * the seat datum the chase/cockpit camera already flies to, so the panel can never sit off-axis
+ * from the view that looks at it.
+ */
+const COCKPIT_SCALE = 0.52;
+
+export function makeDevastator(detail: "hero" | "ai" = "hero", withCockpit = false): T.Group {
   const model = buildModel(detail);
   const root = new T.Group();
   root.name = "Douglas TBD-1 Devastator";
@@ -848,14 +871,20 @@ export function makeDevastator(detail: "hero" | "ai" = "hero"): T.Group {
   propeller.add(mount);
   root.add(propeller);
 
-  const radius = Math.max(1, new T.Box3().setFromObject(blades).getSize(new T.Vector3()).x / 2);
+  // Sized from the swept disc the blades actually cover: the tip radius recorded at build,
+  // plus a margin for blade twist and thickness. A bounding box of the three static blades
+  // parked 120° apart understates the diameter by nearly a fifth and leaves the tips out.
+  const tipRadius = (blades.userData.tipRadius as number | undefined) ?? 1.7;
+  const radius = tipRadius + 0.06;
   const blur = new T.Mesh(
     new T.PlaneGeometry(radius * 2, radius * 2),
     new T.MeshBasicMaterial({
       map: softCircleDataTexture(64, 0.8),
       color: 0xa3aaa3,
       transparent: true,
-      opacity: 0,
+      // The Douglas's value, and it is the whole trick: a faint sheen reads as a turning disc,
+      // while an opaque one reads as a grey plate bolted to the nose.
+      opacity: 0.045,
       side: T.DoubleSide,
       depthWrite: false,
       forceSinglePass: true,
@@ -863,18 +892,44 @@ export function makeDevastator(detail: "hero" | "ai" = "hero"): T.Group {
     }),
   );
   blur.name = "Propeller motion blur";
-  blur.position.copy(shaft);
-  blur.rotation.y = PI / 2;
+  // Ride the propeller group at the shaft, the way the Douglas blur rides its pivot: the disc
+  // stays centred and square to the blades in their own frame, so position and facing can never
+  // drift apart. It spins with the blades, which a radially symmetric texture hides.
+  propeller.add(blur);
+  blur.position.set(0, 0, 0);
   blur.visible = false;
-  root.add(blur);
 
   root.userData.devastator = true;
   root.userData.propeller = propeller;
   root.userData.propBlur = blur;
   root.userData.torpedoLoad = model.parts.torpedo;
   root.userData.arrestingHook = model.parts.hook;
-  root.userData.cockpit = new T.Vector3(0, model.root.position.y + 1.02, -2.42);
-  instances.set(root, { model, propeller, blur, torpedo: model.parts.torpedo! });
+  const eye = new T.Vector3(0, model.root.position.y + 1.02, -2.42);
+  root.userData.cockpit = eye;
+
+  const materials = withCockpit ? getCockpitMaterials() : undefined;
+  const interior = materials ? createCockpitInterior(materials) : undefined;
+  if (interior) {
+    const instrumentRoot = new T.Group();
+    instrumentRoot.name = "Devastator live cockpit instruments";
+    interior.root.scale.setScalar(COCKPIT_SCALE);
+    interior.root.position.set(
+      eye.x - interior.eye[0] * COCKPIT_SCALE,
+      eye.y - interior.eye[1] * COCKPIT_SCALE,
+      eye.z - interior.eye[2] * COCKPIT_SCALE,
+    );
+    instrumentRoot.add(interior.root);
+    root.add(instrumentRoot);
+    root.userData.cockpitInterior = instrumentRoot;
+    root.userData.cockpitRig = interior;
+    // The rig brings its own tub, framing and glazing. The airframe's own blocked-out cockpit and
+    // greenhouse share that space, so they stand down while the player is sitting in it — the same
+    // swap `createDouglas` makes with the SBD's fuselage shells.
+    root.userData.cockpitShell = [model.parts.cockpit!, model.parts.canopy!, model.root.getObjectByName("canopy_fixed")].filter(
+      (node): node is T.Object3D => Boolean(node),
+    );
+  }
+  instances.set(root, { model, propeller, blades, blur, torpedo: model.parts.torpedo!, interior });
   return root;
 }
 
@@ -895,7 +950,7 @@ export function animateDevastator(
 ): void {
   const inst = instances.get(root);
   if (!inst) throw new Error(`${root.name || "This object"} is not a Devastator.`);
-  const { model, propeller, blur } = inst;
+  const { model, propeller, blur, blades, interior } = inst;
   const rpm = T.MathUtils.clamp(p.rpm ?? p.throttle ?? 0, 0, 1);
   model.setControl("rpm", rpm * 2400);
   model.setControl("gear", 1 - T.MathUtils.clamp(p.gearPos ?? 1, 0, 1));
@@ -905,14 +960,22 @@ export function animateDevastator(
   model.setControl("rudder", T.MathUtils.clamp(p.rudder ?? 0, -1, 1));
   model.setControl("hook", T.MathUtils.clamp(p.gearPos ?? 1, 0, 1));
   model.update(dt);
+  // The visible blades live under the mount's -90° yaw (nose -Z frame), while the model's own
+  // prop group stayed behind in the nose -X build frame — spin what is actually drawn, at the
+  // model's own eased rpm so blades and blur agree.
+  const easedRpm = inst.model.getState().current.rpm ?? 0;
+  propeller.rotation.z += ((easedRpm * TAU) / 60) * dt;
+  interior?.update(p);
   inst.torpedo.visible = (p.torpedo ?? 0) > 0;
-  propeller.visible = rpm < 0.38;
-  blur.visible = rpm > 0.15;
-  (blur.material as T.MeshBasicMaterial).opacity = Math.min(1, rpm * 2.5);
+  // Hide the blades, never the group: the blur rides the same pivot and would go with it.
+  // Same swap point and same fixed opacity as the Douglas, so the two aircraft's propellers match.
+  blades.visible = rpm < 0.24;
+  blur.visible = rpm >= 0.24;
 }
 export function disposeDevastator(root: T.Group): void {
   const inst = instances.get(root);
   if (!inst) return;
+  inst.interior?.dispose();
   inst.model.dispose();
   inst.blur.geometry.dispose();
   inst.blur.material.map?.dispose();

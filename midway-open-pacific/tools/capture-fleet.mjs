@@ -100,6 +100,7 @@ try {
         z: +c.position.z.toFixed(2),
         yaw: +c.rotation.y.toFixed(2),
         height: +((c.scale.x || 1) * 1.83).toFixed(3),
+        rig: c.userData.rig || "crew",
         helmet: !!c.getObjectByName("Head")?.children.length,
       })),
     };
@@ -107,8 +108,8 @@ try {
   assert.equal(crew.count, 12, `deck party size: ${JSON.stringify(crew)}`);
   assert.ok(crew.visible, "the deck party is visible at the briefing");
   assert.ok(
-    crew.men.every((m) => m.helmet),
-    "every sailor wears his trade's helmet",
+    crew.men.every((m) => m.helmet || m.rig !== "crew"),
+    "every sailor wears his trade's marking (cap band or trade uniform)",
   );
   assert.ok(
     new Set(crew.men.map((m) => `${m.x},${m.z}`)).size === 12,
@@ -169,7 +170,9 @@ try {
   if (process.env.MIDWAY_CREW_CLOSEUPS === "1") {
     const skinTriangles = await page.evaluate(() => {
       let triangles = 0;
-      window.midway.world.crew.sailors[0].player.root.traverse((node) => {
+      // The party's sailor rig specifically: the director and pilot meshes are smaller assets.
+      const sailor = window.midway.world.crew.sailors.find((s) => s.station.rig === "crew");
+      sailor.player.root.traverse((node) => {
         if (node.isSkinnedMesh) triangles += node.geometry.index.count / 3;
       });
       return triangles;
@@ -243,6 +246,7 @@ try {
               return {
                 type: p.userData.simAirframe,
                 imported: !!p.userData.importedAircraft,
+                devastator: !!p.userData.devastator,
                 name: p.name,
                 visible: p.visible,
                 geometry,
@@ -271,7 +275,13 @@ try {
     for (const p of c.parked) {
       assert.equal(p.pos[0], -1, `${c.name}/${p.type} parks on the measured aft line`);
       assert.equal(p.pos[2], STATION[p.type], `${c.name}/${p.type} parks in its own station`);
-      assert.equal(p.imported, true, `${c.name}/${p.type} uses a real model, never the procedural silhouette`);
+      // The Devastator is the detailed ported airframe, not a supplied GLB, so it carries
+      // the devastator flag instead of the imported one; both are real models either way.
+      assert.equal(
+        p.imported || p.devastator,
+        true,
+        `${c.name}/${p.type} uses a real model, never the procedural silhouette`,
+      );
       assert.ok(MODEL_NAME[p.type].test(p.name), `${c.name}/${p.type} is the right model: ${p.name}`);
     }
   }

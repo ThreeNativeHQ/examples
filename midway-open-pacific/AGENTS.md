@@ -51,11 +51,13 @@ Do not claim desktop, Android or iOS until a `--target` playtest has run.
 ## Deck crew
 
 `src/render/deck-crew.ts` exports `loadDeckCrew(ctx)` and the `DeckCrew` class (`.group`,
-`.sailors`, `.update(dt)`, `.dispose()`). It instances one rigged sailor per flight-deck station —
-twelve, each with a real job (plane director, two chockmen at the main wheels, plane captain at the
-engine, ordnanceman at the bomb rack, fuel detail, arresting-gear crew, deck talker, safety
-observer, three handlers) — each with its own clip, start phase, playback rate and a cloth helmet
-coloured for its trade. Two rules:
+`.sailors`, `.update(dt, clearTarget)`, `.dispose()`). It instances one rigged figure per
+flight-deck station — twelve, each with a real job (plane director, two chockmen at the main
+wheels, plane captain at the engine, ordnanceman at the bomb rack, fuel detail, arresting-gear
+crew, deck talker, safety observer, two handlers, walkaround pilot). The director stations use the
+yellow director rig and the pilot his own rig — he walks to the cockpit side and boards (hides)
+when the deck run starts. The ten sailors keep their trade cap-bands; the hero rigs arrive in
+their own marked uniforms. Each figure has its own clip, start phase and playback rate. Three rules:
 
 - The rig's height is a pipeline constant (`SOURCE_HEIGHT = 1.83`), not `SkeletalMesh3D`'s `size`:
   that option measures to the crown **bone**, which stops in the middle of the skull, and asking it
@@ -63,6 +65,10 @@ coloured for its trade. Two rules:
 - Playback rate is applied to each sailor's own `dt` in `update()`, never to the action's
   `timeScale`, because `AnimationPlayer`'s stride pass rewrites an in-place clip's `timeScale` back
   to 1 on every frame even when `strideSync: false`.
+- Called-away men walk, never slide: `update()` switches them to the walk cycle, faces them along
+  travel the way the chockmen's station yaws already face, and moves them at their own
+  stride-measured ground speed times a 1.35 launch hustle, restoring duty clip, phase and yaw on
+  arrival. The talker stands idle — the walk cycle played in place was the moonwalk.
 
 ## Imported fleet
 
@@ -138,7 +144,9 @@ Three rules, each paid for with a wrong-looking model:
   Keep all 24,856 torpedo triangles; a 3,000-triangle reduction shredded its fins.
 
 Aircraft export nine clips through `articulate-aircraft.py`. Neutral transforms remain identity;
-wing hinges are fitted to the actual cut section and dihedral. TBD's source has no main gear:
+wing hinges are fitted to the actual cut section and dihedral. The ported TBD is procedural, not a
+GLB: it spins its visible propeller group directly and rides its blur disc on that group the way
+the Douglas rides its pivot, sized from the built tip radius rather than a static bounding box. TBD's source has no main gear:
 added wheels fold below the wing skin, with attachment height measured by raycast.
 `node tools/check-asset-polish.mjs` checks all three people and aircraft animation contracts.
 `tools/asset-viewer.html` provides a WebGPU orthographic review on the Vite dev server.
@@ -195,6 +203,32 @@ fitted to, with **not found** written wherever no source gives one.
 - `bash tools/capture-lock.sh node tools/capture-sortie-runs.mjs` — flies one recon and one carrier
   strike from the airborne start to a recovered debrief with keys only and nothing injected, and
   fails if either takes more than twelve simulated minutes.
+- `bash tools/capture-lock.sh node tools/capture-crash.mjs` — destroys the player's aircraft in the
+  air and captures the fall, the impact and the report, asserting that the debrief never opens above
+  the sea.
+
+## Losing the aircraft
+
+A destroyed player aircraft is not a modal. `Battle.crashPlayer` puts it into `mode: "crashing"` and
+the engine's `FlightModel` integrates the fall under the same `DESTROYED_MODIFIERS` every shot-down
+AI aircraft uses — dead engine, no lift, no control authority — burning all the way down. At the
+surface it becomes `mode: "wreck"`: the airframe is hidden under its own splash, the camera stops at
+the water and backs off to watch it, and only after the settle does `lose()` open the after-action
+report. Three rules hold this together:
+
+- **The simulation keeps stepping through the settle.** The clock stops with `status === "lost"`, so
+  a debrief opened at the moment of impact freezes the splash mid-animation instead of playing it.
+- **The wreck takes no orders.** `Midway.action` returns for `crashing` and `wreck`, and the death
+  cam leaves the cockpit for the chase view, so the player watches the aircraft go in the way they
+  watch the ones they shoot down.
+- **Sound is state, not a stinger.** `engineSeize` fires at the kill; from then on the engine bank
+  is silent, `propWindmill` and the slipstream carry the dive, `fuelFire` is welded to the player's
+  own mesh, and `aircraftCrash` belongs to the sea. Nothing in that chain is scripted per frame.
+
+The wingman reports the damage he can see from his own aircraft — smoke, streaming fuel, flame, a
+dying engine, and finally the dive — as `R26`–`R30` in `src/sim/radio-script.ts`, one call at a time
+behind an eleven-second cooldown and only while `wingmanNear()` finds a squadron aircraft still
+flying alongside. An empty sky says nothing.
 
 ## Verify
 
@@ -223,6 +257,7 @@ bash tools/capture-lock.sh node tools/capture-deck.mjs
 bash tools/capture-lock.sh node tools/capture-fleet.mjs
 bash tools/capture-lock.sh node tools/capture-sortie.mjs
 bash tools/capture-lock.sh node tools/capture-sortie-runs.mjs
+bash tools/capture-lock.sh node tools/capture-crash.mjs
 bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/cli.js \
   --scenario playtests/launch.playtest.json --url http://127.0.0.1:5199 --browser-recipe webgpu --headed --timeout 45000
 ```

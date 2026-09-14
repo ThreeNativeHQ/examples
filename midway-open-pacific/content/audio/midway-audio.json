@@ -1108,6 +1108,31 @@
       ]
     },
     {
+      "id": "engine-seize",
+      "file": "audio/engine-seize.ogg",
+      "seconds": 5,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "An aircraft radial piston engine destroyed in flight, combustion breaking into violent uneven misfires and metallic knocking, a harsh mechanical seizure and then only the propeller turning in the airflow, no explosion and no music. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "An aircraft radial piston engine destroyed in flight, combustion breaking into violent uneven misfires and metallic knocking, a harsh mechanical seizure and then only the propeller turning in the airflow, no explosion and no music. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 5,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "1feda6616f25fb58187719a95b0228ae959af0356c21a9f2b695242321bdfa6a",
+          "outputHash": "6283c32f6238cbd5f1e0d1faab3f5df6b04a38178e4ae891e811a32b3f5f2d99",
+          "bytes": 60668
+        }
+      ]
+    },
+    {
       "id": "prop-windmill",
       "file": "audio/prop-windmill.ogg",
       "seconds": 8,
@@ -3103,6 +3128,128 @@
           "sourceHash": "78ec6f7a84fa57ca2b392ee907e127a8149a4766ac6f56adf7923a2cce3bb743",
           "outputHash": "2383f0ff68f94d598b0d03b152e460feec424d9ef929587238cbeabe0aea7184",
           "bytes": 53456
+        }
+      ]
+    },
+    {
+      "id": "R26",
+      "slug": "r26",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. You're hit — smoke coming from your engine. How does she handle?",
+      "substitutions": {},
+      "file": "audio/voice/r26.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "CHo5byWzqFMzEXl8NRX9",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "07d374befd3072741986c310926e9e48cbbb9b1d6a0bfb84442f79a5eaed0726",
+          "outputHash": "b9cbfcd632cc5566dcc2464bf1e0eaa68b50e8fefbe6e80868f633fa19641a8d",
+          "bytes": 55429
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": "uP5xD1VCtmrET0k4JlE4",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "5e1f15f65be2e4b35b5bf4433b9cbeadfea69e916561b5f9304b6087e57e81a5",
+          "outputHash": "809419c7b7e9668b2c70fa9c81eef7b4c2016c1d63b4c3353cb3a415cf8c2495",
+          "bytes": 47446
+        }
+      ]
+    },
+    {
+      "id": "R27",
+      "slug": "r27",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. You're streaming fuel. Get her on a course for home while she still flies.",
+      "substitutions": {},
+      "file": "audio/voice/r27.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "2pc76mlBrPl9cwu0AwMz",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "c276ed88deeb61bcbe2397e4b7f95e641c396f31b7d4d15a65b3a7208fa3e16f",
+          "outputHash": "62a3354fa6d1b7bf55938615520ea4175ffe7a85f3bfddf2eaeb7ae7567f901d",
+          "bytes": 64138
+        }
+      ]
+    },
+    {
+      "id": "R28",
+      "slug": "r28",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three. You're burning! Get out of her!",
+      "substitutions": {},
+      "file": "audio/voice/r28.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "C1eMOcc71DmVe5n76BMR",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "cb02d9e17b242643feda6915838da4d2ae2e9f4226112f152714e95e51dca9be",
+          "outputHash": "67bf2b4b75765adaa9b1f517286fa94180cb64ee21b1ceb6acff0b711b6ce2b3",
+          "bytes": 38566
+        }
+      ]
+    },
+    {
+      "id": "R29",
+      "slug": "r29",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three to Enterprise. Lead is hit hard and losing power. I'm staying with him.",
+      "substitutions": {},
+      "file": "audio/voice/r29.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "zUX9pIkqW6P3dI7ZwbWL",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "648eb96cdbf8ce5112d1fb5fb61f5aa2b158a95f3c69af4b90d6d8888e08225c",
+          "outputHash": "683782ea1a9b3283873faea3acf5547ec378df2a1d7005cf51cfc5ddccc3e141",
+          "bytes": 71150
+        }
+      ]
+    },
+    {
+      "id": "R30",
+      "slug": "r30",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three to Enterprise. Lead is going down. Marking the position.",
+      "substitutions": {},
+      "file": "audio/voice/r30.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "hX3W3Cg1h4kk6tP8wfib",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "837504d076972f2455bbf6fff82ddcd6417f0adc75d1ee17cc965b9c837c0a15",
+          "outputHash": "0949381c26557d8c2a6adc911c38184a154fb090a35baa8f8bb64c4d585d2b6b",
+          "bytes": 60347
+        }
+      ]
+    },
+    {
+      "id": "R31",
+      "slug": "r31",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. You're trailing oil from the engine. Watch your temperature.",
+      "substitutions": {},
+      "file": "audio/voice/r31.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "wNSGcOgLLLadIMmiRS4g",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "58ae4aa02c76e39976394ce186836f774880296fae7267c8ff4e3d3c458a5a24",
+          "outputHash": "2f7c4da0d7b77ede357c2f0845d6e1d274563c6c02b4f3c07238e29f69077553",
+          "bytes": 52578
         }
       ]
     },

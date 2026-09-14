@@ -376,7 +376,7 @@ const DECK_FRAME = { x: 0, y: 0, z: 0, heading: 0, speed: 0, length: 0, width: 0
 const DECK_CONTROLS = { pitch: 0, rudder: 0 };
 
 /** A destroyed aircraft: no power, no lift, no control authority. The engine integrates the fall. */
-const DESTROYED_MODIFIERS = Object.freeze({ power: 0, lift: 0, drag: 0, roll: 0, controls: 0 });
+export const DESTROYED_MODIFIERS = Object.freeze({ power: 0, lift: 0, drag: 0, roll: 0, controls: 0 });
 
 /**
  * One aircraft's engine flight, built on first use. Everything the engine requires is finite before

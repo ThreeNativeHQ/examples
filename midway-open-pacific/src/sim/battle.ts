@@ -1,6 +1,6 @@
 /** Pure deterministic game state. Rendering, audio and browser APIs stay outside this module. */
 import { updateGunnery, updateEvasion } from "./gunnery.js";
-import { chooseCarrierMission, rearGunner, strikeContact, updateTacticalAircraft } from "./tactics.js";
+import { chooseCarrierMission, DESTROYED_MODIFIERS, rearGunner, strikeContact, updateTacticalAircraft } from "./tactics.js";
 import {
   aircraftHit,
   aircraftWorld,
@@ -1160,6 +1160,35 @@ export class Battle {
       flags.r13 = true;
       this.voice("R13", { valid: () => (this.player.damage?.engine?.integrity ?? 1) < 0.75 });
     }
+    // The wingman is the only crew who can see the player's aircraft from outside. He reports what
+    // is visible from his position — smoke, streaming fuel, flame, a dying engine — in the order a
+    // section leader would want to hear it, one call at a time and never twice for the same state.
+    const dmg = p.damage;
+    if (dmg && p.mode === "flight" && this.time > (flags.wingDamageNext ?? 0) && this.wingmanNear()) {
+      let fire = 0;
+      for (const zone of DAMAGE_ZONES) fire = Math.max(fire, dmg[zone].fire);
+      // Every call names something the wingman can actually see on the aircraft: the flame, the
+      // smoke a damaged engine trails, the fuel streaming from a holed tank, the oil from the
+      // engine. Each threshold is the one the renderer draws that effect at.
+      const fuelLeak = Math.max(dmg.leftWing.leak, dmg.rightWing.leak, dmg.fuselage.leak);
+      const crippled = p.engineCut === true || dmg.engine.integrity < 0.25;
+      const call = !flags.r28 && fire > 0.12
+        ? "R28"
+        : !flags.r29 && crippled
+          ? "R29"
+          : !flags.r27 && fuelLeak > 0.12
+            ? "R27"
+            : !flags.r31 && dmg.engine.leak > 0.2
+              ? "R31"
+              : !flags.r26 && dmg.engine.integrity < 0.75
+                ? "R26"
+                : null;
+      if (call) {
+        flags[call.toLowerCase()] = true;
+        flags.wingDamageNext = this.time + 11;
+        this.voice(call, { valid: () => this.player.mode === "flight" && this.wingmanNear() });
+      }
+    }
     if (!flags.r14 && p.fuel < 22) {
       flags.r14 = true;
       this.voice("R14", { valid: () => this.player.fuel < 30 });
@@ -1197,6 +1226,17 @@ export class Battle {
       flags.r11 = true;
       this.voice("R11");
     }
+  }
+
+  /**
+   * A squadron aircraft close enough to see the player's and still flying. Without one, nobody is
+   * on that wing to make the call, and the radio stays quiet rather than voicing an empty sky.
+   */
+  wingmanNear(range = 3200): boolean {
+    const p = this.player;
+    return this.aircraft.some(
+      (a: Any) => a.wing === true && a.team === "us" && a.hp > 0 && a.mode === "flight" && a.tactic !== "ditching" && distance3(a, p) < range,
+    );
   }
 
   fx(type: string, p: Any, size = 1, underwater = false): void {
@@ -2202,7 +2242,7 @@ export class Battle {
     if (a.killCredited) return;
     a.killCredited = true;
     if (a === this.player) {
-      this.lose("Aircraft lost to battle damage.");
+      this.crashPlayer("Aircraft lost to battle damage.");
       return;
     }
     this.recordLoss(a);
@@ -2447,14 +2487,80 @@ export class Battle {
     return this.facilities.length > 0 && baseAviationLost(this.facilities);
   }
 
-  lose(reason: string): void {
+  /**
+   * A destroyed player aircraft goes down the way every other one does: dead stick, no lift and no
+   * control authority, trailing its engine fire, until it meets the sea. The debrief is the report
+   * of a crash that already happened, so it waits for the impact rather than interrupting it.
+   */
+  crashPlayer(reason: string): void {
+    const p = this.player;
+    if (this.status !== "playing" || p.mode === "crashing") return;
+    if (p.mode !== "flight") {
+      this.lose(reason);
+      return;
+    }
+    p.mode = "crashing";
+    p.crashAge = 0;
+    p.hp = 0;
+    p.throttle = 0;
+    p.autopilot = false;
+    p.landingAssist = null;
+    p.engineCut = true;
+    this.crashReason = reason;
+    if (p.damage) p.damage.engine.fire = Math.max(0.7, p.damage.engine.fire);
+    this.fx("explosion", p, 1.4);
+    // The engine dies first and the airframe cracks with it; the crash cue itself belongs to the
+    // sea, seconds later. Everything between is the slipstream, the windmilling prop and the fire.
+    this.event("engineSeize", { cue: "engineSeize", distance: 0, at: { x: p.x, y: p.y, z: p.z } });
+    this.event("damage");
+    this.event("notice", { text: "AIRCRAFT LOST — GOING DOWN" });
+    this.say("REAR GUNNER", "She's finished! We're going in — brace!", true);
+    if (this.wingmanNear()) this.voice("R30");
+  }
+
+  crashReason = "";
+
+  /** The fall itself: the engine integrates it, and the impact ends the sortie. */
+  private updateCrash(dt: number): void {
+    const p = this.player;
+    p.crashAge = (p.crashAge || 0) + dt;
+    // A steady aileron keeps the wreck turning as it falls rather than gliding straight down.
+    p.aileron = 1;
+    this.playerFlight.step(dt, { autopilot: true, pitch: -0.35, rudder: 0, turn: 0 }, DESTROYED_MODIFIERS);
+    if (p.y > 0.6 && p.crashAge < 30) return;
+    // In the water. The sortie is over, but the report waits for the splash to be seen: the
+    // simulation keeps running through the settle so the impact animates instead of freezing
+    // under the debrief.
+    p.y = 0;
+    p.mode = "wreck";
+    p.crashSettle = 0;
+    p.vx = 0;
+    p.vy = 0;
+    p.vz = 0;
+    p.speed = 0;
+    this.fx("splash", { ...p, y: 0 }, 3);
+    this.fx("explosion", { ...p, y: 1 }, 1.6);
+    this.event("explosion", { distance: 0, at: { x: p.x, y: 0, z: p.z }, material: "air" });
+    this.event("splash", { distance: 0, at: { x: p.x, y: 0, z: p.z }, fragments: true });
+  }
+
+  /** `blast` is the loss's own explosion; a crash that already hit the sea has sounded its own. */
+  /** The seconds between the splash and the after-action report. */
+  private updateWreck(dt: number): void {
+    const p = this.player;
+    p.crashSettle = (p.crashSettle || 0) + dt;
+    p.y = 0;
+    if (p.crashSettle >= 2.2) this.lose(this.crashReason || "Aircraft lost.", false);
+  }
+
+  lose(reason: string, blast = true): void {
     if (this.status !== "playing") return;
     if (isShort(this.sortie) && !this.sortie.result) this.sortie.result = this.snapshotResult("lost", this.home);
     else if (this.sortie.assignment === "operation" && !this.sortie.result)
       concludeOperation(this.sortie, { state: "defeat", reason }, this.time);
     this.status = "lost";
     this.reason = reason;
-    this.event("explosion");
+    if (blast) this.event("explosion");
     this.fx("explosion", this.player, 2.5);
   }
 
@@ -3204,6 +3310,14 @@ export class Battle {
   updatePlayer(dt: number, input: Any): void {
     const p = this.player;
     if (p.mode === "spectator") return;
+    if (p.mode === "crashing") {
+      this.updateCrash(dt);
+      return;
+    }
+    if (p.mode === "wreck") {
+      this.updateWreck(dt);
+      return;
+    }
     if (p.mode === "flight") {
       stepDamage(p, dt);
       if (p.hp <= 0) {
@@ -3498,7 +3612,7 @@ export class Battle {
     if (p.speed > 177 || Math.abs(p.gforce) > 7.5) {
       p.hp = Math.max(0, p.hp - dt * (Math.max(0, p.speed - 177) * 0.2 + Math.max(0, Math.abs(p.gforce) - 7.5) * 2));
       if (p.hp <= 0) {
-        this.lose("Structural failure. Reduce airspeed and use gentler control inputs.");
+        this.crashPlayer("Structural failure. Reduce airspeed and use gentler control inputs.");
         return;
       }
     }

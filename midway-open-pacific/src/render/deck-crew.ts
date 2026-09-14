@@ -1,12 +1,13 @@
 /**
  * The flight-deck party around the player's aircraft.
  *
- * One rigged sailor is loaded once and instanced per station. A carrier deck is not a crowd of
- * identical figures: every man here has a job, stands where that job puts him relative to the
- * aircraft, wears his trade's cap-band colour, and runs his own clip at his own phase and rate, so
- * no two are in step. Roles follow 1942 US carrier practice — plane director ahead of the nose,
- * chockmen at the main wheels, plane captain at the engine, ordnance under the wing, fuel and
- * arresting-gear details standing clear of the launch path.
+ * One rigged figure is loaded once per uniform and instanced per station. A carrier deck is not
+ * a crowd of identical figures: every man here has a job, stands where that job puts him relative
+ * to the aircraft, and runs his own clip at his own phase and rate, so no two are in step. Roles
+ * follow 1942 US carrier practice — the yellow-shirted plane director ahead of the nose, chockmen
+ * at the main wheels, plane captain at the engine, ordnance under the wing, fuel and
+ * arresting-gear details standing clear of the launch path, and the pilot walking his aircraft
+ * before he boards it.
  */
 import { SkeletalMesh3D, type ICtx } from "@threenative/core";
 import * as T from "three";
@@ -24,13 +25,20 @@ const CLIPS = [
   "crew.walk",
 ] as const;
 
-type Clip = (typeof CLIPS)[number];
+/** Clips on the director and pilot rigs, built by tools/import-people.sh from the same skeleton. */
+const HERO_CLIPS = ["gesture", "idle", "walk"] as const;
+
+type Rig = "crew" | "director" | "pilot";
 
 interface IStation {
   /** Shown in nothing; it documents why the man is standing there. */
   readonly job: string;
-  readonly clip: Clip;
-  /** Cap-band colour, the trade marking a deck hand is actually recognised by. */
+  /** Which uniform stands here: the sailor party, the yellow director, or the pilot. */
+  readonly rig: Rig;
+  /** Duty clip on that rig: a `crew.*` name for sailors, gesture/idle for the hero rigs. */
+  readonly clip: string;
+  /** Cap-band colour, the trade marking a deck hand is actually recognised by. Sailors only:
+   * the director and pilot arrive in their own marked uniforms. */
   readonly band: number;
   /** Metres in the aircraft's frame: +x starboard, -z ahead of the nose. */
   readonly x: number;
@@ -49,19 +57,21 @@ const WHITE = 0xb9bcb4;
 
 const STATIONS: readonly IStation[] = [
   // The launch spot itself.
-  { job: "plane director", clip: "crew.signal", band: YELLOW, x: -4.6, z: -7.2, yaw: Math.PI },
-  { job: "chockman, port main", clip: "crew.chock", band: BLUE, x: -2.6, z: -0.2, yaw: 1.9 },
-  { job: "chockman, starboard main", clip: "crew.chock", band: BLUE, x: 2.6, z: -0.2, yaw: -1.9 },
-  { job: "plane captain, engine", clip: "crew.service", band: BROWN, x: -1.9, z: -3.7, yaw: 1.3 },
-  { job: "ordnanceman, bomb rack", clip: "crew.service", band: RED, x: 2.5, z: 0.9, yaw: -1.2 },
+  { job: "plane director", rig: "director", clip: "gesture", band: YELLOW, x: -4.6, z: -7.2, yaw: Math.PI },
+  { job: "chockman, port main", rig: "crew", clip: "crew.chock", band: BLUE, x: -2.6, z: -0.2, yaw: 1.9 },
+  { job: "chockman, starboard main", rig: "crew", clip: "crew.chock", band: BLUE, x: 2.6, z: -0.2, yaw: -1.9 },
+  { job: "plane captain, engine", rig: "crew", clip: "crew.service", band: BROWN, x: -1.9, z: -3.7, yaw: 1.3 },
+  { job: "ordnanceman, bomb rack", rig: "crew", clip: "crew.service", band: RED, x: 2.5, z: 0.9, yaw: -1.2 },
   // Standing clear of the launch path.
-  { job: "fuel detail", clip: "crew.wait", band: PURPLE, x: -8.4, z: 4.6, yaw: 2.5 },
-  { job: "arresting-gear crew", clip: "crew.wait", band: GREEN, x: 8.8, z: 9.4, yaw: -2.4 },
-  { job: "deck talker", clip: "crew.walk", band: WHITE, x: -10.2, z: -9.5, yaw: 0.25 },
-  { job: "safety observer", clip: "crew.idle", band: WHITE, x: 10.1, z: -6.2, yaw: -1.6 },
-  { job: "handler, forward park", clip: "crew.idle", band: BLUE, x: -6.8, z: 13.4, yaw: 2.9 },
-  { job: "handler, respot", clip: "crew.signal", band: YELLOW, x: 5.4, z: 15.8, yaw: 3.5 },
-  { job: "handler, tail walker", clip: "crew.wait", band: BLUE, x: -3.2, z: 18.1, yaw: 3.1 },
+  { job: "fuel detail", rig: "crew", clip: "crew.wait", band: PURPLE, x: -8.4, z: 4.6, yaw: 2.5 },
+  { job: "arresting-gear crew", rig: "crew", clip: "crew.wait", band: GREEN, x: 8.8, z: 9.4, yaw: -2.4 },
+  // The talker stands at his phone box: idle, never the walk cycle in place.
+  { job: "deck talker", rig: "crew", clip: "crew.idle", band: WHITE, x: -10.2, z: -9.5, yaw: 0.25 },
+  { job: "safety observer", rig: "crew", clip: "crew.idle", band: WHITE, x: 10.1, z: -6.2, yaw: -1.6 },
+  { job: "handler, forward park", rig: "crew", clip: "crew.idle", band: BLUE, x: -6.8, z: 13.4, yaw: 2.9 },
+  { job: "handler, respot", rig: "director", clip: "gesture", band: YELLOW, x: 5.4, z: 15.8, yaw: 3.5 },
+  // The pilot walks his aircraft, then boards it when the deck run starts.
+  { job: "pilot, walkaround", rig: "pilot", clip: "idle", band: BROWN, x: -3.2, z: -2.9, yaw: 1.4 },
 ];
 
 /**
@@ -77,26 +87,47 @@ const CLEAR_OFFSET: Readonly<Record<number, readonly [number, number]>> = {
   4: [6.3, 1.1],
 };
 
-/** Height of the baked rig, set by tools/blender/rig-deck-crew.py and asserted by check-fleet. */
-const SOURCE_HEIGHT = 1.83;
+/** Where the pilot stands to board: at the cockpit side, in the aircraft's frame. */
+const PILOT_BOARD: readonly [number, number] = [-1.4, -2.5];
+/** Close enough to climb in: the pilot hides past this distance from the board point. */
+const BOARD_RADIUS = 0.4;
 
-let source: GLTF | undefined;
+/** Walk speed fallback, m/s, until a sailor's own stride report arrives. */
+const FALLBACK_WALK_SPEED = 1.4;
+/** The launch hustle: clearing men move and animate this much faster than a walk. */
+const CLEAR_URGENCY = 1.35;
+
+/** Baked rig heights, set by the rigging pipeline and asserted by check-fleet / check-asset-polish. */
+const RIG_HEIGHT: Readonly<Record<Rig, number>> = { crew: 1.83, director: 1.8, pilot: 1.78 };
+
+const WALK_CLIP: Readonly<Record<Rig, string>> = { crew: "crew.walk", director: "walk", pilot: "walk" };
+
+const sources: Record<Rig, GLTF | undefined> = { crew: undefined, director: undefined, pilot: undefined };
 let bandRing: T.TorusGeometry | undefined;
 
 export async function loadDeckCrew(ctx: Pick<ICtx, "assets" | "renderer">): Promise<void> {
-  source = await ctx.assets.model<GLTF>("/assets/deck-crew.glb");
+  const [crew, director, pilot] = await Promise.all([
+    ctx.assets.model<GLTF>("/assets/deck-crew.glb"),
+    ctx.assets.model<GLTF>("/assets/flight-deck-director.glb"),
+    ctx.assets.model<GLTF>("/assets/carrier-aircraft-pilot.glb"),
+  ]);
+  sources.crew = crew;
+  sources.director = director;
+  sources.pilot = pilot;
   const anisotropy = (ctx.renderer.raw as WebGPURenderer).getMaxAnisotropy();
-  source.scene.traverse((node) => {
-    if (!(node instanceof T.Mesh)) return;
-    for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
-      for (const value of Object.values(material)) {
-        if (value instanceof T.Texture) {
-          value.anisotropy = anisotropy;
-          value.needsUpdate = true;
+  for (const source of [crew, director, pilot]) {
+    source.scene.traverse((node) => {
+      if (!(node instanceof T.Mesh)) return;
+      for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+        for (const value of Object.values(material)) {
+          if (value instanceof T.Texture) {
+            value.anisotropy = anisotropy;
+            value.needsUpdate = true;
+          }
         }
       }
-    }
-  });
+    });
+  }
 }
 
 /**
@@ -118,6 +149,13 @@ interface ISailor {
   readonly station: IStation;
   readonly player: SkeletalMesh3D;
   readonly rate: number;
+  readonly walkClip: string;
+  /** duty: working the station; walking: travelling on the walk cycle. */
+  mode: "duty" | "walking";
+  /** m/s the walk clip covers at rate 1, read off the sailor's own stride report. */
+  walkSpeed: number;
+  /** Duty-clip time saved when called away, restored on return so phases never resync. */
+  dutyTime: number;
 }
 
 export class DeckCrew {
@@ -125,17 +163,18 @@ export class DeckCrew {
   /** Public so a capture run can prove the party is not twelve men moving as one. */
   readonly sailors: ISailor[] = [];
   private readonly base: T.Vector3[] = [];
-  /** 0 crowded round the aircraft, 1 stood clear at the deck edge; eased toward its target. */
-  private clear = 0;
 
   constructor() {
-    if (!source) throw new Error("Load the deck crew before constructing the flight-deck party.");
+    if (!sources.crew || !sources.director || !sources.pilot)
+      throw new Error("Load the deck crew before constructing the flight-deck party.");
+    const loaded: Record<Rig, GLTF> = { crew: sources.crew, director: sources.director, pilot: sources.pilot };
     this.group.name = "Flight-deck party";
     for (const [index, station] of STATIONS.entries()) {
+      const source = loaded[station.rig];
       const player = new SkeletalMesh3D({
         source: source.scene,
         clips: source.animations,
-        requiredClips: CLIPS,
+        requiredClips: station.rig === "crew" ? CLIPS : HERO_CLIPS,
         // No `size` here. Skin-aware normalisation measures to the crown *bone*, which stops in
         // the middle of the skull, so asking for 1.74m produced a 2.03m sailor. The rig is baked
         // to a known height instead, and scaled from it.
@@ -143,9 +182,10 @@ export class DeckCrew {
       });
       // Men are not issued in one size; vary height a little so the party does not read as a row
       // of copies. The source height is a pipeline constant, asserted by tools/check-fleet.mjs.
-      player.root.scale.setScalar((1.72 + ((index * 7) % 5) * 0.025) / SOURCE_HEIGHT);
+      player.root.scale.setScalar((1.72 + ((index * 7) % 5) * 0.025) / RIG_HEIGHT[station.rig]);
       player.root.position.set(station.x, 0, station.z);
       player.root.rotation.y = station.yaw;
+      player.root.userData.rig = station.rig;
       player.root.traverse((node) => {
         if (node instanceof T.Mesh) {
           node.castShadow = true;
@@ -153,7 +193,7 @@ export class DeckCrew {
         }
       });
       this.base.push(player.root.position.clone());
-      this.attachCapBand(player.root, station.band);
+      if (station.rig === "crew") this.attachCapBand(player.root, station.band);
       player.play(station.clip);
       // Two men on the same clip must never move as one. Phase comes from the action's start
       // time; rate is applied to the sailor's own `dt` in update() rather than to the action,
@@ -163,7 +203,7 @@ export class DeckCrew {
       const rate = 0.86 + ((index * 11) % 7) * 0.043;
       player.mixer.clipAction(clip).time = clip.duration * (((index * 5) % 12) / 12);
       this.group.add(player.root);
-      this.sailors.push({ station, player, rate });
+      this.sailors.push({ station, player, rate, walkClip: WALK_CLIP[station.rig], mode: "duty", walkSpeed: 0, dutyTime: 0 });
     }
   }
 
@@ -183,19 +223,58 @@ export class DeckCrew {
   }
 
   /**
-   * Advance the party's clips, easing the men around the aircraft out to the deck edge while
+   * Advance the party's clips, walking the men around the aircraft out to the deck edge while
    * `clearTarget` is 1 (the deck run) and back to their stations when it returns to 0.
+   *
+   * Called-away men travel on the walk cycle at the speed their own stride report measures, so
+   * feet match ground — never the old eased slide on a working clip. The pilot instead walks to
+   * the cockpit side and boards (hides) until the deck is safe again.
    */
   update(dt: number, clearTarget = 0): void {
-    this.clear += (clearTarget - this.clear) * Math.min(1, dt * 1.8);
-    if (Math.abs(clearTarget - this.clear) < 0.002) this.clear = clearTarget;
-    const eased = this.clear * this.clear * (3 - 2 * this.clear);
+    const clearing = clearTarget === 1;
     for (const [index, sailor] of this.sailors.entries()) {
-      sailor.player.update(dt * sailor.rate);
-      const offset = CLEAR_OFFSET[index];
-      if (!offset) continue;
+      const walking = sailor.mode === "walking";
+      const urgency = clearing && walking ? CLEAR_URGENCY : 1;
+      sailor.player.update(dt * sailor.rate * urgency);
+      if (walking && sailor.walkSpeed <= 0) {
+        const measured = sailor.player.stride.clipGroundSpeed;
+        if (measured > 0.05) sailor.walkSpeed = measured;
+      }
+      const root = sailor.player.root;
       const home = this.base[index];
-      sailor.player.root.position.set(home.x + offset[0] * eased, home.y, home.z + offset[1] * eased);
+      const isPilot = sailor.station.rig === "pilot";
+      let target: readonly [number, number] | null = null;
+      if (isPilot) target = clearing ? PILOT_BOARD : [home.x, home.z];
+      else {
+        const offset = CLEAR_OFFSET[index];
+        if (offset) target = clearing ? [home.x + offset[0], home.z + offset[1]] : [home.x, home.z];
+      }
+      // Stationary hands hold their duty clip; only the called-away travel.
+      if (!target) continue;
+      if (isPilot && !clearing) root.visible = true;
+      if (!root.visible) continue;
+      const dx = target[0] - root.position.x;
+      const dz = target[1] - root.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.06) {
+        if (!walking) {
+          sailor.dutyTime = sailor.player.mixer.clipAction(sailor.player.clip(sailor.station.clip)).time;
+          sailor.player.play(sailor.walkClip, { fade: 0.25 });
+          sailor.mode = "walking";
+        }
+        // The chockmen's station yaws fit facing +Z at atan2(dx, dz); walk the same way.
+        root.rotation.y = Math.atan2(dx, dz);
+        const speed = (sailor.walkSpeed > 0 ? sailor.walkSpeed : FALLBACK_WALK_SPEED) * sailor.rate * (clearing ? CLEAR_URGENCY : 1);
+        const step = Math.min(dist, Math.max(0, speed * dt));
+        root.position.x += (dx / dist) * step;
+        root.position.z += (dz / dist) * step;
+      } else if (walking) {
+        sailor.player.play(sailor.station.clip, { fade: 0.25 });
+        sailor.player.mixer.clipAction(sailor.player.clip(sailor.station.clip)).time = sailor.dutyTime;
+        root.rotation.y = sailor.station.yaw;
+        sailor.mode = "duty";
+        if (isPilot && clearing) root.visible = false;
+      }
     }
   }
 

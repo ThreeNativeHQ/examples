@@ -525,3 +525,38 @@ for (const r of completers) {
 assert.ok(lostCount >= 1, `the retained seeds must include a player-loss run, not only the completer: ${wingSummary}`);
 console.log(JSON.stringify({ naturalWingStrike: { bound: WING_BOUND, runs: wingReport, playerLost: lostCount, withinPacing: `${withinPacing} of ${completers.length}` } }));
 console.log(wingSummary);
+
+// The death dive: a destroyed player aircraft goes down like every other one, and the debrief is
+// the report of a crash that already happened rather than a modal thrown up in mid-air.
+const dive = airborne();
+dive.player.y = 1500;
+dive.damagePlane(dive.player, 9999, 'jp', 'fuselage');
+assert.equal(dive.player.hp, 0, 'a lethal hit must destroy the player aircraft');
+assert.equal(dive.player.mode, 'crashing', 'a destroyed player aircraft falls; it does not end the mission in the air');
+assert.equal(dive.status, 'playing', 'the debrief must wait for the impact');
+const diveStart = dive.player.y;
+tick(dive, 3);
+assert.ok(dive.player.y < diveStart - 30, `the wreck must actually fall (${diveStart} -> ${dive.player.y})`);
+assert.equal(dive.status, 'playing', 'still in the air, still playing');
+for (let i = 0; i < 60 * 60 && dive.status === 'playing'; i++) dive.step(1 / 60);
+assert.equal(dive.status, 'lost', 'the crash must end the sortie once it reaches the sea');
+assert.ok(dive.player.y <= 0.6, `the loss is declared at the surface, not above it (y=${dive.player.y})`);
+
+// The wingman reports what he can see from his own aircraft, and only while he is there to see it.
+const chatter = airborne();
+const wingPlane = { id: 'wing-test', team: 'us', wing: true, hp: 100, mode: 'flight', tactic: 'formation', x: chatter.player.x + 60, y: chatter.player.y, z: chatter.player.z + 40 };
+chatter.aircraft.length = 0;
+chatter.radio.length = 0;
+chatter.player.damage.engine.integrity = 0.5;
+chatter.updateRadio();
+assert.ok(!chatter.radio.some((r) => r.from === 'SCOUT THREE'), 'an empty sky must not call the damage in');
+chatter.aircraft.push(wingPlane);
+chatter.updateRadio();
+assert.ok(chatter.radio.some((r) => r.from === 'SCOUT THREE'), 'a wingman alongside must call the damage in');
+const first = chatter.radio.filter((r) => r.from === 'SCOUT THREE').length;
+chatter.player.damage.leftWing.fire = 0.5;
+chatter.updateRadio();
+assert.equal(chatter.radio.filter((r) => r.from === 'SCOUT THREE').length, first, 'the wingman does not machine-gun the radio inside one cooldown');
+chatter.time += 12;
+chatter.updateRadio();
+assert.ok(chatter.radio[0].text.includes('burning'), `fire is the call that outranks the rest: ${chatter.radio[0].text}`);

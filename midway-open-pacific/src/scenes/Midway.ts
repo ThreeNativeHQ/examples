@@ -32,6 +32,7 @@ export class Midway extends Scene<GameState, undefined> {
   overlay: string | null = null;
   wall = 0;
   ended = false;
+  private crashCam = false;
   started = false;
   keys = new Set<string>();
   mouse = { fire: false, looking: false, lx: 0, ly: 0 };
@@ -64,6 +65,24 @@ export class Midway extends Scene<GameState, undefined> {
     this.ctx = ctx;
     this.battle = new Battle();
     this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer, add: (object) => ctx.add(object) }, this.battle);
+    // Midway has one main camera and buffer-only draw hooks. Prepare world transforms once,
+    // then reuse them in shadow and reflection passes (which draw through their own cameras).
+    const scene = ctx.scene;
+    const savedAutoUpdate = scene.matrixWorldAutoUpdate;
+    if (savedAutoUpdate) {
+      const savedOnBeforeRender = scene.onBeforeRender;
+      const hadOwnHook = Object.hasOwn(scene, "onBeforeRender");
+      scene.matrixWorldAutoUpdate = false;
+      scene.onBeforeRender = (...args) => {
+        if (args[2] === ctx.camera) scene.updateMatrixWorld();
+        savedOnBeforeRender.apply(scene, args);
+      };
+      this.cleanups.push(() => {
+        if (hadOwnHook) scene.onBeforeRender = savedOnBeforeRender;
+        else Reflect.deleteProperty(scene, "onBeforeRender");
+        scene.matrixWorldAutoUpdate = savedAutoUpdate;
+      });
+    }
     this.hud = new Hud(this.battle, this.world);
     this.audio = new Soundscape(
       this.audioBuffers,
@@ -290,6 +309,11 @@ export class Midway extends Scene<GameState, undefined> {
       const mesh = this.world.meshes.get(s.id);
       if (mesh) emitters.push({ id: `fire-${s.id}`, key: "fuelFire", source: mesh, volume: Math.min(0.85, 0.35 + s.fire * 0.35) });
     }
+    // The player's own aircraft burns like any other wreck once it is going down, and the chase
+    // camera is right on top of it — the fire has to be heard there, not only on distant hulls.
+    const ownFire = p.mode === "wreck" ? 0 : Math.max(p.damage?.engine?.fire ?? 0, p.mode === "crashing" ? 0.7 : 0);
+    if (ownFire > 0.12 && this.world.playerMesh)
+      emitters.push({ id: "fire-player", key: "fuelFire", source: this.world.playerMesh, volume: Math.min(0.8, 0.3 + ownFire * 0.5) });
     const island = b.island;
     if (island) {
       const range = Math.sqrt(distance2(island, p));
@@ -322,6 +346,12 @@ export class Midway extends Scene<GameState, undefined> {
       this.nextAlbatross = this.wall + 9 + Math.random() * 12;
       this.audio.event({ cue: "albatross", at: { x: island.x + 150, y: 20, z: island.z + 150 } });
     }
+    // The pilot's own view ends with the aircraft. From the moment it is a wreck the camera watches
+    // it go in from outside, the way the player watches the ones they shoot down.
+    if ((p.mode === "crashing" || p.mode === "wreck") && !this.crashCam) {
+      this.crashCam = true;
+      if (this.world.cameraMode === 1) this.world.setCamera(0);
+    } else if (p.mode !== "crashing" && p.mode !== "wreck" && this.crashCam) this.crashCam = false;
     if ((b.status === "lost" || b.status === "won" || b.status === "debrief") && !this.ended) {
       this.ended = true;
       this.clearInput();
@@ -516,6 +546,8 @@ export class Midway extends Scene<GameState, undefined> {
     }
     if (this.paused || this.battle.status !== "playing") return;
     const p = this.battle.player;
+    // A wrecked aircraft takes no more orders; the keys go dead until it hits the water.
+    if (p.mode === "crashing" || p.mode === "wreck") return;
     switch (code) {
       case "KeyB":
         this.battle.releaseOrdnance();

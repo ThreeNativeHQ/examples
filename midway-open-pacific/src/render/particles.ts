@@ -140,10 +140,21 @@ export class CombatParticles {
   emitters = new Map<string, { carry: number; previous: IParticle; time: number }>();
   lastTime = 0;
   scene: T.Scene;
+  /** World position of the camera actually drawing a batch, filled per render, not per update. */
+  #renderCamera = new T.Vector3();
 
   constructor(scene: T.Scene) {
     this.scene = scene;
     scene.add(this.smokeBatch.mesh, this.glowBatch.mesh);
+    // Packing belongs to the draw, not the simulation: several fixed updates can run before one
+    // rendered frame, and a batch only needs the latest state at the moment it is drawn. The mesh's
+    // own render hook runs immediately before that draw with the real render camera.
+    const packBeforeDraw = (pool: ParticlePool, batch: any, sort: boolean) => (_r: any, _s: any, camera: T.Camera) => {
+      camera.getWorldPosition(this.#renderCamera);
+      this.writeBatch(pool, batch, this.#renderCamera, sort);
+    };
+    this.smokeBatch.mesh.onBeforeRender = packBeforeDraw(this.smoke, this.smokeBatch, true);
+    this.glowBatch.mesh.onBeforeRender = packBeforeDraw(this.glow, this.glowBatch, false);
   }
 
   spread(s = 1): number {
@@ -252,9 +263,23 @@ export class CombatParticles {
           this.continuous(a.id + zone + "smoke", pos, (35 + fire * 20) * detail, dt, (p) => this.emit(this.smoke, p, { ...vel, vx: vel.vx + this.spread(2), vy: vel.vy + 1 + fire, vz: vel.vz + this.spread(2), drag: 0.62, buoyancy: 0.28, life: 7 + this.random() * 4, size: 0.5 + fire * 0.9, growth: 2 + fire * 2, alpha: 0.47, color: [0.04, 0.038, 0.035] }));
           this.continuous(a.id + zone + "fire", pos, 38 * detail, dt, (p) => this.emit(this.glow, p, { vx: (a.vx || 0) * 0.35, vy: (a.vy || 0) * 0.35 + 1, vz: (a.vz || 0) * 0.35, life: 0.1 + this.random() * 0.1, size: 0.8 + fire * 1.5, aspect: 1.2, kind: 1, color: [0.95, 0.22, 0.025], alpha: 0.55, drag: 0.4, growth: 1 }));
         }
+        // A hurt engine smokes before it burns: a radial with holed cylinders trails grey-blue
+        // exhaust smoke, thinner and paler than a fire's near-black column. Without this the
+        // wingman's "smoke coming from your engine" was a call about nothing.
+        if (zone === "engine" && d.integrity < 0.8 && d.fire <= 0.02) {
+          const hurt = Math.min(1, (0.8 - d.integrity) / 0.7);
+          // Rate is set against the aircraft's own speed, not by eye: at ninety metres a second a
+          // trail needs a puff every metre or it reads as a string of separate blobs.
+          this.continuous(a.id + "enginesmoke", pos, (70 + hurt * 90) * detail, dt, (p) => this.emit(this.smoke, p, { ...vel, vx: vel.vx + this.spread(1.1), vy: vel.vy + 0.4 + hurt, vz: vel.vz + this.spread(1.1), drag: 0.7, buoyancy: 0.22, life: 3.6 + hurt * 2.4, size: 0.62 + hurt * 0.7, growth: 2.2 + hurt * 1.8, alpha: 0.3 + hurt * 0.16, color: [0.09, 0.09, 0.088] }));
+        }
         if (d.leak > 0.05) {
           const oil = zone === "engine";
-          this.continuous(a.id + zone + "leak", pos, (oil ? 13 : 28) * detail, dt, (p) => this.emit(this.smoke, p, { ...vel, vy: vel.vy - (oil ? 1 : 3), drag: 0.9, gravity: oil ? 1 : 2, life: oil ? 3.8 : 1.7, size: oil ? 0.55 : 0.17, growth: oil ? 1.25 : 0.7, aspect: oil ? 1 : 1.8, alpha: oil ? 0.24 : 0.2, color: oil ? [0.2, 0.24, 0.29] : [0.62, 0.69, 0.68] }));
+          // Fuel from a holed tank atomises into the slipstream: a pale vapour streamer off the
+          // wing that hangs for a couple of seconds, not the near-invisible drip this used to be.
+          // Oil stays heavy and dark, and falls away instead of trailing.
+          const leak = Math.min(1, d.leak);
+          const rate = oil ? 13 : 60 + leak * 120;
+          this.continuous(a.id + zone + "leak", pos, rate * detail, dt, (p) => this.emit(this.smoke, p, { ...vel, vx: vel.vx + (oil ? 0 : this.spread(0.7)), vy: vel.vy - (oil ? 1 : 0.6), vz: vel.vz + (oil ? 0 : this.spread(0.7)), drag: oil ? 0.9 : 0.72, gravity: oil ? 1 : 0.35, life: oil ? 3.8 : 2.4, size: oil ? 0.55 : 0.3 + leak * 0.34, growth: oil ? 1.25 : 2.4, aspect: oil ? 1 : 1.35, alpha: oil ? 0.24 : 0.15 + leak * 0.11, color: oil ? [0.2, 0.24, 0.29] : [0.78, 0.82, 0.84] }));
         }
       }
     }
@@ -303,8 +328,6 @@ export class CombatParticles {
       }
     }
     for (const [key, e] of this.emitters) if (b.time - e.time > 2) this.emitters.delete(key);
-    this.writeBatch(this.smoke, this.smokeBatch, camera, true);
-    this.writeBatch(this.glow, this.glowBatch, camera, false);
   }
 
   writeBatch(pool: ParticlePool, b: any, camera: T.Vector3, sort: boolean): void {

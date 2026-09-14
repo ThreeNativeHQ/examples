@@ -552,7 +552,7 @@ const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1)
 // 27 — no orphaned cues: every single cue in CUE_FILES is defined and recognized.
 {
   const definedCues = Object.keys(CUE_FILES);
-  assert.equal(definedCues.length, 77, `expected 77 catalog cues, got ${definedCues.length}`);
+  assert.equal(definedCues.length, 78, `expected 78 catalog cues, got ${definedCues.length}`);
 }
 
 // 28 — the TBD bank follows the torpedo loadout: its layers sound, the SBD bank stays silent,

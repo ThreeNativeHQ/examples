@@ -264,11 +264,15 @@ try {
   );
   await page.screenshot({ path: `${OUT}/tbd-chase.png` });
 
-  // LABELLED INJECTION: freeze the sim and set the exact control values the clips consume.
+  // LABELLED INJECTION: freeze the sim and set the exact control values the airframe consumes,
+  // then step the view itself. A paused scene feeds the animators dt 0, and the ported Devastator
+  // eases its surfaces over time rather than scrubbing a clip, so a frozen world never moves them
+  // — the world's own update is driven here instead, which leaves the simulation frozen.
   const inject = (state) =>
     page.evaluate((values) => {
       window.midway.paused = true;
       Object.assign(window.midway.battle.player, values);
+      for (let i = 0; i < 90; i++) window.midway.world.update(1 / 60, performance.now() / 1000, false);
     }, state);
   await inject({ rpm: 0, elevator: 0, controlAileron: 0, aileron: 0, rudder: 0, flapPos: 0, gearPos: 1, torpedo: 1 });
   await page.waitForTimeout(400);
@@ -281,12 +285,28 @@ try {
   const rig = await page.evaluate(() => {
     const m = window.midway.world.playerMesh;
     return {
-      propellerHidden: m.getObjectByName("propeller").visible === false,
+      // The blades stand down, never the pivot: the blur rides that same pivot, and hiding the
+      // whole group is what once drove the disc to be reparented onto the fuselage instead.
+      bladesHidden: m.getObjectByName("propeller_blades").visible === false,
+      pivotVisible: m.getObjectByName("propeller").visible === true,
       blurVisible: m.getObjectByName("Propeller motion blur").visible === true,
+      // A disc drawn anywhere but the shaft is a grey plate bolted to the airframe. Measure it.
+      blurOffShaft: (() => {
+        const V = m.position.constructor;
+        const blur = m.getObjectByName("Propeller motion blur").getWorldPosition(new V());
+        const shaft = m.getObjectByName("propeller").getWorldPosition(new V());
+        return +blur.distanceTo(shaft).toFixed(3);
+      })(),
+      blurOpacity: m.getObjectByName("Propeller motion blur").material.opacity,
       storeVisible: m.userData.torpedoLoad.visible === true,
     };
   });
-  assert.ok(rig.propellerHidden && rig.blurVisible, "the running propeller hands off to its blur");
+  assert.ok(
+    rig.bladesHidden && rig.pivotVisible && rig.blurVisible,
+    `the running propeller hands off to its blur: ${JSON.stringify(rig)}`,
+  );
+  assert.ok(rig.blurOffShaft < 0.05, `the blur disc stays on the propeller shaft: ${JSON.stringify(rig)}`);
+  assert.ok(rig.blurOpacity < 0.2, `the blur reads as a turning disc, not a plate: ${JSON.stringify(rig)}`);
   assert.ok(rig.storeVisible, "the torpedo store is visible while carried");
   await page.screenshot({ path: `${OUT}/tbd-articulation-injected.png` });
   await inject({ torpedo: 0, rpm: 0 });
