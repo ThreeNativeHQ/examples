@@ -71,6 +71,7 @@ import {
   classify,
   estimatePosition,
   isDelivered,
+  isStale,
   makeContact,
   mergeContact,
   STALE_SECONDS,
@@ -79,6 +80,18 @@ import {
   type Team,
 } from "./intel.js";
 import { shipClass } from "./catalog.js";
+import {
+  baseAviationLost,
+  damageFacility,
+  radarWarning,
+  radioDelivery,
+  repairPlan,
+  spreadFire,
+  stepFacility,
+  type Facility,
+  type FacilityKind,
+  type FacilityRates,
+} from "./facilities.js";
 import {
   AircraftFlight,
   airDensity,
@@ -182,6 +195,21 @@ const ASSIST_DISTANCE = 220;
 const ASSIST_THREAT_RANGE = 2500;
 /** Crew a hull of each class puts in the water, before the seeded draw varies it. */
 const SURVIVOR_CREW: Record<string, number> = { carrier: 420, cruiser: 200, destroyer: 140, sub: 40 };
+
+/** Midway's five facilities, one of each kind, as offsets in metres from the atoll centre. */
+const FACILITY_LAYOUT: Array<{ id: string; kind: FacilityKind; dx: number; dz: number; radius: number }> = [
+  { id: "midway-runway", kind: "airstrip", dx: 0, dz: 0, radius: 900 },
+  { id: "midway-stores", kind: "stores", dx: -1250, dz: 450, radius: 500 },
+  { id: "midway-radar", kind: "radar", dx: 1550, dz: -650, radius: 400 },
+  { id: "midway-radio", kind: "radio", dx: 950, dz: 1000, radius: 350 },
+  { id: "midway-seaplane", kind: "seaplane", dx: -2050, dz: -950, radius: 650 },
+];
+/** Per-second health lost while alight and regained by a crewed repair. */
+const FACILITY_BURN_RATE = 0.05;
+const FACILITY_REPAIR_RATE = 0.02;
+/** One facility's worth of repair work is earned per this many seconds, banked up to the cap. */
+const FACILITY_WORK_PER_SECOND = 1 / 15;
+const FACILITY_WORK_CAP = 3;
 
 /** Any surface escort, by class, never by name: destroyers and cruisers stand the screen. */
 function isEscort(s: Any): boolean {
@@ -520,6 +548,10 @@ export class Battle {
   airTorpedoes: Any[] = [];
   /** Boatloads in the water from sunk hulls; a recovered group leaves once emptied. */
   survivors: Survivors[] = [];
+  /** The atoll's individually hittable facilities: one of each kind, built by `setupFleet`. */
+  facilities: Facility[] = [];
+  /** Banked repair work, in facility-slots, capped at `FACILITY_WORK_CAP`. */
+  facilityWork = 0;
   effects: Any[] = [];
   /** What the player's own crew knows: their sightings, and the reports the fleet has passed them. */
   contacts = new Map<string, IReport>();
@@ -780,6 +812,17 @@ export class Battle {
     const mikuma: Any = add("Mikuma", "jp", "cruiser", -9650, -600, 1.75);
     mogami.support = true;
     mikuma.support = true;
+    this.facilities = FACILITY_LAYOUT.map((f) => ({
+      id: f.id,
+      kind: f.kind,
+      x: this.island.x + f.dx,
+      z: this.island.z + f.dz,
+      radius: f.radius,
+      health: 1,
+      burning: false,
+      repairProgress: 0,
+      repairBlocked: null,
+    }));
     this.setupSurfaceGroups();
   }
 
@@ -1248,6 +1291,7 @@ export class Battle {
       stores[pick] -= 1;
     }
     s.air.fuel = Math.max(0, s.air.fuel - fuel);
+    if (rounds > 0) this.event("explosion", { distance: distance3(this.player, s), at: { x: s.x, y: s.deckHeight ?? 15, z: s.z }, outcome: "secondary" });
   }
 
   /** One airframe that will never come home, charged to the deck that launched it. */
@@ -1373,6 +1417,8 @@ export class Battle {
     const { classification, confidence } = classify({ truth, range, random: this.random() });
     const identified = classification === truth;
     this.filed[team].set(target.id, this.time);
+    // A damaged Midway radio only slows the U.S. side's traffic; it is the delay's sole modifier.
+    const delay = observer.delay * (team === "us" && this.facilities.length ? radioDelivery(this.facilities) : 1);
     this.reports.push({
       ...makeContact({
         id: target.id,
@@ -1380,7 +1426,7 @@ export class Battle {
         observerId: observer.id,
         targetId: target.id,
         observedAt: this.time,
-        delay: observer.delay,
+        delay,
         x: target.x,
         z: target.z,
         heading: target.heading,
@@ -1421,6 +1467,7 @@ export class Battle {
       }
     }
     this.reports = waiting;
+    this.designateKnownCarrier();
   }
 
   /** A newer, vaguer report improves the position but cannot un-identify a hull already named. */
@@ -1489,11 +1536,26 @@ export class Battle {
         this.say("STRIKE CONTROL", "Your target is no longer eligible. Designate another contact with TAB.", true);
     }
     if (s.objective !== "pending") return;
+    this.designateKnownCarrier();
     // A submerged boat can surface again; its dive must not permanently end Surface Strike.
     if (!s.target && !this.ships.some((x: Any) => targetEligible(s.assignment, { ...x, surfaced: true }))) {
       s.objective = "unavailable";
       this.say("STRIKE CONTROL", "No eligible enemy ship remains. Return to the task force and report.", true);
     }
+  }
+
+  /**
+   * A carrier strike is pointed at the first delivered, fresh contact the crew has classified as a
+   * carrier. The trigger is the held sighting — a belief with a classification — never the hull's
+   * true identity or position, so a carrier nobody has reported is never designated.
+   */
+  designateKnownCarrier(): void {
+    const s = this.sortie;
+    if (s.assignment !== "strike" || s.target || s.objective !== "pending") return;
+    const sighting = this.targetContacts().find(
+      (c) => c.kind === "carrier" && !isStale(c, this.time, STALE_SECONDS),
+    );
+    if (sighting) this.designateTarget(sighting.id, false);
   }
 
   /** Freeze what actually came home, before the deck crew resets fuel, damage and stores. */
@@ -1649,7 +1711,7 @@ export class Battle {
     if (!prev && source === "visual" && s.kind === "carrier") {
       this.say("REAR GUNNER", `Carrier off the nose! ${s.name}, bearing ${String(Math.round((bearing(this.player, s) * 180) / Math.PI) % 360).padStart(3, "0")}. Press R to send the contact.`, true);
       this.voice("R04", { identity: s.id });
-      if (!this.target) this.designateTarget(s.id, false);
+      if (!this.target) this.target = s.id;
     }
   }
 
@@ -1817,6 +1879,7 @@ export class Battle {
       count: Math.max(10, Math.round(crew * (0.6 + this.random() * 0.4))),
     });
     this.fx("explosion", s, 5);
+    this.event("collapse", { distance: distance3(this.player, s), at: { x: s.x, y: 0, z: s.z } });
     this.say("BATTLE CONTROL", `${s.name} is going down.`, true);
     if (s.team === "us") this.voice("R15", { ship: radioShipName(s.name), identity: s.id });
     const credit = s.lastHostileHit;
@@ -1845,6 +1908,54 @@ export class Battle {
     if (s.impacts.length > MAX_IMPACTS) s.impacts.shift();
   }
 
+  /** The nearest facility whose footprint contains a weapon impact, or null over open water. */
+  facilityAt(p: Any): Facility | null {
+    let best: Facility | null = null;
+    let bestD = Infinity;
+    for (const f of this.facilities) {
+      const d = Math.hypot(p.x - f.x, p.z - f.z);
+      if (d <= f.radius && d < bestD) {
+        bestD = d;
+        best = f;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * One weapon's damage on the facility it actually landed on. `amount` is a 0..1 fraction of a whole
+   * structure, and the one seeded draw is the roll `damageFacility` needs to decide ignition.
+   */
+  hitFacility(f: Facility, amount: number, p: Any): void {
+    const dealt = clamp(amount, 0, 1);
+    const next = damageFacility(f, dealt, this.random());
+    this.facilities = this.facilities.map((x) => (x.id === f.id ? next : x));
+    this.event("facility", { kind: next.kind, damage: dealt });
+    this.fx("explosion", p, 1.6);
+  }
+
+  /**
+   * Fire, repair and the finite work budget. A single seeded draw gates `spreadFire` for the whole
+   * tick; `repairPlan` decides which damaged facilities a crew can reach, and only those receive the
+   * repair rate, so the atoll cannot rebuild itself for free. Unspent slots bank up to the cap.
+   */
+  updateFacilities(dt: number): void {
+    if (!this.facilities.length) return;
+    const rates: FacilityRates = { repair: FACILITY_REPAIR_RATE, burn: FACILITY_BURN_RATE };
+    this.facilities = spreadFire(this.facilities, dt, rates, this.random());
+    this.facilityWork = Math.min(FACILITY_WORK_CAP, this.facilityWork + FACILITY_WORK_PER_SECOND * dt);
+    const chosen = new Set(repairPlan(this.facilities, this.facilityWork, this.time).map((o) => o.id));
+    this.facilityWork -= chosen.size;
+    this.facilities = this.facilities.map((f) =>
+      stepFacility(f, dt, chosen.has(f.id) ? rates : { repair: 0, burn: rates.burn }),
+    );
+  }
+
+  /** Midway's air arm is lost only when both the airstrip and the seaplane route are gone. */
+  get baseAviationLost(): boolean {
+    return this.facilities.length > 0 && baseAviationLost(this.facilities);
+  }
+
   lose(reason: string): void {
     if (this.status !== "playing") return;
     if (isShort(this.sortie) && !this.sortie.result) this.sortie.result = this.snapshotResult("lost", this.home);
@@ -1870,6 +1981,7 @@ export class Battle {
     this.effects = this.effects.filter((f) => f.age < f.life);
     this.updateRescue(dt);
     this.updateShips(dt);
+    this.updateFacilities(dt);
     this.updatePlayer(dt, input);
     this.observeFuel();
     this.updateRecovery();
@@ -1902,7 +2014,13 @@ export class Battle {
     }
     if (this.time > 130 && !this.threatNotice) {
       this.threatNotice = true;
-      const near = this.aircraft.some((a) => a.team === "jp" && a.kind !== "fighter" && distance2(a, this.home) < 7000);
+      // Air warning is the radar's one job: its mean health sets how far a raid is picked up. It never
+      // names a ship or reports deck health, and one dead set of several only shortens the reach.
+      const warning = this.facilities.length ? radarWarning(this.facilities) : 1;
+      const reach = 7000 * warning;
+      const near =
+        warning > 0 &&
+        this.aircraft.some((a) => a.team === "jp" && a.kind !== "fighter" && distance2(a, this.home) < reach * reach);
       if (near) this.say("ENTERPRISE RADAR", "Inbound strike aircraft. Fighters, intercept before they reach the carriers.", true);
     }
     if (this.ships.filter((s) => s.kind === "carrier" && s.team === "us").every((s) => s.sunk)) this.lose("The U.S. carrier force has been lost.");
@@ -2318,7 +2436,13 @@ export class Battle {
   supportCourse(group: ISurfaceGroup, guide: Any): number {
     const route = group.route;
     if (!route) return wrap(guide.cruiseHeading ?? guide.heading);
-    if (guide.engine < SUPPORT_WITHDRAW_ENGINE) return wrap(route.withdrawBearing);
+    // Any damaged member turns the whole group for home: the sisters retire together, taking their
+    // hurt ship with them rather than leaving one to press on alone.
+    const damaged = [group.guideId, ...group.memberIds].some((id) => {
+      const m = this.byId(id);
+      return m && !m.sunk && m.engine < SUPPORT_WITHDRAW_ENGINE;
+    });
+    if (damaged) return wrap(route.withdrawBearing);
     const toDestination = Math.hypot(guide.x - route.destination.x, guide.z - route.destination.z);
     if (toDestination > SUPPORT_APPROACH_RADIUS)
       return Math.atan2(route.destination.x - guide.x, -(route.destination.z - guide.z));
@@ -2674,6 +2798,7 @@ export class Battle {
       if (p.gearClimbTime >= 1) {
         p.gear = false;
         p.autoGearPending = false;
+        this.event("gear");
         this.event("notice", { text: "POSITIVE CLIMB — GEAR RETRACTING · G FOR MANUAL CONTROL" });
       }
     }
@@ -2746,7 +2871,7 @@ export class Battle {
       landingAssist: null,
       throttle: 0,
     });
-    this.event("land");
+    this.event("land", { wire: true });
     this.say("LANDING SIGNAL OFFICER", "Wire caught. Power idle. Hold straight through arrestment.", true);
   }
 
@@ -2886,6 +3011,9 @@ export class Battle {
         this.damagePlane(nearest.a, b.damage ?? (b.owner === "player" ? 8 : 5), b.owner, nearest.zone, nearest.point, true);
         b.ttl = 0;
       }
+      if (!nearest && this.player.mode === "flight" && b.owner !== "player" && distance3(this.player, b) < 22) {
+        this.event("bulletNear", { at: { x: b.x, y: b.y, z: b.z } });
+      }
       if (!nearest && Math.min(prev.y, b.y) < 30) {
         for (const s of this.ships) {
           if (s.sunk || s.id === b.owner) continue;
@@ -2897,6 +3025,7 @@ export class Battle {
           }
           if (at.y > 0 && at.y <= top + 0.2 && overHull(at, s, 1)) {
             this.damageShip(s, 0.7, at, "strafe", b.team, { owner: b.owner });
+            this.event("damage", { distance: distance3(this.player, at), at: { x: at.x, y: at.y, z: at.z }, material: "steel" });
             b.ttl = 0;
             break;
           }
@@ -2904,6 +3033,7 @@ export class Battle {
       }
       if (b.y <= 0) {
         if (this.random() < 0.4) this.fx("splash", b, 0.18);
+        if (distance3(this.player, b) < 180) this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: 0, z: b.z }, fragments: true });
         b.ttl = 0;
       }
     }
@@ -2972,6 +3102,7 @@ export class Battle {
         const u = clamp(prev.y / (prev.y - t.y || 1), 0, 1);
         const entry = { ...t, x: lerp(prev.x, t.x, u), z: lerp(prev.z, t.z, u) };
         this.fx("splash", entry, 0.8);
+        this.event("splash", { distance: distance3(this.player, entry), at: { x: entry.x, y: 0, z: entry.z }, outcome: "torpedoEntry" });
         if (t.safe) {
           this.spawnTorpedo(entry, Math.atan2(t.vx, -t.vz), { aerial: true });
           if (t.owner === "player") this.event("notice", { text: "TORPEDO RUNNING — STRAIGHT COURSE / ARMING" });
