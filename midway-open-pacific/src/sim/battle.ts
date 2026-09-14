@@ -99,6 +99,7 @@ import {
   courseAuthority,
   rejoinCourse,
   stationTarget,
+  type FormationStation,
   steerToStation,
   type ICourseShip,
   type IHazard,
@@ -108,7 +109,6 @@ import {
   coverageLost,
   groupCourse,
   reformAfter,
-  type FormationStation,
   type Group,
 } from "./formation.js";
 
@@ -122,6 +122,31 @@ export const RECOVERY_DECK = 0.25;
 export const DECK_FAILED = 0.2;
 /** Impact records kept per ship for persistent damage visuals. */
 export const MAX_IMPACTS = 8;
+
+/** The supplied Midway atoll is an 8 km disc; the fringing reef is its rim, so one circle holds both. */
+const ATOLL_HAZARD_RADIUS = 4000;
+/** A guide samples this far ahead for the atoll when it plans the group's course. */
+const GROUP_LOOKAHEAD = 6000;
+/** Clearance kept from the reef, and the angular step used to search for a clear course. */
+const GROUP_MARGIN = 400;
+const GROUP_STEP = 0.1;
+/** Rudder rates, radians per second: carriers turn slower than escorts, as evasion already assumes. */
+const CARRIER_TURN = 0.02;
+const ESCORT_TURN = 0.045;
+/** Full speed is made once this far off station; the residual station-keeping lag is bounded by it. */
+const STATION_SLOW_RADIUS = 350;
+/** Separation lookahead and minimum passing distance for surface ships. */
+const SURFACE_LOOKAHEAD = 30;
+const MIN_SEPARATION = 900;
+/** A ship arcs back onto its station for this long after an evasion rather than resuming instantly. */
+const REJOIN_SECONDS = 8;
+
+/** A surface group: `formation.Group` plus the coverage its absent escorts have removed. */
+interface ISurfaceGroup extends Group {
+  coverageLost: number;
+  /** Set when an evasion ended and `reformAfter` still has to restore the held stations. */
+  reform: boolean;
+}
 
 /**
  * Every ship's geometry, in metres, resolved here so a `Battle` knows how big its world is before
@@ -1772,36 +1797,8 @@ export class Battle {
   strikeComplete = false;
 
   updateShips(dt: number): void {
-    // Formation identity, resolved lazily and once: a carrier guides its own group and each other
-    // hull takes the nearest friendly carrier as its guide. This is data on the hull; it moves
-    // nothing. A carrier's id is its group id, so `stationTarget` can find the guide by lookup.
-    for (const c of this.ships) if (c.kind === "carrier" && !c.groupId) c.groupId = c.id;
-    const SCREEN = [
-      { offsetX: 800, offsetZ: -300 },
-      { offsetX: -800, offsetZ: -300 },
-      { offsetX: 500, offsetZ: -1000 },
-      { offsetX: -500, offsetZ: -1000 },
-      { offsetX: 0, offsetZ: -1300 },
-    ];
-    for (const s of this.ships) {
-      if (s.kind === "carrier" || s.groupId) continue;
-      let guide: Any = null;
-      let nearest = Infinity;
-      for (const c of this.ships) {
-        if (c.kind !== "carrier" || c.team !== s.team || c.sunk) continue;
-        const d = distance2(s, c);
-        if (d < nearest) {
-          nearest = d;
-          guide = c;
-        }
-      }
-      if (!guide) continue;
-      const taken = this.ships.filter((o: Any) => o !== s && o.groupId === guide.id && o.station).length;
-      const slot = SCREEN[taken % SCREEN.length];
-      s.groupId = guide.id;
-      s.station = { shipId: s.id, groupId: guide.id, offsetX: slot.offsetX, offsetZ: slot.offsetZ };
-    }
-    const hazards = [{ x: this.island.x, z: this.island.z, radius: 4200 }];
+    const surface = this.ships.filter((s: Any) => !s.sunk && s.kind !== "sub");
+    const hazards = [{ x: this.island.x, z: this.island.z, radius: ATOLL_HAZARD_RADIUS }];
     for (const s of this.ships) {
       if (s.sunk) {
         s.sink = Math.min(1, s.sink + dt * 0.012);
@@ -1810,34 +1807,9 @@ export class Battle {
       }
       updateEvasion(this, s, dt);
       s.speed = s.baseSpeed * (0.35 + 0.65 * s.engine);
-      // A station-kept escort holds its present heading in the evader's cruise slot, so the
-      // non-evading half of `updateEvasion` cannot pull the other way and cancel the station turn
-      // applied below. While an evasion is live the slot is left alone, so the evasion is untouched.
-      if (s.station && s.kind !== "sub" && !((s.evadeUntil || 0) > this.time)) s.cruiseHeading = s.heading;
-      // An escort that has a station and is not evading steers for it in the guide's moving frame.
-      // Evasion above keeps priority: while `evadeUntil` is in the future this is skipped entirely.
-      // A submarine runs its own attack logic and is never station-kept.
-      if (s.station && s.kind !== "sub" && !((s.evadeUntil || 0) > this.time)) {
-        const guide = this.ships.find((o: Any) => o.id === s.groupId);
-        if (guide) {
-          const target = stationTarget(guide.x, guide.z, guide.heading, s.station);
-          const limits = { maxSpeed: s.baseSpeed * (0.35 + 0.65 * s.engine), turnRate: 0.045, slowRadius: 700 };
-          const steer = steerToStation(s, target, dt, limits);
-          // Avoidance is applied to the desired station heading, never as a snap, so a close
-          // contact bends the track while the turn-rate limit still bounds every step.
-          const avoid = avoidanceHeading(s, this.ships.filter((o: Any) => o !== s && !o.sunk), 45, 350);
-          s.heading = wrap(avoid === null ? steer.heading : avoid);
-          s.speed = steer.speed;
-        }
-      }
-      // The guide keeps clear of the atoll: if its track would be inside the reef within the next
-      // ninety seconds it turns away, rate-limited, rather than leading the formation aground.
-      if (s.kind === "carrier") {
-        const track = forward(s.heading);
-        if (!clearOfHazard(s.x + track.x * s.speed * 90, s.z + track.z * s.speed * 90, hazards, 600)) {
-          s.heading = wrap(s.heading + clamp(angleDelta(wrap(bearing(s, this.island) + Math.PI), s.heading), -0.02 * dt, 0.02 * dt));
-        }
-      }
+      // A submarine runs its own attack logic and is never station-kept; every surface hull hands
+      // its helm to the group, where station keeping, course authority and evasion all resolve.
+      if (s.kind !== "sub") this.steerSurface(s, dt, surface, hazards);
       const f = forward(s.heading);
       s.x += f.x * s.speed * dt;
       s.z += f.z * s.speed * dt;
@@ -1873,6 +1845,205 @@ export class Battle {
         continue;
       }
       updateGunnery(this, s, dt);
+    }
+    // A group re-forms after an evasion ends, and the coverage it has lost is exactly its absent
+    // escorts' stations — the number a removed escort now costs.
+    for (const group of this.surfaceGroups) {
+      if (group.reform) {
+        this.reformGroup(group);
+        group.reform = false;
+      }
+      const absent = group.memberIds.filter((id) => {
+        const m = this.byId(id);
+        return !m || m.sunk || (m.evadeUntil || 0) > this.time;
+      });
+      group.coverageLost = coverageLost(group, absent);
+    }
+  }
+
+  /**
+   * One surface ship's helm for this frame. The guide holds the group's course, routed clear of the
+   * atoll and reef by `formation.groupCourse`; every other hull steers onto its station in the
+   * guide's moving frame with `naval.steerToStation`, and a ship whose evasion has just ended arcs
+   * back with `naval.rejoinCourse` rather than snapping. `naval.courseAuthority` decides who owns
+   * the course, so no ship overwrites another's. Applies heading and speed; `updateShips` moves.
+   */
+  steerSurface(s: Any, dt: number, surface: Any[], hazards: IHazard[]): void {
+    const now = this.time;
+    s.task ??= { task: "station", targetId: null, startedAt: now, reason: "station keeping" };
+    // Survival outranks station keeping, so a torpedo evasion is expressed as a withdraw task and
+    // skips the helm below. It is an emergency, not a commitment: it ends with the evasion, so the
+    // ship rejoins at once instead of running on through `COMMIT_SECONDS`.
+    const survival = (s.evadeUntil || 0) > now;
+    if (!survival && s.task.task === "withdraw") s.task = null;
+    const chosen = chooseTask(
+      { task: s.task },
+      { survival, taskFeasible: true, opportunity: null, stationFeasible: true },
+      now,
+    );
+    const detaching = chosen?.task === "withdraw";
+    if (chosen) {
+      s.task = {
+        task: chosen.task,
+        targetId: chosen.targetId,
+        startedAt: s.task && s.task.task === chosen.task ? s.task.startedAt : now,
+        reason: chosen.reason,
+      };
+    }
+    if (s.wasEvading && !detaching) {
+      s.rejoinUntil = now + REJOIN_SECONDS;
+      const g = this.surfaceGroups.find((gr) => gr.id === s.groupId);
+      if (g) g.reform = true;
+    }
+    s.wasEvading = detaching;
+    if (detaching) return; // `updateEvasion` already owns the heading and the base speed stands.
+
+    const group = this.surfaceGroups.find((gr) => gr.id === s.groupId);
+    const base = s.baseSpeed * (0.35 + 0.65 * s.engine);
+    const limits: ISteerLimits = {
+      maxSpeed: base || 1,
+      turnRate: s.kind === "carrier" ? CARRIER_TURN : ESCORT_TURN,
+      slowRadius: STATION_SLOW_RADIUS,
+    };
+    let heading = s.heading;
+    let speed = base;
+
+    if (s.guide) {
+      if (group) {
+        const planned = groupCourse(
+          group,
+          { kind: "transit", course: wrap(s.cruiseHeading ?? s.heading), speed: base, guideX: s.x, guideZ: s.z },
+          hazards,
+          { maxSpeed: base || 1, lookahead: GROUP_LOOKAHEAD, margin: GROUP_MARGIN, step: GROUP_STEP },
+        );
+        let course = planned.course;
+        const authorityId = courseAuthority(
+          { id: s.id, groupId: s.groupId, guide: true, evading: false },
+          this.courseRecords(group, s.id),
+        );
+        if (authorityId) {
+          const holder = this.byId(authorityId);
+          if (holder && !holder.sunk) course = wrap(holder.heading);
+        }
+        group.course = course;
+        group.speed = base;
+        s.cruiseHeading = course;
+        const ahead = { x: s.x + Math.sin(course) * GROUP_LOOKAHEAD, z: s.z - Math.cos(course) * GROUP_LOOKAHEAD };
+        const steer = steerToStation(s, ahead, dt, { ...limits, slowRadius: GROUP_LOOKAHEAD * 0.5 });
+        heading = steer.heading;
+        speed = steer.speed;
+      }
+    } else if (s.station && group) {
+      const guide = this.byId(group.guideId);
+      if (guide && !guide.sunk) {
+        let world = stationTarget(guide.x, guide.z, guide.heading, s.station as FormationStation);
+        // Never station-keep into the reef: a station inside a hazard falls back to the ship's own
+        // track until the group has routed clear.
+        if (!clearOfHazard(world.x, world.z, hazards, 0)) {
+          world = { x: s.x + Math.sin(s.heading) * 1000, z: s.z - Math.cos(s.heading) * 1000 };
+        }
+        const steer =
+          s.rejoinUntil > now
+            ? rejoinCourse(s, { x: world.x, z: world.z, dt }, limits)
+            : steerToStation(s, world, dt, limits);
+        heading = steer.heading;
+        speed = steer.speed;
+        s.cruiseHeading = heading;
+      }
+    }
+
+    const avoid = avoidanceHeading(s, surface.filter((o) => o !== s), SURFACE_LOOKAHEAD, MIN_SEPARATION);
+    if (avoid !== null) {
+      const turn = limits.turnRate * dt;
+      heading = wrap(heading + clamp(angleDelta(avoid, heading), -turn, turn));
+    }
+    s.heading = heading;
+    s.speed = speed;
+  }
+
+  /** The course identities a group's authority is resolved against: living members only. */
+  courseRecords(group: ISurfaceGroup, excludeId: string): ICourseShip[] {
+    const out: ICourseShip[] = [];
+    for (const id of group.memberIds) {
+      if (id === excludeId) continue;
+      const m = this.byId(id);
+      if (!m || m.sunk) continue;
+      out.push({ id: m.id, groupId: group.id, guide: !!m.guide, evading: (m.evadeUntil || 0) > this.time });
+    }
+    return out;
+  }
+
+  /** Put every member back on the station it held, through `formation.reformAfter`. */
+  reformGroup(group: ISurfaceGroup): void {
+    const disrupted = group.memberIds.map((id) => {
+      const m = this.byId(id);
+      return { id, slot: (m?.stationSlot as string | null) ?? null };
+    });
+    for (const a of reformAfter(group, disrupted, this.time)) {
+      const m = this.byId(a.shipId);
+      if (!m) continue;
+      m.station = { shipId: a.shipId, groupId: group.id, offsetX: a.offsetX, offsetZ: a.offsetZ };
+      m.stationSlot = a.slot;
+    }
+  }
+
+  /** A ship by id; the group records name their members, so this is the one lookup. */
+  byId(id: string): Any {
+    return this.ships.find((s: Any) => s.id === id);
+  }
+
+  /**
+   * Form each team's surface escorts into carrier groups. The guide is the nearest carrier, decided
+   * by position rather than name; the stations come from `formation.reformAfter`, so the offsets are
+   * the module's tables, not a second copy. Pure data: nothing here moves a ship.
+   */
+  setupSurfaceGroups(): void {
+    const surface = this.ships.filter((s: Any) => s.kind !== "sub");
+    const carriers = surface.filter((s: Any) => s.kind === "carrier");
+    this.surfaceGroups = carriers.map((guide: Any): ISurfaceGroup => ({
+      id: `group-${guide.id}`,
+      guideId: guide.id,
+      memberIds: [],
+      formationId: "screen",
+      course: wrap(guide.heading),
+      speed: guide.baseSpeed,
+      coverageLost: 0,
+      reform: false,
+    }));
+    for (const s of surface) {
+      s.wasEvading = false;
+      s.rejoinUntil = 0;
+      s.task = { task: "station", targetId: null, startedAt: 0, reason: "station keeping" };
+      let best: ISurfaceGroup | null = null;
+      let nearest = Infinity;
+      for (const g of this.surfaceGroups) {
+        const guide = this.byId(g.guideId);
+        if (!guide || guide.team !== s.team) continue;
+        const d = distance2(s, guide);
+        if (d < nearest) {
+          nearest = d;
+          best = g;
+        }
+      }
+      if (best && best.guideId !== s.id) {
+        best.memberIds.push(s.id);
+        s.groupId = best.id;
+        s.guide = false;
+      } else {
+        s.groupId = best?.id ?? null;
+        s.guide = true;
+        s.station = null;
+        s.stationSlot = null;
+      }
+    }
+    for (const group of this.surfaceGroups) {
+      const assigned = reformAfter(group, group.memberIds.map((id) => ({ id, slot: null })), 0);
+      for (const a of assigned) {
+        const s = this.byId(a.shipId);
+        if (!s) continue;
+        s.station = { shipId: a.shipId, groupId: group.id, offsetX: a.offsetX, offsetZ: a.offsetZ };
+        s.stationSlot = a.slot;
+      }
     }
   }
 
