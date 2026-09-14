@@ -111,6 +111,18 @@ import {
   reformAfter,
   type Group,
 } from "./formation.js";
+import {
+  applyFire,
+  batteryDrain,
+  canFire,
+  interceptCourse,
+  maxSpeed,
+  stepDepth,
+  SURFACED_MAX,
+  subY,
+  type SubMode,
+  type SubState,
+} from "./submarine.js";
 
 type Any = any;
 
@@ -315,6 +327,19 @@ const VISIBILITY = 0.85;
 /** Metres of water an observer can see a hull through. A boat deeper than this is unobserved. */
 const SIGHT_DEPTH = 20;
 
+/**
+ * A submarine's own numbers: the finite magazine and the rates its depth and bow change at.
+ * `submarine.ts` owns the rules; these are the game's tuning. Tubes and reloads are spent, never
+ * reset, so a boat that has fired them all is out of the fight.
+ */
+const SUB_TUBES = 4;
+const SUB_RELOADS = 2;
+const SUB_RELOAD_SECONDS = 45;
+const SUB_DIVE_RATE = 2;
+const SUB_TURN_RATE = 0.05;
+const SUB_TORPEDO_RANGE = 4800;
+const SUB_FIRE_INTERVAL = 25;
+
 /** Seconds between an aircrew's sighting and the fleet holding the report, and a ship's by lamp/TBS. */
 const AIR_REPORT_DELAY = 30;
 const SHIP_REPORT_DELAY = 8;
@@ -433,6 +458,8 @@ export class Battle {
   time = 0;
   status = "briefing";
   ships: Any[] = [];
+  /** Surface groups and their stations, built once when the fleet is created. */
+  surfaceGroups: ISurfaceGroup[] = [];
   aircraft: Any[] = [];
   bullets: Any[] = [];
   bombs: Any[] = [];
@@ -621,8 +648,8 @@ export class Battle {
         y: 0,
         z,
         heading,
-        speed: sub ? 4 : cv ? 8 : 10,
-        baseSpeed: sub ? 4 : cv ? 8 : 10,
+        speed: sub ? SURFACED_MAX : cv ? 8 : 10,
+        baseSpeed: sub ? SURFACED_MAX : cv ? 8 : 10,
         // Geometry, resolved before any renderer exists.
         ...shipGeometry(name, kind),
         hp: cv ? 340 : sub ? 90 : 145,
@@ -654,6 +681,19 @@ export class Battle {
         sunk: false,
         sink: 0,
         surfaced: true,
+        /** The boat's own depth, battery and finite tubes. Null for every surface hull. */
+        sub: sub
+          ? ({
+              depth: 0,
+              depthRate: 0,
+              mode: "surfaced",
+              battery: 1,
+              tubes: SUB_TUBES,
+              reloads: SUB_RELOADS,
+              reloadUntil: 0,
+              lastLook: 0,
+            } as SubState)
+          : null,
         baseX: x,
         baseZ: z,
       };
@@ -677,6 +717,7 @@ export class Battle {
     add("Nowaki", "jp", "destroyer", -7350, -7800, 2.85);
     add("I-168", "jp", "sub", -2100, 3000, 0.05);
     add("USS Nautilus", "us", "sub", -8000, -6400, 1.65);
+    this.setupSurfaceGroups();
   }
 
   start(airborne = false): void {
@@ -1239,7 +1280,8 @@ export class Battle {
         const held = this.teamIntel[team].get(target.id);
         const last = Math.max(held?.observedAt ?? -Infinity, this.filed[team].get(target.id) ?? -Infinity);
         if (this.time - last < TRACK_SECONDS) continue;
-        const targetAltitude = target.kind === "sub" ? (target.surfaced ? 2 : -40) : target.deckHeight;
+        // The boat's own depth, through the one conversion: a periscope is seen, a deep hull is not.
+        const targetAltitude = target.sub ? subY(target.sub) : target.deckHeight;
         for (const o of observers) {
           if (
             !canObserve({
@@ -1806,7 +1848,11 @@ export class Battle {
         continue;
       }
       updateEvasion(this, s, dt);
-      s.speed = s.baseSpeed * (0.35 + 0.65 * s.engine);
+      // A submarine's own state caps it: swift on the surface, slow and battery-hungry under it.
+      s.speed =
+        s.kind === "sub" && s.sub
+          ? Math.min(s.baseSpeed * (0.35 + 0.65 * s.engine), maxSpeed(s.sub))
+          : s.baseSpeed * (0.35 + 0.65 * s.engine);
       // A submarine runs its own attack logic and is never station-kept; every surface hull hands
       // its helm to the group, where station keeping, course authority and evasion all resolve.
       if (s.kind !== "sub") this.steerSurface(s, dt, surface, hazards);
@@ -1826,19 +1872,40 @@ export class Battle {
         this.refreshDeck(s);
       }
       if (s.kind === "sub") {
-        s.surfaced = Math.sin(this.time / 70 + s.baseX) > 0.1;
-        s.torpTimer -= dt;
-        // A boat attacks what it has been told about, through the same delivered contacts every other
-        // attacker uses. With no report it has nothing to steer at, and a stale one puts the spread
-        // where the ship was going rather than where it is.
+        const state: SubState = s.sub;
+        // A boat attacks what it has been told about, through the same delivered contacts every
+        // other attacker uses. No ship name and no live hull are read: with no report it has nothing
+        // to steer at, and a stale one puts the aim where the ship was going, not where it is.
         const contact = strikeContact(this, s);
+        const fire = canFire(state, this.time);
+        // Pick a depth, then earn it. `stepDepth` converges on the wanted mode and `mode` flips only
+        // when the hull is within a metre of it. Nothing surfaces a boat on a timer.
+        const wanted: SubMode = !contact
+          ? "surfaced"
+          : fire.ok || fire.reason === "too deep"
+            ? "periscope"
+            : "deep";
+        Object.assign(state, stepDepth(state, wanted, dt, SUB_DIVE_RATE));
+        // A reload is finite and its clock belongs to the boat: when it runs out the tubes are ready
+        // again. `applyFire` spends the reload; nothing here re-arms a repeating salvo.
+        if (state.tubes <= 0 && state.reloadUntil > 0 && this.time >= state.reloadUntil) state.tubes = SUB_TUBES;
+        state.battery = Math.max(0, state.battery - batteryDrain(state, s.speed, dt));
+        // Only a deep boat is unobserved; a periscope still breaks the surface.
+        s.surfaced = state.depth < SIGHT_DEPTH;
+        // The one and only depth-to-y conversion.
+        s.y = subY(state);
         if (contact) {
           const e = estimatePosition(contact, this.time);
-          s.heading = wrap(s.heading + clamp(angleDelta(bearing(s, e), s.heading), -0.06 * dt, 0.06 * dt));
-          if (s.torpTimer <= 0 && distance2(s, e) < 4800) {
-            const aim = bearing(s, e);
-            for (const off of [-0.025, 0, 0.025]) this.spawnTorpedo(s, aim + off);
-            s.torpTimer = 78;
+          const range = distance2(s, e);
+          const course = interceptCourse(s.x, s.z, s.speed, e.x, e.z, contact.heading, contact.speed);
+          const aim = course ? course.heading : bearing(s, e);
+          s.heading = wrap(s.heading + clamp(angleDelta(aim, s.heading), -SUB_TURN_RATE * dt, SUB_TURN_RATE * dt));
+          s.torpTimer -= dt;
+          const shot = canFire(state, this.time);
+          if (s.torpTimer <= 0 && shot.ok && range < SUB_TORPEDO_RANGE) {
+            this.spawnTorpedo(s, aim);
+            Object.assign(state, applyFire(state, this.time, SUB_RELOAD_SECONDS));
+            s.torpTimer = SUB_FIRE_INTERVAL;
             if (s.team === "jp" && distance2(s, this.player) < 3000) this.say("LOOKOUT", "Torpedo wakes! Submarine attack near the task force!", true);
           }
         }
