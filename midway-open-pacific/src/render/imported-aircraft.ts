@@ -113,6 +113,8 @@ const animatedImports = new WeakMap<
     instrumentRoot: T.Group;
     interior: CockpitInterior | undefined;
     torpedo: T.Object3D | undefined;
+    /** The hook this file adds, because neither supplied airframe ships one. */
+    hook: T.Group;
   }
 >();
 
@@ -378,6 +380,37 @@ export function disposeDouglas(root: T.Group): void {
  * mapping can quietly hand back the wrong silhouette. `ai` is the reduced-detail build where the
  * airframe has one; where it does not, the same model serves both and says so here.
  */
+/**
+ * The arresting hook the supplied airframes do not ship.
+ *
+ * Neither the TBD nor the Kate GLB has a hook — nine clips each, none of them a hook — and this
+ * game recovers onto a carrier deck every sortie, so the one part a player watches on every landing
+ * was the one part missing. `src/render/dauntless.ts` already draws one for the procedural SBD and
+ * ties it to gear position; this is the same part and the same convention on the imported models,
+ * so the two airframes behave alike rather than one of them being silently hookless.
+ *
+ * The stinger is placed from the model's own bounds, not from typed-in metres: its root sits at the
+ * tail on the centreline, just under the fuselage, so a change to the airframe's scale carries it.
+ */
+function addArrestingHook(root: T.Group, model: T.Object3D): T.Group {
+  const bounds = new T.Box3().setFromObject(model);
+  const size = bounds.getSize(new T.Vector3());
+  const hook = new T.Group();
+  hook.name = "arresting hook";
+  // Bow is -Z by the import contract, so the tail is the +Z end of the bounds.
+  hook.position.set(0, bounds.min.y + size.y * 0.18, bounds.max.z * 0.86);
+  const reach = size.z * 0.17;
+  const steel = mat(0x2e3336);
+  const tip = mat(0x8d9498);
+  rod(hook, [0, 0, 0], [0, -reach * 0.22, reach], 0.035, steel);
+  rod(hook, [0, -reach * 0.22, reach], [0, -reach * 0.36, reach * 1.11], 0.055, tip);
+  // Stowed against the fuselage; `animateImportedAirframe` lowers it with the gear.
+  hook.rotation.x = 0;
+  root.add(hook);
+  root.userData.arrestingHook = hook;
+  return hook;
+}
+
 export function createAirframe(id: AirframeId, detail: "hero" | "ai", animated = false): T.Group {
   // The Dauntless and the Zero keep the constructors that measured them; only their propeller is
   // republished here, so one animator can find any airframe's propeller the same way.
@@ -493,7 +526,8 @@ export function createAirframe(id: AirframeId, detail: "hero" | "ai", animated =
     }
     root.add(instrumentRoot);
     root.userData.animatedAirframe = true;
-    animatedImports.set(root, { mixer, actions, instrumentRoot, interior, torpedo });
+    const hook = addArrestingHook(root, model);
+    animatedImports.set(root, { mixer, actions, instrumentRoot, interior, torpedo, hook });
   }
   return root;
 }
@@ -579,6 +613,10 @@ export function animateImportedAirframe(
   opposed("flight.rudder-right", "flight.rudder-left", p.rudder ?? 0);
   // gear.retract runs deployed (time 0) to stowed (full), so gearPos 1 = down = time 0.
   hold("gear.retract", 1 - T.MathUtils.clamp(p.gearPos ?? 1, 0, 1));
+  // The hook comes down with the gear, the same tie `dauntless.ts` uses for the SBD: the simulation
+  // carries no separate hook state, and inventing one here would put the drawn part ahead of what
+  // `recovery.ts` actually gates an arrestment on.
+  if (rig.hook) rig.hook.rotation.x = T.MathUtils.clamp(p.gearPos ?? 1, 0, 1) * 0.42;
   hold("flaps.deploy", p.flapPos ?? 0);
   const blur = root.userData.propBlur as T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial> | undefined;
   if (blur) {
