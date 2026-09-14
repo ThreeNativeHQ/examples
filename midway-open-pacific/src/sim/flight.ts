@@ -13,8 +13,9 @@ import {
   gearClearance,
   setAttitude,
 } from "@threenative/core";
-import type { IAircraftAirframe } from "@threenative/core";
+import type { IAircraftAirframe, IFlightControls, IFlightState } from "@threenative/core";
 import { damageModifiers } from "./damage.js";
+import { angleDelta, bearing, clamp, distance2 } from "./math.js";
 
 export { airDensity, aircraftMass, attitudeAxes, gearClearance, setAttitude };
 
@@ -194,7 +195,7 @@ export class AircraftFlight {
     return this.#model.gearClearance();
   }
 
-  step(dt: number, controls: Record<string, unknown>): void {
+  step(dt: number, controls: IFlightControls): void {
     this.#model.step(dt, controls, damageModifiers(this.state));
   }
 
@@ -208,8 +209,142 @@ export class AircraftFlight {
       width: number;
     },
     dt: number,
-    controls: Record<string, unknown>,
+    controls: IFlightControls,
   ): "liftoff" | "overrun" | null {
     return this.#model.stepDeck(deck, dt, controls, damageModifiers(this.state));
   }
+}
+
+/**
+ * Every field `IFlightState` declares as required, with a finite value. The engine backfills some of
+ * these in `initFlight`, but not all: `throttle` in particular is only ever read, and an aircraft
+ * that reaches `step` without one turns `rpm` into NaN on the first actuator pass, which then
+ * silently poisons thrust, velocity and position with no error anywhere. The literal is typed as
+ * `IFlightState` so a field the engine adds later fails typecheck here instead of at runtime.
+ */
+const FLIGHT_STATE_DEFAULTS: IFlightState = Object.freeze({
+  aileron: 0,
+  aoa: 0,
+  assist: true,
+  beta: 0,
+  brakePos: 0,
+  brakes: false,
+  controlAileron: 0,
+  drag: 0,
+  elevator: 0,
+  engineCut: false,
+  flapPos: 0,
+  flaps: 0,
+  flightTime: 0,
+  fuel: 100,
+  gear: false,
+  gearPos: 0,
+  gforce: 1,
+  groundSpeed: 0,
+  heading: 0,
+  hp: 100,
+  ias: 0,
+  lift: 0,
+  mass: 0,
+  payloadDrag: 0,
+  payloadMass: 0,
+  pitch: 0,
+  pitchRate: 0,
+  roll: 0,
+  rollRate: 0,
+  rpm: 0,
+  rudder: 0,
+  speed: 0,
+  stall: 0,
+  throttle: 0,
+  thrust: 0,
+  trim: 0.04,
+  vx: 0,
+  vy: 0,
+  vz: 0,
+  x: 0,
+  y: 0,
+  yawRate: 0,
+  z: 0,
+});
+
+/** Fill in whatever the game's own aircraft record is missing, and repair any non-finite value. */
+export function initFlightState(a: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(FLIGHT_STATE_DEFAULTS)) {
+    const have = a[key];
+    const bad = typeof value === "boolean" ? typeof have !== "boolean" : !Number.isFinite(have);
+    if (bad) a[key] = value;
+  }
+}
+
+/** How far a controller may command the aircraft away from straight and level. */
+export interface ISteerLimits {
+  /** Maximum commanded bank, rad. */
+  bank?: number;
+  /** Maximum commanded climb, m/s. Negative forces a descent, which is how a glide is asked for. */
+  climb?: number;
+  /** Maximum commanded descent, m/s. */
+  sink?: number;
+  /** Shortest lookahead the vertical law will aim over, m: a small one makes a steep dive. */
+  lead?: number;
+  /** Longest lookahead, m. Equal to `lead` it fixes the aim distance, as a torpedo run wants. */
+  leadMax?: number;
+  /** Below this altitude the law asks for a climb whatever the target says, m. */
+  floor?: number;
+}
+
+/**
+ * The bank-and-load control law: a heading error becomes a bank command and an altitude error a
+ * vertical-speed command, both leaving as the installed `IFlightControls` fields. `autopilot` is
+ * set, which bypasses the engine's stability assist so the commanded bank is the aircraft's own
+ * rather than a correction on top of a wing leveller, and keeps the turn coordinated.
+ *
+ * The same law flies the player's own autopilot (`Battle.updatePlayer`); that call site should be
+ * switched to this function rather than keeping a second copy of the gains.
+ */
+export function steerToward(
+  a: {
+    x: number;
+    y: number;
+    z: number;
+    vx: number;
+    vy: number;
+    vz: number;
+    heading: number;
+    roll: number;
+    rollRate: number;
+    ias?: number;
+    speed: number;
+    stall?: number;
+  },
+  aim: { x: number; z: number },
+  desiredAlt: number,
+  limits: ISteerLimits = {},
+): IFlightControls {
+  const bankLimit = limits.bank ?? 0.62;
+  const desiredBank = clamp(angleDelta(bearing(a, aim), a.heading) * 0.9, -bankLimit, bankLimit);
+  const currentBank = -a.roll;
+  const turn = clamp((desiredBank - currentBank) * 2.5 - a.rollRate * 0.7, -1, 1);
+  // The vertical command is a flight path towards the aim point, not a fixed gain on the height
+  // error: the same law then flies a cruise leg, a dive-bombing run and a groove, because a short
+  // lookahead is exactly what makes a dive steep.
+  const reach = clamp(distance2(a, aim), limits.lead ?? 250, limits.leadMax ?? Infinity);
+  let desiredVY = clamp(
+    ((desiredAlt - a.y) / reach) * Math.max(30, Math.hypot(a.vx, a.vz)),
+    -(limits.sink ?? 12),
+    limits.climb ?? 8,
+  );
+  // The floor is the height the aircraft will not descend through, and the deeper it is the harder
+  // the law climbs out of it: a fixed 2 m/s does not recover a torpedo bomber that has already sunk
+  // to the wave tops.
+  if (limits.floor !== undefined && a.y < limits.floor)
+    desiredVY = Math.max(desiredVY, 2 + (limits.floor - a.y));
+  // A banked aircraft needs more than 1 g to hold its height; the engine takes that as the load the
+  // stick is asking for, so the bank compensation and the height error arrive on the same channel.
+  const baseLoad = clamp(1 / Math.max(0.45, Math.cos(currentBank)), 1, 2.2);
+  let pitch = clamp((baseLoad - 1) / 4.5 + (desiredVY - a.vy) * 0.02, -0.45, 0.6);
+  // The engine's trimmed angle of attack reaches past the critical one, so a load command held
+  // through a stall keeps the aircraft stalled. Stop pulling instead.
+  if ((a.stall ?? 0) > 0.35) pitch = Math.min(pitch, 0);
+  return { autopilot: true, pitch, rudder: 0, turn };
 }

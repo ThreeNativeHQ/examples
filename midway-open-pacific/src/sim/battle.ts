@@ -172,8 +172,11 @@ interface IDeck {
  * `node tools/measure-decks.mjs`, which prints every station this table was filled from:
  *
  * - `deckLength` x `deckWidth` is the longest run of deck through amidships with at least 7 m of
- *   deck each side of the centreline, made symmetric about the ship's origin because `onDeck`
- *   measures the corridor from there, and then as wide as the narrowest station it crosses. It is a
+ *   deck each side of the centreline — half a Devastator's span, so a narrower station ends the
+ *   corridor rather than narrowing it — made symmetric about the ship's origin because `onDeck`
+ *   measures the corridor from there, then as wide as the narrowest station it crosses. tools/
+ *   capture-deck.mjs re-measures the same edges in the running game and holds the two surveys to
+ *   AC-2's own 0.1 m, which is the resolution either of them can claim. It is a
  *   measurement of the deck, not of the ship: the class hull length and waterline beam that used to
  *   stand in here gave Kaga a 247.65 x 32.5 m launch rectangle — the whole ship, bow overhang and
  *   island included.
@@ -202,8 +205,9 @@ const CARRIER_DECKS: Readonly<Record<string, IDeck>> = Object.freeze({
   Kaga: { deckLength: 230, deckWidth: 18, deckHeight: 15.76, deckBeam: 52 },
   // Measured: deck 20.30..20.68, midpoint 20.49, less 7.6 m draught.
   Soryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.89, deckBeam: 34 },
-  // Measured: deck 19.91..21.50, midpoint 20.71, less 7.8 m draught.
-  Hiryu: { deckLength: 210, deckWidth: 18, deckHeight: 12.91, deckBeam: 40 },
+  // Measured: deck 19.91..21.54, midpoint 20.72, less 7.8 m draught. The 1.64 m of sheer over the
+  // corridor is the largest of the four, and the reason AC-2's flat 0.1 m bound cannot hold here.
+  Hiryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.92, deckBeam: 40 },
 });
 
 /** The plane a weapon strikes on a ship with no flight deck. What the hit code always assumed. */

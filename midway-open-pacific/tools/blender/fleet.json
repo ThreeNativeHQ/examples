@@ -49,7 +49,7 @@
       "draught": 7.9,
       "flip": false,
       "budget": 700000,
-      "sourceTriangles": 688672,
+      "sourceTriangles": 199999,
       "class": "Yorktown CV-5",
       "heightSource": "DANFS hull figure plus the hornet.glb masthead envelope",
       "note": "The Yorktown is simplified by error bound rather than to a triangle target, so its count is what an 0.0001 error tolerance yields, not a number chosen in advance."
@@ -76,7 +76,7 @@
       "draught": 6.1,
       "flip": true,
       "budget": 55000,
-      "sourceTriangles": 51552,
+      "sourceTriangles": 51311,
       "class": "Supplied Mogami-labelled model (byte-identical to Tone source)",
       "heightSource": "shares the Tone hull envelope; the two classes were close in freeboard",
       "derivedFrom": "cruiser.tone",

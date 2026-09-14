@@ -13,7 +13,8 @@ import {
   wrap,
 } from "./math.js";
 import { damageModifiers, initDamage, stepDamage } from "./damage.js";
-import { torpedoEnvelope, torpedoIntercept } from "./armament.js";
+import { torpedoEnvelope, torpedoIntercept, updateStores } from "./armament.js";
+import { AircraftFlight, DECK_HEIGHT, initFlightState, steerToward, type ISteerLimits } from "./flight.js";
 import { estimatePosition, isStale, STALE_SECONDS } from "./intel.js";
 
 type Any = any;
@@ -189,36 +190,148 @@ export function chooseFighterTarget(b: Any, a: Any): Any {
   return best;
 }
 
-export function steerAircraft(a: Any, dest: Any, alt: number, targetSpeed: number, dt: number): void {
+/**
+ * How far each tactic lets the controller depart from straight and level. These are the game's
+ * tactical envelopes, not the airframe's: the engine decides whether the aircraft can actually
+ * deliver what is asked, and refuses by stalling or sinking rather than by clamping.
+ */
+function limitsFor(a: Any): ISteerLimits {
+  switch (a.tactic) {
+    case "dive":
+      return { bank: 0.9, climb: 8, floor: 55, lead: 80, sink: 115 };
+    // A fixed aim distance, so the run-in descends to release height at once instead of easing down
+    // over the whole approach and arriving over the ship still too high to drop.
+    case "torpedo-run":
+      return { bank: 0.6, climb: 6, floor: 6, lead: 550, leadMax: 550, sink: 32 };
+    case "landing":
+      return { bank: 0.5, climb: 5, floor: 6, sink: 5.5 };
+    case "ditching":
+      return { bank: 0.4, climb: 2, floor: 0, sink: 4 };
+    case "evade":
+      return { bank: 1.1, climb: 12, floor: 55, sink: 30 };
+    default:
+      return a.kind === "fighter"
+        ? { bank: 1.02, climb: 11, floor: 55, sink: 18 }
+        : { bank: 0.73, climb: 8, floor: 55, sink: 12 };
+  }
+}
+
+/**
+ * One aircraft's engine flight, built on first use. Everything the engine requires is finite before
+ * the model exists, the fuel is converted to the percentage the engine and the player already share,
+ * and the payload is counted once from the stores this aircraft launched with — `Battle`'s release
+ * path owns it from then on, so nothing applies a store twice.
+ */
+function flightOf(a: Any): AircraftFlight {
+  if (!a.flight) {
+    // Endurance arrived in seconds; `IFlightState.fuel` is a percentage of the airframe's fuel mass,
+    // which is also the unit `damage.ts` leaks and `aircraftMass` weighs. Keep the endurance the
+    // launch chose as the burn rate and normalise the reading.
+    a.enduranceSeconds = Math.max(1, a.fuelCapacity ?? a.fuel ?? 600);
+    a.fuel = clamp((100 * (a.fuel ?? 0)) / a.enduranceSeconds, 0, 100);
+    a.fuelCapacity = 100;
+    updateStores(a);
+    initFlightState(a);
+    a.flight = new AircraftFlight(a, a.airframe, DECK_HEIGHT);
+    a.flight.reset();
+  }
+  return a.flight;
+}
+
+/**
+ * Fly one aircraft one step towards a point, at an altitude and a speed, through the engine's
+ * `FlightModel`. The tactic picks the envelope and the configuration; the controller only ever emits
+ * the installed `IFlightControls` fields, and power reaches the engine as `state.throttle`, which is
+ * not a control input at all.
+ */
+function flyAircraft(a: Any, dest: Any, alt: number, targetSpeed: number, dt: number): void {
   if (!dest) return;
+  const fl = flightOf(a);
   const m = damageModifiers(a);
-  void angleDelta(bearing(a, dest), a.heading);
-  const bankLimit = a.tactic === "evade" ? 1.1 : a.kind === "fighter" ? 1.02 : 0.73;
   const avoid = a.avoid || { x: 0, z: 0 };
-  const adjusted = { x: dest.x + avoid.x, z: dest.z + avoid.z };
-  const headingError = angleDelta(bearing(a, adjusted), a.heading);
-  const desiredBank = -clamp(headingError * 1.45, -bankLimit, bankLimit);
-  a.roll = lerp(a.roll || 0, desiredBank, 1 - Math.exp(-dt * (a.kind === "fighter" ? 2.0 : 1.25)));
-  const turn = (-9.80665 * Math.tan(a.roll)) / Math.max(40, a.speed);
-  a.heading = wrap(a.heading + clamp(turn, -0.3, 0.3) * dt);
-  const distance = a.tactic === "torpedo-run" ? 550 : Math.max(a.tactic === "dive" ? 80 : 250, distance2(a, dest));
-  let desiredPitch = Math.atan2(alt - a.y, distance);
-  const pitchMax = a.kind === "fighter" ? 0.3 : 0.22;
-  desiredPitch = clamp(desiredPitch, a.tactic === "dive" ? -0.99 : -0.38, pitchMax);
-  const lowRun = a.tactic === "torpedo-run" || a.tactic === "landing";
-  if (a.y < (lowRun ? 6 : 55)) desiredPitch = Math.max(desiredPitch, 0.1);
-  if (m.power < 0.12) desiredPitch = Math.min(desiredPitch, a.speed < 65 ? -0.16 : -0.055);
-  a.pitch = lerp(a.pitch || 0, desiredPitch, 1 - Math.exp(-dt * 1.75 * m.controls));
-  const accel = clamp((targetSpeed - a.speed) * 0.22, -3.7, 3.3) * (0.25 + 0.75 * m.power) - Math.sin(a.pitch) * 6.0 - (1 - m.power) * 2.5;
-  a.speed = clamp(a.speed + accel * dt, 32, a.kind === "fighter" ? 153 : 142);
-  const f = forward(a.heading, a.pitch);
-  a.vx = f.x * a.speed;
-  a.vy = f.y * a.speed;
-  a.vz = f.z * a.speed;
-  a.x += a.vx * dt;
-  a.y += a.vy * dt;
-  a.z += a.vz * dt;
-  a.rpm = m.power * 0.86;
+  const aim = { x: dest.x + avoid.x, z: dest.z + avoid.z };
+  const slow = a.tactic === "landing" || a.tactic === "torpedo-run";
+  // Configuration follows the tactic: flaps for slow flight and the climb-out, dive brakes to hold a
+  // dive-bomber's speed inside its release window, wheels only to land.
+  a.flaps = slow || a.y < 120 ? 0.33 : 0;
+  a.gear = a.tactic === "landing";
+  a.brakes = a.tactic === "dive";
+  // Power is trimmed, not scheduled: a proportional lever droops, and a torpedo bomber that settles
+  // six knots above its release limit never drops. `throttle` is the engine's own state field — there
+  // is no throttle control input — and the engine lags `rpm` towards it, which damps this.
+  a.throttle = clamp(a.throttle + (targetSpeed - (a.ias || a.speed)) * dt * 0.06, 0, 1);
+  // With the engine gone the aircraft glides: no floor to hold, no climb to command, so it really
+  // does trade height for speed instead of being held up by a minimum-speed rule.
+  const limits: ISteerLimits =
+    m.power < 0.12 ? { ...limitsFor(a), climb: -2, floor: undefined } : limitsFor(a);
+  fl.step(dt, steerToward(a, aim, alt, limits));
+}
+
+/**
+ * Fly one aircraft off its own deck, through the engine's deck run rather than a synthetic climb.
+ * The launch interval is shorter than a full run, so a second departure is spotted farther aft and
+ * waits with its chocks in — `stepDeck` holds a chocked aircraft still below 55% power — until the
+ * aircraft ahead of it is off.
+ */
+function deckDeparture(b: Any, a: Any, home: Any, dt: number): void {
+  const fl = flightOf(a);
+  if (!home || home.sunk || !(home.deckLength > 0)) {
+    // Midway's runway is not a carrier deck corridor, and a sinking ship is not one either: the
+    // aircraft is airborne from here and flies on the engine like everything else.
+    a.mode = "flight";
+    a.deckRun = "airborne";
+    return;
+  }
+  fl.setDeck(home.deckHeight);
+  if (a.deckRun === undefined) {
+    const ahead = b.aircraft.filter(
+      (o: Any) => o !== a && o.home === a.home && o.mode === "launch" && o.deckRun !== undefined,
+    ).length;
+    Object.assign(a, {
+      brakes: false,
+      chocks: true,
+      deckLateral: 0,
+      deckOffset: Math.max(-(home.deckLength / 2) + 6, -(home.deckLength / 2) + 10 - 14 * ahead),
+      deckRun: "spotted",
+      deckSpeed: 0,
+      flaps: 0.33,
+      gear: true,
+      heading: home.heading,
+      pitch: 0.22,
+      speed: 0,
+      throttle: 0.2,
+    });
+    fl.reset();
+  }
+  if (a.deckRun === "spotted") {
+    const rolling = b.aircraft.some((o: Any) => o !== a && o.home === a.home && o.deckRun === "rolling");
+    if (!rolling) {
+      a.deckRun = "rolling";
+      a.throttle = 1;
+    }
+  }
+  const departure = fl.stepDeck(
+    {
+      heading: home.heading,
+      length: home.deckLength,
+      speed: home.speed,
+      width: home.deckWidth,
+      x: home.x,
+      z: home.z,
+    },
+    dt,
+    // The deck is a moving, turning frame: a ship under helm rotates the corridor out from under an
+    // aircraft that holds its launch heading, and the run then ends as a lateral overrun at half
+    // flying speed. Steer down the deck instead.
+    { pitch: 0, rudder: clamp(angleDelta(home.heading, a.heading) * 6, -1, 1) },
+  );
+  if (departure !== null) {
+    // `stepDeck` reports the departure but the game owns `mode`; without this the aircraft stays
+    // pinned to the deck plane and never climbs.
+    a.mode = "flight";
+    a.deckRun = departure;
+    a.chocks = false;
+  }
 }
 
 export function fireClear(b: Any, a: Any, t: Any): boolean {
@@ -283,7 +396,7 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
   if (a.home === "midway") h = b.island;
   if (!h) {
     a.tactic = "ditching";
-    steerAircraft(a, { x: a.x + Math.sin(a.heading) * 1000, z: a.z - Math.cos(a.heading) * 1000 }, 3, 48, dt);
+    flyAircraft(a, { x: a.x + Math.sin(a.heading) * 1000, z: a.z - Math.cos(a.heading) * 1000 }, 3, 48, dt);
     if (a.y < 4) {
       b.recordLoss(a);
       a.removed = true;
@@ -299,7 +412,7 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
   const busy = (h.deckState?.occupiedUntil ?? 0) > b.time || h.deckState?.suspended != null || (h.evadeUntil || 0) > b.time;
   if (a.tactic !== "landing" && (distance2(a, astern) > 350 || Math.abs(angleDelta(bearing(a, h), h.heading || 0)) > 0.65 || busy)) {
     a.tactic = "rtb";
-    steerAircraft(
+    flyAircraft(
       a,
       busy ? { x: h.x + Math.sin(b.time * 0.025 + a.phase) * 1300, z: h.z + Math.cos(b.time * 0.025 + a.phase) * 1300 } : astern,
       busy ? 450 : Math.max(90, Math.min(900, distance2(a, astern) * 0.14)),
@@ -310,7 +423,7 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
   }
   a.tactic = "landing";
   const along = (a.x - h.x) * f.x + (a.z - h.z) * f.z;
-  steerAircraft(a, { x: h.x + f.x * 140, z: h.z + f.z * 140 }, h.id ? 22 + Math.max(0, -along - 65) * 0.08 : 10, 51, dt);
+  flyAircraft(a, { x: h.x + f.x * 140, z: h.z + f.z * 140 }, h.id ? 22 + Math.max(0, -along - 65) * 0.08 : 10, 51, dt);
   if ((distance2(a, h) < 150 && a.y < 42) || (!h.id && distance2(a, h) < 200 && a.y < 50)) {
     // The airframe goes back into that ship's inventory — counted again, unready, and carrying no
     // store. A deck that cannot take it refuses, and the aircraft goes round again.
@@ -349,29 +462,27 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       continue;
     }
     if (!a.damage) initDamage(a);
+    // Built before the first fuel burn: this is where the endurance in seconds becomes the percentage
+    // both the engine's mass and `damage.ts`'s leak read.
+    const flight = flightOf(a);
     stepDamage(a, dt);
     if (a.hp <= 0) {
       b.planeDestroyed(a, a.lastAttacker);
       continue;
     }
     a.age += dt;
-    a.fuel = Math.max(0, a.fuel - dt);
+    a.fuel = Math.max(0, a.fuel - (dt * 100) / a.enduranceSeconds);
     a.gunTimer = Math.max(0, a.gunTimer - dt);
     a.attackCooldown = Math.max(0, a.attackCooldown - dt);
     rearGunner(b, a, dt);
     const home = b.ships.find((s: Any) => s.id === a.home);
+    // The deck datum is a construction-time option, so the wrapper is rebound only when the aircraft's
+    // own deck changes — a diversion to a carrier a metre lower otherwise rolls and lands on the
+    // previous ship's deck height.
+    if (home && home.deckHeight > 0) flight.setDeck(home.deckHeight);
     if (a.mode === "launch") {
       a.tactic = "launch";
-      const f = forward(a.heading, 0.18);
-      a.speed = Math.min(a.kind === "torpedo" ? 80 : 100, a.speed + dt * 6);
-      a.pitch = 0.18;
-      a.vx = f.x * a.speed;
-      a.vy = f.y * a.speed;
-      a.vz = f.z * a.speed;
-      a.x += a.vx * dt;
-      a.y += a.vy * dt;
-      a.z += a.vz * dt;
-      if (a.age > 8) a.mode = "flight";
+      deckDeparture(b, a, home, dt);
       continue;
     }
     if (a.fuel <= 0) {
@@ -382,7 +493,8 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
         continue;
       }
     }
-    const returnFuel = home ? distance2(a, home) / 80 + 50 : 85;
+    // Endurance is now a percentage, so the seconds a return leg needs are converted the same way.
+    const returnFuel = (100 * (home ? distance2(a, home) / 80 + 50 : 85)) / a.enduranceSeconds;
     const hurt =
       a.hp < (a.maxHp || 100) * 0.35 ||
       a.damage.engine.integrity < 0.42 ||
@@ -403,7 +515,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
     ) {
       const f = forward(home.heading);
       a.tactic = "muster";
-      steerAircraft(
+      flyAircraft(
         a,
         { x: home.x + f.x * 1900 + Math.sin(b.time * 0.025 + a.phase) * 650, z: home.z + f.z * 1900 + Math.cos(b.time * 0.025 + a.phase) * 650 },
         a.kind === "torpedo" ? 550 : 1550,
@@ -414,7 +526,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
     }
     if (a.tactic === "egress") {
       if (b.time < (a.egressUntil || 0)) {
-        steerAircraft(a, a.egressPoint, Math.max(350, a.y), 108, dt);
+        flyAircraft(a, a.egressPoint, Math.max(350, a.y), 108, dt);
         continue;
       }
       a.mode = "rtb";
@@ -551,7 +663,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
         }
       }
     }
-    steerAircraft(a, dest || home || b.search, alt, speed, dt);
+    flyAircraft(a, dest || home || b.search, alt, speed, dt);
     if (a.y < 1) {
       a.hp = 0;
       b.planeDestroyed(a, a.lastAttacker);

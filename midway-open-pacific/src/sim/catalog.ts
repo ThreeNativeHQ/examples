@@ -42,8 +42,8 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     draught: 7.5, // m; Kaga draught reference, tools/blender/fleet.json
     mastHeight: 46.8, // m; Kaga keel-to-masthead reference, tools/blender/fleet.json
     measuredLength: 247.65, // m; Z extent of public/assets/carrier.kaga.glb, tools/inspect-glb.mjs
-    measuredBeam: 78.94, // m; X extent of public/assets/carrier.kaga.glb, tools/inspect-glb.mjs
-    measuredHeight: 115.26, // m; Y extent of public/assets/carrier.kaga.glb, tools/inspect-glb.mjs
+    measuredBeam: 53.93, // m; X extent of public/assets/carrier.kaga.glb, tools/inspect-glb.mjs
+    measuredHeight: 46.80, // m; Y extent of public/assets/carrier.kaga.glb, tools/inspect-glb.mjs
     triangles: 45683, // count; public/assets/carrier.kaga.glb, tools/inspect-glb.mjs
     source: "carriers/japan-kaga.glb", // supplied model under the source directory
     repair: "Declared beam repair x0.60 (32.50 m reference against the 53.93 m X extent); declared height repair x1.00 (46.80 m either side).",
@@ -57,8 +57,8 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     draught: 7.6, // m; Soryu draught reference, tools/blender/fleet.json
     mastHeight: 40.0, // m; Soryu keel-to-masthead reference, tools/blender/fleet.json
     measuredLength: 227.50, // m; Z extent of public/assets/carrier.soryu.glb, tools/inspect-glb.mjs
-    measuredBeam: 69.03, // m; X extent of public/assets/carrier.soryu.glb, tools/inspect-glb.mjs
-    measuredHeight: 111.49, // m; Y extent of public/assets/carrier.soryu.glb, tools/inspect-glb.mjs
+    measuredBeam: 36.35, // m; X extent of public/assets/carrier.soryu.glb, tools/inspect-glb.mjs
+    measuredHeight: 40.00, // m; Y extent of public/assets/carrier.soryu.glb, tools/inspect-glb.mjs
     triangles: 23605, // count; public/assets/carrier.soryu.glb, tools/inspect-glb.mjs
     source: "carriers/japan-soryu.glb", // supplied model under the source directory
     repair: "Declared beam repair x0.59 (21.30 m reference against the 36.35 m X extent); declared height repair x1.00 (40.00 m either side).",
@@ -72,8 +72,8 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     draught: 7.8, // m; Hiryu draught reference, tools/blender/fleet.json
     mastHeight: 40.0, // m; Hiryu keel-to-masthead reference, tools/blender/fleet.json
     measuredLength: 227.40, // m; Z extent of public/assets/carrier.hiryu.glb, tools/inspect-glb.mjs
-    measuredBeam: 48.86, // m; X extent of public/assets/carrier.hiryu.glb, tools/inspect-glb.mjs
-    measuredHeight: 81.25, // m; Y extent of public/assets/carrier.hiryu.glb, tools/inspect-glb.mjs
+    measuredBeam: 41.47, // m; X extent of public/assets/carrier.hiryu.glb, tools/inspect-glb.mjs
+    measuredHeight: 40.00, // m; Y extent of public/assets/carrier.hiryu.glb, tools/inspect-glb.mjs
     triangles: 23421, // count; public/assets/carrier.hiryu.glb, tools/inspect-glb.mjs
     source: "carriers/japan-kyriu.glb", // supplied model under the source directory
     repair: "Declared beam repair x0.54 (22.30 m reference against the 41.47 m X extent); declared height repair x1.00 (40.00 m either side).",
@@ -86,10 +86,10 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     hullBeam: 25.4, // m; Yorktown waterline beam reference, tools/blender/fleet.json
     draught: 7.9, // m; Yorktown draught reference, tools/blender/fleet.json
     mastHeight: 48.0, // m; Yorktown keel-to-masthead reference, tools/blender/fleet.json
-    measuredLength: 246.78, // m; Z extent of public/assets/carrier.yorktown.glb, tools/inspect-glb.mjs
-    measuredBeam: 63.57, // m; X extent of public/assets/carrier.yorktown.glb, tools/inspect-glb.mjs
-    measuredHeight: 98.77, // m; Y extent of public/assets/carrier.yorktown.glb, tools/inspect-glb.mjs
-    triangles: 688672, // count; public/assets/carrier.yorktown.glb, tools/inspect-glb.mjs
+    measuredLength: 246.79, // m; Z extent of public/assets/carrier.yorktown.glb, tools/inspect-glb.mjs
+    measuredBeam: 32.79, // m; X extent of public/assets/carrier.yorktown.glb, tools/inspect-glb.mjs
+    measuredHeight: 48.02, // m; Y extent of public/assets/carrier.yorktown.glb, tools/inspect-glb.mjs
+    triangles: 199999, // count; public/assets/carrier.yorktown.glb, tools/inspect-glb.mjs
     source: "carriers/uss-yorktown.glb", // supplied model under the source directory
     repair: "Declared beam repair x0.77 (25.40 m reference against the 32.79 m X extent); declared height repair x1.00 (48.00 m declared against 48.02 m measured).",
   },
@@ -102,8 +102,8 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     draught: 6.5, // m; Tone draught reference, tools/blender/fleet.json
     mastHeight: 38.0, // m; Tone keel-to-masthead reference, tools/blender/fleet.json
     measuredLength: 201.60, // m; Z extent of public/assets/cruiser.tone.glb, tools/inspect-glb.mjs
-    measuredBeam: 43.27, // m; X extent of public/assets/cruiser.tone.glb, tools/inspect-glb.mjs
-    measuredHeight: 85.38, // m; Y extent of public/assets/cruiser.tone.glb, tools/inspect-glb.mjs
+    measuredBeam: 22.13, // m; X extent of public/assets/cruiser.tone.glb, tools/inspect-glb.mjs
+    measuredHeight: 38.00, // m; Y extent of public/assets/cruiser.tone.glb, tools/inspect-glb.mjs
     triangles: 47991, // count; public/assets/cruiser.tone.glb, tools/inspect-glb.mjs
     source: "cruiser/tone-class-cruiser.glb", // supplied model under the source directory
     repair: "Declared beam repair x0.88 (19.40 m reference against the 22.13 m X extent); declared height repair x1.00 (38.00 m either side).",
@@ -117,9 +117,9 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     draught: 6.1, // m; Mogami draught reference, tools/blender/fleet.json
     mastHeight: 38.0, // m; shares the Tone hull envelope it was derived from
     measuredLength: 201.60, // m; Z extent of public/assets/cruiser.mogami.glb, tools/inspect-glb.mjs
-    measuredBeam: 43.27, // m; X extent of public/assets/cruiser.mogami.glb, tools/inspect-glb.mjs
-    measuredHeight: 85.38, // m; Y extent of public/assets/cruiser.mogami.glb, tools/inspect-glb.mjs
-    triangles: 51552, // count; public/assets/cruiser.mogami.glb, tools/inspect-glb.mjs
+    measuredBeam: 22.13, // m; X extent of public/assets/cruiser.mogami.glb, tools/inspect-glb.mjs
+    measuredHeight: 38.00, // m; Y extent of public/assets/cruiser.mogami.glb, tools/inspect-glb.mjs
+    triangles: 51311, // count; public/assets/cruiser.mogami.glb, tools/inspect-glb.mjs
     source: "cruiser/tone-class-cruiser.glb", // the supplied mogami GLB is byte-identical to this
     repair: "Derived, not supplied: the supplied Mogami GLB is byte-identical to the Tone GLB and the geometry is a Tone. tools/blender/derive-mogami.py copies the after pair of forward turrets, mirrors them to face aft and sets them on the quarterdeck, so the class reads as a Mogami rather than a second Tone. Hull repairs are inherited from cruiser.tone.",
   },
@@ -132,8 +132,8 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     draught: 3.8, // m; Kagero draught reference, tools/blender/fleet.json
     mastHeight: 28.0, // m; Kagero keel-to-masthead reference, tools/blender/fleet.json
     measuredLength: 118.50, // m; Z extent of public/assets/destroyer.kagero.glb, tools/inspect-glb.mjs
-    measuredBeam: 18.35, // m; X extent of public/assets/destroyer.kagero.glb, tools/inspect-glb.mjs
-    measuredHeight: 40.54, // m; Y extent of public/assets/destroyer.kagero.glb, tools/inspect-glb.mjs
+    measuredBeam: 12.43, // m; X extent of public/assets/destroyer.kagero.glb, tools/inspect-glb.mjs
+    measuredHeight: 28.00, // m; Y extent of public/assets/destroyer.kagero.glb, tools/inspect-glb.mjs
     triangles: 22650, // count; public/assets/destroyer.kagero.glb, tools/inspect-glb.mjs
     source: "destroyers/japan-mikuma-and-mogami.glb", // supplied model under the source directory
     repair: "Declared beam repair x0.87 (10.80 m reference against the 12.43 m X extent); declared height repair x1.00 (28.00 m either side).",
@@ -147,8 +147,8 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     draught: 3.3, // m; Hammann draught reference, tools/blender/fleet.json
     mastHeight: 28.0, // m; Hammann keel-to-masthead reference, tools/blender/fleet.json
     measuredLength: 106.17, // m; Z extent of public/assets/destroyer.hammann.glb, tools/inspect-glb.mjs
-    measuredBeam: 15.92, // m; X extent of public/assets/destroyer.hammann.glb, tools/inspect-glb.mjs
-    measuredHeight: 43.52, // m; Y extent of public/assets/destroyer.hammann.glb, tools/inspect-glb.mjs
+    measuredBeam: 20.14, // m; X extent of public/assets/destroyer.hammann.glb, tools/inspect-glb.mjs
+    measuredHeight: 28.00, // m; Y extent of public/assets/destroyer.hammann.glb, tools/inspect-glb.mjs
     triangles: 22887, // count; public/assets/destroyer.hammann.glb, tools/inspect-glb.mjs
     source: "destroyers/uss-harmann.glb", // supplied model under the source directory
     repair: "Declared beam repair x0.55 (11.00 m reference against the 20.14 m X extent); declared height repair x1.00 (28.00 m either side).",
@@ -162,8 +162,8 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     draught: 4.6, // m; I-168 draught reference, tools/blender/fleet.json
     mastHeight: 13.5, // m; I-168 keel-to-masthead reference, tools/blender/fleet.json
     measuredLength: 104.70, // m; Z extent of public/assets/submarine.i168.glb, tools/inspect-glb.mjs
-    measuredBeam: 18.74, // m; X extent of public/assets/submarine.i168.glb, tools/inspect-glb.mjs
-    measuredHeight: 42.61, // m; Y extent of public/assets/submarine.i168.glb, tools/inspect-glb.mjs
+    measuredBeam: 9.22, // m; X extent of public/assets/submarine.i168.glb, tools/inspect-glb.mjs
+    measuredHeight: 13.50, // m; Y extent of public/assets/submarine.i168.glb, tools/inspect-glb.mjs
     triangles: 23243, // count; public/assets/submarine.i168.glb, tools/inspect-glb.mjs
     source: "submarines/japan-I168-submarine.glb", // supplied model under the source directory
     repair: "Declared beam repair x0.89 (8.20 m reference against the 9.22 m X extent); declared height repair x1.00 (13.50 m either side).",
@@ -177,8 +177,8 @@ export const SHIP_CLASSES: Readonly<Record<string, ShipClass>> = Object.freeze({
     draught: 4.9, // m; Nautilus draught reference, tools/blender/fleet.json
     mastHeight: 15.0, // m; Nautilus keel-to-masthead reference, tools/blender/fleet.json
     measuredLength: 113.08, // m; Z extent of public/assets/submarine.nautilus.glb, tools/inspect-glb.mjs
-    measuredBeam: 14.84, // m; X extent of public/assets/submarine.nautilus.glb, tools/inspect-glb.mjs
-    measuredHeight: 38.85, // m; Y extent of public/assets/submarine.nautilus.glb, tools/inspect-glb.mjs
+    measuredBeam: 12.61, // m; X extent of public/assets/submarine.nautilus.glb, tools/inspect-glb.mjs
+    measuredHeight: 15.00, // m; Y extent of public/assets/submarine.nautilus.glb, tools/inspect-glb.mjs
     triangles: 22967, // count; public/assets/submarine.nautilus.glb, tools/inspect-glb.mjs
     source: "submarines/uss-nautilus.glb", // supplied model under the source directory
     repair: "Declared beam repair x0.80 (10.13 m reference against the 12.61 m X extent); declared height repair x1.00 (15.00 m either side).",

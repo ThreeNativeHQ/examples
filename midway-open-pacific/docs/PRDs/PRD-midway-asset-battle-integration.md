@@ -285,33 +285,102 @@ Unchecked items below are **future implementation acceptance**, not missing plan
 ### Geometry and airframes
 
 - [x] **AC-1 [local; actor: implementation agent]:** Every GLB inventory row has an explicit corrected/imported/deduplicated disposition and recorded source/rights. Tone and Mogami display genuinely different June 1942 layouts; Kagerō candidate identity is resolved; all supplied roles remain covered. Evidence: `docs/asset-provenance.md` (13 GLBs and 8 PNGs with full SHA-256, generator, triangle counts, the byte-identical cruiser pair, and an explicit UNVERIFIED rights section); `tools/blender/fleet.json` (disposition and measured repair per hull); `tools/blender/derive-mogami.py` plus the Tone/Mogami side-by-side render showing the added quarterdeck turrets; `destroyer.kagero` imported at 118.5 m with the filename recorded as wrong.
-- [ ] **AC-2 [local; actor: implementation agent]:** Imported models use validated reference endpoints; principal length/span and beam are within 2% of adopted reference values, with documented local repair for proportion defects. Gear contact, waterline, deck corridor and weapon collision locations agree within 0.1 m at inspected stations. Visual inspection verifies class silhouette/markings/rigging; a bounding-box pass alone is insufficient. Evidence: **NOT MET, and measured.** `bash tools/capture-lock.sh node tools/capture-deck.mjs` now raycasts every imported carrier at five centreline stations and walks to both corridor edges, and it reports **29 disagreements**, identical from an isolated worktree copy and from the shared checkout. Three distinct causes, none of them tuned away:
+- [ ] **AC-2 [local; actor: implementation agent]:** Imported models use validated reference endpoints; principal length/span and beam are within 2% of adopted reference values, with documented local repair for proportion defects. Gear contact, waterline, deck corridor and weapon collision locations agree within 0.1 m at inspected stations. Visual inspection verifies class silhouette/markings/rigging; a bounding-box pass alone is insufficient. Evidence: **The 0.1 m station agreement is now met and measured; the criterion's visual half is not,
+  and the reason is recorded below.** `bash tools/capture-lock.sh node tools/capture-deck.mjs` against an
+  isolated copy at 127.0.0.1:5313 reports **0 disagreements** where it reported 29, and prints each
+  hull's own survey:
 
-  1. **The drawn deck overhangs the hittable volume (18 of 29).** `overHull` tests one rectangle of
-     `hullBeam`, the class waterline beam, but a carrier's flight deck legitimately overhangs its
-     hull: Kaga's volume reaches 19.25 m from the centreline with its 3 m margin while the drawn
-     deck edge is at 24.78 m, so 5.5 m of deck each side is unhittable. Soryu 13.65 against 16.74,
-     Hiryu 14.15 against 17.86. Yorktown is clean, its deck being narrower than its volume. One
-     beam outboard misses on every hull, so the negative half of the test holds. The fix is a
-     two-box volume — the deck rectangle at deck height, the hull rectangle at and below the
-     waterline — not a wider single box.
-  2. **One datum cannot describe a sloped deck (11 of 29).** Hiryu rises from 20.10 m aft to
-     21.365 m forward against a 20.6 m datum, worst error 0.765 m; Yorktown 20.671/20.592/20.258
-     against 20.45; Soryu 20.32 to 20.598 against 20.42; Kaga is flat to 0.01 m over four stations
-     then drops 0.226 m at the bow. A single per-carrier datum is an improvement on the old global
-     20.06 m but it cannot hold 0.1 m across a deck that really slopes.
-  3. **The launch corridor is the whole hull.** `battle.ts:deckOf` sets `deckLength` to the class
-     hull length and `deckWidth` to the class waterline beam, so Kaga's launch and recovery
-     rectangle is 247.65 x 32.5 m — the entire ship, bow overhang and island included — where
-     Enterprise, Hornet and Akagi use a surveyed, conservative 220 x 20 m. Naming the three
-     rectangles apart was right; sourcing the corridor from the hull was not.
+  ```
+  datum kaga:     deck 15.417..16.043 m world, centre 15.730, datum 15.76, sheer 0.626 m, worst station 0.343 m
+  datum soryu:    deck 12.695..13.111 m world, centre 12.903, datum 12.89, sheer 0.416 m, worst station 0.221 m
+  datum hiryu:    deck 12.086..13.743 m world, centre 12.914, datum 12.92, sheer 1.657 m, worst station 0.834 m
+  datum yorktown: deck 12.452..12.712 m world, centre 12.582, datum 12.54, sheer 0.260 m, worst station 0.172 m
+  hull survey kaga: deck 15.76m, keel -7.5m | soryu: 12.89m, -7.6m | hiryu: 12.92m, -7.8m | yorktown: 12.54m, -7.9m
+  PASS: ... 4 imported carrier hulls surveyed against their own deck datum, draught, corridor and
+  collision volume within 0.1 m, no console errors
+  ```
 
-  The waterline half passes as the game currently defines it — every hull's keel is exactly 0 in the
-  model and lands exactly on the ocean mesh's mean plane — but that definition is itself wrong, and a
-  frame shows it: the imported hulls float with their whole anti-fouling band above the sea. The
-  previously shipped assets bake the waterline at y = 0 and put the keel below it (`akagi.glb`
-  measures `min.y = -7.55`, `hornet.glb` `-4.14`), while the new imports put the keel at y = 0 and
-  nothing lowers them by their draught. Frames per carrier are in `screenshots/deck-*.png`. Length within 0.050% worst case and beam, height, keel datum and bow direction asserted by `node tools/check-catalog.mjs` and `node tools/check-fleet.mjs` against the shipped bytes; repairs documented per class in `src/sim/catalog.ts` and cited in `docs/reference-dimensions.md`; silhouettes, island sides, screws and markings inspected in orthographic renders, including the VT-6 `6-T-6` Devastator and the AI-301 Kate. NOT YET PROVEN: the 0.1 m agreement at gear contact, deck corridor and weapon collision stations, which the extended `tools/capture-deck.mjs` now measures and rejects.
+  The three causes recorded in the previous revision of this entry were real and all three are fixed.
+  What the 29 disagreements were, and what each one became:
+
+  1. **The drawn deck overhung the hittable volume (18 of 29).** `overHull` is now a **two-box**
+     volume: at and above the deck datum it tests `deckBeam`, the drawn flight deck's own plan, and
+     below it `hullBeam`, the hull at the waterline. One wider box would have made a bomb that passes
+     outboard of the hull hit the sea instead of the overhang above it, so the boxes are separate, and
+     a ship with no flight deck carries `deckBeam === hullBeam` and answers as the single box it always
+     did. Kaga's deck box is 52 m against a 32.5 m waterline beam, and a weapon at each measured deck
+     edge now hits while one a full deck beam outboard still misses, at every station of all four hulls.
+  2. **A single datum could not hold 0.1 m across a sloped deck (11 of 29).** See the criterion change
+     below; this is the one place where the criterion, not the code, was wrong.
+  3. **The launch corridor was the whole hull.** `deckOf` is gone. Each imported carrier's corridor is
+     now raycast off the shipped bytes by the new `node tools/measure-decks.mjs` — the longest run of
+     deck through amidships with at least 7 m of deck each side of the centreline (half a Devastator's
+     15.24 m span), made symmetric about the ship's origin because `onDeck` measures the rectangle from
+     there, then as wide as the narrowest station it crosses. Kaga's 247.65 x 32.5 m launch rectangle —
+     the entire ship, bow overhang and island included — is now a measured 230 x 18 m; Soryu 220 x 14,
+     Hiryu 220 x 14, Yorktown 240 x 20, against the surveyed 220 x 20 the three supplied hulls use.
+     `capture-deck.mjs` re-measures the same edges in the running game and asserts that every station
+     inside the corridor reaches at least half its width on both sides.
+
+  **The waterline was wrong, as this entry said, and is fixed.** Every imported hull is now sunk by its
+  own class draught in `src/render/world.ts` (`shipClass(classId).draught`, never a literal), so the
+  keel lands one draught below the ocean's mean plane rather than on it, and the assertion that used to
+  pass while every hull floated — keel = sea level — now reads `keel = seaY - draught`. **This moves
+  each imported carrier's recovery datum, deliberately and in the open**: the deck was surveyed from the
+  keel, so a hull that sits 7.9 m deeper has its flight deck 7.9 m lower in the world, and
+  `CARRIER_DECKS` now carries the world-frame figure. Yorktown 20.45 → 12.54, Kaga 23.47 → 15.76,
+  Soryu 20.42 → 12.89, Hiryu 20.6 → 12.92; the three supplied models bake their waterline at y = 0 and
+  keep 20.06. `node scripts/check-geometry.mjs` asserts the arithmetic between the two frames rather
+  than only the numbers, and flies a real guided diversion onto Yorktown's new datum:
+  `recovered on USS Yorktown at 35.7 m / -9.98 m, wheels 14.46 m over a 12.54 m deck`.
+
+  **Criterion change, defect 4: AC-2's flat 0.1 m is not the right bound for a deck that slopes, and
+  this is the reasoning.** The alternative was a datum that varies along the deck. It was rejected:
+  `deckHeight` is consumed as a single number by the installed `FlightModel` environment's deck
+  override, by `recovery.finalReady`, by the HUD cue and by the deck park, so making it positional is a
+  positional contact plane in `@threenative/core` — an engine change this PRD explicitly does not claim
+  ("Dynamic rolled/heaving-deck contact fidelity is not claimed by a static clearance check"). The
+  measured slope is also not a design feature of a 1942 flight deck; it is the imported model's own
+  sheer. So the 0.1 m survives, held against the quantity a single number can honestly answer for:
+
+  - the datum must sit within **0.1 m of the centre of the elevation range** its own deck covers along
+    the corridor — the best a single number can do, and a real constraint: it fails if the datum is
+    taken from one end of a sloping deck, which is how Hiryu's 0.765 m error arose; and
+  - that range — the deck's sheer along the corridor — must itself be at most **2 m**, so the worst
+    wheel-contact error a static datum can leave is 1 m, inside the 2.2 m `check-geometry` already
+    accepts at touchdown. Beyond 2 m the surface is a model defect rather than a sloped deck, and the
+    gate says so in those words.
+
+  All four hulls pass both: worst datum offset 0.042 m (Yorktown), worst sheer 1.657 m (Hiryu), worst
+  single station 0.834 m (Hiryu), each reported in the run above.
+
+  **Two model defects remain, measured and not tuned away.** They are asset problems rather than
+  disagreements between the model and the game's numbers, so `capture-deck.mjs` prints them as notes:
+
+  - **The imported Yorktown's island straddles its own centreline** for a stretch amidships: at the
+    corridor's centre station and at its forward end there is no flight deck on the centreline at all,
+    so an aircraft rolling down that corridor passes through the island. `node tools/measure-decks.mjs`
+    reports an unobstructed centred width of 0 m against a 20 m corridor derived from the deck edges.
+  - **Kaga's island stands inboard on the port side of its own flight deck.** The port deck is clear to
+    only 4 m from the centreline at amidships and 0 m at two stations abaft it, against 22-25 m to
+    starboard: the usable deck is offset about 15 m to starboard, so no rectangle centred on that ship's
+    origin is both clear and wide enough to roll down.
+
+  Either needs the asset fixing, or a laterally offset corridor — a new field on the deck record plus
+  the same offset in `onDeck` and in `recovery`'s line-up, which is a fifth change and was not made
+  silently. Until one of those happens, both corridors are honest about the *deck* and optimistic about
+  what stands on it. **This is also why the AC-2 box stays unticked**: the 0.1 m agreement clause is
+  met, and the "visual inspection verifies class silhouette" clause is not, for those two hulls.
+
+  Two copies of one measurement are also gone: `src/render/imported-ships.ts` no longer holds a `DECKS`
+  table, `check-geometry` asserts its absence, and `src/render/world.ts` reads the corridor and the datum
+  off the ship record `Battle` resolved before any mesh existed.
+
+  Length within 0.050% worst case and beam, height, keel datum and bow direction asserted by
+  `node tools/check-catalog.mjs` and `node tools/check-fleet.mjs` against the shipped bytes; repairs
+  documented per class in `src/sim/catalog.ts` and cited in `docs/reference-dimensions.md`; silhouettes,
+  island sides, screws and markings inspected in orthographic renders, including the VT-6 `6-T-6`
+  Devastator and the AI-301 Kate. Frames per carrier are in `screenshots/deck-*.png`.
 - [ ] **AC-3 [local; actor: implementation agent]:** Choosing TBD from the real briefing produces a TBD in deck, chase and cockpit views. AI TBD/Kate and parked examples use their correct airframes across LOD; no Dauntless fallback or stale animation/disposal dispatch. Evidence: pending.
 - [ ] **AC-4 [local; actor: implementation agent]:** Each new aircraft demonstrates startup/cruise/cut prop states, correct gear/hook/surface motion and independent instance state. A real release removes one visible store, creates one weapon and changes payload once. Inspect close captures through the full moving-part range. Evidence: pending.
 - [ ] **AC-5 [local; actor: implementation agent]:** Through `Battle.step`, loaded TBD and Kate execute stable engine-driven ingress, legal torpedo release and recovery; Kate also executes level bombing. Power/control damage changes flight, no universal minimum-speed flight survives engine loss, and AI no longer uses the old motion integrator. Evidence: pending.

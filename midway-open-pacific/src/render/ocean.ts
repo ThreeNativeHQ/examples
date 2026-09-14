@@ -127,10 +127,13 @@ export function createOcean() {
         .mul(size.z)
         .mul(bowBias);
       foam.addAssign(
-        wake.mul(.42).add(wash.mul(.45)).add(hullWash.mul(.5)).mul(noise.mul(.62).add(.38)),
+        wake.mul(.8).add(wash.mul(.55)).add(hullWash.mul(.6)).mul(noise.mul(.62).add(.38)),
       );
     }
-    result.assign(mix(result, vec3(.52, .65, .66), foam.clamp(0, .72)));
+    // Aerated water is the brightest thing in a wartime photograph of a task force at speed —
+    // a wake reads as white against deep blue, not as a slightly paler shade of the sea.
+    // Crest foam reaches this same colour but only at .14 strength, so whitecaps stay subtle.
+    result.assign(mix(result, vec3(.74, .82, .84), foam.clamp(0, .85)));
     const distance = cameraPosition.sub(vec3(world.x, worldHeight, world.y)).length();
     return mix(result, skyColor(vec3(view.x, .015, view.z).normalize()), distance.mul(-.000012).exp().oneMinus());
   })();
