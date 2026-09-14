@@ -27,20 +27,32 @@ import {
 import { applyLoadout, torpedoEnvelope, updateStores, type ILoadout, LOADOUTS } from "./armament.js";
 import {
   ASSIGNMENTS,
+  concludeOperation,
   confirmPending,
   hitQualifies,
   isShort,
   newSortie,
+  operationOutcome,
   outcomeText,
+  pendingOpportunities,
   recordObjectiveHit,
   stamp,
   targetEligible,
   type Assignment,
+  type IOperationOutcome,
+  type IOperationWorld,
   type IResult,
   type ISortie,
   type IStamp,
   type Outcome,
 } from "./sortie.js";
+import {
+  offerBriefing,
+  retaskOnUnavailable,
+  validateSelection,
+  type BriefingOption,
+  type IBriefingWorld,
+} from "./briefing.js";
 import {
   approach,
   APPROACH_SPEED,
@@ -671,17 +683,79 @@ export class Battle {
     return true;
   }
 
-  /** Known eligible contacts; recon and Open Pacific retain carrier navigation targets. */
+  /**
+   * The plain battle records the briefing, the one validator and the Open Pacific end conditions
+   * read. Contacts are the crew's own beliefs, never a hull's live position, and nothing here
+   * reaches into a ship for identity that was not first delivered to the fleet.
+   */
+  briefingWorld(): IBriefingWorld {
+    return {
+      ships: this.ships,
+      aircraft: this.aircraft,
+      contacts: [...this.contacts.values()],
+      survivors: this.survivors,
+      facilities: this.facilities,
+    };
+  }
+
+  /** The same world, named for the Open Pacific end conditions that also read the fleet's beliefs. */
+  operationWorld(): IOperationWorld {
+    return this.briefingWorld();
+  }
+
+  /**
+   * The assignment categories the world can actually offer, through the one briefing contract, so
+   * surface strike and fleet support reach the player with their real feasibility and their reasons
+   * rather than a hard-coded list.
+   */
+  briefingOptions(): BriefingOption[] {
+    return offerBriefing(this.briefingWorld(), this.time);
+  }
+
+  /** The one `{kind,id}` option for a designation, read off the hull record, never stored twice. */
+  private designationOption(id: string, assignment: Assignment): BriefingOption | null {
+    const ship = this.byId(id);
+    if (!ship) return null;
+    return {
+      kind: assignment,
+      targetKind: ship.kind as BriefingOption["targetKind"],
+      targetId: id,
+      label: ship.name,
+      detail: "",
+      feasible: true,
+      reason: "",
+    };
+  }
+
+  /** Any enemy hull this assignment could still be pointed at; a submerged boat may surface again. */
+  private eligibleHullRemains(assignment: Assignment): boolean {
+    return this.ships.some((x: Any) => targetEligible(assignment, { ...x, surfaced: true }));
+  }
+
+  /**
+   * Known eligible contacts; recon and Open Pacific retain carrier navigation targets. Only a hull
+   * this crew has actually identified is offered — a classified but unnamed report establishes no
+   * target — and the one validator then answers whether the sighting is still current.
+   */
   targetContacts(): IReport[] {
-    const assignment = this.sortie.assignment === "surface" ? "surface" : "strike";
-    return [...this.contacts.values()].filter((contact) => {
-      const ship = this.ships.find((s: Any) => s.id === contact.id);
-      return !contact.lost && contact.kind === ship?.kind && targetEligible(assignment, ship);
-    });
+    const assignment: Assignment = this.sortie.assignment === "surface" ? "surface" : "strike";
+    const world = this.briefingWorld();
+    const out: IReport[] = [];
+    for (const contact of this.contacts.values()) {
+      if (contact.lost) continue;
+      const ship = this.byId(contact.id);
+      if (!ship || contact.kind !== ship.kind) continue;
+      const option = this.designationOption(contact.id, assignment);
+      if (option && validateSelection(option, world, this.time).ok) out.push(contact);
+    }
+    return out;
   }
 
   designateTarget(id: string, navigate = true): boolean {
     if (!this.targetContacts().some((c) => c.id === id)) return false;
+    const assignment: Assignment = this.sortie.assignment === "surface" ? "surface" : "strike";
+    const option = this.designationOption(id, assignment);
+    if (!option || !validateSelection(option, this.briefingWorld(), this.time).ok) return false;
     this.target = id;
     if (navigate) this.player.nav = "search";
     this.updateSortie();
@@ -1541,24 +1615,43 @@ export class Battle {
     return stamp(this.sortie, this.sortie.target, ordered);
   }
 
-  /** Reconcile known targets without silently choosing a replacement after a loss. */
+  /**
+   * Reconcile known targets without silently choosing a replacement after a loss. A dead or gone
+   * designation is answered by the one retask contract: it is cleared, and the crew is told to
+   * retask when any legal hull remains or that none does — never handed a different target.
+   */
   updateSortie(): void {
     const s = this.sortie;
     confirmPending(s, (id: string) => this.contacts.get(id));
     if (s.assignment !== "strike" && s.assignment !== "surface") return;
     const contacts = this.targetContacts();
     const live = (id: string | null) => contacts.some((c) => c.id === id);
-    if (live(this.target)) s.target = this.target;
-    else if (s.target && !live(s.target)) {
+    if (live(this.target)) {
+      s.target = this.target;
+    } else if (s.target && !live(s.target)) {
+      const option = this.designationOption(s.target, s.assignment);
+      const verdict = option ? retaskOnUnavailable(option, this.briefingWorld(), this.time) : { result: "unavailable" as const };
       if (this.target === s.target) this.target = null;
       s.target = null;
-      if (s.objective === "pending")
-        this.say("STRIKE CONTROL", "Your target is no longer eligible. Designate another contact with TAB.", true);
+      if (s.objective === "pending") {
+        if (this.eligibleHullRemains(s.assignment)) {
+          this.say(
+            "STRIKE CONTROL",
+            verdict.result === "retask"
+              ? "Your target is no longer eligible. Designate another contact with TAB."
+              : "Your target is gone. Designate another contact with TAB.",
+            true,
+          );
+        } else {
+          s.objective = "unavailable";
+          this.say("STRIKE CONTROL", "No eligible enemy ship remains. Return to the task force and report.", true);
+        }
+      }
     }
     if (s.objective !== "pending") return;
     this.designateKnownCarrier();
     // A submerged boat can surface again; its dive must not permanently end Surface Strike.
-    if (!s.target && !this.ships.some((x: Any) => targetEligible(s.assignment, { ...x, surfaced: true }))) {
+    if (!s.target && !this.eligibleHullRemains(s.assignment)) {
       s.objective = "unavailable";
       this.say("STRIKE CONTROL", "No eligible enemy ship remains. Return to the task force and report.", true);
     }
@@ -1990,6 +2083,8 @@ export class Battle {
   lose(reason: string): void {
     if (this.status !== "playing") return;
     if (isShort(this.sortie) && !this.sortie.result) this.sortie.result = this.snapshotResult("lost", this.home);
+    else if (this.sortie.assignment === "operation" && !this.sortie.result)
+      concludeOperation(this.sortie, { state: "defeat", reason }, this.time);
     this.status = "lost";
     this.reason = reason;
     this.event("explosion");
@@ -2039,6 +2134,7 @@ export class Battle {
       this.observeFleet();
       this.deliverReports();
       for (const s of this.ships) if (s.kind === "carrier" && !s.sunk && s.air) this.updateCarrier(s);
+      this.updateOperation();
     }
     if (this.time > 7 && !this.reconLaunched) {
       this.reconLaunched = true;
@@ -2688,9 +2784,16 @@ export class Battle {
         this.playerFlight.reset();
         this.stats.sorties += 1;
         this.say("DECK CREW", `${supplies.length ? `Repairs complete. ${supplies.join(" ")}` : "Refueled, repaired and rearmed."} Takeoff flaps set. Advance power when ready.`, supplies.length > 0);
-        if (this.strikeComplete) {
-          this.status = "won";
-          this.reason = "Enemy carrier aviation neutralized. You brought your crew home.";
+        if (this.sortie.assignment === "operation" && !this.sortie.result) {
+          // Open Pacific ends on its own conditions, not on one neutralized deck: full success needs
+          // the threats resolved and the fleet able to fly, and the conclusion is frozen once.
+          const outcome = operationOutcome(this.operationWorld(), this.time);
+          if (outcome.state === "success") {
+            this.reason = outcomeText(concludeOperation(this.sortie, outcome, this.time));
+            this.status = "won";
+          } else if (outcome.state === "running") {
+            this.say("BATTLE CONTROL", `Open Pacific continues: ${outcome.reason}.`, true);
+          }
         }
       }
       return;
@@ -2955,7 +3058,36 @@ export class Battle {
       this.say("LANDING SIGNAL OFFICER", "Aboard and safe. That is the sortie.", true);
       return;
     }
+    if (this.sortie.assignment === "operation" && !this.sortie.result) {
+      // Recovering is the crew's explicit choice to end Open Pacific; the pure end conditions decide
+      // whether that choice is a win, and one conclusion freezes exactly one record.
+      const outcome = operationOutcome(this.operationWorld(), this.time);
+      if (outcome.state === "success") {
+        this.reason = outcomeText(concludeOperation(this.sortie, outcome, this.time));
+      }
+    }
     this.say("DECK CREW", "Welcome aboard. Fuel, ammunition and repairs are under way.", true);
+  }
+
+  /**
+   * Open Pacific's own clock. Evaluated on the coarse operational cadence: the pure end condition
+   * says whether the operation has been won or lost, and it only concludes as a win when nothing is
+   * still pending to salvage or pursue, because ending the operation stays the crew's choice.
+   * `concludeOperation` freezes exactly one result record, so a second tick can never rewrite it.
+   */
+  updateOperation(): void {
+    if (this.sortie.assignment !== "operation" || this.sortie.result) return;
+    const outcome = operationOutcome(this.operationWorld(), this.time);
+    if (outcome.state === "running") return;
+    if (outcome.state === "defeat") {
+      this.lose(outcome.reason);
+      return;
+    }
+    if (pendingOpportunities(this.operationWorld(), this.time).length) return;
+    if (!["service", "deck", "arrest"].includes(this.player.mode)) return;
+    this.reason = outcomeText(concludeOperation(this.sortie, outcome, this.time));
+    this.status = "won";
+    this.event("operation", { state: outcome.state });
   }
 
   assistRecovery(): boolean {
