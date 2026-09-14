@@ -21,7 +21,11 @@ const SEA = .65;
 const FAR_RANGE = 8000;
 const swell = new WaveField({waves:OCEAN_BANDS.map(([a,kx,kz,w])=>({direction:{x:kx,z:kz},
   wavelength:2*Math.PI/Math.hypot(kx,kz),amplitude:a*SEA,speed:w,detail:true}))});
-export const oceanSwell = (x:number,z:number,time:number) => swell.sample(x,z,time).height;
+// The CPU asks for this height thousands of times a frame — every whitewater parcel, every hull
+// query, every float — and throws the normal away every time. `heightAt` is the engine's scalar
+// query: the same arithmetic in the same order as `sample`, with no jacobian, no slope, and no
+// result object or `Vector3` allocated per call. The shader graph below is unchanged.
+export const oceanSwell = (x:number,z:number,time:number) => swell.heightAt(x,z,time);
 export const oceanSwellNode = (point:any,time:any):any => swell.heightNode({point,time});
 
 /** Periodic height noise; both slopes derive from one surface. Adapted from Fluid Lab V2 (MIT). */

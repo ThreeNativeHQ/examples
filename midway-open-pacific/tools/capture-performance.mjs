@@ -49,6 +49,17 @@ const START_TICK = Number(process.env.MIDWAY_START_TICK || 12);
 // One scheduled water event every four battle seconds. A wall-clock timer would fire a different
 // number of events on a slower build, which is the comparison quietly measuring itself.
 const IMPACT_PERIOD = 4;
+// The two fixtures sample a fixed window of BATTLE time, not of wall time.
+//
+// The PRD asked for a sixty wall-second sample and a simulated duration matched to 0.1 s. On a
+// machine whose fixed-step loop is clamping its catch-up those two cannot both hold: battle seconds
+// per wall second is exactly what varies with load and with the change under test, so a wall-clock
+// window hands each side a different slice of the battle and then compares them. Sampling a fixed
+// battle window instead makes both sides cover the *same* section of the same battle — which is
+// what the matching rule exists to guarantee — and a faster build simply finishes it sooner.
+// MIDWAY_WALL_CAP bounds the wall time so a stalled run fails instead of hanging.
+const SAMPLE_TICKS = Number(process.env.MIDWAY_SAMPLE_TICKS || 30);
+const WALL_CAP = Number(process.env.MIDWAY_WALL_CAP || 240);
 // AC-23's approved envelope: the live-aircraft ceiling Battle enforces (`ACTIVE_CAP` in
 // src/sim/battle.ts). It is fixed and never env-overridable, because an override could only lower
 // the bar. A 30-minute natural run was measured to plateau at 22, so the current natural battle
@@ -79,6 +90,8 @@ const BASELINE_FIELDS = [
   "requiredAircraft",
   "hidden",
   "workload",
+  "startTick",
+  "sampleTicks",
 ];
 
 /**
@@ -155,10 +168,15 @@ function qualificationReasons(meta, pop, relativePass) {
  * cockpit, or a water sample whose water never moved, is a missing observation: reporting its
  * timings as if the workload had run is how a benchmark measures the wrong scene and calls it fast.
  */
-function workloadEvidenceFailures(workload, evidence) {
+function workloadEvidenceFailures(workload, evidence, sampleSeconds) {
   const out = [];
   if (evidence.status !== "playing") out.push(`battle status ${evidence.status} is not a running battle`);
-  if (!(evidence.simSeconds > 30)) out.push(`the battle clock did not advance across the sample: ${evidence.simSeconds}s`);
+  // Relative to the sample, not an absolute number of seconds: the fixed-step loop clamps its
+  // catch-up, so a heavily loaded machine advances less battle time per wall second, and an
+  // absolute floor would reject a short attribution run that ran perfectly well.
+  const wanted = evidence.sampleTicks ?? sampleSeconds;
+  if (!(evidence.simSeconds >= wanted * (evidence.sampleTicks ? 0.999 : 0.5)))
+    out.push(`the battle clock did not advance across the sample: ${evidence.simSeconds}s of ${wanted}s`);
   if (workload === "cockpit") {
     if (evidence.cameraMode !== 1) out.push(`camera mode ${evidence.cameraMode} is not the cockpit`);
     if (!(evidence.playerHp > 0)) out.push("the player crashed during the sample");
@@ -293,6 +311,8 @@ if (process.argv.includes("--self-check")) {
     requiredAircraft: 68,
     hidden: null,
     workload: "crowd68-fixture",
+    startTick: null,
+    sampleTicks: null,
     population: { min: 68, max: 70 },
     gpuP95: 6.8,
     cpuP95: 0.7,
@@ -397,8 +417,8 @@ if (process.argv.includes("--self-check")) {
   // AC-6's arithmetic.
   assert.equal(median([3, 1, 2]), 2, "median of three is the middle value");
   assert.equal(median([1, 3]), 2, "median of two interpolates");
-  const fixture = { aircraftMin: 12, aircraftMax: 14, shipsMin: 20, shipsMax: 20, acceptedImpacts: 14, simStart: 12, simSeconds: 60 };
-  const run = (over, fx = {}) => ({ ...cur, workload: "water-impact-fixture", requiredAircraft: 0, file: "run", fixture: { ...fixture, ...fx }, ...over });
+  const fixture = { aircraftMin: 12, aircraftMax: 14, shipsMin: 20, shipsMax: 20, acceptedImpacts: 14, startTick: 75, sampleTicks: 30, simStart: 75, simSeconds: 30 };
+  const run = (over, fx = {}) => ({ ...cur, workload: "water-impact-fixture", requiredAircraft: 0, startTick: 75, sampleTicks: 30, file: "run", fixture: { ...fixture, ...fx }, ...over });
   const before3 = [run({ updateRenderCpuP95: 50 }), run({ updateRenderCpuP95: 52 }), run({ updateRenderCpuP95: 54 })];
   const good = [run({ updateRenderCpuP95: 39 }), run({ updateRenderCpuP95: 40 }), run({ updateRenderCpuP95: 41 })];
   assert.deepEqual(compareWorkload(before3, good).failures, [], "a 23% improvement with matched components passes");
@@ -418,13 +438,13 @@ if (process.argv.includes("--self-check")) {
     "a different accepted-impact count is not a matched comparison",
   );
   assert.ok(
-    compareWorkload(before3, good.map((r) => ({ ...r, fixture: { ...fixture, simStart: 12.5 } }))).failures.some((r) =>
+    compareWorkload(before3, good.map((r) => ({ ...r, fixture: { ...fixture, simStart: 75.5 } }))).failures.some((r) =>
       r.includes("starts at battle time"),
     ),
     "a candidate measured over a later slice of the battle is rejected",
   );
   assert.ok(
-    compareWorkload(before3, good.map((r) => ({ ...r, fixture: { ...fixture, simSeconds: 59 } }))).failures.some((r) =>
+    compareWorkload(before3, good.map((r) => ({ ...r, fixture: { ...fixture, simSeconds: 29 } }))).failures.some((r) =>
       r.includes("covers"),
     ),
     "a candidate covering a different simulated duration is rejected",
@@ -452,42 +472,42 @@ if (process.argv.includes("--self-check")) {
 
   // A fixture whose water never actually ran is a missing observation, not a fast frame.
   assert.ok(
-    workloadEvidenceFailures("water-impact", { acceptedImpacts: 0, whitewaterMax: 400, energyMax: 3, simSeconds: 60, status: "playing" }).some((r) =>
+    workloadEvidenceFailures("water-impact", { acceptedImpacts: 0, whitewaterMax: 400, energyMax: 3, sampleTicks: 30, simSeconds: 30, status: "playing" }, 60).some((r) =>
       r.includes("accepted"),
     ),
     "a water fixture that accepted no impacts is rejected",
   );
   assert.ok(
-    workloadEvidenceFailures("water-impact", { acceptedImpacts: 14, whitewaterMax: 0, energyMax: 3, simSeconds: 60, status: "playing" }).some((r) =>
+    workloadEvidenceFailures("water-impact", { acceptedImpacts: 14, whitewaterMax: 0, energyMax: 3, sampleTicks: 30, simSeconds: 30, status: "playing" }, 60).some((r) =>
       r.includes("whitewater"),
     ),
     "a water fixture with no active whitewater is rejected",
   );
   assert.ok(
-    workloadEvidenceFailures("water-impact", { acceptedImpacts: 14, whitewaterMax: 400, energyMax: 0, simSeconds: 60, status: "playing" }).some((r) =>
+    workloadEvidenceFailures("water-impact", { acceptedImpacts: 14, whitewaterMax: 400, energyMax: 0, sampleTicks: 30, simSeconds: 30, status: "playing" }, 60).some((r) =>
       r.includes("energy"),
     ),
     "a water fixture whose wave energy never rose is rejected",
   );
   assert.deepEqual(
-    workloadEvidenceFailures("water-impact", { acceptedImpacts: 14, whitewaterMax: 400, energyMax: 3, simSeconds: 60, status: "playing" }),
+    workloadEvidenceFailures("water-impact", { acceptedImpacts: 14, whitewaterMax: 400, energyMax: 3, sampleTicks: 30, simSeconds: 30, status: "playing" }, 60),
     [],
     "a real water fixture passes",
   );
   assert.ok(
-    workloadEvidenceFailures("cockpit", { cameraMode: 2, playerHp: 3, status: "playing", simSeconds: 60 }).some((r) => r.includes("camera")),
+    workloadEvidenceFailures("cockpit", { cameraMode: 2, playerHp: 3, status: "playing", simSeconds: 60 }, 60).some((r) => r.includes("camera")),
     "a cockpit fixture that left the cockpit is rejected",
   );
   assert.ok(
-    workloadEvidenceFailures("cockpit", { cameraMode: 1, playerHp: 3, status: "debrief", simSeconds: 60 }).some((r) => r.includes("status")),
+    workloadEvidenceFailures("cockpit", { cameraMode: 1, playerHp: 3, status: "debrief", simSeconds: 60 }, 60).some((r) => r.includes("status")),
     "a cockpit fixture that ended in debrief is rejected",
   );
   assert.ok(
-    workloadEvidenceFailures("cockpit", { cameraMode: 1, playerHp: 0, status: "playing", simSeconds: 60 }).some((r) => r.includes("crashed")),
+    workloadEvidenceFailures("cockpit", { cameraMode: 1, playerHp: 0, status: "playing", simSeconds: 60 }, 60).some((r) => r.includes("crashed")),
     "a cockpit fixture whose player crashed is rejected",
   );
   assert.ok(
-    workloadEvidenceFailures("cockpit", { cameraMode: 1, playerHp: 3, status: "playing", simSeconds: 1 }).some((r) => r.includes("advance")),
+    workloadEvidenceFailures("cockpit", { cameraMode: 1, playerHp: 3, status: "playing", simSeconds: 1 }, 60).some((r) => r.includes("advance")),
     "a cockpit fixture whose battle clock stalled is rejected",
   );
   console.log("self-check PASS");
@@ -541,6 +561,110 @@ const { percentile, verdict, regression, format, REGRESSION_LIMIT_PCT } = await 
     ).outputFiles[0].text,
   )}`
 );
+
+// `--trace <file.json.gz> [--against a.json,b.json,...]`: recompute the supplied recording's own
+// figures from its bytes and put them beside this change's measured ones.
+//
+// What this is: the diagnostic recording PRD-midway-trace-20260914-performance was written from,
+// recomputed here in node with the SAME percentile rule as everything else (src/sim/perf.ts), so
+// the numbers quoted in that document can be re-derived rather than trusted.
+//
+// What this is NOT: a matched baseline. The recording was taken on a normal desktop session with
+// DevTools attached, at an unknown drawing-buffer size, over an uncontrolled slice of play; these
+// captures run headed on a virtual display under whatever else this machine is doing. Two named
+// biases, in opposite directions, and neither is quantified:
+//
+//   - `FixedStepLoop.#frameCallback` is the WHOLE game callback. `updateRenderCpu` is a subset of
+//     it: scene update since the previous outer render, plus that render. Engine work inside the
+//     callback but outside those wrappers — clustered reconciliation, and whatever else the loop
+//     does — is in the trace's number and not in ours. This flatters us.
+//   - The trace ran with a profiler attached, which inflates it; and these runs share a loaded
+//     machine with other work, which inflates us.
+//
+// So a win here is corroboration, not proof. AC-6's matched before/after captures are the proof.
+if (process.argv.includes("--trace")) {
+  const at = process.argv.indexOf("--trace");
+  const file = process.argv[at + 1];
+  if (!file) throw new Error("--trace needs a path to a DevTools .json.gz recording");
+  const againstAt = process.argv.indexOf("--against");
+  const against = againstAt === -1 ? [] : (process.argv[againstAt + 1] ?? "").split(",").filter(Boolean);
+
+  const bytes = await readFile(file);
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  const { gunzipSync } = await import("node:zlib");
+  const trace = JSON.parse(gunzipSync(bytes).toString("utf8"));
+  const events = trace.traceEvents ?? trace;
+
+  // The recording names its own renderer process and main thread; find them rather than hardcoding
+  // the pid from the document, so this still works on a different recording of the same game.
+  const callbacksBy = new Map();
+  for (const e of events)
+    if (
+      e.ph === "X" &&
+      e.name === "FunctionCall" &&
+      e.args?.data?.functionName === "FixedStepLoop.#frameCallback"
+    ) {
+      const key = `${e.pid}/${e.tid}`;
+      if (!callbacksBy.has(key)) callbacksBy.set(key, []);
+      callbacksBy.get(key).push(e);
+    }
+  const [key, callbacks] = [...callbacksBy.entries()].sort((a, b) => b[1].length - a[1].length)[0] ?? [];
+  assert.ok(callbacks?.length, "the recording contains no FixedStepLoop.#frameCallback events");
+  const [pid, tid] = key.split("/").map(Number);
+
+  // The selected window is the span the callbacks themselves cover, and only complete events
+  // wholly inside it are counted — the rule the PRD's own snippet uses.
+  const starts = callbacks.map((e) => e.ts).sort((a, b) => a - b);
+  const lo = starts[0];
+  const hi = Math.max(...callbacks.map((e) => e.ts + (e.dur ?? 0)));
+  const durations = callbacks.map((e) => e.dur / 1000);
+  const tasks = events.filter(
+    (e) => e.pid === pid && e.tid === tid && e.ph === "X" && e.name === "RunTask" && e.ts >= lo && e.ts + (e.dur ?? 0) <= hi,
+  );
+  const window = (hi - lo) / 1e6;
+  const recording = {
+    file,
+    sha256: digest,
+    process: key,
+    callbacks: callbacks.length,
+    windowSeconds: +window.toFixed(6),
+    cadencePerSecond: +(((starts.length - 1) * 1e6) / (starts[starts.length - 1] - starts[0])).toFixed(4),
+    callbackP50: percentile(durations, 0.5),
+    callbackP95: percentile(durations, 0.95),
+    callbackP99: percentile(durations, 0.99),
+    callbackWorst: durations.reduce((m, x) => (x > m ? x : m), 0),
+    mainBusyPct: +((100 * tasks.reduce((n, e) => n + e.dur, 0)) / (hi - lo)).toFixed(2),
+    longTasks: tasks.filter((e) => e.dur > 50000).length,
+  };
+  console.log(`recording ${JSON.stringify(recording, null, 2)}`);
+
+  if (!against.length) {
+    console.log("no --against records supplied; nothing compared");
+    process.exit(0);
+  }
+  const records = await Promise.all(
+    against.map(async (f) => ({ ...JSON.parse(await readFile(f, "utf8")), file: f })),
+  );
+  for (const r of records)
+    assert.ok(Number.isFinite(r.updateRenderCpuP95), `${r.file} has no finite updateRenderCpuP95`);
+  const mine = median(records.map((r) => r.updateRenderCpuP95));
+  const ratio = mine / recording.callbackP95;
+  console.log(
+    [
+      "",
+      `recording  FixedStepLoop.#frameCallback p95   ${recording.callbackP95.toFixed(2)} ms  (whole callback, ${recording.callbacks} calls, ${recording.mainBusyPct}% main-thread busy)`,
+      `candidate  updateRenderCpu p95 median         ${mine.toFixed(2)} ms  (subset: scene update + outer render, ${records.length} runs on ${records[0].workload})`,
+      `           ${((1 - ratio) * 100).toFixed(1)}% of the recorded p95 removed — corroboration, not proof; see the two biases above`,
+      "",
+    ].join("\n"),
+  );
+  assert.ok(
+    mine < recording.callbackP95,
+    `the measured update+render p95 (${mine.toFixed(2)} ms) does not beat the recorded callback p95 (${recording.callbackP95.toFixed(2)} ms)`,
+  );
+  console.log("PASS: every supplied run's update+render p95 median is below the recorded callback p95");
+  process.exit(0);
+}
 
 // Checkout refs at the start of the run; the digest is not an exact fingerprint of the loaded
 // module bytes (a dev server may transform them), and concurrent edits are disclosed below.
@@ -772,7 +896,10 @@ try {
       await page.keyboard.down("ArrowRight");
     }
     await page.waitForTimeout(WARMUP * 1000);
-    await page.waitForFunction((tick) => window.midway.battle.time >= tick, START_TICK, { timeout: 120000 });
+    // The battle tick is waited for INSIDE the sample, by the step wrapper, so that the first step
+    // to reach it is observed. Waiting for it out here would consume it during setup and leave the
+    // wrapper to latch whatever tick happened to run first after installation — which is a
+    // load-dependent number, and the one thing this gate exists to remove.
   } else {
     await page.keyboard.down("Space");
     if (!burning) await page.keyboard.down("ArrowLeft");
@@ -783,7 +910,7 @@ try {
     }
   }
 
-  const result = await page.evaluate(async ({ sample, workload, wrapSource }) => {
+  const result = await page.evaluate(async ({ sample, workload, startTick, sampleTicks, wallCap, wrapSource }) => {
     const s = window.midway;
     const renderer = s.world.renderer;
     // GPU time is the figure that describes the game. Wall time is collected alongside it, but
@@ -799,6 +926,12 @@ try {
     const cpu = [];
     const stack = [];
     let substeps = 0;
+    // The first fixed step to reach the predeclared tick, observed inside the step itself. Battle
+    // time is a whole number of fixed steps, so this lands on exactly the same tick in every run
+    // however many steps a frame had to catch up — which a between-frames check cannot promise, and
+    // a wall-clock warm-up cannot promise at all.
+    let startedAt = null;
+    let endedAt = null;
     const origStep = b.step;
     b.step = function (dt, input) {
       const frame = { children: 0 };
@@ -812,6 +945,13 @@ try {
         const ms = performance.now() - t0;
         if (frame.children === 0) cpu.push(ms);
         else substeps += frame.children;
+        if (startedAt === null && startTick !== null && this.time >= startTick) startedAt = this.time;
+        // And the end of the window, latched the same way and for the same reason: checking
+        // `b.time` between frames ends the sample wherever the last catch-up burst happened to
+        // land, which is a load-dependent number, and two runs then cover slightly different
+        // battle windows. Latched here, both cover exactly `sampleTicks` of battle.
+        else if (startedAt !== null && endedAt === null && sampleTicks !== null && this.time - startedAt >= sampleTicks)
+          endedAt = this.time;
       }
     };
     // The CPU the leaf `Battle.step` timer above cannot see, which is most of it: the trace put
@@ -896,13 +1036,19 @@ try {
       tmp.project(cam);
       return tmp.x >= -1 && tmp.x <= 1 && tmp.y >= -1 && tmp.y <= 1 && tmp.z >= -1 && tmp.z <= 1;
     };
-    const timeStart = b.time;
+    if (startTick !== null)
+      await new Promise((resolve) => {
+        const poll = () => (startedAt === null ? requestAnimationFrame(poll) : resolve());
+        requestAnimationFrame(poll);
+      });
+    const timeStart = startedAt ?? b.time;
     const ammoStart = b.player.ammo ?? null;
     const positions = new Map(b.aircraft.map((a) => [a.id, { x: a.x, y: a.y, z: a.z }]));
     let ticks = 0;
     await new Promise((resolve) => {
       let last = performance.now();
       const stop = last + sample * 1000;
+      const hardStop = last + wallCap * 1000;
       const tick = async (now) => {
         wall.push(now - last);
         last = now;
@@ -942,7 +1088,8 @@ try {
         } catch {
           // No timestamp-query support; the gpu series stays empty and is reported as such.
         }
-        if (now < stop) requestAnimationFrame(tick);
+        const done = sampleTicks === null ? now >= stop : endedAt !== null || now >= hardStop;
+        if (!done) requestAnimationFrame(tick);
         else resolve();
       };
       requestAnimationFrame(tick);
@@ -974,7 +1121,8 @@ try {
     const advance = { seconds: +(b.time - timeStart).toFixed(1), moved, ammoStart, ammoEnd: b.player.ammo ?? null };
     // The exact battle-time window this sample covers. A comparison that does not match these is
     // measuring two different sections of the same battle and crediting the difference to code.
-    const fixture = { ...evidence, simStart: +timeStart.toFixed(3), simEnd: +b.time.toFixed(3), simSeconds: +(b.time - timeStart).toFixed(3) };
+    const windowEnd = endedAt ?? b.time;
+    const fixture = { ...evidence, startTick, sampleTicks, simStart: +timeStart.toFixed(3), simEnd: +windowEnd.toFixed(3), simSeconds: +(windowEnd - timeStart).toFixed(3) };
     // Raw durations, not summaries: AC-23's percentiles are computed once, in node, by
     // src/sim/perf.ts. Deriving a p95 here as well would be the second implementation the
     // repository forbids.
@@ -1006,7 +1154,14 @@ try {
         pixelRatio: renderer.getPixelRatio(),
       },
     };
-  }, { sample: SAMPLE, workload: WORKLOAD, wrapSource: wrapCalls.toString() });
+  }, {
+    sample: SAMPLE,
+    workload: WORKLOAD,
+    startTick: WORKLOAD ? START_TICK : null,
+    sampleTicks: WORKLOAD ? SAMPLE_TICKS : null,
+    wallCap: WALL_CAP,
+    wrapSource: wrapCalls.toString(),
+  });
   if (WORKLOAD !== "water-impact") await page.keyboard.up("Space");
   if (!burning && WORKLOAD !== "water-impact") await page.keyboard.up("ArrowRight");
 
@@ -1061,6 +1216,8 @@ try {
     quality: result.scene.quality,
     warmup: WARMUP,
     sample: SAMPLE,
+    startTick: WORKLOAD ? START_TICK : null,
+    sampleTicks: WORKLOAD ? SAMPLE_TICKS : null,
     seed: result.seed,
     damage: burning,
     input:
@@ -1143,7 +1300,7 @@ try {
   assert.deepEqual(errors, []);
   // A fixture must have been the thing it claims to measure before its timings mean anything.
   if (WORKLOAD) {
-    const evidenceFailures = workloadEvidenceFailures(WORKLOAD, { ...result.fixture });
+    const evidenceFailures = workloadEvidenceFailures(WORKLOAD, { ...result.fixture }, SAMPLE);
     assert.deepEqual(evidenceFailures, [], `${WORKLOAD} fixture did not run as declared: ${evidenceFailures.join("; ")}`);
   }
   // The new series fail closed exactly as the old ones do: a missing full-CPU observation is a
@@ -1166,7 +1323,10 @@ try {
   assert.ok(result.memory.total > 0, `memory observation present: ${JSON.stringify(result.memory)}`);
   // The sample must be a running battle, not a frozen frame: the simulation clock advanced and
   // live actors changed position. This fails if a fixture ever disables gameplay to look calm.
-  assert.ok(result.advance.seconds > SAMPLE * 0.5, `simulation advanced across the sample: ${result.advance.seconds}s`);
+  assert.ok(
+    result.advance.seconds > (WORKLOAD ? SAMPLE_TICKS * 0.9 : SAMPLE * 0.5),
+    `simulation advanced across the sample: ${result.advance.seconds}s`,
+  );
   assert.ok(result.advance.moved > 0, `live actors advanced across the sample: ${result.advance.moved} moved`);
 
   // Everything AC-23 requires on one record, decided by the single verdict from src/sim/perf.ts. A

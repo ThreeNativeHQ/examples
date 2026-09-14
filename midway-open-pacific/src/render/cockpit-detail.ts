@@ -5,7 +5,7 @@
  * out of the batch so live flight state can drive them.
  */
 import * as T from "three";
-import { Fn, cos, float, mix, sin, texture, uniform, uv, vec2, vec3 } from "three/tsl";
+import { Fn, cos, mix, sin, texture, uniform, uv, vec2, vec3 } from "three/tsl";
 import { MeshStandardNodeMaterial } from "three/webgpu";
 
 const PBR = [

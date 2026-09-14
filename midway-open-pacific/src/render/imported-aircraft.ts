@@ -379,9 +379,8 @@ export function disposeDouglas(root: T.Group): void {
  *
  * Neither the TBD nor the Kate GLB has a hook — nine clips each, none of them a hook — and this
  * game recovers onto a carrier deck every sortie, so the one part a player watches on every landing
- * was the one part missing. `src/render/dauntless.ts` already draws one for the procedural SBD and
- * ties it to gear position; this is the same part and the same convention on the imported models,
- * so the two airframes behave alike rather than one of them being silently hookless.
+ * was the one part missing. The imported Douglas already carries one tied to gear position;
+ * this is the same part and the same convention on the Kate, so the two airframes behave alike rather than one of them being silently hookless.
  *
  * The stinger is placed from the model's own bounds, not from typed-in metres: its root sits at the
  * tail on the centreline, just under the fuselage, so a change to the airframe's scale carries it.
@@ -603,7 +602,7 @@ export function animateImportedAirframe(
   opposed("flight.rudder-right", "flight.rudder-left", p.rudder ?? 0);
   // gear.retract runs deployed (time 0) to stowed (full), so gearPos 1 = down = time 0.
   hold("gear.retract", 1 - T.MathUtils.clamp(p.gearPos ?? 1, 0, 1));
-  // The hook comes down with the gear, the same tie `dauntless.ts` uses for the SBD: the simulation
+  // The hook comes down with the gear, the same tie the Douglas uses: the simulation
   // carries no separate hook state, and inventing one here would put the drawn part ahead of what
   // `recovery.ts` actually gates an arrestment on.
   if (rig.hook) rig.hook.rotation.x = T.MathUtils.clamp(p.gearPos ?? 1, 0, 1) * 0.42;

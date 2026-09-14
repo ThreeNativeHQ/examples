@@ -135,11 +135,38 @@ try{
  // is a canvas texture on the artificial horizon, and no canvas texture at all may change version
  // while the dial is flown through its whole range.
  assert.deepEqual(cockpit.horizonCanvas,[],`the artificial horizon holds no canvas texture: ${JSON.stringify(cockpit.horizonCanvas)}`);
+ await shot('cockpit-wide');
+ // The automated checks above are blind to how the dial looks, and the pilot's eye does not frame
+ // the instrument panel, so put the camera on the horizon's own face: find the mesh wearing that
+ // material, and look at it down its own normal. Every attitude below is then a picture a person
+ // can compare against the old canvas dial.
+ const framed=await page.evaluate(()=>{
+   const w=midway.world;let target=null;
+   w.scene.traverse(o=>{const m=o.material;if(!target&&m&&!Array.isArray(m)&&m.name==='Live artificial horizon')target=o;});
+   if(!target)return false;
+   target.updateWorldMatrix(true,false);
+   window.dial=target;
+   // `optimize()` merged this dial into one mesh per material, so the object's origin is the
+   // cockpit group's, not the instrument's. Its bounding sphere is where the dial actually is.
+   target.geometry.computeBoundingSphere();
+   const V3=Object.getPrototypeOf(w.camera.position).constructor;
+   const Q=Object.getPrototypeOf(w.camera.quaternion).constructor;
+   const local=target.geometry.boundingSphere.center,radius=target.geometry.boundingSphere.radius;
+   w.updateCamera=()=>{
+     const centre=local.clone().applyMatrix4(target.matrixWorld);
+     const n=new V3(0,0,1).applyQuaternion(target.getWorldQuaternion(new Q()));
+     w.camera.position.copy(centre).addScaledVector(n,radius*2.4);
+     w.camera.up.set(0,1,0);w.camera.fov=45;w.camera.lookAt(centre);
+     w.camera.updateProjectionMatrix();w.camera.updateMatrixWorld();
+   };
+   return {radius:+radius.toFixed(4)};
+ });
+ assert.ok(framed&&framed.radius>0,`the artificial horizon material is on a real mesh in the scene: ${JSON.stringify(framed)}`);
  const views=[['level',0,0],['climb-right',.35,.6],['dive-left',-.35,-.6],['pitch-limit',1.6,0],['roll-limit',0,3.6]];
  for(const [name,pitch,roll] of views){
    await page.evaluate(([pitch,roll])=>{const b=midway.battle;b.player.pitch=pitch;b.player.roll=roll;
      midway.world.update(0,b.time,false);},[pitch,roll]);
-   await shot(`cockpit-${name}`);
+   await shot(`attitude-${name}`);
  }
  // Flying the dial through its whole range must not have touched a single texture version, and the
  // cockpit's merged static meshes must have stopped recomposing without freezing where they are.
@@ -163,6 +190,7 @@ try{
  assert.ok(after.frozen>0,`static cockpit meshes stopped recomposing: ${JSON.stringify(after)}`);
  assert.ok(after.moved>0,`and are still carried to a real world position: ${JSON.stringify(after)}`);
  assert.equal(after.cameraMode,1,'the capture really flew the cockpit view');
+ assert.ok(after.eye.some(v=>v!==0),'the dial camera reached a real world position');
  console.log('cockpit',JSON.stringify({...cockpit,...after}));
 
  assert.deepEqual(errors,[]);console.log(JSON.stringify({plume,returning,bomb,deep,errors},null,2));
