@@ -3065,15 +3065,22 @@ export class Battle {
         this.damageShip(hit, b.damage || 155, point, "bomb", b.team, { owner: b.owner, stamp: b.stamp });
         b.dead = true;
       } else if (b.y <= 0) {
-        // A heavy bomb that misses the hull is fused to burst under the surface, not on it. The
-        // sea is what the crew hears and sees: a deep concussion first, the column a moment later.
-        this.fx("splash", b, 3.5, true);
-        this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: b.y, z: b.z }, material: "underwater" });
-        for (const s of this.ships) {
-          const l = localPoint(b, s);
-          const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.hullBeam / 2), Math.max(0, Math.abs(l.forward) - s.hullLength / 2));
-          if (d < 55 && !s.sunk)
-            this.damageShip(s, (b.damage || 155) * 0.4 * (1 - d / 55), b, "bomb", b.team, { owner: b.owner, nearMiss: true, stamp: b.stamp });
+        // A bomb that lands on the atoll hits the one facility it fell on — the radar's hit never
+        // touches the runway. Midway is American, so only a hostile weapon does any damage.
+        const facility = b.team === "jp" ? this.facilityAt(b) : null;
+        if (facility) {
+          this.hitFacility(facility, (b.damage || 155) / 155, b);
+        } else {
+          // A heavy bomb that misses the hull is fused to burst under the surface, not on it. The
+          // sea is what the crew hears and sees: a deep concussion first, the column a moment later.
+          this.fx("splash", b, 3.5, true);
+          this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: b.y, z: b.z }, material: "underwater" });
+          for (const s of this.ships) {
+            const l = localPoint(b, s);
+            const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.hullBeam / 2), Math.max(0, Math.abs(l.forward) - s.hullLength / 2));
+            if (d < 55 && !s.sunk)
+              this.damageShip(s, (b.damage || 155) * 0.4 * (1 - d / 55), b, "bomb", b.team, { owner: b.owner, nearMiss: true, stamp: b.stamp });
+          }
         }
         b.dead = true;
       }
