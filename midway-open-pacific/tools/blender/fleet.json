@@ -9,10 +9,13 @@
       "height": 46.8,
       "draught": 7.5,
       "flip": false,
+      "island": "port",
+      "islandHistorical": "starboard",
       "budget": 60000,
       "sourceTriangles": 45683,
       "class": "Kaga, as reconstructed 1935",
-      "heightSource": "matched to the shipped akagi.glb envelope (46.82 m keel to masthead)"
+      "heightSource": "matched to the shipped akagi.glb envelope (46.82 m keel to masthead)",
+      "islandNote": "her usable flight deck is offset to starboard because the island stands where the port deck should be; the real ship's was starboard after the 1935 reconstruction (docs/reference-dimensions.md), so the source model, not the flip, is wrong-side."
     },
     {
       "id": "carrier.soryu",
@@ -22,10 +25,12 @@
       "height": 40.0,
       "draught": 7.6,
       "flip": true,
+      "island": "starboard",
       "budget": 60000,
       "sourceTriangles": 23605,
       "class": "Soryu",
-      "heightSource": "scaled from the akagi.glb envelope by length ratio"
+      "heightSource": "scaled from the akagi.glb envelope by length ratio",
+      "islandNote": "Soryu carried a small starboard island (docs/reference-dimensions.md). The flip is applied and the shipped hull lands on starboard at +10.8 m mean X; removing or inverting the flip moves the island to port and trips check-fleet."
     },
     {
       "id": "carrier.hiryu",
@@ -35,6 +40,7 @@
       "height": 40.0,
       "draught": 7.8,
       "flip": false,
+      "island": "port",
       "budget": 60000,
       "sourceTriangles": 23421,
       "class": "Hiryu candidate; filename reads kyriu",
@@ -48,11 +54,14 @@
       "height": 48.0,
       "draught": 7.9,
       "flip": false,
+      "island": "centreline",
+      "islandHistorical": "starboard",
       "budget": 700000,
       "sourceTriangles": 199999,
       "class": "Yorktown CV-5",
       "heightSource": "DANFS hull figure plus the hornet.glb masthead envelope",
-      "note": "The Yorktown is simplified by error bound rather than to a triangle target, so its count is what an 0.0001 error tolerance yields, not a number chosen in advance."
+      "note": "The Yorktown is simplified by error bound rather than to a triangle target, so its count is what an 0.0001 error tolerance yields, not a number chosen in advance.",
+      "islandNote": "the shipped hull's superstructure is a 16 m block straddling the centreline for 80 m rather than a starboard island, which is why CV-5 is drawn from hornet.glb instead (src/render/imported-ships.ts)."
     },
     {
       "id": "cruiser.tone",

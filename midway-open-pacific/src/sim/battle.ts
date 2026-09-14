@@ -386,6 +386,8 @@ interface IDeck {
   deckWidth: number;
   deckHeight: number;
   deckBeam: number;
+  /** Metres the usable corridor is shifted to starboard of the ship's origin; 0 when the deck is clear on centreline. */
+  deckOffset: number;
 }
 
 /**
@@ -420,20 +422,26 @@ interface IDeck {
  * copies of a measurement is how they drift.
  */
 const CARRIER_DECKS: Readonly<Record<string, IDeck>> = Object.freeze({
-  "USS Enterprise": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
-  "USS Hornet": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
+  "USS Enterprise": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4, deckOffset: 0 },
+  "USS Hornet": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4, deckOffset: 0 },
   // Akagi's original stern deck slopes down ~1.4 m; the datum is its central deck.
-  Akagi: { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 31.3 },
+  Akagi: { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 31.3, deckOffset: 0 },
   // CV-5 is drawn from the same `hornet.glb` sister hull as CV-6 and CV-8 — see the note in
   // src/render/imported-ships.ts — so she carries their deck, not the imported Tripo Yorktown's.
-  "USS Yorktown": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
-  // Measured: deck 22.91..23.61, midpoint 23.26, less 7.5 m draught.
-  Kaga: { deckLength: 230, deckWidth: 18, deckHeight: 15.76, deckBeam: 52 },
+  "USS Yorktown": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4, deckOffset: 0 },
+  // Measured: deck 22.91..23.61, midpoint 23.26, less 7.5 m draught. Kaga's Tripo island is a
+  // 20 m wide, 48 m long, 23 m tall block whose inboard face touches the centreline — above
+  // deck+6 m it spans X -20.44..-0.43, Y -39.9..+7.8 — so the clear deck is not centred: amidships
+  // it is clear only ~4 m to port against ~22 m to starboard, and two stations abaft that the port
+  // clearance is 0. The usable rectangle is X -4..+22, ~26 m wide and centred ~+9 m to starboard,
+  // so the 18 m corridor is shifted there rather than widened. (The real ship's island was about
+  // 5 m wide at the deck edge; this reconstruction is wrong but it is what is shipped.)
+  Kaga: { deckLength: 230, deckWidth: 18, deckHeight: 15.76, deckBeam: 52, deckOffset: 9 },
   // Measured: deck 20.30..20.68, midpoint 20.49, less 7.6 m draught.
-  Soryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.89, deckBeam: 34 },
+  Soryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.89, deckBeam: 34, deckOffset: 0 },
   // Measured: deck 19.91..21.54, midpoint 20.72, less 7.8 m draught. The 1.64 m of sheer over the
   // corridor is the largest of the four, and the reason AC-2's flat 0.1 m bound cannot hold here.
-  Hiryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.92, deckBeam: 40 },
+  Hiryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.92, deckBeam: 40, deckOffset: 0 },
 });
 
 /** The plane a weapon strikes on a ship with no flight deck. What the hit code always assumed. */
@@ -449,7 +457,7 @@ export function shipGeometry(name: string, kind: string): IHull & IDeck {
   const hull = HULLS[name] ?? { hullLength: sub ? 92 : 112, hullBeam: sub ? 9 : 13, draught: sub ? 4.6 : 4.5 };
   // No flight deck, so nothing overhangs: the damage volume is one box of the hull's own beam.
   if (kind !== "carrier")
-    return { ...hull, deckLength: 0, deckWidth: 0, deckHeight: SUPERSTRUCTURE_TOP, deckBeam: hull.hullBeam };
+    return { ...hull, deckLength: 0, deckWidth: 0, deckHeight: SUPERSTRUCTURE_TOP, deckBeam: hull.hullBeam, deckOffset: 0 };
   const deck = CARRIER_DECKS[name];
   if (!deck) throw new Error(`no flight deck geometry for carrier: ${name}`);
   return { ...hull, ...deck };

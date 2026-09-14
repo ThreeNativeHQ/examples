@@ -120,6 +120,23 @@ assert.equal(overHull(abeam(kagaHull, kagaHull.deckBeam, kagaHull.deckHeight), k
 // A ship with no flight deck is one box, exactly as it always was.
 for (const s of b.ships) if (s.kind !== "carrier") assert.equal(s.deckBeam, s.hullBeam, `${s.name} has no overhang`);
 
+// ---- 2c — the corridor can be shifted athwartships. Kaga's island is a 20 m block on her centreline,
+// so `onDeck` measures her 18 m corridor from `deckOffset` = 9 m to starboard: the centreline
+// amidships — where the island stands — is not landing deck, while a point 9 m to starboard is. The
+// same two points on a carrier with no offset answer the opposite way, which is what proves the field
+// moves the rectangle rather than widening it. Asserted through the real Battle and onDeck.
+const kagaOffset = b.ships.find((s) => s.name === "Kaga");
+assert.equal(kagaOffset.deckOffset, 9, "Kaga's corridor is shifted 9 m to starboard");
+assert.equal(kagaOffset.deckWidth, 18, "the offset shifts the corridor; it does not widen it");
+for (const s of b.ships.filter((s) => s.kind === "carrier" && s.name !== "Kaga"))
+  assert.equal(s.deckOffset, 0, `${s.name} keeps its corridor on the centreline`);
+const soryuDeck = b.ships.find((s) => s.name === "Soryu");
+assert.ok(soryuDeck.deckWidth / 2 <= 9, "the zero-offset control must be narrower than 9 m to answer oppositely");
+assert.equal(onDeck(abeam(kagaOffset, 0, kagaOffset.deckHeight), kagaOffset), false, "Kaga's island stands on the centreline: not a landable corridor");
+assert.equal(onDeck(abeam(kagaOffset, 9, kagaOffset.deckHeight), kagaOffset), true, "9 m to starboard amidships is Kaga's clear deck");
+assert.equal(onDeck(abeam(soryuDeck, 0, soryuDeck.deckHeight), soryuDeck), true, "a centred deck takes the centreline");
+assert.equal(onDeck(abeam(soryuDeck, 9, soryuDeck.deckHeight), soryuDeck), false, "and 9 m to starboard is off its centreline");
+
 // ---- 3 — per-carrier deck datums, and no single global height.
 const decks = Object.fromEntries(b.ships.filter((s) => s.kind === "carrier").map((s) => [s.name, s.deckHeight]));
 assert.deepEqual(

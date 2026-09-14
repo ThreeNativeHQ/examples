@@ -180,6 +180,61 @@ const sizeOf = (object) => new Box3().setFromObject(object).getSize(new Vector3(
       `${ship.id}: ${triangles} triangles, keel ${box.min.y.toFixed(3)}, ` +
         `${size.z.toFixed(2)}m x ${size.x.toFixed(2)}m x ${size.y.toFixed(2)}m, ${shape}; pass`,
     );
+
+    // A carrier's island is the most asymmetric thing on the hull, so which side it stands on is a
+    // fact worth pinning to the shipped bytes. `flip` in fleet.json reverses bow and stern by a 180
+    // degree yaw, and that same yaw mirrors port and starboard, so a flipped carrier silently moves
+    // its island across the deck; nothing above the deck is visible to plan taper or end fineness.
+    // `ship.island` records the side the shipped model actually has, so the gate fires if a re-import
+    // or a flip change moves it. Where the model and history disagree, `ship.islandHistorical` records
+    // the real side and the run states the divergence instead of failing on a defect nobody fixes.
+    if (!ship.island) continue;
+
+    // The flight deck is the largest flat surface a carrier has, so it is the densest 1 m slab of
+    // the vertex cloud. Everything more than 6 m above it is superstructure - the island - because
+    // the deck-edge galleries and catwalks the task names stop at the deck.
+    const ys = vertices.map((v) => v.y).sort((a, b) => a - b);
+    let densest = 0;
+    let deck = ys[0];
+    for (let i = 0, j = 0; i < ys.length; i++) {
+      while (ys[i] - ys[j] > 1) j++;
+      if (i - j + 1 > densest) {
+        densest = i - j + 1;
+        deck = (ys[i] + ys[j]) / 2;
+      }
+    }
+    const above = vertices.filter((v) => v.y > deck + 6).map((v) => v.x).sort((a, b) => a - b);
+    assert(above.length, `${ship.id} has no vertices above its flight deck; cannot classify its island`);
+
+    const mean = above.reduce((a, b) => a + b, 0) / above.length;
+    const median = above[above.length >> 1];
+    // Same 5%-of-beam deadband the hull centre check uses: an island is either plainly to one side
+    // or, as on the imported Yorktown, a block straddling the centreline.
+    const sideOf = (x) => (Math.abs(x) <= ship.beam * 0.05 ? "centreline" : x > 0 ? "starboard" : "port");
+    assert(
+      sideOf(mean) === sideOf(median),
+      `${ship.id} island mean X ${mean.toFixed(2)}m and median X ${median.toFixed(2)}m classify differently`,
+    );
+
+    const measured = sideOf(median);
+    console.log(
+      `${ship.id} island: mean X ${mean.toFixed(2)}m, median X ${median.toFixed(2)}m -> ${measured} ` +
+        `(recorded ${ship.island})`,
+    );
+    assert.equal(
+      measured,
+      ship.island,
+      `${ship.id} island measured on the ${measured}, but fleet.json records ${ship.island}; the side ` +
+        `moved, so re-check the imported bytes and the recorded side together (a 180 degree flip ` +
+        `reverses the bow and mirrors port/starboard).`,
+    );
+    // A known-bad side that nobody is about to fix: state it, do not fail on it. This is the same
+    // shape tools/capture-deck.mjs uses for the imported hulls' model defects.
+    if (ship.islandHistorical && measured !== ship.islandHistorical)
+      console.log(
+        `NOTE ${ship.id}: island measured on the ${measured}; history puts it to ${ship.islandHistorical} — ` +
+          `${ship.islandNote}`,
+      );
   }
 
   // destroyer.samidare.glb matches the fleet naming pattern without being a fleet.json hull: it is

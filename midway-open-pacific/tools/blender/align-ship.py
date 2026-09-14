@@ -5,6 +5,13 @@ covariance of the vertex cloud, rewrites the mesh so length runs along glTF -Z (
 beam along X and the mast up, optionally flips bow/stern, scales uniformly to a reference
 length and drops the keel to Z=0. Reports every number it used so the measurement is auditable.
 
+--flip yaws the hull 180 degrees. That reverses bow and stern, which is all it is used for, and it
+also **mirrors port and starboard**, because a rotation about the vertical axis swaps the two sides.
+A symmetric hull does not notice; a carrier does, because its island is the most asymmetric thing on
+the ship and the flip carries it to the other side. Any hull with an island must have its side
+re-measured and recorded after a flip. tools/check-fleet.mjs asserts the island side against the
+`island` field in fleet.json, so a flip that moves an island no longer lands silently.
+
 Usage:
   blender -b -P tools/blender/align-ship.py -- <src.glb> <out.glb|-> [--length M] [--flip]
           [--preview PREFIX] [--waterline FRAC]
