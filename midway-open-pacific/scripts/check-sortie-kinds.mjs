@@ -32,6 +32,41 @@ const phelps = hull("phelps", "destroyer", { team: "us" });
 const wreck = hull("mikuma", "cruiser", { sunk: true });
 const fleet = [tone, arashi, i168, akagi, deep, phelps, wreck];
 
+// Midway's facilities and a launch/recovery carrier, for the Open Pacific end conditions.
+const facility = (id, kind, over = {}) => ({
+  id,
+  kind,
+  x: 0,
+  z: 0,
+  radius: 50,
+  health: 1,
+  burning: false,
+  repairProgress: 0,
+  repairBlocked: null,
+  ...over,
+});
+const atoll = (lost = false) => [
+  facility("strip", "airstrip", { health: lost ? 0 : 1 }),
+  facility("stores", "stores", { health: lost ? 0 : 1 }),
+  facility("radar", "radar"),
+  facility("radio", "radio"),
+  facility("seaplane", "seaplane", { health: lost ? 0 : 1 }),
+];
+const report = (targetId, over = {}) => ({
+  id: `r-${targetId}`,
+  team: "us",
+  targetId,
+  observedAt: 0,
+  deliveredAt: 0,
+  x: 0,
+  z: 0,
+  heading: 0,
+  speed: 0,
+  errorRadius: 0,
+  lost: false,
+  ...over,
+});
+
 // --- 1. A surface strike completes only on a confirmed hit on its own designated hull. ---
 const surface = () => {
   const s = S.newSortie("surface", 0, 7);
@@ -188,5 +223,142 @@ const surface = () => {
   assert.equal(S.designatedTarget(S.newSortie("surface"), fleet), null, "nothing designated resolves to no pair");
 }
 
+// --- 8. A fourth disabled enemy deck alone never ends an operation with an attack or rescue live. ---
+{
+  const usDeck = hull("enterprise", "carrier", { team: "us", deck: 1 });
+  const fourDeadDecks = [
+    hull("akagi", "carrier", { deck: 0 }),
+    hull("kaga", "carrier", { deck: 0 }),
+    hull("soryu", "carrier", { deck: 0 }),
+    hull("hiryu", "carrier", { deck: 0 }),
+  ];
+  const base = { ships: [...fourDeadDecks, usDeck], aircraft: [], facilities: atoll(), contacts: [], survivors: [] };
+  const attack = { ...base, aircraft: [{ team: "jp", kind: "torpedo", dead: false, hp: 90 }] };
+  assert.equal(
+    S.operationOutcome(attack, 100).state,
+    "running",
+    "a fourth disabled deck does not end an operation with an attack still airborne",
+  );
+  const rescue = { ...base, survivors: [{ id: "survivor-1", rescued: false }] };
+  assert.deepEqual(
+    S.pendingOpportunities(rescue, 100),
+    [{ kind: "salvage", id: "survivor-1" }],
+    "a live rescue stays selectable after the fourth deck is disabled",
+  );
+}
+
+// --- 9. Success needs all four conditions; withholding each one keeps the operation running. ---
+{
+  const world = (over = {}) => ({
+    ships: [
+      hull("akagi", "carrier", { deck: 0 }),
+      hull("kaga", "carrier", { deck: 0 }),
+      hull("soryu", "carrier", { deck: 0 }),
+      hull("hiryu", "carrier", { deck: 0 }),
+      hull("enterprise", "carrier", { team: "us", deck: 1 }),
+    ],
+    aircraft: [],
+    facilities: atoll(),
+    contacts: [],
+    survivors: [],
+    ...over,
+  });
+  assert.equal(S.operationOutcome(world(), 100).state, "success", "all four conditions met is success");
+  assert.equal(
+    S.operationOutcome(world({ ships: [hull("kaga", "carrier", { deck: 1 }), hull("enterprise", "carrier", { team: "us", deck: 1 })] }), 100).state,
+    "running",
+    "a launch-capable enemy deck withholds success",
+  );
+  assert.equal(
+    S.operationOutcome(world({ aircraft: [{ team: "jp", kind: "fighter", dead: false, hp: 70 }] }), 100).state,
+    "running",
+    "an airborne enemy threat withholds success",
+  );
+  assert.equal(
+    S.operationOutcome(world({ ships: [hull("kaga", "carrier", { deck: 0 }), hull("enterprise", "carrier", { team: "us", deck: 0 })] }), 100).state,
+    "running",
+    "no usable friendly recovery deck withholds success",
+  );
+  const lostBase = S.operationOutcome(world({ facilities: atoll(true) }), 100);
+  assert.equal(lostBase.state, "running", "losing base aviation withholds success even with a friendly deck alive");
+  assert.match(lostBase.reason, /Midway/, "the running reason names the lost base aviation");
+}
+
+// --- 10. Withdrawal counts only from the friendly fleet's delivered observation. ---
+{
+  const escaped = hull("kaga", "carrier", { deck: 1, x: 30000, z: 0 });
+  const usDeck = hull("enterprise", "carrier", { team: "us", deck: 1 });
+  const hidden = { ships: [escaped, usDeck], aircraft: [], facilities: atoll(), contacts: [], survivors: [] };
+  assert.equal(S.operationOutcome(hidden, 100).state, "running", "an unobserved withdrawal never ends the operation");
+  const reported = { ...hidden, contacts: [report("kaga", { x: 30000, z: 0 })] };
+  assert.equal(S.operationOutcome(reported, 100).state, "success", "a delivered report beyond the boundary is an observed withdrawal");
+  const undelivered = { ...hidden, contacts: [report("kaga", { x: 30000, z: 0, deliveredAt: 500 })] };
+  assert.equal(S.operationOutcome(undelivered, 100).state, "running", "a report not yet delivered is not observation");
+}
+
+// --- 11. Defeat is the player lost or every friendly carrier sunk. ---
+{
+  const live = [hull("enterprise", "carrier", { team: "us", deck: 1 }), hull("akagi", "carrier", { deck: 0 })];
+  const world = { ships: live, aircraft: [], facilities: atoll(), contacts: [], survivors: [] };
+  assert.equal(S.operationOutcome({ ...world, playerLost: true }, 100).state, "defeat", "a lost player is defeat");
+  const allSunk = {
+    ...world,
+    ships: [hull("enterprise", "carrier", { team: "us", deck: 0, sunk: true }), hull("akagi", "carrier", { deck: 0 })],
+  };
+  assert.equal(S.operationOutcome(allSunk, 100).state, "defeat", "sinking every friendly carrier is defeat");
+}
+
+// --- 12. A completed short assignment keeps its own honest result when the operation fails. ---
+{
+  const strike = S.newSortie("strike", 0, 4);
+  const own = {
+    assignment: "strike",
+    outcome: "recovered",
+    objective: true,
+    elapsed: 900,
+    personalHits: 1,
+    wingHits: 0,
+    nearMisses: 2,
+    reportedCarriers: 0,
+    fuel: 42,
+    hp: 88,
+    damage: [],
+    carrier: "USS Enterprise",
+  };
+  strike.result = own;
+  const frozen = S.concludeOperation(strike, { state: "defeat", reason: "All friendly carriers are sunk." }, 1200);
+  assert.equal(frozen, own, "the operation never rewrites an independently completed sortie's result");
+  assert.equal(strike.result, own, "the short assignment's own record is left in place");
+  assert.equal(strike.result.assignment, "strike", "and it still reports the short assignment");
+}
+
+// --- 13. Conclusion is the player's choice and freezes exactly one record. ---
+{
+  const world = {
+    ships: [
+      hull("akagi", "carrier", { deck: 0 }),
+      hull("mikuma", "cruiser", { x: 2000, z: 0 }),
+      hull("enterprise", "carrier", { team: "us", deck: 1 }),
+    ],
+    aircraft: [],
+    facilities: atoll(),
+    contacts: [report("mikuma", { x: 2000, z: 0 })],
+    survivors: [{ id: "survivor-2", rescued: false }],
+  };
+  const pending = S.pendingOpportunities(world, 100);
+  assert.ok(pending.length > 0, "a pursuit or salvage opportunity is still selectable");
+  assert.ok(pending.some((o) => o.kind === "pursuit" && o.id === "mikuma"), "the reported cruiser is a pursuit");
+  assert.ok(pending.some((o) => o.kind === "salvage" && o.id === "survivor-2"), "the person in the water is salvage");
+  const s = S.newSortie("operation", 0, 9);
+  const outcome = S.operationOutcome(world, 100);
+  const first = S.concludeOperation(s, outcome, 100);
+  const second = S.concludeOperation(s, outcome, 100);
+  assert.equal(first, second, "concluding twice freezes the same one record");
+  assert.equal(s.result, first, "the one record lives on the sortie");
+  assert.equal(s.result.assignment, "operation", "the operation conclusion reports the operation");
+  assert.equal(s.result.operation, "success", "the frozen operation state is honest");
+}
+
 console.log("check-sortie-kinds: 5 assignments, 7 hulls, 4 duties");
 console.log("check-sortie-kinds: release stamp, pending confirmation, unavailable/retask, participation and one validator all hold");
+console.log("check-sortie-kinds: Open Pacific end conditions, observed withdrawal and one honest conclusion all hold");

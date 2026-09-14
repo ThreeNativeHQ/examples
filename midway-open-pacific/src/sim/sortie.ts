@@ -3,11 +3,27 @@
  * while the HUD, the map orders and the debrief all read this same record. Deliberately not a
  * mission schema — three assignments, one objective, one frozen result.
  */
+import { baseAviationLost } from "./facilities.js";
+import { estimatePosition } from "./intel.js";
+
 type Any = any;
 
 export type Assignment = "strike" | "recon" | "operation" | "surface" | "support";
 export type Objective = "pending" | "achieved" | "unavailable";
 export type Outcome = "recovered" | "incomplete" | "lost";
+
+/**
+ * Where Open Pacific stands. `running` is not failure: it is the world still offering choices,
+ * including a base air arm too broken to win with. Only `success` and `defeat` are terminal.
+ */
+export type OperationState = "running" | "success" | "defeat";
+
+/** The declared radius from the operation origin beyond which a fleet has left the area. */
+export const OPERATION_BOUNDARY = 24000;
+/** A carrier deck below this cannot launch. Mirrors Battle's own gate; the pure test cannot import Battle. */
+export const OPERATION_LAUNCH_DECK = 0.35;
+/** A deck at or below this cannot recover. Mirrors Battle's separate recovery gate. */
+export const OPERATION_RECOVERY_DECK = 0.25;
 
 /** Hull classes a sortie can be pointed at. A submerged boat is not one of them; see `targetEligible`. */
 export type TargetKind = "carrier" | "cruiser" | "destroyer" | "sub";
@@ -90,6 +106,10 @@ export interface IResult {
   hp: number;
   damage: string[];
   carrier: string;
+  /** Open Pacific only: the operation state frozen alongside this record, if it concluded one. */
+  operation?: OperationState;
+  /** Plain-language operation reason, set only with `operation`. */
+  reason?: string;
 }
 
 export interface ISortie {
@@ -320,6 +340,146 @@ export function objectiveText(s: ISortie): string {
 }
 
 export function outcomeText(r: IResult): string {
+  if (r.operation === "success") return "Open Pacific — enemy offensive ended";
+  if (r.operation === "defeat") return "Open Pacific — operation failed";
+  if (r.operation === "running") return "Returned — operation incomplete";
   if (r.outcome === "lost") return r.objective ? "Objective achieved — aircraft lost" : "Aircraft lost";
   return r.objective ? "Objective achieved — recovered" : "Returned — objective incomplete";
+}
+
+/** The plain records the Open Pacific end conditions read. Contacts are the friendly fleet's own. */
+export interface IOperationWorld {
+  ships?: Any[];
+  aircraft?: Any[];
+  facilities?: Any[];
+  survivors?: Any[];
+  contacts?: Any[];
+  /** True once the player's own aircraft is lost; `Battle` passes its own lost status in. */
+  playerLost?: boolean;
+  /** Override for the declared boundary, in metres from the world origin. */
+  boundary?: number;
+}
+
+export interface IOperationOutcome {
+  state: OperationState;
+  reason: string;
+}
+
+/** One still-selectable continuation: people to pick up, or a hull the fleet knows is afloat. */
+export interface IOpportunity {
+  kind: "salvage" | "pursuit";
+  id: string;
+}
+
+/**
+ * Has the enemy been observed leaving? The friendly fleet's delivered reports are the only input:
+ * a withdrawal nobody filed a report of is not a withdrawal, whatever the ships are secretly doing.
+ * Reading the enemy hull's own position or sunk flag would let hidden world state end the operation.
+ */
+function observedWithdrawal(world: IOperationWorld, now: number): boolean {
+  const boundary = world.boundary ?? OPERATION_BOUNDARY;
+  for (const c of world.contacts ?? []) {
+    if (!c || c.team !== "us" || !(c.deliveredAt <= now)) continue;
+    const p = estimatePosition(c, now);
+    if (Math.hypot(p.x, p.z) > boundary) return true;
+  }
+  return false;
+}
+
+/** Midway keeps an air arm while either her airstrip or her seaplane area can still work. */
+function baseAviationPreserved(world: IOperationWorld): boolean {
+  const facilities = world.facilities ?? [];
+  // A caller that does not model the atoll is not reporting a loss, so the gate stays open.
+  return facilities.length === 0 ? true : !baseAviationLost(facilities);
+}
+
+/**
+ * The Open Pacific end conditions. Success needs all four: the enemy carrier offensive ended (no
+ * launch-capable deck, or an observed withdrawal), current incoming threats resolved, a usable
+ * friendly recovery deck, and Midway's aviation preserved. Defeat is the player lost or every
+ * friendly carrier sunk. Any other shortfall leaves the operation running — a lost base air arm
+ * can no longer win, but it has not lost the fleet, so it is not a defeat either.
+ */
+export function operationOutcome(world: IOperationWorld, now: number): IOperationOutcome {
+  const ships = world.ships ?? [];
+  const carriers = ships.filter((s: Any) => s && s.kind === "carrier");
+  const friendly = carriers.filter((s: Any) => s.team === "us" && !s.sunk);
+
+  if (world.playerLost) return { state: "defeat", reason: "The player aircraft was lost." };
+  if (carriers.some((s: Any) => s.team === "us") && friendly.length === 0) {
+    return { state: "defeat", reason: "All friendly carriers are sunk." };
+  }
+
+  const launchCapable = ships.some(
+    (s: Any) => s && s.team === "jp" && s.kind === "carrier" && !s.sunk && (s.deck ?? 1) >= OPERATION_LAUNCH_DECK,
+  );
+  const offensiveEnded = !launchCapable || observedWithdrawal(world, now);
+  const threatsResolved = !(world.aircraft ?? []).some(
+    (a: Any) => a && a.team === "jp" && !a.dead && (a.hp ?? 1) > 0,
+  );
+  const recoveryDeck = friendly.some((s: Any) => (s.deck ?? 0) > OPERATION_RECOVERY_DECK);
+  const baseAviation = baseAviationPreserved(world);
+
+  if (offensiveEnded && threatsResolved && recoveryDeck && baseAviation) {
+    return {
+      state: "success",
+      reason: "Enemy offensive ended, threats resolved, a recovery deck is ready and Midway's air arm is preserved.",
+    };
+  }
+  const reasons: string[] = [];
+  if (!offensiveEnded) reasons.push("an enemy deck can still launch");
+  if (!threatsResolved) reasons.push("enemy aircraft are still airborne");
+  if (!recoveryDeck) reasons.push("no friendly deck can recover aircraft");
+  if (!baseAviation) reasons.push("Midway's aviation has been lost");
+  return { state: "running", reason: reasons.join("; ") };
+}
+
+/**
+ * What the operation may still continue for. Concluding is the crew's choice, so this list never
+ * drains to force an ending: people still in the water are salvage work, and an enemy hull the
+ * fleet has a delivered report on is a pursuit. A hull nobody reported is never chased on hidden
+ * knowledge, which is the same fog-of-war rule the withdrawal inference follows.
+ */
+export function pendingOpportunities(world: IOperationWorld, now: number): IOpportunity[] {
+  const out: IOpportunity[] = [];
+  for (const v of world.survivors ?? []) {
+    if (v && !v.rescued) out.push({ kind: "salvage", id: v.id });
+  }
+  const known = new Set<string>();
+  for (const c of world.contacts ?? []) {
+    if (c && c.team === "us" && c.deliveredAt <= now) known.add(c.targetId);
+  }
+  for (const s of world.ships ?? []) {
+    if (s && s.team === "jp" && !s.sunk && known.has(s.id)) out.push({ kind: "pursuit", id: s.id });
+  }
+  return out;
+}
+
+/**
+ * Freeze Open Pacific's one result record. A short assignment that already completed keeps its own
+ * honest after-action report: the wider operation's outcome never rewrites a sortie flown and
+ * reported on its own terms. Calling again is idempotent, so exactly one record is ever frozen.
+ */
+export function concludeOperation(s: ISortie, outcome: IOperationOutcome, now: number): IResult {
+  if (s.result) return s.result;
+  const objective = outcome.state === "success";
+  s.result = {
+    assignment: s.assignment,
+    outcome: outcome.state === "defeat" ? "lost" : objective ? "recovered" : "incomplete",
+    objective,
+    elapsed: Math.max(0, now - s.startTime),
+    personalHits: s.personalHits,
+    wingHits: s.wingHits,
+    nearMisses: 0,
+    reportedCarriers: s.reportedCarriers,
+    // An operation conclusion is not the pilot's own report, so the airframe figures only the last
+    // flight could have supplied stay at zero.
+    fuel: 0,
+    hp: 0,
+    damage: [],
+    carrier: "",
+    operation: outcome.state,
+    reason: outcome.reason,
+  };
+  return s.result;
 }
