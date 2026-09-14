@@ -210,6 +210,8 @@ const FACILITY_REPAIR_RATE = 0.02;
 /** One facility's worth of repair work is earned per this many seconds, banked up to the cap. */
 const FACILITY_WORK_PER_SECOND = 1 / 15;
 const FACILITY_WORK_CAP = 3;
+/** A facility with no crew on it this tick still burns: the constant step rates, reused, never built. */
+const NO_REPAIR_RATES: FacilityRates = { repair: 0, burn: FACILITY_BURN_RATE };
 
 /** Any surface escort, by class, never by name: destroyers and cruisers stand the screen. */
 function isEscort(s: Any): boolean {
@@ -553,6 +555,12 @@ export class Battle {
   /** Banked repair work, in facility-slots, capped at `FACILITY_WORK_CAP`. */
   facilityWork = 0;
   effects: Any[] = [];
+  /** Reused per step so the hot path never allocates a fresh list: surface hulls, the per-ship
+   *  separation list and the repair slots. Cleared before each use, never read across a step. */
+  private surfaceScratch: Any[] = [];
+  private avoidScratch: Any[] = [];
+  private planesScratch: Any[] = [];
+  private chosenScratch = new Set<string>();
   /** What the player's own crew knows: their sightings, and the reports the fleet has passed them. */
   contacts = new Map<string, IReport>();
   /** Transmitted and not yet delivered. Killing the observer cannot recall what it already sent. */
@@ -830,7 +838,10 @@ export class Battle {
     if (this.status !== "briefing") return;
     this.status = "playing";
     this.voiceFlags = {};
-    for (const s of this.ships.filter((s) => s.kind === "carrier")) this.launch(s, "fighter");
+    // The player's own deck holds its aircraft until the player is off it: a wingman that launches
+    // while Scout Two is still chocked does not have his wing. `updateCarrier` opens this gate on
+    // liftoff. Every other carrier launches as before.
+    for (const s of this.ships.filter((s) => s.kind === "carrier" && s.id !== this.player.home)) this.launch(s, "fighter");
     if (airborne) {
       this.player.mode = "spectator";
       for (let i = 0; i < 900; i += 1) this.step(1 / 30, {});
@@ -852,11 +863,11 @@ export class Battle {
       this.events = [];
       this.sortie.startTime = this.time;
       this.say("SCOUT CONTROL", "Search the northwest sector. No confirmed carrier positions. Scan the horizon; use R to report sightings.");
+      this.say("SCOUT THREE", "Two, we have your wing. Orders on your command.");
     } else {
       this.sortie.startTime = this.time;
       this.say("ENTERPRISE TOWER", "Scout Two, cleared for launch. Hold W. Chocks release with power. Keep straight; ease the stick back (Down) through 90 knots. Lift, not the bow, gets you flying.");
     }
-    this.say("SCOUT THREE", "Two, we have your wing. Orders on your command.");
   }
 
   say(from: string, text: string, priority = false): void {
@@ -1335,7 +1346,8 @@ export class Battle {
     let role: string | null = null;
     let shortest = 0;
     for (const key in want) {
-      const flying = this.aircraft.filter((a: Any) => a.hp > 0 && a.home === s.id && a.kind === key).length;
+      let flying = 0;
+      for (const a of this.aircraft) if (a.hp > 0 && a.home === s.id && a.kind === key) flying += 1;
       const deficit = want[key] - flying;
       if (deficit > shortest) {
         shortest = deficit;
@@ -1343,7 +1355,12 @@ export class Battle {
       }
     }
     // Nothing wanted is not a blocked deck: the reason the HUD reads must not outlive its attempt.
-    if (role) this.launch(s, role);
+    // The player's own deck holds every launch while the player is still chocked on it — a wingman
+    // rolling while the player stands on deck has no one to join. A spectator or airborne player
+    // is not on the deck, so the deck operates normally. Recovery and service are unaffected.
+    const onPlayerDeck = this.player.mode === "deck" || this.player.mode === "service";
+    const held = s.id === this.player.home && onPlayerDeck;
+    if (role && !held) this.launch(s, role);
     else s.launchBlocked = null;
   }
 
@@ -1935,7 +1952,12 @@ export class Battle {
   hitFacility(f: Facility, amount: number, p: Any): void {
     const dealt = clamp(amount, 0, 1);
     const next = damageFacility(f, dealt, this.random());
-    this.facilities = this.facilities.map((x) => (x.id === f.id ? next : x));
+    for (let i = 0; i < this.facilities.length; i += 1) {
+      if (this.facilities[i].id === f.id) {
+        this.facilities[i] = next;
+        break;
+      }
+    }
     this.event("facility", { kind: next.kind, damage: dealt });
     this.fx("explosion", p, 1.6);
   }
@@ -1950,11 +1972,14 @@ export class Battle {
     const rates: FacilityRates = { repair: FACILITY_REPAIR_RATE, burn: FACILITY_BURN_RATE };
     this.facilities = spreadFire(this.facilities, dt, rates, this.random());
     this.facilityWork = Math.min(FACILITY_WORK_CAP, this.facilityWork + FACILITY_WORK_PER_SECOND * dt);
-    const chosen = new Set(repairPlan(this.facilities, this.facilityWork, this.time).map((o) => o.id));
+    const chosen = this.chosenScratch;
+    chosen.clear();
+    for (const o of repairPlan(this.facilities, this.facilityWork, this.time)) chosen.add(o.id);
     this.facilityWork -= chosen.size;
-    this.facilities = this.facilities.map((f) =>
-      stepFacility(f, dt, chosen.has(f.id) ? rates : { repair: 0, burn: rates.burn }),
-    );
+    for (let i = 0; i < this.facilities.length; i += 1) {
+      const f = this.facilities[i];
+      this.facilities[i] = stepFacility(f, dt, chosen.has(f.id) ? rates : NO_REPAIR_RATES);
+    }
   }
 
   /** Midway's air arm is lost only when both the airstrip and the seaplane route are gone. */
@@ -1984,7 +2009,12 @@ export class Battle {
     }
     this.time += dt;
     for (const fx of this.effects) fx.age += dt;
-    this.effects = this.effects.filter((f) => f.age < f.life);
+    let kept = 0;
+    for (let i = 0; i < this.effects.length; i += 1) {
+      const f = this.effects[i];
+      if (f.age < f.life) this.effects[kept++] = f;
+    }
+    this.effects.length = kept;
     this.updateRescue(dt);
     this.updateShips(dt);
     this.updateFacilities(dt);
@@ -2029,8 +2059,14 @@ export class Battle {
         this.aircraft.some((a) => a.team === "jp" && a.kind !== "fighter" && distance2(a, this.home) < reach * reach);
       if (near) this.say("ENTERPRISE RADAR", "Inbound strike aircraft. Fighters, intercept before they reach the carriers.", true);
     }
-    if (this.ships.filter((s) => s.kind === "carrier" && s.team === "us").every((s) => s.sunk)) this.lose("The U.S. carrier force has been lost.");
-    if (this.operationalEnemyCarriers.length === 0 && !this.strikeComplete) {
+    let usCarriersAfloat = false;
+    let enemyDecksOperational = false;
+    for (const s of this.ships) {
+      if (s.kind === "carrier" && s.team === "us" && !s.sunk) usCarriersAfloat = true;
+      if (s.team === "jp" && s.kind === "carrier" && !s.sunk && s.deck >= LAUNCH_DECK) enemyDecksOperational = true;
+    }
+    if (!usCarriersAfloat) this.lose("The U.S. carrier force has been lost.");
+    if (!enemyDecksOperational && !this.strikeComplete) {
       this.strikeComplete = true;
       this.say("ENTERPRISE", "All four enemy flight decks are neutralized. Return and recover to complete the operation.", true);
     }
@@ -2039,7 +2075,9 @@ export class Battle {
   strikeComplete = false;
 
   updateShips(dt: number): void {
-    const surface = this.ships.filter((s: Any) => !s.sunk && s.kind !== "sub");
+    const surface = this.surfaceScratch;
+    surface.length = 0;
+    for (const s of this.ships) if (!s.sunk && s.kind !== "sub") surface.push(s);
     const hazards = [{ x: this.island.x, z: this.island.z, radius: ATOLL_HAZARD_RADIUS }];
     for (const s of this.ships) {
       if (s.sunk) {
@@ -2205,7 +2243,12 @@ export class Battle {
       s.task = { task: "rescue", targetId: window.targetId, startedAt: now, reason: "survivors in the water" };
     }
     // A group recovered down to nothing is no longer in the water.
-    this.survivors = this.survivors.filter((g) => g.count > 0.5);
+    let kept = 0;
+    for (let i = 0; i < this.survivors.length; i += 1) {
+      const g = this.survivors[i];
+      if (g.count > 0.5) this.survivors[kept++] = g;
+    }
+    this.survivors.length = kept;
   }
 
   /** The rescue module's view of an escort: its screen contribution is the whole station. */
@@ -2237,9 +2280,12 @@ export class Battle {
 
   /** A running hostile torpedo near the carrier: the one detected threat that aborts an alongside. */
   threatsNear(carrier: Any): Any[] {
-    return this.torpedoes
-      .filter((t: Any) => t.team !== carrier.team && distance2(t, carrier) <= ASSIST_THREAT_RANGE)
-      .map((t: Any) => ({ kind: "torpedo", team: t.team, x: t.x, z: t.z }));
+    const out: Any[] = [];
+    for (const t of this.torpedoes) {
+      if (t.team !== carrier.team && distance2(t, carrier) <= ASSIST_THREAT_RANGE)
+        out.push({ kind: "torpedo", team: t.team, x: t.x, z: t.z });
+    }
+    return out;
   }
 
   /** The nearest damaged friendly carrier in reach that no other escort is already working. */
@@ -2394,7 +2440,10 @@ export class Battle {
       }
     }
 
-    const avoid = avoidanceHeading(s, surface.filter((o) => o !== s), SURFACE_LOOKAHEAD, MIN_SEPARATION);
+    const others = this.avoidScratch;
+    others.length = 0;
+    for (const o of surface) if (o !== s) others.push(o);
+    const avoid = avoidanceHeading(s, others, SURFACE_LOOKAHEAD, MIN_SEPARATION);
     if (avoid !== null) {
       const turn = limits.turnRate * dt;
       heading = wrap(heading + clamp(angleDelta(avoid, heading), -turn, turn));
@@ -2694,8 +2743,11 @@ export class Battle {
         p.launchAssist = p.assist ? 9 : 0;
         p.autoGearPending = !p.gearManual;
         p.gearClimbTime = 0;
-        if (departure === "liftoff") this.say("ENTERPRISE TOWER", "Positive climb, Scout Two. Gear retracts after a safe climb; G overrides it. N cycles flap settings. Build speed before turning.");
-        else this.say("SCOUT THREE", "Off the deck. Watch your airspeed — do not haul back on the stick.", true);
+        if (departure === "liftoff") {
+          this.say("ENTERPRISE TOWER", "Positive climb, Scout Two. Gear retracts after a safe climb; G overrides it. N cycles flap settings. Build speed before turning.");
+          // Scout Three was held on deck until this moment; he rolls and joins as the player climbs.
+          this.say("SCOUT THREE", "Two, we have your wing. Orders on your command.");
+        } else this.say("SCOUT THREE", "Off the deck. Watch your airspeed — do not haul back on the stick.", true);
       }
       return;
     }
@@ -2985,7 +3037,10 @@ export class Battle {
   }
 
   updateWeapons(dt: number): void {
-    const planes = [...this.aircraft, ...(this.player.mode === "flight" ? [this.player] : [])];
+    const planes = this.planesScratch;
+    planes.length = 0;
+    for (const a of this.aircraft) planes.push(a);
+    if (this.player.mode === "flight") planes.push(this.player);
     for (const b of this.bullets) {
       const prev = { x: b.x, y: b.y, z: b.z };
       b.x += b.vx * dt;
@@ -3043,7 +3098,17 @@ export class Battle {
         b.ttl = 0;
       }
     }
-    this.bullets = this.bullets.filter((b) => b.ttl > 0).slice(-850);
+    let liveBullets = 0;
+    for (let i = 0; i < this.bullets.length; i += 1) {
+      const b = this.bullets[i];
+      if (b.ttl > 0) this.bullets[liveBullets++] = b;
+    }
+    if (liveBullets > 850) {
+      const drop = liveBullets - 850;
+      for (let i = drop; i < liveBullets; i += 1) this.bullets[i - drop] = this.bullets[i];
+      liveBullets = 850;
+    }
+    this.bullets.length = liveBullets;
     for (const b of this.bombs) {
       const prev = { x: b.x, y: b.y, z: b.z };
       b.age += dt;
@@ -3092,7 +3157,12 @@ export class Battle {
       }
       if (b.age > 80) b.dead = true;
     }
-    this.bombs = this.bombs.filter((b) => !b.dead);
+    let liveBombs = 0;
+    for (let i = 0; i < this.bombs.length; i += 1) {
+      const b = this.bombs[i];
+      if (!b.dead) this.bombs[liveBombs++] = b;
+    }
+    this.bombs.length = liveBombs;
     for (const t of this.airTorpedoes) {
       const prev = { x: t.x, y: t.y, z: t.z };
       t.age += dt;
@@ -3124,7 +3194,12 @@ export class Battle {
       }
       if (t.age > 35) t.dead = true;
     }
-    this.airTorpedoes = this.airTorpedoes.filter((t) => !t.dead);
+    let liveAirTorpedoes = 0;
+    for (let i = 0; i < this.airTorpedoes.length; i += 1) {
+      const t = this.airTorpedoes[i];
+      if (!t.dead) this.airTorpedoes[liveAirTorpedoes++] = t;
+    }
+    this.airTorpedoes.length = liveAirTorpedoes;
     for (const t of this.torpedoes) {
       const prev = { ...t };
       t.x += t.vx * dt;
@@ -3162,7 +3237,12 @@ export class Battle {
         }
       }
     }
-    this.torpedoes = this.torpedoes.filter((t) => t.ttl > 0);
+    let liveTorpedoes = 0;
+    for (let i = 0; i < this.torpedoes.length; i += 1) {
+      const t = this.torpedoes[i];
+      if (t.ttl > 0) this.torpedoes[liveTorpedoes++] = t;
+    }
+    this.torpedoes.length = liveTorpedoes;
   }
 
   /**
@@ -3185,7 +3265,7 @@ export class Battle {
         const was = this.contacts.has(s.id);
         this.recordContact(s, "PBY reconnaissance");
         if (!was && s.kind === "carrier") this.say("CATALINA FIVE", `Carrier contact northwest. ${s.name} sighted. Position entered on your intelligence map.`, true);
-      } else if (this.aircraft.some((a) => a.team === "us" && a.wing && a.hp > 0 && distance2(a, s) < 4300)) {
+      } else if (this.aircraft.some((a) => a.team === "us" && a.wing && a.hp > 0 && a.target === s.id && distance2(a, s) < 4300)) {
         this.recordContact(s, "aircraft visual");
       }
     }
