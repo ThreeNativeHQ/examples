@@ -455,13 +455,16 @@ export class WorldView {
 
     }
     // The deck party works the launch spot, so it is anchored where the aircraft was standing and
-    // does not taxi away with it once the deck run starts.
-    const onDeck = p.mode === "deck" || p.mode === "service" || p.mode === "arrest";
-    this.crew.group.visible = onDeck || briefing;
+    // does not taxi away with it once the deck run starts. They also clear the lane the moment the
+    // throttle releases: the party around a parked aircraft is right, but men under a rolling one
+    // are not. `deckSpeed`, not `speed`, is the deck run's own speed — `speed` carries the ship's
+    // way too, so it was never below 2 and the anchor never left the briefing's default.
+    const parkedOnDeck = p.mode === "service" || p.mode === "arrest" || (p.mode === "deck" && (p.deckSpeed ?? 0) < 2);
+    this.crew.group.visible = parkedOnDeck || briefing;
     if (this.crew.group.visible) {
       const home = b.home;
       if (briefing) this.crewAnchor = 15;
-      else if (home && (p.mode !== "deck" || (p.speed ?? 0) < 2))
+      else if (home && (p.mode !== "deck" || (p.deckSpeed ?? 0) < 2))
         this.crewAnchor = -localPoint(p, home).forward;
       // The party stands on whichever deck the player is actually on, at that carrier's own datum:
       // a diversion to Yorktown otherwise left the crew on Enterprise, 0.39 m too low.
@@ -598,10 +601,13 @@ export class WorldView {
     } else {
       // A stationary aircraft on its deck sits ahead of the aft deck park, so a centreline chase
       // camera lands inside that parked row and its near wing/body fills the frame. While the
-      // wheels are down on deck the view is taken abeam (port, clear of the island) and above,
-      // still in the aircraft's own moving frame; rolling launch and airborne chase are unchanged.
+      // aircraft is *parked* on deck the view is taken abeam (port, clear of the island) and
+      // above. The moment the deck run starts the aft park is behind the camera, so the takeoff
+      // roll uses the regular chase, exactly as it does once airborne; only a stopped deck,
+      // an arrestment and a service stay abeam.
       const onDeck =
-        !briefing && (p.mode === "deck" || p.mode === "arrest" || p.mode === "service");
+        !briefing &&
+        (p.mode === "arrest" || p.mode === "service" || (p.mode === "deck" && (p.deckSpeed ?? 0) < 2));
       const wide = this.cameraMode === 2;
       const distance = onDeck ? (wide ? 26 : 13) : wide ? 58 : 18;
       const sign = this.rear ? 1 : -1;

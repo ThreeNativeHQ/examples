@@ -25,12 +25,17 @@ const COCKPIT_SCALE = 0.52;
 const COCKPIT_POSITION: [number, number, number] = [0, 0.342, -2.482];
 
 /**
- * The same real-metre interior, fitted to the imported TBD's own greenhouse. `COCKPIT_POSITION` is
- * the panel origin; the shared `EYE` sits 1.42 x 0.52 m above and 1.6 x 0.52 m behind it, so the
- * position is the measured pilot eye (0, 3.45, -2.35) less that offset. It is a shared instrument
- * panel, not the SBD's canopy or bomb-aimer sight, and no exterior canopy is hidden for it.
+ * The same real-metre interior, fitted inside the imported TBD's own greenhouse. `COCKPIT_POSITION`
+ * is the panel origin; the shared `EYE` sits 1.42 x 0.52 m above and 1.6 x 0.52 m behind it.
+ *
+ * The first fit used the measured pilot eye (0, 3.45, -2.35), but a live raycast from the game
+ * camera (tools/capture-player-aircraft.mjs pattern) found that eye 0.20–0.30 m ABOVE the closed
+ * canopy roof, so the forward-down sightline met the opaque `airframebody` at 0.955 m instead of the
+ * panel. Lowering the eye to (0, 2.95, -2.35) seats it under the roof: the down-forward ray now
+ * reaches the instrument panel, and the forward view passes through the single-sided glazing (whose
+ * backfaces are culled from inside). The exterior is never hidden and no canopy is re-authored.
  */
-const TBD_COCKPIT_POSITION: [number, number, number] = [0, 2.712, -3.182];
+const TBD_COCKPIT_POSITION: [number, number, number] = [0, 2.2116, -3.182];
 /** Measured TBD belly is 0.4 m above the wheel datum; the store hangs from it, clear of the deck. */
 const TBD_TORPEDO_POSITION: [number, number, number] = [0, 0.33, -0.3];
 
