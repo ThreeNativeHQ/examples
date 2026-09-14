@@ -345,6 +345,7 @@ export class Midway extends Scene<GameState, undefined> {
 
   private hideOverlays(): void {
     for (const id of ["pause-overlay", "map-overlay", "command-overlay"]) $(id).classList.add("hidden");
+    $("debrief").classList.toggle("hidden", !["lost", "won", "debrief"].includes(this.battle.status));
     this.overlay = null;
     this.hud.mapOpen = false;
     this.paused = false;
@@ -359,6 +360,7 @@ export class Midway extends Scene<GameState, undefined> {
     this.hideOverlays();
     this.overlay = id;
     this.paused = true;
+    $("debrief").classList.add("hidden");
     $(id).classList.remove("hidden");
     this.hud.mapOpen = id === "map-overlay";
     this.updateLoadoutUI();
@@ -447,8 +449,12 @@ export class Midway extends Scene<GameState, undefined> {
 
   private selectLoadout(id: string): void {
     if (!this.battle.selectLoadout(id)) {
-      this.hud.toast("LOADOUT LOCKED — STOP ON DECK FIRST");
+      const notice = this.battle.events.at(-1);
       this.updateLoadoutUI();
+      if (notice?.type === "notice") {
+        this.hud.toast(notice.text);
+        $("deck-loadout-note").textContent = notice.text;
+      }
       return;
     }
     this.world.setAirframe();

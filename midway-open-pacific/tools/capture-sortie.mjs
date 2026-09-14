@@ -192,6 +192,47 @@ try {
   log("debrief", shown);
   await page.screenshot({ path: `${OUT}/04-debrief.png` });
 
+  // Pause must be usable over a terminal debrief, and closing it must restore that frozen result.
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#debrief").isVisible(), false, "debrief must not intercept pause controls");
+  assert.equal(await page.locator("#pause-overlay").isVisible(), true);
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#debrief").isVisible(), true, "closing pause restores the debrief");
+  assert.deepEqual(await page.evaluate(() => window.midway.battle.sortie.result), arrival.result);
+  await page.keyboard.press("Escape");
+  await page.click("#restart-pause");
+  await page.waitForSelector("#briefing:not(.hidden)");
+
+  // Empty fuel and weapon racks are a feasible initial condition; service and loadout selection
+  // still run through Battle and the actual UI. The recovery approach itself is not under test.
+  await page.selectOption("#assignment-select", "operation");
+  await page.click("#start-deck");
+  await page.evaluate(() => {
+    const b = window.midway.battle;
+    Object.assign(b.player, { fuel: 10, bombs: 0, ammo: 12, rearAmmo: 7 });
+    b.home.air.fuel = 0;
+    Object.assign(b.home.air.stores, { bomb: 0, torpedo: 0, ammo: 0 });
+    b.recover(b.home);
+  });
+  forced.push("player recovered with 10% fuel and empty carrier fuel/weapon racks to isolate service accounting");
+  await page.waitForFunction(() => window.midway.battle.player.mode === "deck", null, { timeout: 90000 });
+  await page.keyboard.press("Escape");
+  await page.selectOption("#deck-loadout", "torpedo");
+  const limited = await page.evaluate(() => ({
+    fuel: window.midway.battle.player.fuel,
+    bombs: window.midway.battle.player.bombs,
+    loadout: window.midway.battle.player.loadout,
+    selection: document.getElementById("deck-loadout").value,
+    message: document.getElementById("deck-loadout-note").textContent,
+  }));
+  assert.ok(limited.fuel <= 10, "empty carrier fuel must not refill the player");
+  assert.equal(limited.bombs, 0);
+  assert.equal(limited.loadout, "bomb");
+  assert.equal(limited.selection, "bomb", "a refused swap restores the real selection");
+  assert.match(limited.message, /NO TORPEDOES ABOARD/);
+  log("limited service", limited);
+  await page.screenshot({ path: `${OUT}/05-limited-service.png` });
+
   assert.deepEqual(errors, [], `no console or page errors: ${JSON.stringify(errors)}`);
   console.log(JSON.stringify({ pass: true, out: OUT, forced }, null, 1));
 } finally {
