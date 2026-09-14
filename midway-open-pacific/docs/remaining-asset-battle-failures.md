@@ -102,3 +102,42 @@ and `/tmp/midway-deepseek-coordination/wing_strike_fix.events.jsonl`; historical
 comparisons are summarized in `recovery_fix.result.md` in that coordination
 directory. Temporary snapshot output is diagnostic evidence, not an alternate
 checkout to resume working in.
+
+## Resolution (2026-09-13, `midway/asset-battle-integration`)
+
+### 1. TBD cockpit — fixed by seating the live eye inside the greenhouse
+
+The offline measurement was reconciled against the **actual game camera** with a live
+raycast from the real player mesh (the SBD as reference):
+
+- SBD: forward ray clear; down-forward ray meets `Instruments` at 1.118 m (its own panel).
+- TBD before: eye `(0, 3.45, -2.35)` sat 0.20–0.30 m above the closed canopy roof
+  (y 3.14–3.25 at the pilot station), so the down-forward ray met the opaque
+  `airframebody` at 0.955 m and the nose deck cut off the panel's lower row.
+- TBD after: eye `(0, 2.95, -2.35)`; forward ray reaches the `propeller` at 2.647 m
+  (through the single-sided glazing, whose backfaces cull from inside) and the
+  down-forward ray meets `Instruments` at 1.118 m — identical to the SBD.
+
+Fix: `TBD_COCKPIT_POSITION` lowered from `[0, 2.712, -3.182]` to `[0, 2.2116, -3.182]`
+in `src/render/imported-aircraft.ts`. `node scripts/check-aircraft.mjs` passes,
+`tools/capture-player-aircraft.mjs` passes against an HMR-disabled server, and the deck
+cockpit frame shows the full panel and a clear windscreen. The exterior, markings,
+15.24 m span, wheel datum, pivots and nine clips are untouched; no exterior is hidden and
+no canopy is re-authored. The shared detail panel is still the SBD's (the PRD's
+type-correct TBD cockpit/canopy remains a separate asset item).
+
+### 2. Ordered-wing strike / late assisted return — passes on clean HEAD
+
+`node scripts/check-flight.mjs` exits 0 on clean HEAD `4575f0c` in an isolated worktree
+(no uncommitted edits): `naturalWingStrike` recovered, objective true, elapsed
+**706.42 s** (≤ 720), `wingHits 1`, `personalHits 0`, carrier `USS Enterprise`. Commit
+`304a54c` (the AC-23 performance harness test) is the only commit since and does not touch
+the simulation. The earlier worker snapshot's `result: null` is not reproduced by the
+current tree, so the old flight-steering diagnosis no longer explains it.
+
+Browser keys-only sortie gate (`tools/capture-sortie-runs.mjs`) against an HMR-disabled
+server from this checkout passes (exit 0): hardware WebGPU `nvidia/turing`, recon
+recovered at 263.83 s, and the ordered-wing strike recovered at 594.98 s with
+`wingHits: 1`, `personalHits: 0`, `reportedCarriers: 0`, carrier `USS Enterprise`; the
+debrief reads "Objective achieved — recovered" with 0 your hits / 1 wing hit. Keys were
+`T R H L` (recon) and `T Digit2 H L` (strike); nothing was injected.
