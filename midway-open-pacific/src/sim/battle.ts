@@ -3160,10 +3160,12 @@ export class Battle {
   }
 
   /**
-   * The player's own eyes, and a scout close enough over a hull to identify it. Detection by radius
-   * that copied a live ship's name, course and exact deck health into both sides' knowledge is gone:
-   * every other observer files a dated, range-classified, delayed report in `observeFleet`, and the
-   * AI reads nothing else.
+   * The player's own eyes, a scout close enough over a hull to identify it, and a strike crew with its
+   * target in sight. Detection by radius that copied a live ship's name, course and exact deck health
+   * into both sides' knowledge is gone: every other observer files a dated, range-classified, delayed
+   * report in `observeFleet`, and the AI reads nothing else. A crew looking straight at the hull it is
+   * attacking still holds that sighting itself, though — it does not wait on the fleet's radio net —
+   * so the observation is recorded at once and a hit the crew watched land can be confirmed.
    */
   updateIntel(): void {
     const p = this.player;
@@ -3177,6 +3179,8 @@ export class Battle {
         const was = this.contacts.has(s.id);
         this.recordContact(s, "PBY reconnaissance");
         if (!was && s.kind === "carrier") this.say("CATALINA FIVE", `Carrier contact northwest. ${s.name} sighted. Position entered on your intelligence map.`, true);
+      } else if (this.aircraft.some((a) => a.team === "us" && a.wing && a.hp > 0 && distance2(a, s) < 4300)) {
+        this.recordContact(s, "aircraft visual");
       }
     }
   }

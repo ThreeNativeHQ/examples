@@ -429,12 +429,16 @@ export class WorldView {
       m.rotation.set(Math.sin(time * 0.3 + s.baseZ) * 0.004, -s.heading, s.sunk ? s.sink * 0.35 : Math.sin(time * 0.22 + s.baseX) * 0.004 + (1 - s.hp / s.maxHp) * 0.035);
       m.visible = s.sink < 0.95;
       const d = distance2(s, p);
+      // The park is a visual LOD: it is worth drawing while the camera is close, wherever the
+      // player is, exactly as the hull's own LOD range is read from the camera. A carrier a
+      // player never approaches keeps its park out of the draw.
+      const camD = distance2(s, this.camera.position);
       updateShipScars(m, s, d, this.quality);
       for (const a of (m.userData.parked ?? []) as T.Group[]) {
         const type = a.userData.simAirframe as string;
         // The park is the ready line: an airframe with none ready is below in the hangar, so its
         // parked instance hides and the other types stay spotted.
-        a.visible = d < 1900 && (s.air?.ready?.[type] ?? 0) > 0;
+        a.visible = camD < 1900 && (s.air?.ready?.[type] ?? 0) > 0;
         // Turning over on the spot, waiting for the flag. One airframe, one animator.
         spinParked(a, dt);
       }

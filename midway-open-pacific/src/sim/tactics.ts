@@ -134,9 +134,12 @@ export function selectNavalTarget(b: Any, a: Any): Any {
     a.target = c.id;
     return believedTarget(b, c);
   }
-  const candidates = [...known.values()].filter(
-    (c: Any) => !c.lost && !isStale(c, b.time, STALE_SECONDS) && STRIKE_CLASSES.has(c.classification),
-  );
+  const candidates = NAVAL_CANDIDATES;
+  candidates.length = 0;
+  for (const c of known.values()) {
+    if (c.lost || isStale(c, b.time, STALE_SECONDS) || !STRIKE_CLASSES.has(c.classification)) continue;
+    candidates.push(c);
+  }
   if (a.wing && b.command === "strike" && b.target) {
     const c = candidates.find((c: Any) => c.id === b.target);
     if (c) {
@@ -278,8 +281,12 @@ function aimPoint(x: number, z: number): { x: number; z: number } {
 }
 /** Reused candidate buffers and count maps: the AI is single-threaded and never retains them. */
 const FIGHTER_CANDIDATES: Any[] = [];
+const NAVAL_CANDIDATES: Any[] = [];
 const ATTACKS = new Map<any, number>();
 const PRESSURE = new Map<any, number>();
+/** The deck frame and launch stick for one `stepDeck` call; consumed synchronously, never retained. */
+const DECK_FRAME = { x: 0, y: 0, z: 0, heading: 0, speed: 0, length: 0, width: 0 };
+const DECK_CONTROLS = { pitch: 0, rudder: 0 };
 
 /**
  * One aircraft's engine flight, built on first use. Everything the engine requires is finite before
@@ -367,52 +374,54 @@ function deckDeparture(b: Any, a: Any, home: Any, dt: number): void {
   }
   fl.setDeck(home.deckHeight);
   if (a.deckRun === undefined) {
-    const ahead = b.aircraft.filter(
-      (o: Any) => o !== a && o.home === a.home && o.mode === "launch" && o.deckRun !== undefined,
-    ).length;
-    Object.assign(a, {
-      brakes: false,
-      chocks: true,
-      deckLateral: 0,
-      deckOffset: Math.max(-(home.deckLength / 2) + 6, -(home.deckLength / 2) + 10 - 14 * ahead),
-      deckRun: "spotted",
-      deckSpeed: 0,
-      flaps: 0.6,
-      gear: true,
-      heading: home.heading,
-      pitch: 0.22,
-      speed: 0,
-      throttle: 0.2,
-    });
+    let ahead = 0;
+    for (const o of b.aircraft)
+      if (o !== a && o.home === a.home && o.mode === "launch" && o.deckRun !== undefined) ahead += 1;
+    a.brakes = false;
+    a.chocks = true;
+    a.deckLateral = 0;
+    a.deckOffset = Math.max(-(home.deckLength / 2) + 6, -(home.deckLength / 2) + 10 - 14 * ahead);
+    a.deckRun = "spotted";
+    a.deckSpeed = 0;
+    a.flaps = 0.6;
+    a.gear = true;
+    a.heading = home.heading;
+    a.pitch = 0.22;
+    a.speed = 0;
+    a.throttle = 0.2;
     fl.reset();
   }
   if (a.deckRun === "spotted") {
-    const rolling = b.aircraft.some((o: Any) => o !== a && o.home === a.home && o.deckRun === "rolling");
+    let rolling = false;
+    for (const o of b.aircraft) {
+      if (o !== a && o.home === a.home && o.deckRun === "rolling") {
+        rolling = true;
+        break;
+      }
+    }
     if (!rolling) {
       a.deckRun = "rolling";
       a.throttle = 1;
     }
   }
+  DECK_FRAME.x = home.x;
+  DECK_FRAME.z = home.z;
+  DECK_FRAME.heading = home.heading;
+  DECK_FRAME.speed = home.speed;
+  DECK_FRAME.length = home.deckLength;
+  DECK_FRAME.width = home.deckWidth;
+  // Rotate late: the engine's own tail-rise schedule only reaches for the nose past 42 m/s, which a
+  // loaded torpedo aircraft never sees on a deck, and holding the stick back from a standstill buys
+  // angle of attack at a drag price that costs more roll than it gains lift.
+  DECK_CONTROLS.pitch = a.speed > 24 ? 1 : 0;
+  DECK_CONTROLS.rudder = clamp(angleDelta(home.heading, a.heading) * 6, -1, 1);
   const departure = fl.stepDeck(
-    {
-      heading: home.heading,
-      length: home.deckLength,
-      speed: home.speed,
-      width: home.deckWidth,
-      x: home.x,
-      z: home.z,
-    },
+    DECK_FRAME,
     dt,
     // The deck is a moving, turning frame: a ship under helm rotates the corridor out from under an
     // aircraft that holds its launch heading, and the run then ends as a lateral overrun at half
     // flying speed. Steer down the deck instead.
-    {
-      // Rotate late: the engine's own tail-rise schedule only reaches for the nose past 42 m/s, which
-      // a loaded torpedo aircraft never sees on a deck, and holding the stick back from a standstill
-      // buys angle of attack at a drag price that costs more roll than it gains lift.
-      pitch: a.speed > 24 ? 1 : 0,
-      rudder: clamp(angleDelta(home.heading, a.heading) * 6, -1, 1),
-    },
+    DECK_CONTROLS,
   );
   if (departure !== null) {
     // `stepDeck` reports the departure but the game owns `mode`; without this the aircraft stays
@@ -447,25 +456,31 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
   // foe already in the 25–650 m envelope, which is the only place its value is used.
   let t: Any = null;
   let d = 0;
-  const consider = (e: Any): boolean => {
-    const dx = e.x - a.x;
-    const dy = e.y - a.y;
-    const dz = e.z - a.z;
+  const ax = a.x;
+  const ay = a.y;
+  const az = a.z;
+  const others = b.aircraft;
+  for (let i = 0; i <= others.length; i += 1) {
+    let e: Any;
+    if (i === others.length) {
+      if (!(a.team === "jp" && b.player.mode === "flight")) break;
+      e = b.player;
+    } else {
+      e = others[i];
+      if (e.team === a.team || e.hp <= 0) continue;
+    }
+    const dx = e.x - ax;
+    const dy = e.y - ay;
+    const dz = e.z - az;
     const d2 = dx * dx + dy * dy + dz * dz;
-    if (d2 >= 422500 || d2 <= 625) return false;
+    if (d2 >= 422500 || d2 <= 625) continue;
     const dd = Math.hypot(dx, dy, dz);
-    if ((dx * f.x + dy * f.y + dz * f.z) / (dd || 1) < -0.6 && dy / dd > -0.13) {
+    if ((dx * f.x + dy * f.y + dz * f.z) / dd < -0.6 && dy / dd > -0.13) {
       t = e;
       d = dd;
-      return true;
+      break;
     }
-    return false;
-  };
-  for (const e of b.aircraft) {
-    if (e.team === a.team || e.hp <= 0) continue;
-    if (consider(e)) break;
   }
-  if (!t && a.team === "jp" && b.player.mode === "flight") consider(b.player);
   if (!t) return;
   const tt = d / 730;
   const aim = { x: t.x + (t.vx || 0) * tt - a.x, y: t.y + (t.vy || 0) * tt - a.y, z: t.z + (t.vz || 0) * tt - a.z };
@@ -494,15 +509,30 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
 }
 
 export function navigateHome(b: Any, a: Any, dt: number): void {
-  let h = b.ships.find((s: Any) => s.id === a.home && !s.sunk && s.deck > 0.3);
-  if (!h)
-    h = b.ships
-      .filter((s: Any) => s.team === a.team && s.kind === "carrier" && !s.sunk && s.deck > 0.3)
-      .sort((s: Any, t: Any) => distance2(a, s) - distance2(a, t))[0];
+  let h: Any = null;
+  for (const s of b.ships) {
+    if (s.id === a.home && !s.sunk && s.deck > 0.3) {
+      h = s;
+      break;
+    }
+  }
+  if (!h) {
+    // The first suitable deck by distance, matching the old `filter().sort()[0]` but without either
+    // array: a strict `<` keeps the earliest ship in fleet order on a tie, exactly as a stable sort did.
+    let bestD = Infinity;
+    for (const s of b.ships) {
+      if (s.team !== a.team || s.kind !== "carrier" || s.sunk || !(s.deck > 0.3)) continue;
+      const d = distance2(a, s);
+      if (d < bestD) {
+        bestD = d;
+        h = s;
+      }
+    }
+  }
   if (a.home === "midway") h = b.island;
   if (!h) {
     a.tactic = "ditching";
-    flyAircraft(a, { x: a.x + Math.sin(a.heading) * 1000, z: a.z - Math.cos(a.heading) * 1000 }, 3, 48, dt);
+    flyAircraft(a, aimPoint(a.x + Math.sin(a.heading) * 1000, a.z - Math.cos(a.heading) * 1000), 3, 48, dt);
     if (a.y < 4) {
       b.recordLoss(a);
       a.removed = true;
@@ -520,7 +550,7 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
     a.tactic = "rtb";
     flyAircraft(
       a,
-      busy ? { x: h.x + Math.sin(b.time * 0.025 + a.phase) * 1300, z: h.z + Math.cos(b.time * 0.025 + a.phase) * 1300 } : astern,
+      busy ? aimPoint(h.x + Math.sin(b.time * 0.025 + a.phase) * 1300, h.z + Math.cos(b.time * 0.025 + a.phase) * 1300) : astern,
       busy ? 450 : Math.max(90, Math.min(900, distance2(a, astern) * 0.14)),
       a.kind === "fighter" ? 94 : 84,
       dt,
@@ -533,7 +563,7 @@ export function navigateHome(b: Any, a: Any, dt: number): void {
   // towards its aim point, so an approach aimed 140 m beyond the bow arrives over the deck as high as
   // that point is distant — which is exactly what `Battle.recoverAircraft` then refuses.
   const glide = (h.id ? (h.deckHeight ?? DECK_HEIGHT) + 4 : 10) + Math.max(0, -along - 65) * 0.08;
-  flyAircraft(a, { x: h.x + f.x * 45, z: h.z + f.z * 45 }, glide, 51, dt);
+  flyAircraft(a, aimPoint(h.x + f.x * 45, h.z + f.z * 45), glide, 51, dt);
   if ((distance2(a, h) < 150 && a.y < 42) || (!h.id && distance2(a, h) < 200 && a.y < 50)) {
     // The airframe goes back into that ship's inventory — counted again, unready, and carrying no
     // store. A deck that cannot take it refuses, and the aircraft goes round again.
@@ -637,7 +667,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       a.tactic = "muster";
       flyAircraft(
         a,
-        { x: home.x + f.x * 1900 + Math.sin(b.time * 0.025 + a.phase) * 650, z: home.z + f.z * 1900 + Math.cos(b.time * 0.025 + a.phase) * 650 },
+        aimPoint(home.x + f.x * 1900 + Math.sin(b.time * 0.025 + a.phase) * 650, home.z + f.z * 1900 + Math.cos(b.time * 0.025 + a.phase) * 650),
         a.kind === "torpedo" ? 550 : 1550,
         a.kind === "torpedo" ? 80 : 94,
         dt,
@@ -656,19 +686,26 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
     const avoid = a.avoid || (a.avoid = { x: 0, z: 0 });
     avoid.x = 0;
     avoid.z = 0;
-    for (const other of b.aircraft) {
-      if (other === a || other.hp <= 0) continue;
-      const dx = a.x - other.x;
-      const dz = a.z - other.z;
-      const dy = a.y - other.y;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      // Only the handful inside the 75 m separation bubble need a distance; everyone else is
-      // rejected on the squared value, which is what makes this all-pairs scan affordable.
-      if (d2 <= 1 || d2 >= 5625) continue;
-      const d = Math.hypot(dx, dy, dz);
-      const gain = ((75 - d) * 14) / d;
-      avoid.x += dx * gain;
-      avoid.z += dz * gain;
+    if (b.aircraft.length > 1) {
+      const ax = a.x;
+      const ay = a.y;
+      const az = a.z;
+      const others = b.aircraft;
+      for (let i = 0, n = others.length; i < n; i += 1) {
+        const other = others[i];
+        if (other === a || other.hp <= 0) continue;
+        const dx = ax - other.x;
+        const dz = az - other.z;
+        const dy = ay - other.y;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        // Only the handful inside the 75 m separation bubble need a distance; everyone else is
+        // rejected on the squared value, which is what makes this all-pairs scan affordable.
+        if (d2 <= 1 || d2 >= 5625) continue;
+        const d = Math.hypot(dx, dy, dz);
+        const gain = ((75 - d) * 14) / d;
+        avoid.x += dx * gain;
+        avoid.z += dz * gain;
+      }
     }
     let dest: Any;
     let alt = 1400;
