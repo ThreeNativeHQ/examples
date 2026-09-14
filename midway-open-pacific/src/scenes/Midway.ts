@@ -83,6 +83,9 @@ export class Midway extends Scene<GameState, undefined> {
   exit(): void {
     this.audio.dispose();
     this.world.crew.dispose();
+    this.world.ripples.dispose();
+    this.world.ocean.dispose();
+    this.world.particles.dispose();
     for (const off of this.cleanups) off();
     this.cleanups = [];
     this.keys.clear();

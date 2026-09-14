@@ -1,122 +1,78 @@
-/** The engine's RippleField as a shader source: impacts push chop and leave foam the ocean samples. */
+/** One local free surface drives ocean shading, whitewater collisions, and floating foam. */
 import { RippleField } from "@threenative/core";
-import { ClampToEdgeWrapping, DataTexture, DataUtils, HalfFloatType, LinearFilter, RGFormat, Vector2 } from "three";
-import { float, smoothstep, texture, uniform } from "three/tsl";
-import type { Node } from "three/webgpu";
+import { ClampToEdgeWrapping, DataTexture, DataUtils, HalfFloatType, LinearFilter, RGBAFormat, Vector2 } from "three";
+import { float, smoothstep, texture, uniform, vec2 } from "three/tsl";
+import { WaterEffects } from "./water-effects.js";
+import { oceanSwell, oceanSwellNode } from "./ocean.js";
+import { localPoint } from "../sim/math.js";
 
-export function createRipples(): {
-  heightNode: (point: Node<"vec2">) => Node<"float">;
-  foamNode: (point: Node<"vec2">) => Node<"float">;
-  update: (battle: any, camera: { x: number; z: number }, dt: number) => void;
-  /** Total disturbance energy; zero on a flat sea. The water gate asserts on this, not on pixels. */
-  energy: () => number;
-  /** Tallest and deepest metre of disturbance anywhere on the patch, for judging visibility. */
-  peak: () => { high: number; low: number };
-  reset: () => void;
-  dispose: () => void;
-} {
-  const field = new RippleField({ resolution: 128, size: 900, speed: 22, damping: 0.22, foamHalfLife: 9 });
-  const resolution = field.resolution;
-  // Half float, not float: WebGPU will not linearly filter an rg32float texture without the
-  // optional `float32-filterable` feature, and it does not complain — the sample silently reads
-  // nothing, so the sea stays flat while the simulation behind it is moving metres of water.
-  // rg16float is filterable everywhere, and a centimetre of precision over a few metres of
-  // disturbance is far more than the surface needs.
-  const data = new Uint16Array(resolution * resolution * 2);
-  const map = new DataTexture(data, resolution, resolution, RGFormat, HalfFloatType);
-  map.minFilter = map.magFilter = LinearFilter;
-  map.wrapS = map.wrapT = ClampToEdgeWrapping;
-  map.needsUpdate = true;
-  const center = uniform(new Vector2());
-  const size = uniform(field.size);
-
-  const patchUv = (point: Node<"vec2">): any => (point as any).sub(center).div(size).add(0.5);
-  // Fade the outer 12% of each axis so the patch has no square edge; zero outside it too.
-  const rimMask = (uv: any): any =>
-    smoothstep(0, 0.12, uv.x)
-      .mul(smoothstep(0, 0.12, uv.x.oneMinus()))
-      .mul(smoothstep(0, 0.12, uv.y))
-      .mul(smoothstep(0, 0.12, uv.y.oneMinus()));
-  const heightNode = (point: Node<"vec2">): Node<"float"> => {
-    const uv = patchUv(point);
-    // `.level(0)` is load bearing. This node is evaluated in the vertex stage, and WGSL has no
-    // implicit derivatives there, so a plain sample is silently dropped: the sea stays perfectly
-    // flat while the field behind it is moving five metres of water, with nothing on the console.
-    // The fragment-stage foam below needs no such thing, which is why foam appeared and the
-    // displacement did not.
-    return texture(map, uv).level(float(0)).r.mul(rimMask(uv)) as unknown as Node<"float">;
+export function createRipples() {
+  const field = new RippleField({resolution:192,size:640,speed:22,damping:.27,foamHalfLife:7,current:{x:.22,z:.06},step:1/120,maxSteps:24});
+  const n=field.resolution,data=new Uint16Array(n*n*4);
+  const map=new DataTexture(data,n,n,RGBAFormat,HalfFloatType);
+  map.minFilter=map.magFilter=LinearFilter;map.wrapS=map.wrapT=ClampToEdgeWrapping;map.needsUpdate=true;
+  const center=uniform(new Vector2()),time=uniform(0);
+  // Cell centres, not cell edges: CPU sampling and vertex/fragment sampling agree.
+  const uvAt=(p:any):any=>p.sub(center).div(field.size).add(.5);
+  const rim=(uv:any):any=>smoothstep(0,.07,uv.x).mul(smoothstep(0,.07,uv.x.oneMinus()))
+    .mul(smoothstep(0,.07,uv.y)).mul(smoothstep(0,.07,uv.y.oneMinus()));
+  const read=(p:any):any=>{const uv=uvAt(p);return texture(map,uv.mul((n-1)/n).add(.5/n)).level(float(0)).mul(rim(uv));};
+  const heightNode=(p:any):any=>read(p).r;
+  const normalNode=(p:any):any=>vec2(heightNode(p.add(vec2(field.dx,0))).sub(heightNode(p.sub(vec2(field.dx,0)))),
+    heightNode(p.add(vec2(0,field.dx))).sub(heightNode(p.sub(vec2(0,field.dx))))).div(2*field.dx);
+  const surfaceNode=(p:any):any=>oceanSwellNode(p,time).add(heightNode(p));
+  const rimCPU=(x:number,z:number)=>{
+    const sx=(v:number)=>{const t=Math.min(1,Math.max(0,v/.07));return t*t*(3-2*t);};
+    const u=(x-field.centerX)/field.size+.5,v=(z-field.centerZ)/field.size+.5;
+    return sx(u)*sx(1-u)*sx(v)*sx(1-v);
   };
-  const foamNode = (point: Node<"vec2">): Node<"float"> => {
-    const uv = patchUv(point);
-    return texture(map, uv).g.mul(rimMask(uv)) as unknown as Node<"float">;
+  const heightAt=(x:number,z:number,t:number)=>oceanSwell(x,z,t)+field.heightAt(x,z)*rimCPU(x,z);
+  let ships:any[]=[];
+  const hullHeightAt=(x:number,z:number)=>{
+    for(const s of ships){
+      if(s.sunk||(s.kind==='sub'&&!s.surfaced))continue;
+      if(Math.abs(x-s.x)>s.hullLength||Math.abs(z-s.z)>s.hullLength)continue;
+      const l=localPoint({x,z},s);
+      const taper=Math.sqrt(Math.max(0,1-(l.forward/(s.hullLength*.5))**4));
+      if(Math.abs(l.forward)<s.hullLength*.5&&Math.abs(l.right)<s.hullBeam*.5*taper)return s.deckHeight??12;
+    }
+    return -Infinity;
   };
-
-  let seen = new Set<string>();
-  let uploaded = -1;
-  /** Surface disturbances that have not happened yet, soonest last so the tail pops cheaply. */
-  let queued: Array<{ at: number; x: number; z: number; radius: number; amplitude: number; foam: number }> = [];
-  let clock = 0;
-
-  const update = (battle: any, camera: { x: number; z: number }, dt: number): void => {
-    field.recenter(camera.x, camera.z);
-    center.value.set(field.centerX, field.centerZ);
-    for (const e of battle.effects) {
-      if (seen.has(e.id)) continue;
+  let simulationOffset=0;
+  const effects=new WaterEffects(field,(x,z,t)=>heightAt(x,z,t+simulationOffset),hullHeightAt,surfaceNode);
+  let seen=new Set<string>(),lastBattleTime=0,elapsed=0;
+  const update=(battle:any,camera:{x:number;z:number},dt:number)=>{
+    ships=battle.ships;
+    effects.whitewater.wind.x=battle.wind.x;effects.whitewater.wind.z=battle.wind.z;
+    // Stop with the battle clock (including pause and debrief); no duplicate wall-time clock.
+    const delta=Math.max(0,Math.min(.2,battle.time-lastBattleTime));lastBattleTime=battle.time;
+    elapsed=battle.time;time.value=elapsed;
+    const incoming=battle.effects.filter((e:any)=>!seen.has(e.id)&& (e.type==='splash'||e.waterKind));
+    // Nearest live impact keeps the field centred on it while the aircraft flies past.
+    let nearest:any=null,nearestDist=Infinity;
+    for(const e of incoming){const d=Math.hypot(e.x-camera.x,e.z-camera.z);if(d<1800&&d<nearestDist){nearest=e;nearestDist=d;}}
+    // Keep an active impact in world space while the aircraft flies past it.
+    if(nearest&&!field.contains(nearest.x,nearest.z,90))field.recenter(nearest.x,nearest.z);
+    else if(effects.events.length===0)field.recenter(camera.x,camera.z);
+    center.value.set(field.centerX,field.centerZ);
+    // Whitewater's clock is local; the swell callback uses the battle's absolute time.
+    simulationOffset=elapsed-effects.time-delta;
+    for(const e of incoming){
       seen.add(e.id);
-      if (Math.abs(e.y) > 60) continue;
-      if (e.underwater) {
-        // A charge fused to burst below the surface does not move the sea at the instant it goes
-        // off. The gas cavity has to reach the surface first, and what the crew see is the column
-        // breaking through and then falling back — two disturbances, not one, on the same timeline
-        // the audio schedules its concussion and its falling water against.
-        queued.push({ at: clock + 0.35, x: e.x, z: e.z, radius: 5 + e.size * 4, amplitude: -30 * Math.sqrt(e.size), foam: 0.6 });
-        queued.push({ at: clock + 1.55, x: e.x, z: e.z, radius: 7 + e.size * 5, amplitude: -11 * Math.sqrt(e.size), foam: 0.45 });
-      } else if (e.type === "splash") field.impulse(e.x, e.z, 2.5 + e.size * 3, -14 * Math.sqrt(e.size), 0.25 * e.size);
-      else if (e.type === "explosion") field.impulse(e.x, e.z, 4 + e.size * 4, -26 * Math.sqrt(e.size), 0.5);
+      if(Math.hypot(e.x-camera.x,e.z-camera.z)>1800)continue;
+      const size=e.size??1;
+      effects.explode({x:e.x,z:e.z,depth:e.waterDepth??(e.underwater?Math.max(3,-e.y):0),
+        strength:e.waterStrength??Math.max(.03,size/3),direction:e.waterDirection});
     }
-    if (seen.size > 650) seen = new Set(battle.effects.map((e: any) => e.id));
-    for (const t of battle.torpedoes) field.depositFoam(t.x, t.z, 3, 0.5 * dt);
-    for (const t of battle.airTorpedoes) field.depositFoam(t.x, t.z, 3, 0.5 * dt);
-    for (const s of battle.ships) {
-      if (s.sunk || (s.kind === "sub" && !s.surfaced) || s.speed < 2) continue;
-      field.depositFoam(s.x, s.z, s.hullBeam, 0.35 * dt);
-    }
-    clock += dt;
-    if (queued.length > 0) {
-      for (const q of queued) if (q.at <= clock) field.impulse(q.x, q.z, q.radius, q.amplitude, q.foam);
-      queued = queued.filter((q) => q.at > clock);
-    }
-    field.advance(dt);
-    if (field.version !== uploaded) {
-      for (let i = 0; i < resolution * resolution; i++) {
-        data[i * 2] = DataUtils.toHalfFloat(field.height[i]!);
-        data[i * 2 + 1] = DataUtils.toHalfFloat(field.foam[i]!);
-      }
-      map.needsUpdate = true;
-      uploaded = field.version;
-    }
+    if(seen.size>650)seen=new Set(battle.effects.map((e:any)=>e.id));
+    for(const t of [...battle.torpedoes,...battle.airTorpedoes])if(t.y<=.5)field.depositFoam(t.x,t.z,2,.65*delta);
+    effects.step(delta);effects.render();
+    for(let i=0;i<n*n;i++){data[i*4]=DataUtils.toHalfFloat(field.height[i]);data[i*4+1]=DataUtils.toHalfFloat(field.foam[i]);
+      data[i*4+2]=DataUtils.toHalfFloat(field.flowX[i]);data[i*4+3]=DataUtils.toHalfFloat(field.flowZ[i]);}
+    if(delta>0||incoming.length)map.needsUpdate=true;
   };
-
-  return {
-    heightNode,
-    foamNode,
-    update,
-    energy: () => field.energy(),
-    peak: () => {
-      let high = 0;
-      let low = 0;
-      for (const h of field.height) {
-        if (h > high) high = h;
-        if (h < low) low = h;
-      }
-      return { high, low };
-    },
-    reset: () => {
-      field.reset();
-      seen.clear();
-      queued = [];
-      clock = 0;
-    },
-    dispose: () => map.dispose(),
-  };
+  return {field,effects,heightNode,normalNode,foamNode:(p:any)=>read(p).g,flowNode:(p:any)=>read(p).ba,heightAt,update,
+    energy:()=>field.energy(),peak:()=>({high:Math.max(...field.height),low:Math.min(...field.height)}),
+    reset:()=>{effects.reset();seen.clear();lastBattleTime=0;elapsed=0;time.value=0;data.fill(0);map.needsUpdate=true;},
+    dispose:()=>{effects.dispose();map.dispose();}};
 }

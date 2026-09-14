@@ -165,7 +165,6 @@ export class CombatParticles {
       return;
     }
     if (water) {
-      this.column(e, size);
       return;
     }
     const smokeCount = hit ? 2 : flak ? 23 : 34;
@@ -209,83 +208,6 @@ export class CombatParticles {
       if (!hit && !flak)
         for (let i = 0; i < 10; i += 1)
           this.emit(this.smoke, e, { vx: this.spread(45 * size), vy: (12 + this.random() * 25) * size, vz: this.spread(45 * size), life: 4, drag: 0.1, gravity: 9.81, size: 0.5 * size, aspect: 2, kind: 3, color: [0.04, 0.045, 0.045], alpha: 1, spin: this.spread(9) });
-    }
-  }
-
-  /**
-   * A near miss throws a water column, not a puff of grey: a narrow ragged white plume that
-   * rises, stalls and collapses, a broad collar of spray at its foot, and a foam patch left
-   * lying on the sea. Every part is ballistic — `drag` is near zero, so the wind cannot bend a
-   * column of water sideways the way it bends smoke, and the height is set by gravity alone.
-   */
-  column(e: any, size: number): void {
-    // Peak speed scales with the square root of the effect size, so the column height follows
-    // v^2/2g against the cited figures: a 0.18 bullet strike lifts about two metres, a 1.6
-    // ditching aircraft about twenty, a 3.5 heavy-bomb near miss about forty-five, with the
-    // torn-off spray reaching half again above the water mass. Measured on the shipped frame
-    // against Arashi's 118.5 m: 66 m to the top of the spray.
-    const peak = 16 * Math.sqrt(size);
-    const core = Math.round(clamp(15 * size, 5, 60));
-    for (let i = 0; i < core; i += 1) {
-      // t biases the mass low, so the column is dense at the base and feathers into streamers.
-      const t = Math.pow(this.random(), 0.7);
-      const angle = this.random() * 6.28;
-      const r = (1 - t * 0.8) * 1.5 * size * this.random();
-      this.emit(this.smoke, { x: e.x + Math.cos(angle) * r, y: 0.4 + t * size, z: e.z + Math.sin(angle) * r }, {
-        vx: Math.cos(angle) * (1 + t * 3),
-        vy: peak * (0.25 + 0.75 * t),
-        vz: Math.sin(angle) * (1 + t * 3),
-        drag: 0.05,
-        gravity: 9.81,
-        life: 2.2 + t * 2 + this.random() * 0.7,
-        // A column is a stem, not a bloom: the mass at the foot is the widest part of it and
-        // the top feathers into smaller torn pieces. Growth stays under a metre a second at the
-        // base, or the column doubles its own width before it has finished rising.
-        size: (1.25 - t * 0.5) * size,
-        growth: (0.25 + t * 0.5) * size,
-        aspect: 1.4 + t * 0.8,
-        kind: 4,
-        alpha: 0.92,
-        color: [0.78, 0.85, 0.89],
-        spin: this.spread(0.25),
-      });
-    }
-    // The collar: water thrown outwards at the surface, falling back inside two seconds.
-    for (let i = 0; i < Math.round(core * 0.4); i += 1) {
-      const angle = this.random() * 6.28;
-      const v = (3 + this.random() * 5) * Math.sqrt(size);
-      this.emit(this.smoke, { x: e.x + Math.cos(angle) * size, y: 0.3, z: e.z + Math.sin(angle) * size }, {
-        vx: Math.cos(angle) * v, vy: 2 + this.random() * 5, vz: Math.sin(angle) * v,
-        drag: 0.35, gravity: 9.81, life: 1.1 + this.random() * 1.1,
-        size: 1.1 * size, growth: 1.8 * size, aspect: 0.8,
-        kind: 4, alpha: 0.75, color: [0.82, 0.88, 0.91], spin: this.spread(0.3),
-      });
-    }
-    // Torn-off droplets, gone before the column is: they must not outlive the water they left.
-    for (let i = 0; i < Math.round(core * 0.5); i += 1) {
-      const angle = this.random() * 6.28;
-      const v = (2 + this.random() * 7) * Math.sqrt(size);
-      this.emit(this.smoke, { x: e.x + this.spread(size), y: 0.5, z: e.z + this.spread(size) }, {
-        vx: Math.cos(angle) * v, vy: peak * (0.45 + this.random() * 0.5), vz: Math.sin(angle) * v,
-        drag: 0.04, gravity: 9.81, life: 0.9 + this.random() * 1.1,
-        size: 0.1 * size, growth: 0.1 * size, aspect: 4.5,
-        kind: 2, alpha: 0.85, color: [0.82, 0.9, 0.93],
-      });
-    }
-    // Foam: flat on the sea, held still by zero drag so the wind never drags the patch with it.
-    // It settles at roughly six times the effect size across — about twenty metres for a heavy
-    // near miss, not the forty a free-running growth rate reached.
-    // It rides at 3.6 m, just clear of the measured 3.34 m crest: the sea writes depth, so a
-    // patch laid on the datum is swallowed whole every time a swell passes over it.
-    // ponytail: a fixed clearance, not the wave height under it. Sample the ocean's WaveField
-    // on the CPU if the patch ever has to sit down in the troughs.
-    for (let i = 0; i < 3; i += 1) {
-      this.emit(this.smoke, { x: e.x + this.spread(size * 2), y: 3.6, z: e.z + this.spread(size * 2) }, {
-        drag: 0, gravity: 0, buoyancy: 0,
-        life: 5 + this.random() * 4,
-        size: (1.6 + this.random() * 1.2) * size, growth: 0.45 * size,
-        kind: 6, alpha: 0.7, color: [0.88, 0.93, 0.95], spin: this.spread(0.06),
-      });
     }
   }
 

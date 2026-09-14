@@ -966,6 +966,9 @@ export class Battle {
       z: p.z,
       size,
       underwater,
+      waterKind: p.waterKind,
+      waterDepth: p.waterDepth,
+      waterDirection: p.waterDirection,
       age: 0,
       life: type === "muzzle" ? 0.18 : type === "splash" ? 5 : type === "flak" ? 8 : type === "hit" ? 1.5 : 9,
     });
@@ -1813,7 +1816,7 @@ export class Battle {
       this.wreckAircraft(s, Math.ceil(amount / 40));
       this.burnStores(s, Math.ceil(amount / 60), amount * 0.15);
       s.engine = Math.max(0.12, s.engine - amount / 600);
-      this.fx("explosion", point, weapon === "bomb" ? 3.2 : 1);
+      if (!nearMiss) this.fx("explosion", point, 3.2);
       this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: s.kind === "carrier" ? "deck" : "steel", outcome: "hit" });
       if (byPlayer && nearMiss) {
         this.stats.nearMisses += 1;
@@ -1839,7 +1842,10 @@ export class Battle {
       // Flooding. Three hits put the deck past the heavy-list threshold; counter-flooding brings it
       // back slowly, which reopens limited operations without repairing the hull or the stores.
       s.list = clamp((s.list ?? 0) + 0.14, 0, 0.7);
-      this.fx("explosion", point, 2.8);
+      const local = localPoint(point, s), side = Math.sign(local.right) || 1;
+      const right = side * (s.hullBeam * .5 + 2.5), c = Math.cos(s.heading), sn = Math.sin(s.heading);
+      this.fx("splash", {x:s.x + sn * local.forward + c * right, z:s.z - c * local.forward + sn * right,
+        y:-3, waterKind:"torpedo", waterDepth:3, waterDirection:{x:c*side,z:sn*side}}, 3.6, true);
       this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: "steel", outcome: "torpedo" });
     } else {
       s.aa = Math.max(0.1, s.aa - 0.005);

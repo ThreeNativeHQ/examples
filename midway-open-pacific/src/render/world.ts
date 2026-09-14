@@ -14,6 +14,7 @@ import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./envir
 import { createOcean } from "./ocean.js";
 import { CombatParticles } from "./particles.js";
 import { createRipples } from "./ripples.js";
+import { shipMotion } from "./ship-motion.js";
 
 /**
  * The imported airframe for an AI aircraft, where the game has one.
@@ -218,6 +219,9 @@ export class WorldView {
   tracerColors = new Float32Array(1000 * 6);
   particles!: CombatParticles;
   ripples!: ReturnType<typeof createRipples>;
+  private sky!: T.Texture;
+  private surfaceFog!: T.FogExp2;
+  private underwater = false;
   lookYaw = 0;
   lookPitch = 0;
   lookActive = false;
@@ -239,7 +243,8 @@ export class WorldView {
     this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = T.PCFShadowMap;
-    this.scene.fog = new T.FogExp2(new T.Color(0x8fa9b4).convertLinearToSRGB(), 0.000028);
+    this.surfaceFog = new T.FogExp2(new T.Color(0x8fa9b4).convertLinearToSRGB(), 0.000028);
+    this.scene.fog = this.surfaceFog;
     // The reference used r140 legacy light units (PI brighter) and linear hex colours.
     const hemi = new T.HemisphereLight(0xb5cedd, 0x243745, 0.9);
     this.scene.add(hemi);
@@ -256,6 +261,7 @@ export class WorldView {
     this.wakeTex = wakeTexture();
     this.makeSky();
     this.ripples = createRipples();
+    this.scene.add(this.ripples.effects.group);
     this.makeOcean();
     this.makeWorld();
     this.makeTracers();
@@ -264,6 +270,7 @@ export class WorldView {
 
   makeSky(): void {
     const sky = dawnEnvironment();
+    this.sky = sky;
     this.scene.background = sky;
     this.scene.environment = sky;
     this.scene.backgroundRotation.copy(SKY_ROTATION);
@@ -273,7 +280,7 @@ export class WorldView {
   }
 
   makeOcean(): void {
-    this.ocean = createOcean({ rippleHeight: this.ripples.heightNode, rippleFoam: this.ripples.foamNode });
+    this.ocean = createOcean({ rippleHeight: this.ripples.heightNode, rippleNormal: this.ripples.normalNode, rippleFoam: this.ripples.foamNode, rippleFlow: this.ripples.flowNode });
     this.sea = this.ocean.mesh;
     this.scene.add(this.sea);
   }
@@ -425,8 +432,10 @@ export class WorldView {
       const m = this.meshes.get(s.id);
       if (!m) continue;
       // Depth already became y through `subY` in the simulation; the renderer never converts it.
-      m.position.set(s.x, s.y, s.z);
-      m.rotation.set(Math.sin(time * 0.3 + s.baseZ) * 0.004, -s.heading, s.sunk ? s.sink * 0.35 : Math.sin(time * 0.22 + s.baseX) * 0.004 + (1 - s.hp / s.maxHp) * 0.035);
+      const moving = s.kind !== "sub" || s.surfaced;
+      const motion = moving ? shipMotion(s, time, this.ripples.heightAt) : {x:0,y:0,z:0,pitch:0,roll:0};
+      m.position.set(s.x + motion.x, s.y + motion.y, s.z + motion.z);
+      m.rotation.set(motion.pitch, -s.heading, s.sunk ? s.sink * .35 : motion.roll + (s.list ?? 0), "YXZ");
       m.visible = s.sink < 0.95;
       const d = distance2(s, p);
       // The park is a visual LOD: it is worth drawing while the camera is close, wherever the
@@ -525,6 +534,21 @@ export class WorldView {
     this.playerMesh.visible = b.status !== "lost";
     this.updateProjectiles();
     this.updateCamera(dt, briefing, time);
+    // The eye below the surface is in a different medium: the dawn sky behind a submerged hull
+    // reads as a hole punched through the sea. Tint the background and thicken the fog while the
+    // camera is under, and restore the surface medium on the way up.
+    const submerged = this.camera.position.y < 0;
+    if (submerged !== this.underwater) {
+      this.underwater = submerged;
+      if (submerged) {
+        const water = new T.Color(0x0b2f38).convertLinearToSRGB();
+        this.scene.background = water;
+        this.scene.fog = new T.FogExp2(water, 0.032);
+      } else {
+        this.scene.background = this.sky;
+        this.scene.fog = this.surfaceFog;
+      }
+    }
     this.ripples.update(b, this.camera.position, dt);
     this.particles.update(b, this.camera.position);
     this.ocean.update(this.camera.position, time, b.ships);

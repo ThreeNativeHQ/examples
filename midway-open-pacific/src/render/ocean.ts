@@ -1,50 +1,53 @@
 /** Reference Pacific swells, evaluated by the engine's analytic WaveField on a dense near grid. */
-import { reflectedSky, oceanRipples, SUN_DIRECTION } from "./environment.js";
-import { WaveField } from "@threenative/core";
-import { BufferGeometry, Float32BufferAttribute, Mesh, Vector2, Vector4 } from "three";
+import { reflectedSky, SUN_DIRECTION } from "./environment.js";
+import { WaveField, WaterSurface3D } from "@threenative/core";
+import { BufferGeometry, Float32BufferAttribute, Mesh, Vector2, Vector4, DoubleSide, DataTexture, RepeatWrapping, LinearFilter, LinearMipmapLinearFilter } from "three";
 import {
-  Fn, cameraPosition, dot, float, mix, mx_noise_float, positionGeometry,
+  Fn, cameraPosition, dot, float, mix, mx_noise_float, mx_worley_noise_vec2, positionGeometry, texture, vec2,
   reflect, smoothstep, uniform, uniformArray, varying, vec3,
 } from "three/tsl";
 import { MeshBasicNodeMaterial, type Node } from "three/webgpu";
 
-const WAVES = [
-  [.94, .34, 108, 1.15], [.76, .65, 61, .72], [-.61, .79, 87, .68],
-  [.40, -.92, 45, .31], [.42, .91, 34, .38], [-.35, .94, 18, .19],
-  [.99, -.12, 9.4, .08], [.70, .71, 4.8, .035],
-];
+/** The reference's swell spectrum; CPU and shader sample this exact same field. */
+export const OCEAN_BANDS = [[.54,.035,.014,.56],[.28,-.057,.041,.83],[.12,.13,.09,1.25],[.055,-.27,.18,1.74]];
+const SEA = .65;
+const swell = new WaveField({waves:OCEAN_BANDS.map(([a,kx,kz,w])=>({direction:{x:kx,z:kz},
+  wavelength:2*Math.PI/Math.hypot(kx,kz),amplitude:a*SEA,speed:w,detail:true}))});
+export const oceanSwell = (x:number,z:number,time:number) => swell.sample(x,z,time).height;
+export const oceanSwellNode = (point:any,time:any):any => swell.heightNode({point,time});
 
-export function createOcean({ rippleHeight, rippleFoam }: {
-  rippleHeight?: (point: Node<"vec2">) => Node<"float">;
-  rippleFoam?: (point: Node<"vec2">) => Node<"float">;
-} = {}) {
-  const origin = uniform(new Vector2());
-  const time = uniform(0);
-  const sun = vec3(SUN_DIRECTION);
-  const ships = Array.from({ length: 20 }, () => new Vector4(1e8, 1e8, 0, 0));
-  const sizes = Array.from({ length: 20 }, () => new Vector4());
-  const shipNodes = uniformArray<"vec4">(ships, "vec4");
-  const sizeNodes = uniformArray<"vec4">(sizes, "vec4");
-  const fields = WAVES.map(([dx, dz, wavelength, amplitude]) => {
-    const length = Math.hypot(dx, dz);
-    const x = dx / length, z = dz / length, k = 2 * Math.PI / wavelength;
-    return new WaveField({
-      waves: [{ direction: { x, z }, wavelength, amplitude, speed: Math.sqrt(9.81 * k), detail: true }],
-      domainWarp: [{ waveVector: { x: -z * k * .22, z: x * k * .22 }, displacement: { x: x * .85 / k, z: z * .85 / k }, speed: .07 }],
-    });
-  });
-  const ripples = Array.from({ length: 6 }, (_, i) => {
-    const frequency = 1.35 * 1.94 ** i;
-    const angle = .4 + i * Math.atan2(.785, .62);
-    return new WaveField({ waves: [{ direction: { x: Math.cos(angle), z: Math.sin(angle) }, wavelength: 2 * Math.PI / frequency, amplitude: .047 * .66 ** i / frequency, speed: Math.sqrt(9.81 * frequency), detail: true }] });
-  });
+/** Periodic height noise; both slopes derive from one surface. Adapted from Fluid Lab V2 (MIT). */
+function normalTexture(){
+  const n=256,data=new Uint8Array(n*n*4);
+  const hash=(x:number,z:number)=>{const a=Math.sin(x*127.1+z*311.7)*43758.5453;return a-Math.floor(a);};
+  const noise=(u:number,v:number,k:number)=>{const x=u*k,z=v*k,i=Math.floor(x),j=Math.floor(z);let a=x-i,b=z-j;
+    a=a*a*a*(a*(a*6-15)+10);b=b*b*b*(b*(b*6-15)+10);
+    const h=(x:number,z:number)=>hash((x%k+k)%k,(z%k+k)%k);
+    return (h(i,j)*(1-a)+h(i+1,j)*a)*(1-b)+(h(i,j+1)*(1-a)+h(i+1,j+1)*a)*b;};
+  const height=(u:number,v:number)=>noise(u,v,8)*.58+noise(u,v,16)*.28+noise(u,v,32)*.11+noise(u,v,64)*.03;
+  for(let j=0;j<n;j++)for(let i=0;i<n;i++){
+    const u=i/n,v=j/n,e=1/n,nx=(height(u+e,v)-height(u-e,v))*6,nz=(height(u,v+e)-height(u,v-e))*6,k=(j*n+i)*4;
+    data[k]=Math.max(0,Math.min(255,(nx*.5+.5)*255));data[k+1]=Math.max(0,Math.min(255,(nz*.5+.5)*255));data[k+2]=240;data[k+3]=height(u,v)*255;
+  }
+  const t=new DataTexture(data,n,n);t.wrapS=t.wrapT=RepeatWrapping;t.magFilter=LinearFilter;t.minFilter=LinearMipmapLinearFilter;t.generateMipmaps=true;t.needsUpdate=true;return t;
+}
+
+export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
+  rippleHeight?: (point:any)=>any; rippleNormal?: (point:any)=>any; rippleFoam?: (point:any)=>any; rippleFlow?: (point:any)=>any;
+}={}) {
+  const origin=uniform(new Vector2()),time=uniform(0),sun=vec3(SUN_DIRECTION);
+  const ships=Array.from({length:20},()=>new Vector4(1e8,1e8,0,0));
+  const sizes=Array.from({length:20},()=>new Vector4());
+  const shipNodes=uniformArray<"vec4">(ships,"vec4"),sizeNodes=uniformArray<"vec4">(sizes,"vec4");
+  const normalMap=normalTexture();
+  const surface=new WaterSurface3D({level:0,maxThickness:14,reflection:{resolutionScale:.5}});
 
   // Logarithmic rings keep metre-scale triangles beside the carrier and reach the horizon.
   // Ring count sets how finely the swell is sampled at range, and the ships sit at range: at
   // 156 rings the spacing out at 300m was 21m, so a 45m wave got two vertices and the sea
   // flattened into ripples exactly where a destroyer is being looked at. Doubling the rings
   // halves that spacing and costs only vertices, not another wave evaluation per pixel.
-  const segments = 288, rings = 312, positions = [0, 0, 0], indices: number[] = [];
+  const segments = 320, rings = 360, positions = [0, 0, 0], indices: number[] = [];
   const growth = Math.log(1 + 100000 / 1.6) / rings;
   for (let r = 0; r < rings; r++) {
     const radius = 1.6 * (Math.exp((r + 1) * growth) - 1);
@@ -62,11 +65,11 @@ export function createOcean({ rippleHeight, rippleFoam }: {
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
-  const material = new MeshBasicNodeMaterial({ fog: false });
+  const material = new MeshBasicNodeMaterial({ fog: false, transparent: true, depthWrite: true, side: DoubleSide });
   const point = positionGeometry.xz.add(origin);
   const height = Fn(() => {
     const h = float(0).toVar();
-    for (const field of fields) h.addAssign(field.heightNode({ point, time }));
+    h.addAssign(oceanSwellNode(point,time));
     if (rippleHeight) h.addAssign(rippleHeight(point));
     return h;
   })();
@@ -75,20 +78,16 @@ export function createOcean({ rippleHeight, rippleFoam }: {
   const worldHeight = varying(height);
   material.colorNode = Fn(() => {
     const footprint = world.dFdx().length().max(world.dFdy().length()).toVar();
-    const slope = vec3(0, 0, 0).toVar();
-    const variance = float(0).toVar();
-    const crest = float(0).toVar();
-    for (const [i, field] of [...fields, ...ripples].entries()) {
-      const wave = field.waves[0];
-      const k = 2 * Math.PI / wave.wavelength;
-      const fade = footprint.mul(k * 1.35).pow(2).mul(-.5).exp();
-      const n = field.normalNode({ point: world, time, fade }).toVar();
-      slope.addAssign(vec3(n.x.div(n.y), 0, n.z.div(n.y)));
-      variance.addAssign(fade.oneMinus().mul((wave.amplitude! * k) ** 2 * .5));
-      if (i < fields.length) crest.addAssign(field.heightNode({ point: world, time, fade }).sub(wave.amplitude! * .6).max(0).mul(.32));
-    }
-    slope.addAssign(oceanRipples(world, time).mul(smoothstep(.15, 2.4, footprint).oneMinus()));
-    const normal = slope.add(vec3(0, 1, 0)).normalize().toVar();
+    const worldPos=vec3(world.x,worldHeight,world.y);
+    const distance=cameraPosition.sub(worldPos).length();
+    const analytic:any=swell.normalNode({point:world,time});
+    const impact:any=rippleNormal?rippleNormal(world):vec2(0);
+    const micro=texture(normalMap,world.mul(vec2(.022,.045)).add(vec2(time.mul(.006),time.mul(.003))));
+    const finer=texture(normalMap,world.mul(vec2(.10,.075)).add(vec2(time.mul(-.014),time.mul(.009))));
+    const ripple=micro.rg.mul(2).sub(1).add(finer.rg.mul(2).sub(1).mul(.32));
+    const detail=float(1).div(distance.mul(.003).add(1)).mul(smoothstep(.4,4,footprint).oneMinus());
+    const normal=vec3(analytic.x.div(analytic.y).sub(impact.x).add(ripple.x.mul(.47).mul(detail)),
+      1,analytic.z.div(analytic.y).sub(impact.y).add(ripple.y.mul(.47).mul(detail))).normalize().toVar();
     const view = cameraPosition.sub(vec3(world.x, worldHeight, world.y)).normalize().toVar();
     const nv = dot(normal, view).max(.001);
     const fresnel = nv.oneMinus().pow(5).mul(.97963).add(.02037);
@@ -96,19 +95,26 @@ export function createOcean({ rippleHeight, rippleFoam }: {
     const reflection = reflect(view.negate(), normal);
     const facing = dot(normal, sun).mul(.5).add(.5).clamp(0, 1);
     const scatter = dot(view, sun.negate()).max(0).pow(3).mul(worldHeight.add(1).max(0)).mul(.14);
-    const body = mix(vec3(.004, .018, .042), vec3(.012, .078, .13), facing.mul(.14).add(.10).add(scatter));
+    const body = vec3(.005,.030,.048).add(vec3(.004,.020,.022).mul(worldHeight.max(0)))
+      .add(vec3(.014,.066,.071).mul(rippleFoam?rippleFoam(world).mul(1.6).min(1):float(0)));
     const nh = dot(normal, view.add(sun).normalize()).max(0);
     const nl = dot(normal, sun).max(.001);
     const pixelVariance = dot(normal.dFdx(), normal.dFdx()).max(dot(normal.dFdy(), normal.dFdy()));
-    const roughness = variance.mul(3).add(pixelVariance.mul(1.8)).add(.09 ** 2).sqrt().clamp(.09, .48);
-    const result = mix(body, skyColor(reflection, roughness), fresnel).toVar();
+    const roughness = pixelVariance.mul(1.8).add(.075 ** 2).sqrt().clamp(.075, .35);
+    const offset=normal.xz.mul(.017).mul(detail);
+    const mirror=surface.reflectionAt(offset);
+    const thickness=surface.thicknessAt();
+    const transmission=thickness.div(4).oneMinus().max(0).pow(2);
+    const beneath=surface.refractionAt(normal.xz.mul(.008)).mul(transmission);
+    const water=body.mul(transmission.oneMinus()).add(beneath.mul(vec3(.45,.72,.76)));
+    const result = mix(water, mirror, fresnel.mul(.91).add(.065).clamp(0,.96)).toVar();
     const a2 = roughness.pow(4);
     const distribution = a2.div(nh.pow(2).mul(a2.sub(1)).add(1).pow(2).mul(Math.PI).add(.0000002));
     const masking = nv.div(nv.mul(roughness.oneMinus()).add(roughness)).mul(nl.div(nl.mul(roughness.oneMinus()).add(roughness)));
     const spec = distribution.mul(masking).mul(fresnel).div(nv.mul(nl).mul(4).add(.001)).min(14).mul(nl);
     result.addAssign(vec3(1.45, 1.04, .65).mul(spec));
     const noise = mx_noise_float(world.mul(.48).add(time.mul(.04))).mul(.5).add(.5);
-    const foam = smoothstep(.34, .52, crest).mul(smoothstep(.55, .77, noise)).mul(.14).mul(smoothstep(4, 22, footprint).oneMinus()).toVar();
+    const foam = float(0).toVar();
     for (let i = 0; i < ships.length; i++) {
       const s = shipNodes.element(i), size = sizeNodes.element(i);
       const rel = world.sub(s.xy);
@@ -131,16 +137,26 @@ export function createOcean({ rippleHeight, rippleFoam }: {
         .mul(size.z)
         .mul(bowBias);
       foam.addAssign(
-        wake.mul(.8).add(wash.mul(.55)).add(hullWash.mul(.6)).mul(noise.mul(.62).add(.38)),
+        wake.mul(.55).add(wash.mul(.4)).add(hullWash.mul(.28)).mul(noise.mul(.62).add(.38)),
       );
     }
     if (rippleFoam) foam.addAssign(rippleFoam(world));
-    // Aerated water is the brightest thing in a wartime photograph of a task force at speed —
-    // a wake reads as white against deep blue, not as a slightly paler shade of the sea.
-    // Crest foam reaches this same colour but only at .14 strength, so whitecaps stay subtle.
-    result.assign(mix(result, vec3(.74, .82, .84), foam.clamp(0, .85)));
-    const distance = cameraPosition.sub(vec3(world.x, worldHeight, world.y)).length();
-    return mix(result, skyColor(vec3(view.x, .015, view.z).normalize()), distance.mul(-.000012).exp().oneMinus());
+    // The density moves with the solver. Noise reveals rounded pores instead of painting a white disc.
+    const flow=rippleFlow?rippleFlow(world):vec2(0);
+    const coord=world.sub(vec2(.22,.06).mul(time)).sub(flow.mul(time).mul(.055));
+    const breakup=mx_noise_float(coord.mul(.26)).mul(.31).add(mx_noise_float(coord.mul(.79)).mul(.13))
+      .add(mx_noise_float(coord.mul(2.6)).mul(.06)).add(.5);
+    const coverage=smoothstep(.22,.62,foam.mul(1.15).add(breakup.mul(.37)));
+    const grain=mx_noise_float(coord.mul(4.4)).mul(.5).add(.5);
+    const warp=vec2(mx_noise_float(coord.mul(.19)),mx_noise_float(coord.mul(.19).add(12))).mul(2.4);
+    const cell=mx_worley_noise_vec2(coord.mul(2.4).add(warp),float(1));
+    const pore=smoothstep(.11,.33,cell.x).oneMinus().mul(smoothstep(.20,.53,mx_noise_float(coord.mul(3.3)).mul(.5).add(.5)));
+    const rim=smoothstep(.10,.23,cell.x).mul(smoothstep(.23,.34,cell.x).oneMinus());
+    const froth=mix(vec3(.32,.45,.46),vec3(.69,.78,.78),grain.mul(.85).add(rim.mul(.2)).clamp());
+    result.assign(mix(result,froth,coverage.mul(pore.mul(.88).oneMinus()).mul(.96)));
+    const haze=skyColor(vec3(view.x,.015,view.z).normalize());
+    const above=mix(result,haze,distance.mul(-.00006).exp().oneMinus());
+    return cameraPosition.y.lessThan(0).select(vec3(.02,.17,.20).add(above.mul(.38)),above);
   })();
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;
@@ -148,12 +164,15 @@ export function createOcean({ rippleHeight, rippleFoam }: {
   mesh.name = "sea-surface";
   return {
     mesh,
+    dispose:()=>{surface.dispose();normalMap.dispose();geometry.dispose();material.dispose();},
     update(camera: { x: number; z: number }, elapsed: number, vessels: Array<{ x: number; z: number; heading: number; hullLength: number; hullBeam: number; speed: number; sunk: boolean; kind: string; surfaced?: boolean }>) {
       time.value = elapsed;
       origin.value.set(camera.x, camera.z);
       mesh.position.set(camera.x, 0, camera.z);
+      const visible=vessels.filter(s=>!s.sunk&&(s.kind!=="sub"||s.surfaced))
+        .sort((a,b)=>(a.x-camera.x)**2+(a.z-camera.z)**2-((b.x-camera.x)**2+(b.z-camera.z)**2));
       for (let i = 0; i < ships.length; i++) {
-        const s = vessels[i];
+        const s = visible[i];
         if (s && !s.sunk && (s.kind !== "sub" || s.surfaced)) {
           ships[i].set(s.x, s.z, s.heading, s.hullLength);
           sizes[i].set(s.hullBeam, s.speed, Math.min(1, s.speed / 8), 0);
