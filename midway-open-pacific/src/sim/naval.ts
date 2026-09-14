@@ -187,3 +187,114 @@ export function clearOfHazard(x: number, z: number, hazards: IHazard[], margin: 
   }
   return true;
 }
+
+/** A resolved world point a rejoining ship steers for, plus the step the heading is applied over. */
+export interface IRejoinStation {
+  x: number;
+  z: number;
+  dt: number;
+}
+
+/**
+ * Steering back onto station once an evasion has ended. It reuses `steerToStation`'s turn-rate
+ * limit rather than a second one, so the rejoin is bounded by the same rudder rate as ordinary
+ * station keeping and the ship arcs back instead of snapping to the bearing. The caller decides
+ * when evasion has ended; this only expresses the rejoin.
+ */
+export function rejoinCourse(
+  ship: { x: number; z: number; heading: number },
+  station: IRejoinStation,
+  limits: ISteerLimits,
+): { heading: number; speed: number } {
+  return steerToStation(ship, station, station.dt, limits);
+}
+
+/** A ship's formation identity as far as course authority is concerned. */
+export interface ICourseShip {
+  id: string;
+  groupId: string;
+  /** Sets the group's course while nobody is evading. */
+  guide: boolean;
+  /** Committed to an evasion; immediate survival outranks station keeping. */
+  evading: boolean;
+}
+
+/**
+ * Who owns the course. Rule: an evasion outranks station keeping, so a group yields to its lowest-id
+ * evader, and among evaders the lowest id leads — that is what stops two evaders from each yielding
+ * to the other. With nobody evading the guide holds the course and every non-guide yields to it.
+ * A ship that leads returns null, meaning it may set its own course.
+ */
+export function courseAuthority(ship: ICourseShip, others: ICourseShip[]): string | null {
+  const group = others.filter((o) => o.groupId === ship.groupId);
+  if (ship.evading) {
+    const senior = group
+      .filter((o) => o.evading && o.id < ship.id)
+      .map((o) => o.id)
+      .sort();
+    return senior.length > 0 ? senior[0] : null;
+  }
+  const evaders = group
+    .filter((o) => o.evading)
+    .map((o) => o.id)
+    .sort();
+  if (evaders.length > 0) return evaders[0];
+  if (ship.guide) return null;
+  const guide = group.find((o) => o.guide);
+  return guide ? guide.id : null;
+}
+
+/** A crew or boat group in the water: a plain record, never an entity. */
+export interface ISurvivorGroup {
+  id: string;
+  x: number;
+  z: number;
+  /** Simulation time the group was first seen, seconds. */
+  since: number;
+  count: number;
+}
+
+export interface IRescueLimits {
+  /** The escort's own position: reach is measured from here. */
+  fromX: number;
+  fromZ: number;
+  /** Furthest an escort will detach from the screen, metres. */
+  range: number;
+  /** A group smaller than this does not justify a dedicated run. */
+  minCount: number;
+  /** Seconds after `since` at which the attempt is abandoned. */
+  abandonAfter: number;
+}
+
+/**
+ * The rescue an escort should divert to, or null. Rule: only groups within `range`, at least
+ * `minCount` strong and not yet abandoned are candidates; among them the most survivors win, then
+ * the nearest, then the longest in the water, then the lowest id for a deterministic result.
+ * `until` is when the attempt is abandoned whether or not it has started.
+ */
+export function rescueWindow(
+  survivors: ISurvivorGroup[],
+  now: number,
+  limits: IRescueLimits,
+): { targetId: string; until: number } | null {
+  let best: ISurvivorGroup | null = null;
+  let bestDist = 0;
+  for (const s of survivors) {
+    if (s.count < limits.minCount) continue;
+    if (now >= s.since + limits.abandonAfter) continue;
+    const d = Math.hypot(s.x - limits.fromX, s.z - limits.fromZ);
+    if (d > limits.range) continue;
+    if (
+      !best ||
+      s.count > best.count ||
+      (s.count === best.count &&
+        (d < bestDist ||
+          (d === bestDist && s.since < best.since) ||
+          (d === bestDist && s.since === best.since && s.id < best.id)))
+    ) {
+      best = s;
+      bestDist = d;
+    }
+  }
+  return best ? { targetId: best.id, until: best.since + limits.abandonAfter } : null;
+}

@@ -212,3 +212,83 @@ export function chargeDamage(
   const d = Math.hypot(charge.x - targetX, charge.y - targetY, charge.z - targetZ);
   return clamp(1 - d / lethalRadius, 0, 1);
 }
+
+/** The last firm fix on a boat that has gone quiet: where it was, when, and the course it made. */
+export interface LostContact {
+  x: number;
+  z: number;
+  heading: number;
+  speed: number;
+  time: number;
+}
+
+/**
+ * The circle an escort hunts over once it has lost the boat. The centre is the dead-reckoned last
+ * fix — the boat ran on from where it was last held — and the radius grows at the target's plausible
+ * speed, because every unobserved second it could be that much farther in any direction. It stays an
+ * area and never narrows: a stale fix that collapsed back onto the truth would be a free re-acquire.
+ */
+export function searchArea(
+  lastContact: LostContact,
+  now: number,
+  spreadRate: number,
+): { x: number; z: number; radius: number } {
+  const age = Math.max(0, now - lastContact.time);
+  const reach = Math.max(0, lastContact.speed) * age;
+  return {
+    x: lastContact.x + Math.sin(lastContact.heading) * reach,
+    z: lastContact.z - Math.cos(lastContact.heading) * reach,
+    radius: Math.max(0, spreadRate) * age,
+  };
+}
+
+export interface TransmitCheck {
+  detectable: boolean;
+  reason: string;
+}
+
+/**
+ * Whether a radio call exposes the boat in its current mode. Surfaced or at periscope the antenna is
+ * up and a listening escort can fix it; deep, the mast is stowed and the boat is silent, so a message
+ * waits rather than being sent. Information is never free — this is the cost the brief attaches to
+ * surfacing or transmitting, kept separate from fleet radio knowledge.
+ */
+export function transmitCost(state: SubState): TransmitCheck {
+  if (state.mode === "deep") return { detectable: false, reason: "deep and silent" };
+  if (state.mode === "periscope") return { detectable: true, reason: "periscope exposed" };
+  return { detectable: true, reason: "surfaced and in plain sight" };
+}
+
+/**
+ * Seconds of submerged endurance left at `speed`, from the battery alone. Reuses `batteryDrain`, so
+ * endurance falls with the cube of speed: a sprint empties the cells far sooner than a crawl, and the
+ * ratio is exactly the cube of the speed ratio. A flat battery is zero; surfaced running is unlimited.
+ */
+export function enduranceLeft(state: SubState, speed: number): number {
+  if (state.battery <= 0) return 0;
+  const drain = batteryDrain(state, speed, 1);
+  if (drain <= 0) return Infinity;
+  return state.battery / drain;
+}
+
+/**
+ * The deepest an ordinary strafe or a surface bomb can hurt a boat. An underwater blast path is only
+ * defined inside this shallow band; at or below it the attack misses outright rather than sharing a
+ * ship's damage rectangle. Metres, positive downward.
+ */
+export const SHALLOW_BLAST_DEPTH = 20;
+
+/**
+ * Damage from ordinary strafing or a surface bomb, 0..1. `blastDepth` is where the effect reaches,
+ * positive downward like `SubState.depth`. A boat deeper than the shallow band is untouched, and a
+ * blast that itself needs to reach deeper is not an ordinary strafe — both are misses. Inside the
+ * band the loss falls linearly with the vertical separation. `subY` converts the hull once, so the
+ * two sign conventions are never mixed by hand.
+ */
+export function strafeDamage(state: SubState, blastDepth: number): number {
+  const boatY = subY(state);
+  if (boatY < -SHALLOW_BLAST_DEPTH) return 0;
+  if (blastDepth > SHALLOW_BLAST_DEPTH) return 0;
+  const separation = Math.abs(state.depth - Math.max(0, blastDepth));
+  return clamp(1 - separation / SHALLOW_BLAST_DEPTH, 0, 1);
+}

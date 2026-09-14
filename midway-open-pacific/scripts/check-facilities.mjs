@@ -32,6 +32,9 @@ const {
   seaplaneCapability,
   baseAviationLost,
   observedCapability,
+  spreadFire,
+  repairPlan,
+  japaneseFollowUp,
 } = await import(`data:text/javascript,${encodeURIComponent(built.outputFiles[0].text)}`);
 
 const fac = (over = {}) => ({
@@ -174,4 +177,88 @@ assert.deepEqual(
   assert.ok(Number.isFinite(observedCapability(list, observed)), "observedCapability must read a frozen snapshot");
 }
 
-console.log("check-facilities: 10 checks passed");
+// 11 — only a burning stores fire spreads, only within its radius, and only on a passing draw.
+{
+  const rates = { repair: 0, burn: 1 };
+  const byId = (out, id) => out.find((f) => f.id === id);
+  const source = fac({ id: "st", kind: "stores", x: 0, z: 0, radius: 100, health: 0.5, burning: true });
+  const near = fac({ id: "as", kind: "airstrip", x: 50, z: 0, health: 1 });
+  const far = fac({ id: "rd", kind: "radar", x: 500, z: 0, health: 1 });
+  const list = freeze([source, near, far]);
+
+  const passed = spreadFire(list, 0.5, rates, 0.4); // chance = burn*dt = 0.5
+  assert.equal(byId(passed, "as").burning, true, "a neighbour inside the radius must catch on a passing draw");
+  assert.equal(byId(passed, "rd").burning, false, "a facility outside the radius must not catch");
+  assert.notEqual(byId(passed, "as"), near, "spreadFire must return new records");
+  assert.equal(near.burning, false, "spreadFire must not mutate its input");
+  assert.equal(byId(spreadFire(list, 0.5, rates, 0.6), "as").burning, false, "a failing draw must not spread fire");
+
+  const radarSource = fac({ id: "rd2", kind: "radar", x: 0, z: 0, radius: 100, health: 0.5, burning: true });
+  const beside = fac({ id: "sp", kind: "seaplane", x: 10, z: 0, health: 1 });
+  assert.equal(
+    byId(spreadFire(freeze([radarSource, beside]), 1, rates, 0), "sp").burning,
+    false,
+    "only a stores fire may spread",
+  );
+
+  const ratesBurn = { repair: 0, burn: 0.5 };
+  let out = source;
+  for (let i = 0; i < 20; i += 1) out = stepFacility(out, 0.5, ratesBurn);
+  assert.equal(out.burning, false, "the source must have burned out first");
+  const afterOut = spreadFire(freeze([out, near]), 1, rates, 0);
+  assert.equal(afterOut.find((f) => f.id === "as").burning, false, "a burned-out fire must stop spreading");
+}
+
+// 12 — repair picks by priority, skips burning and blocked, and never exceeds the work available.
+{
+  const list = freeze([
+    fac({ id: "burn", kind: "stores", health: 0.2, burning: true }),
+    fac({ id: "full", kind: "airstrip", health: 1 }),
+    fac({ id: "strip", kind: "airstrip", health: 0.5 }),
+    fac({ id: "depot", kind: "stores", health: 0.3 }),
+    fac({ id: "radar", kind: "radar", health: 0.5 }),
+    fac({ id: "blocked", kind: "stores", health: 0.1, repairBlocked: "crew" }),
+  ]);
+  const plan = repairPlan(list, 2, 10);
+  assert.equal(plan.length, 2, "repair must spend no more than the work available");
+  assert.ok(!plan.some((p) => p.id === "burn"), "a burning facility must never be worked");
+  assert.ok(!plan.some((p) => p.id === "blocked"), "a blocked facility must not be worked");
+  assert.ok(!plan.some((p) => p.id === "full"), "a whole facility needs no work");
+  assert.equal(plan[0].id, "strip", "the airstrip is the first priority");
+  assert.equal(plan[1].id, "depot", "stores is the next priority after the airstrip");
+  assert.deepEqual(repairPlan(list, 0, 10), [], "no work means no plan");
+}
+
+// 13 — the repeat-strike call reads the report, so live damage after the sighting cannot move it.
+{
+  const live = freeze([fac({ id: "as", kind: "airstrip", health: 1 }), fac({ id: "sp", kind: "seaplane", health: 1 })]);
+  const snapshot = Object.freeze({ as: 1, sp: 1 });
+  const observed = observedCapability(live, snapshot);
+  const before = japaneseFollowUp(observed, 0.5);
+  assert.equal(before.worthwhile, true, "a report of full capability justifies another strike");
+  const bombed = freeze([damageFacility(live[0], 1, 0), damageFacility(live[1], 1, 0)]);
+  assert.equal(observedCapability(bombed, snapshot), observed, "the sighting must not follow live health");
+  assert.deepEqual(japaneseFollowUp(observed, 0.5), before, "the call must not change with later damage");
+  assert.equal(
+    japaneseFollowUp(observedCapability(bombed, { as: 0, sp: 0 }), 0.5).worthwhile,
+    false,
+    "a report of suppression must cancel the repeat strike",
+  );
+  assert.ok(japaneseFollowUp(0.1, 0.5).reason.length > 0, "the answer must carry a readable reason");
+}
+
+// 14 — every new function tolerates frozen inputs and leaves them untouched.
+{
+  const rates = Object.freeze({ repair: 0.1, burn: 0.5 });
+  const f = Object.freeze(fac({ id: "st", kind: "stores", x: 0, z: 0, radius: 100, health: 0.6, burning: true }));
+  const near = Object.freeze(fac({ id: "as", kind: "airstrip", x: 20, z: 0, health: 0.4 }));
+  const list = Object.freeze([f, near]);
+  assert.doesNotThrow(() => spreadFire(list, 1, rates, 0), "spreadFire must accept frozen input");
+  assert.doesNotThrow(() => repairPlan(list, 1, 5), "repairPlan must accept frozen input");
+  assert.doesNotThrow(() => japaneseFollowUp(0.9, 0.5), "japaneseFollowUp must accept a plain number");
+  assert.equal(f.health, 0.6, "spreadFire must not touch the frozen source");
+  assert.equal(near.burning, false, "spreadFire must not light a frozen neighbour in place");
+  assert.equal(repairPlan(list, 1, 5)[0].id, "as", "repairPlan must read the frozen record");
+}
+
+console.log("check-facilities: 14 checks passed");

@@ -85,6 +85,24 @@ const occDeck = deck({ occupiedUntil: 10 });
 assert.equal(ops.canLaunch(occAir, occDeck, "sbd", "bomb", 9.999, 0, 68).reason, "deck occupied");
 assert.equal(ops.canLaunch(occAir, occDeck, "sbd", "bomb", 10, 0, 68).ok, true);
 
+// canRecover mirrors canLaunch: the suspension's own reason, then occupancy, and no mutation.
+assert.deepEqual(ops.canRecover(air(), deck({ suspended: "evading" }), "sbd", 0),
+  { ok: false, reason: "evading" }, "a suspended deck must refuse a recovery with its own reason");
+assert.equal(ops.canRecover(air(), deck({ occupiedUntil: 10 }), "sbd", 9.999).reason, "deck occupied");
+assert.equal(ops.canRecover(air(), deck({ occupiedUntil: 10 }), "sbd", 10).ok, true);
+const recAir = air();
+const recDeck = deck({ suspended: "evading" });
+const recBefore = snapshot({ air: recAir, deck: recDeck });
+ops.canRecover(recAir, recDeck, "sbd", 0);
+assert.deepEqual({ air: recAir, deck: recDeck }, recBefore, "a refused recovery must consume nothing");
+
+// applyRecovery throws on the same gate that refuses the call.
+assert.throws(() => ops.applyRecovery(air(), deck({ suspended: "evading" }), "sbd", 0, TIMES, false));
+
+// Launch and recovery agree on occupancy: the same deck and now refuse both.
+assert.equal(ops.canLaunch(occAir, occDeck, "sbd", "bomb", 5, 0, 68).reason, "deck occupied");
+assert.equal(ops.canRecover(occAir, occDeck, "sbd", 5).reason, "deck occupied");
+
 // suspendReason is the single readable gate for every suspending condition.
 assert.equal(ops.suspendReason({ evading: true }), "evading");
 assert.equal(ops.suspendReason({ list: 0.5 }), "heavy list");

@@ -112,3 +112,89 @@ export function observedCapability(list: Facility[], lastObserved: ObservedSnaps
   const seen: Facility[] = list.map((f) => ({ ...f, health: lastObserved[f.id] ?? 0 }));
   return (airstripCapability(seen) + seaplaneCapability(seen)) / 2;
 }
+
+/**
+ * Fuel fires spread locally. A still-burning stores facility is the only source; any facility whose
+ * centre lies inside that source's own radius can catch. A fire's own burn rate is its spread rate,
+ * so a hotter fire reaches further per tick. `r01` is a single caller-seeded draw: one draw gates the
+ * whole tick, which keeps a spread correlated rather than giving every pair an independent roll.
+ * ponytail: one global draw, upgrade to a per-source draw if correlated ignition ever shows.
+ */
+export function spreadFire(
+  list: Facility[],
+  dt: number,
+  rates: FacilityRates,
+  r01: number,
+): Facility[] {
+  const ignites = r01 < clamp(rates.burn * dt, 0, 1);
+  return list.map((f) => {
+    // A facility that is already alight cannot be lit again, and a burned-out source passes nothing
+    // because `stepFacility` clears `burning` once it crosses `BURN_OUT`.
+    if (!ignites || f.burning) return { ...f };
+    for (const src of list) {
+      if (!src.burning || src.kind !== "stores" || src.id === f.id) continue;
+      const dx = f.x - src.x;
+      const dz = f.z - src.z;
+      if (dx * dx + dz * dz <= src.radius * src.radius) return { ...f, burning: true };
+    }
+    return { ...f };
+  });
+}
+
+/** A facility the base should put a repair crew on this tick. */
+export interface RepairOrder {
+  id: string;
+  kind: FacilityKind;
+}
+
+/**
+ * Repair priority: restore the base's fighting power in the order it can be used. The airstrip comes
+ * first because land-based aviation is the atoll's primary arm; stores next because it arms and
+ * fuels that aviation; then radar, which restores warning; then the seaplane area, the secondary
+ * patrol route; radio last, since a report still gets through, only slower. Within a kind the worst
+ * facility first, so a capability about to be lost is saved before a nearly-whole one is topped up.
+ * Each chosen facility costs one work unit; a burning, blocked or already-whole facility is not
+ * worked. `now` is the caller's clock, kept in the contract so a later interruption rule has it.
+ */
+const REPAIR_PRIORITY: FacilityKind[] = ["airstrip", "stores", "radar", "seaplane", "radio"];
+
+export function repairPlan(list: Facility[], work: number, now: number): RepairOrder[] {
+  void now;
+  const slots = Math.max(0, Math.floor(work));
+  return list
+    .map((f, index) => ({ f, index }))
+    .filter(({ f }) => !f.burning && f.repairBlocked === null && f.health < 1)
+    .sort((a, b) => {
+      const byKind = REPAIR_PRIORITY.indexOf(a.f.kind) - REPAIR_PRIORITY.indexOf(b.f.kind);
+      if (byKind !== 0) return byKind;
+      if (a.f.health !== b.f.health) return a.f.health - b.f.health;
+      return a.index - b.index;
+    })
+    .slice(0, slots)
+    .map(({ f }) => ({ id: f.id, kind: f.kind }));
+}
+
+/** Whether a fresh island strike is justified, and the line the staff would say. */
+export interface FollowUp {
+  worthwhile: boolean;
+  reason: string;
+}
+
+/**
+ * Japanese commanders judge a repeat strike from the *reported* suppression, so this takes the
+ * capability already computed from a sighting, never a live facility or its current health. A live
+ * read would let damage that was never observed rewrite a decision the report had already settled,
+ * which is exactly the fog-of-war the base model exists to keep.
+ */
+export function japaneseFollowUp(observed: number, threshold: number): FollowUp {
+  if (observed >= threshold) {
+    return {
+      worthwhile: true,
+      reason: `Reported capability ${observed.toFixed(2)} still at or above ${threshold.toFixed(2)}: strike again.`,
+    };
+  }
+  return {
+    worthwhile: false,
+    reason: `Reported capability ${observed.toFixed(2)} below ${threshold.toFixed(2)}: base suppressed, no repeat strike.`,
+  };
+}

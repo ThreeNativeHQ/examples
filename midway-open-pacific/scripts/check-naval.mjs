@@ -25,6 +25,9 @@ const {
   avoidanceHeading,
   chooseTask,
   clearOfHazard,
+  rejoinCourse,
+  courseAuthority,
+  rescueWindow,
   COMMIT_SECONDS,
 } = await import(`data:text/javascript,${encodeURIComponent(built.outputFiles[0].text)}`);
 
@@ -143,6 +146,81 @@ const freeze = (o) => Object.freeze(o);
   const hazards = freeze([freeze({ x: 0, z: 0, radius: 50 })]);
   assert.doesNotThrow(() => clearOfHazard(80, 0, hazards, 10), "clearOfHazard must not mutate its hazards");
   assert.equal(clearOfHazard(80, 0, hazards, 10), clearOfHazard(80, 0, hazards, 10), "clearOfHazard must be repeatable");
+
+  const rejoin = freeze({ x: 40, z: -30, dt: 0.5 });
+  const rejoinShip = freeze({ x: 1, z: 2, heading: 0.3 });
+  assert.doesNotThrow(() => rejoinCourse(rejoinShip, rejoin, limits), "rejoinCourse must not mutate its inputs");
+  assert.deepEqual(rejoinCourse(rejoinShip, rejoin, limits), rejoinCourse(rejoinShip, rejoin, limits), "rejoinCourse must be repeatable");
+
+  const authorityShip = freeze({ id: "a", groupId: "g", guide: false, evading: true });
+  const authorityOther = freeze([freeze({ id: "b", groupId: "g", guide: true, evading: false })]);
+  assert.doesNotThrow(() => courseAuthority(authorityShip, authorityOther), "courseAuthority must not mutate its inputs");
+  assert.equal(courseAuthority(authorityShip, authorityOther), courseAuthority(authorityShip, authorityOther), "courseAuthority must be repeatable");
+
+  const survivors = freeze([freeze({ id: "a", x: 10, z: 0, since: 0, count: 5 })]);
+  const rescueLimits = freeze({ fromX: 0, fromZ: 0, range: 100, minCount: 3, abandonAfter: 600 });
+  assert.doesNotThrow(() => rescueWindow(survivors, 100, rescueLimits), "rescueWindow must not mutate its inputs");
+  assert.deepEqual(rescueWindow(survivors, 100, rescueLimits), rescueWindow(survivors, 100, rescueLimits), "rescueWindow must be repeatable");
 }
 
-console.log("check-naval: 7 checks passed");
+// 8 — a rejoin is turn-rate-limited every step and closes on the station monotonically over 30 steps.
+{
+  const limits = freeze({ maxSpeed: 20, turnRate: 0.05, slowRadius: 150 });
+  const station = freeze({ x: 200, z: -800, dt: 1 });
+  let ship = { x: 0, z: 0, heading: 0 };
+  let previous = dist(ship, station);
+  for (let i = 0; i < 30; i += 1) {
+    const r = rejoinCourse(ship, station, limits);
+    const turned = Math.abs(Math.atan2(Math.sin(r.heading - ship.heading), Math.cos(r.heading - ship.heading)));
+    assert.ok(turned <= limits.turnRate * station.dt + 1e-9, `step ${i} turned ${turned} rad, past the ${limits.turnRate} rad/s limit`);
+    ship = { x: ship.x + Math.sin(r.heading) * r.speed, z: ship.z - Math.cos(r.heading) * r.speed, heading: r.heading };
+    const nowDist = dist(ship, station);
+    assert.ok(nowDist < previous, `step ${i} must close on station, went ${previous} -> ${nowDist}`);
+    previous = nowDist;
+  }
+}
+
+// 9 — evasion holds course authority; when it ends the guide regains it, and two ships never both yield.
+{
+  const guide = freeze({ id: "g1", groupId: "g", guide: true, evading: false });
+  const escort = freeze({ id: "e2", groupId: "g", guide: false, evading: false });
+  assert.equal(courseAuthority(escort, freeze([guide])), "g1", "a non-guide yields to the guide");
+  assert.equal(courseAuthority(guide, freeze([escort])), null, "the guide sets its own course");
+
+  const evader = freeze({ id: "e2", groupId: "g", guide: false, evading: true });
+  assert.equal(courseAuthority(guide, freeze([evader])), "e2", "the guide yields to an evasion");
+  assert.equal(courseAuthority(evader, freeze([guide])), null, "the evader holds the course");
+  assert.equal(courseAuthority(escort, freeze([guide])), "g1", "once evasion ends the guide regains authority");
+
+  const evaderA = freeze({ id: "a", groupId: "g", guide: false, evading: true });
+  const evaderB = freeze({ id: "b", groupId: "g", guide: false, evading: true });
+  const aYields = courseAuthority(evaderA, freeze([evaderB]));
+  const bYields = courseAuthority(evaderB, freeze([evaderA]));
+  assert.ok(!(aYields && bYields), `two ships must not mutually yield, got ${aYields} and ${bYields}`);
+  assert.ok(aYields === null || bYields === null, "at most one of the pair yields");
+}
+
+// 10 — rescueWindow prefers the larger, then the closer group, and refuses a group past abandonment.
+{
+  const limits = freeze({ fromX: 0, fromZ: 0, range: 500, minCount: 3, abandonAfter: 600 });
+  const mixed = freeze([
+    freeze({ id: "near-small", x: 50, z: 0, since: 0, count: 4 }),
+    freeze({ id: "far-large", x: 300, z: 0, since: 0, count: 9 }),
+  ]);
+  const larger = rescueWindow(mixed, 100, limits);
+  assert.equal(larger.targetId, "far-large", `the larger group must win, got ${larger.targetId}`);
+  assert.equal(larger.until, 600, `until must be since + abandonAfter, got ${larger.until}`);
+
+  const tied = freeze([
+    freeze({ id: "far", x: 400, z: 0, since: 0, count: 6 }),
+    freeze({ id: "near", x: 20, z: 0, since: 0, count: 6 }),
+  ]);
+  assert.equal(rescueWindow(tied, 100, limits).targetId, "near", "closer wins a count tie");
+
+  const stale = freeze([freeze({ id: "old", x: 10, z: 0, since: 0, count: 9 })]);
+  assert.equal(rescueWindow(stale, 700, limits), null, "past the abandon time no group is attempted");
+  assert.equal(rescueWindow(freeze([freeze({ id: "out", x: 900, z: 0, since: 0, count: 9 })]), 100, limits), null, "out of range is not attempted");
+  assert.equal(rescueWindow(freeze([freeze({ id: "few", x: 10, z: 0, since: 0, count: 2 })]), 100, limits), null, "below minCount is not attempted");
+}
+
+console.log("check-naval: 10 checks passed");

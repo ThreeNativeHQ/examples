@@ -126,4 +126,74 @@ assert.ok(Math.abs(hit - 0.5) < 1e-9, `falloff is linear in 3D distance, got ${h
 const horizontalOnly = { x: 0, y: deepBoatY, z: 0, presetDepth: 60, sinkRate: 1, armed: true };
 assert.equal(s.chargeDamage(horizontalOnly, 0, deepBoatY, 0, 20), 1, "co-located is full damage, proving the vertical axis is used");
 
-console.log(JSON.stringify({ pass: true, periscopeSteps: steps, intercept: meet, contact, hit }));
+// searchArea: grows with age and is centred on the dead-reckoned last fix, not the last fix itself.
+const lastFix = Object.freeze({ x: 100, z: -200, heading: 0, speed: 2, time: 10 });
+const atFix = s.searchArea(lastFix, 10, 5);
+assert.equal(atFix.radius, 0, "no age, no circle");
+assert.equal(atFix.x, 100);
+assert.equal(atFix.z, -200);
+const laterArea = s.searchArea(lastFix, 40, 5);
+assert.ok(laterArea.radius > atFix.radius, "the circle grows with age");
+assert.equal(laterArea.radius, 5 * 30, "radius grows at spreadRate");
+assert.equal(laterArea.x, 100, "a boat on course 0 does not move in x");
+assert.ok(Math.abs(laterArea.z - (-200 - 2 * 30)) < 1e-9, `centre dead-reckons along the last course, got z ${laterArea.z}`);
+
+// transmitCost: surfaced is exposed, deep is not, and each says why.
+const surfacedTx = s.transmitCost(state({ mode: "surfaced" }));
+assert.equal(surfacedTx.detectable, true, "a surfaced boat transmitting is seen");
+assert.ok(surfacedTx.reason.length > 0, "and gives a reason");
+const deepTx = s.transmitCost(state({ mode: "deep", depth: s.DEEP_DEPTH }));
+assert.equal(deepTx.detectable, false, "a deep boat transmitting is not");
+assert.ok(deepTx.reason.length > 0, "and gives a reason");
+assert.notEqual(deepTx.reason, surfacedTx.reason, "the reason differs by mode");
+assert.equal(s.transmitCost(state({ mode: "periscope", depth: s.PERISCOPE_DEPTH })).detectable, true, "periscope is exposed too");
+
+// enduranceLeft: cubic in speed, and zero on a flat battery.
+const crawlEndurance = s.enduranceLeft(state({ mode: "deep" }), s.CRAWL_SPEED);
+const sprintEndurance = s.enduranceLeft(state({ mode: "deep" }), s.SUBMERGED_MAX);
+assert.ok(sprintEndurance > 0 && crawlEndurance > sprintEndurance, "a sprint is much shorter than a crawl");
+const cubic = (s.SUBMERGED_MAX / s.CRAWL_SPEED) ** 3;
+assert.ok(Math.abs(crawlEndurance / sprintEndurance - cubic) < 1e-9, `endurance ratio is cubic in speed, got ${crawlEndurance / sprintEndurance}`);
+assert.equal(s.enduranceLeft(state({ mode: "deep", battery: 0 }), s.SUBMERGED_MAX), 0, "a flat battery has no endurance");
+
+// strafeDamage: a shallow boat is reached through the blast path, a deep one is not.
+assert.equal(s.strafeDamage(state({ depth: s.DEEP_DEPTH }), 0), 0, "ordinary strafing cannot touch a deep boat");
+const shallowHit2 = s.strafeDamage(state({ depth: 2 }), 0);
+assert.ok(shallowHit2 > 0, `just under the surface is nonzero, got ${shallowHit2}`);
+const midHit = s.strafeDamage(state({ depth: s.PERISCOPE_DEPTH - 10 }), 0);
+assert.ok(midHit > 0 && midHit < 1, `a shallow boat is damaged, got ${midHit}`);
+assert.equal(s.strafeDamage(state({ depth: 2 }), s.SHALLOW_BLAST_DEPTH + 1), 0, "a blast below the shallow limit misses");
+
+// Purity: every input frozen, and no function throws or mutates.
+const frozenState = Object.freeze(state({ mode: "deep", depth: s.DEEP_DEPTH, battery: 0.5 }));
+const frozenCharge = Object.freeze({ x: 0, y: -1, z: 0, presetDepth: 20, sinkRate: 5, armed: false });
+assert.doesNotThrow(() => {
+  s.stepDepth(frozenState, "periscope", 0.5, 2);
+  s.maxSpeed(frozenState);
+  s.batteryDrain(frozenState, 3, 1);
+  s.canSee(frozenState, 100, 1000);
+  s.hydrophoneBearing(0, 0, 100, 0, 8, 4, 0.5);
+  s.canFire(frozenState, 0);
+  s.applyFire(frozenState, 0, 40);
+  s.interceptCourse(0, 0, 6, 0, 100, 0, 2);
+  s.subY(frozenState);
+  s.stepCharge(frozenCharge, 0.5);
+  s.chargeDamage(frozenCharge, 0, 0, 0, 20);
+  s.searchArea(lastFix, 30, 5);
+  s.transmitCost(frozenState);
+  s.enduranceLeft(frozenState, 3);
+  s.strafeDamage(frozenState, 0);
+}, "frozen inputs never throw");
+assert.equal(frozenState.depth, s.DEEP_DEPTH, "the boat depth is untouched");
+assert.equal(frozenState.battery, 0.5, "the battery is untouched");
+
+console.log(JSON.stringify({
+  pass: true,
+  periscopeSteps: steps,
+  intercept: meet,
+  contact,
+  hit,
+  searchRadius: laterArea.radius,
+  enduranceRatio: crawlEndurance / sprintEndurance,
+  strafe: shallowHit2,
+}));

@@ -54,6 +54,19 @@ export interface ILaunchCheck {
 /** Only these modes accept a launch; the rest are mid-cycle and still occupy the deck. */
 const LAUNCH_MODES: ReadonlySet<DeckMode> = new Set(["available", "deck-ready"]);
 
+/**
+ * Modes that can take an aircraft aboard. `preparing` is a launch-only evolution: the deck is being
+ * respotted for the next cycle, so it is the one mode a landing may not interrupt. Everything else
+ * either owns no deck space or has already released it once `occupiedUntil` has passed.
+ */
+const RECOVERY_MODES: ReadonlySet<DeckMode> = new Set([
+  "available",
+  "deck-ready",
+  "launching",
+  "recovering",
+  "servicing",
+]);
+
 /** A straight deck listing beyond this is unsafe to work. */
 export const HEAVY_LIST = 0.35;
 /** The shared launch threshold: a deck failed below this cannot operate at all. */
@@ -118,6 +131,22 @@ export function canLaunch(
 }
 
 /**
+ * The single recovery gate, symmetric with `canLaunch`. It only reads, so a refused landing consumes
+ * nothing. The caller checks this before every recovery and applies `applyRecovery` only on `ok`.
+ */
+export function canRecover(
+  air: CarrierAir,
+  deck: DeckState,
+  airframe: string,
+  now: number,
+): ILaunchCheck {
+  if (deck.suspended) return { ok: false, reason: deck.suspended };
+  if (deck.occupiedUntil > now) return { ok: false, reason: "deck occupied" };
+  if (!RECOVERY_MODES.has(deck.mode)) return { ok: false, reason: `deck ${deck.mode}` };
+  return { ok: true, reason: "" };
+}
+
+/**
  * Move one prepared aircraft, its airframe and one store off the deck. The inputs are never
  * touched; the caller replaces its records with the result. The active cap is the caller's
  * concern, so this refuses only the reasons `canLaunch` reports with no cap.
@@ -154,6 +183,8 @@ export function applyRecovery(
   times: ITimes,
   damaged: boolean,
 ): { air: CarrierAir; deck: DeckState } {
+  const check = canRecover(air, deck, airframe, now);
+  if (!check.ok) throw new Error(`recovery refused: ${check.reason}`);
   const next = cloneAir(air);
   if (totalCount(next.servicing) + totalCount(next.damaged) === 0) next.serviceSince = now;
   next.airframes[airframe] = (next.airframes[airframe] ?? 0) + 1;
