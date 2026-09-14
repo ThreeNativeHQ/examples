@@ -50,9 +50,13 @@ for (const s of b.ships) {
   assert.equal(s.length, undefined, `${s.name} still carries the ambiguous 'length' field`);
   assert.equal(s.width, undefined, `${s.name} still carries the ambiguous 'width' field`);
 }
-/** Every ship whose geometry comes from a measured GLB, and the class it comes from. */
+/**
+ * Every ship whose geometry comes from an imported, measured GLB, and the class it comes from.
+ * CV-5 is absent: she is drawn from the supplied `hornet.glb`, which is not a catalog import, so
+ * her `hullLength` is the sisters' literal rather than `yorktown`'s measured GLB. See
+ * src/sim/battle.ts.
+ */
 const FROM_CATALOG = {
-  "USS Yorktown": "yorktown",
   Kaga: "kaga",
   Soryu: "soryu",
   Hiryu: "hiryu",
@@ -123,7 +127,10 @@ assert.deepEqual(
   {
     "USS Enterprise": 20.06,
     "USS Hornet": 20.06,
-    "USS Yorktown": 12.54,
+    // CV-5 draws her sister's `hornet.glb` hull, so she carries their datum. The imported
+    // `carrier.yorktown.glb` measured 12.54 and is still a correct import; it is simply not what
+    // this ship is drawn from. See src/render/imported-ships.ts for why.
+    "USS Yorktown": 20.06,
     Akagi: 20.06,
     Kaga: 15.76,
     Soryu: 12.89,
@@ -131,12 +138,18 @@ assert.deepEqual(
   },
   "carrier deck datums must be each ship's own measurement",
 );
-assert.equal(new Set(Object.values(decks)).size, 5, "five distinct deck datums, not one");
+// Four, not five: CV-5, CV-6, CV-8 and Akagi share the two supplied hulls and therefore share a
+// datum, which is the point — a datum belongs to the model a ship is drawn from. What this guards
+// is that there is no single global deck height, which was the bug it was written for.
+assert.equal(new Set(Object.values(decks)).size, 4, "four distinct deck datums, not one global height");
 // And every imported datum is that measurement in the world's frame rather than the model's: the
 // deck's own midpoint along the corridor, less the class draught the hull is sunk by in
 // src/render/world.ts. Both tables come from `node tools/measure-decks.mjs`; this is the arithmetic
-// between them, so a draught that changes without the datum moving is caught here.
-const MEASURED_MIDPOINT = { "USS Yorktown": 20.44, Kaga: 23.26, Soryu: 20.49, Hiryu: 20.72 };
+// between them, so a draught that changes without the datum moving is caught here. It is the
+// arithmetic for IMPORTED hulls only: CV-5 is drawn from the supplied `hornet.glb`, which bakes its
+// waterline rather than its keel, so she has no measured midpoint to subtract a draught from and is
+// absent here and from FROM_CATALOG above.
+const MEASURED_MIDPOINT = { Kaga: 23.26, Soryu: 20.49, Hiryu: 20.72 };
 for (const [name, midpoint] of Object.entries(MEASURED_MIDPOINT)) {
   const cls = SHIP_CLASSES[FROM_CATALOG[name]];
   const expected = +(midpoint - cls.draught).toFixed(2);
@@ -175,15 +188,18 @@ const astern = (battle, s, y, right = 0, range = 400) => {
   return battle.player;
 };
 const hornet = b.ships.find((s) => s.name === "USS Hornet");
-const yorktown = b.ships.find((s) => s.name === "USS Yorktown");
-assert.notEqual(hornet.deckHeight, yorktown.deckHeight, "this case needs two decks at different heights");
+// CV-5 draws the supplied Hornet hull now, so she no longer supplies this case a second deck
+// height. Soryu is an imported hull the game still draws, and its 12.89 m deck is the lower deck
+// the discriminating pair needs.
+const soryu = b.ships.find((s) => s.name === "Soryu");
+assert.notEqual(hornet.deckHeight, soryu.deckHeight, "this case needs two decks at different heights");
 
-// The discriminating band. Yorktown's imported hull sits 7.52 m lower in the water than the supplied
-// Hornet's — 12.54 m of flight deck against 20.06 m — so an altitude that clears Yorktown's deck by
-// 0.2 m more than the gate needs is 7.3 m BELOW Hornet's deck. A fleet-wide 20.06 m datum would
-// refuse this legitimate approach to Yorktown, which is the same bug from the other side.
-const band = yorktown.deckHeight + FINAL.minClearance + 0.2;
-assert.equal(finalReady(astern(b, yorktown, band), yorktown), true, "ready over the lower deck");
+// The discriminating band. Soryu's imported hull sits 7.17 m lower in the water than the supplied
+// Hornet's — 12.89 m of flight deck against 20.06 m — so an altitude that clears Soryu's deck by
+// 0.2 m more than the gate needs is 7 m BELOW Hornet's deck. A fleet-wide 20.06 m datum would
+// refuse this legitimate approach to Soryu, which is the same bug from the other side.
+const band = soryu.deckHeight + FINAL.minClearance + 0.2;
+assert.equal(finalReady(astern(b, soryu, band), soryu), true, "ready over the lower deck");
 assert.equal(finalReady(astern(b, hornet, band), hornet), false, "not yet ready over the taller deck");
 assert.ok(band < 20.06 + FINAL.minClearance, "a fixed 20.06 m datum would have refused both — that is the bug");
 assert.equal(
@@ -192,18 +208,16 @@ assert.equal(
   "the same clearance over its own deck is ready",
 );
 // The cue the HUD prints and the gate the game enforces are the same decision, per deck.
-for (const s of [yorktown, hornet]) {
+for (const s of [soryu, hornet]) {
   const low = approach(astern(b, s, band), s);
   assert.equal(low.ready, finalReady(b.player, s), `${s.name}: the cue and the gate disagree`);
   if (!low.ready) assert.ok(low.cues.includes("LOW"), `${s.name}: a sub-envelope approach must say LOW`);
 }
 // The line-up corridor is the deck's own width plus the LSO's tolerance, so the wider deck accepts
-// a wider lineup — and neither accepts one beyond its own limit.
-// Yorktown's measured corridor is the same 20 m as the surveyed Hornet's, so the pair that shows a
-// corridor feeding the lineup limit is Hornet against Soryu's narrower 14 m measured deck.
-const soryu = b.ships.find((s) => s.name === "Soryu");
+// a wider lineup — and neither accepts one beyond its own limit. Hornet's 20 m surveyed corridor
+// against Soryu's narrower 14 m measured deck is the pair that shows a corridor feeding the limit.
 assert.ok(lineUpLimit(hornet) > lineUpLimit(soryu), "a wider deck has a wider lineup limit");
-for (const s of [hornet, yorktown]) {
+for (const s of [hornet, soryu]) {
   const inside = lineUpLimit(s) - 1;
   assert.equal(finalReady(astern(b, s, s.deckHeight + 20, inside), s), true, `${s.name}: inside its lineup limit`);
   assert.equal(finalReady(astern(b, s, s.deckHeight + 20, lineUpLimit(s) + 1), s), false, `${s.name}: beyond it`);
@@ -308,4 +322,4 @@ for (const [name, height] of Object.entries(decks))
     `src/render/imported-ships.ts restates ${name}'s ${height} m deck datum; the simulation owns it`,
   );
 
-console.log(`check-geometry: ${b.ships.length} hulls sized before any render; 5 distinct deck datums; all checks passed`);
+console.log(`check-geometry: ${b.ships.length} hulls sized before any render; 4 distinct deck datums; all checks passed`);

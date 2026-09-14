@@ -69,7 +69,10 @@ const CARRIER_MODEL: Readonly<Record<string, { id: CarrierModelId; classId?: str
   "USS Enterprise": { id: "enterprise" },
   "USS Hornet": { id: "hornet" },
   Akagi: { id: "akagi" },
-  "USS Yorktown": { id: "yorktown", classId: "yorktown" },
+  // No `classId`, deliberately: CV-5 is drawn from the supplied `hornet.glb` like her two sisters,
+  // and that model bakes its waterline at y = 0 rather than its keel, so sinking it by a class
+  // draught would put her 7.9 m under.
+  "USS Yorktown": { id: "yorktown" },
   Kaga: { id: "kaga", classId: "kaga" },
   Soryu: { id: "soryu", classId: "soryu" },
   Hiryu: { id: "hiryu", classId: "hiryu" },

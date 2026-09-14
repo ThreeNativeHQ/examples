@@ -335,7 +335,13 @@ const hullOf = (classId: string): IHull => {
 const HULLS: Readonly<Record<string, IHull>> = Object.freeze({
   "USS Enterprise": { hullLength: 251.58, hullBeam: 32.4, draught: 7.9 }, // Yorktown class, as drawn by hornet.glb
   "USS Hornet": { hullLength: 251.58, hullBeam: 32.4, draught: 7.9 },
-  "USS Yorktown": hullOf("yorktown"),
+  // CV-5 is drawn from the supplied `hornet.glb` sister hull, not from the catalog's
+  // `carrier.yorktown.glb`, so her collision hull is the sisters' literal rather than
+  // `hullOf("yorktown")`. The catalog class is still a correct measurement of that import
+  // (246.74 m); it just describes a model this ship is no longer drawn from, and leaving the
+  // 4.6 m gap between the drawn hull and the collision hull would be a gap a bomb can land in.
+  // See the CV-5 note in src/render/imported-ships.ts for why the import was retired.
+  "USS Yorktown": { hullLength: 251.58, hullBeam: 32.4, draught: 7.9 },
   Akagi: { hullLength: 260.67, hullBeam: 31.3, draught: 7.55 }, // supplied akagi.glb keel depth, src/render/world.ts
   Kaga: hullOf("kaga"),
   Soryu: hullOf("soryu"),
@@ -418,8 +424,9 @@ const CARRIER_DECKS: Readonly<Record<string, IDeck>> = Object.freeze({
   "USS Hornet": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
   // Akagi's original stern deck slopes down ~1.4 m; the datum is its central deck.
   Akagi: { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 31.3 },
-  // Measured: deck 20.20..20.68 over the corridor, midpoint 20.44, less 7.9 m draught.
-  "USS Yorktown": { deckLength: 240, deckWidth: 20, deckHeight: 12.54, deckBeam: 32 },
+  // CV-5 is drawn from the same `hornet.glb` sister hull as CV-6 and CV-8 — see the note in
+  // src/render/imported-ships.ts — so she carries their deck, not the imported Tripo Yorktown's.
+  "USS Yorktown": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
   // Measured: deck 22.91..23.61, midpoint 23.26, less 7.5 m draught.
   Kaga: { deckLength: 230, deckWidth: 18, deckHeight: 15.76, deckBeam: 52 },
   // Measured: deck 20.30..20.68, midpoint 20.49, less 7.6 m draught.

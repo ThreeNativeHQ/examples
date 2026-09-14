@@ -96,10 +96,38 @@ claim("AC-14 escort holds station through a turn", () => {
   const before = frameOffset(member, guide);
   const headingBefore = guide.heading;
   guide.cruiseHeading = guide.heading + 0.5;
-  steps(b, 300);
+  // AC-14's own exception, sampled through the turn: an escort may leave station to evade a torpedo,
+  // or on an observed rescue or alongside. Record that, because a ship the simulation is right to
+  // detach is not a formation failure — but it must still rejoin, which is asserted below.
+  let detachReason = null;
+  for (let i = 0; i < Math.round(300 / STEP); i += 1) {
+    b.step(STEP, {});
+    if (detachReason) continue;
+    if ((member.evadeUntil || 0) > b.time) detachReason = "evading a torpedo";
+    else if (member.rescue) detachReason = "detached on an observed rescue";
+    else if (member.assist) detachReason = "detached alongside a damaged carrier";
+  }
   const after = frameOffset(member, guide);
   const turned = Math.abs(guide.heading - headingBefore);
   assert.ok(turned > 0.35, `the group barely turned: ${turned.toFixed(2)} rad`);
+  if (detachReason) {
+    // The offset is allowed to move while the ship is away; what the criterion names is that she
+    // rejoins. Step out the detachment and require her back within the station tolerance.
+    let rejoined = false;
+    for (let i = 0; i < Math.round(3600 / STEP); i += 1) {
+      b.step(STEP, {});
+      if (member.rescue || member.assist || (member.evadeUntil || 0) > b.time) continue;
+      if (!member.station) continue;
+      const off = frameOffset(member, guide);
+      const err = Math.hypot(off.x - member.station.offsetX, off.z - member.station.offsetZ);
+      if (err < 600) {
+        rejoined = true;
+        break;
+      }
+    }
+    assert.ok(rejoined, `${member.name} detached (${detachReason}) and never rejoined its station within an hour`);
+    return;
+  }
   const moved = Math.hypot(after.x - before.x, after.z - before.z);
   assert.ok(
     moved < 150,

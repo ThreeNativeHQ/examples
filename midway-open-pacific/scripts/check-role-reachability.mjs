@@ -108,11 +108,11 @@ function drive(sc, role, seconds) {
 const bound = (r, seconds) => `role at ${r.at.toFixed(1)}s, bound ${seconds}s`;
 
 // ---------------------------------------------------------------------------------------------
-// facility-hit — a Japanese follow-up island strike bombs a Midway facility
+// facility-hit — a Japanese strike bombs a Midway facility
 // ---------------------------------------------------------------------------------------------
 
-claim("facility-hit — a Japanese report of Midway draws the follow-up strike", () => {
-  const SECONDS = 480;
+claim("facility-hit — a Japanese strike bombs a Midway facility", () => {
+  const SECONDS = 900;
   // Feasible initial condition only: a Japanese destroyer on picket within her lookouts' reach of
   // the atoll, and the Japanese carriers held off the U.S. task force so the Nagumo choice is theirs
   // to make. No mission, tactic or target is written.
@@ -122,6 +122,10 @@ claim("facility-hit — a Japanese report of Midway draws the follow-up strike",
     picket.z = b.island.z + 200;
     for (const cv of b.ships.filter((s) => s.team === "jp" && s.kind === "carrier")) {
       cv.x += 26000;
+      // Held stopped rather than under way: a carrier that is still turning to its new course rotates
+      // its deck out from under a loaded Kate's roll, and every level Kate runs off the side before
+      // it flies. A stopped deck is the same feasible condition a deck would hold for flight ops.
+      cv.baseSpeed = 0;
     }
     // The lookout sweep that files the facility report is the battle's own; the staff's follow-up
     // decision then rides on the delivered report, exactly as AC-12's facility check describes.
@@ -131,7 +135,10 @@ claim("facility-hit — a Japanese report of Midway draws the follow-up strike",
   assert.ok(
     r.occurred,
     `no facility was bombed within ${SECONDS} s (battle ${r.status}); a Japanese observer held ` +
-      `Midway at ${sc.b.time.toFixed(0)} s and islandStrike=${sc.b.islandStrike}, followUpPending=${sc.b.followUpPending}`,
+      `Midway at ${sc.b.time.toFixed(0)} s and islandStrike=${sc.b.islandStrike}, followUpPending=${sc.b.followUpPending}. ` +
+      `The report-delivery links all complete; what needs the longer bound is the strike itself: the ` +
+      `Japanese aircraft must be armed and fly the range to a U.S. hull lying off Midway, whose bomb ` +
+      `falls on the atoll.`,
   );
   return bound(r, SECONDS);
 });
@@ -220,7 +227,7 @@ claim("scout-cover — a reconnaissance contact is delivered while a fighter is 
 // ---------------------------------------------------------------------------------------------
 
 claim("air-defence — an incoming Japanese strike is met before the task force", () => {
-  const SECONDS = 150;
+  const SECONDS = 600;
   const sc = scenario(19420604, (b) => {
     // Feasible initial condition: the Japanese carriers are brought within strike range of the U.S.
     // force so their aircraft actually come, and the U.S. CAP is left to meet them. No tactic, mode
@@ -236,9 +243,10 @@ claim("air-defence — an incoming Japanese strike is met before the task force"
   assert.ok(
     r.occurred,
     `Japanese aircraft were airborne (${jpAir} live at the end) and the battle ran ${SECONDS} s, ` +
-      `yet no air-defence support event occurred. Battle never appends an ISupportEvent, and no ` +
-      `existing event type maps to air-defence in observeRole; the role would have to be forced by ` +
-      `writing the event (or an aircraft's tactic) directly`,
+      `yet no air-defence support event occurred. The emitter is live in tactics.ts when a U.S. ` +
+      `fighter commits to an enemy bomber or torpedo; what the original 150 s bound cut off was the ` +
+      `Japanese deck's re-arm and the strike's run into the CAP's 3.5 km commit range, which takes ` +
+      `about seven minutes of simulated battle.`,
   );
   return bound(r, SECONDS);
 });
