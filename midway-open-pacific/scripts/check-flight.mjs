@@ -333,6 +333,20 @@ tick(final, 0.2, { turn: 1 });
 assert.equal(final.player.landingAssist, null, 'manual steering cancels the assisted final');
 assert.equal(final.player.autopilot, false);
 
+// A missed deck still needs a wave-off when the aircraft is low and alongside the bow.
+const bolter = airborne();
+const bolterDeck = bolter.home;
+placeFinal(bolter, bolterDeck, {
+  x: bolterDeck.x + 30, z: bolterDeck.z - bolterDeck.deckLength / 2 - 5,
+  y: bolterDeck.deckHeight + 2, autopilot: true, landingAssist: bolterDeck.id,
+});
+bolter.playerFlight.reset();
+tick(bolter, 1 / 60);
+assert.equal(bolter.player.landingAssist, null, 'a low miss must leave assisted descent immediately');
+tick(bolter, 15);
+assert.equal(bolter.status, 'playing', `wave-off stays airborne: ${bolter.reason}`);
+assert.ok(bolter.player.y > bolterDeck.deckHeight + 10, 'wave-off climbs clear of the deck');
+
 // AC-10 — the reserve is an observed estimate, never a promise.
 const reserve = airborne();
 assert.equal(reserve.returnReserve().available, false, 'without a burn sample there is no estimate');
@@ -422,3 +436,25 @@ assert.equal(scout.sortie.result.objective, true, JSON.stringify(scout.sortie.re
 assert.ok(scout.sortie.result.elapsed < 12 * 60, `within the pacing target: ${scout.sortie.result.elapsed}`);
 
 console.log(JSON.stringify({ sortieRealismE1d: true, strikeReturn: homeward.sortie.result, reconRun: scout.sortie.result }));
+
+// A late return must survive the moving deck too: normal-entry ordered-wing strike, no placement.
+const wingRun = new Battle();
+wingRun.selectAssignment('strike');
+wingRun.start(true);
+wingRun.player.autopilot = true; // T: course hold, as in the browser run.
+let ordered = false, acceptedFinal = false;
+for (let i = 0; i < 720 * 60 && wingRun.status === 'playing'; i++) {
+  wingRun.step(1 / 60, {});
+  if (!ordered && [...wingRun.contacts.values()].some((c) => c.kind === 'carrier')) {
+    assert.ok(wingRun.sortie.target, 'the sighting designates a real carrier');
+    wingRun.setCommand('strike');
+    wingRun.goHome();
+    ordered = true;
+  }
+  if (!acceptedFinal && wingRun.sortie.objective === 'achieved' && wingRun.approach().ready)
+    acceptedFinal = wingRun.assistRecovery();
+}
+assert.equal(wingRun.sortie.result?.outcome, 'recovered', `late assisted return: ${JSON.stringify({ reason: wingRun.reason, result: wingRun.sortie.result, acceptedFinal })}`);
+assert.ok(wingRun.sortie.result.wingHits > 0 && wingRun.sortie.result.personalHits === 0, 'the ordered wing owns the confirmed hit');
+assert.ok(wingRun.sortie.result.elapsed <= 720, 'natural strike still fits twelve simulated minutes');
+console.log(JSON.stringify({ naturalWingStrike: wingRun.sortie.result }));

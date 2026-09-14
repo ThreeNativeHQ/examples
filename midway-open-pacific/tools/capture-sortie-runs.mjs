@@ -1,5 +1,6 @@
 /**
- * AC-16: two normal-entry airborne sorties, flown to a recovered debrief with nothing injected.
+ * Original sortie AC-16: two normal-entry airborne sorties, recovered with nothing injected.
+ * The strike uses an explicitly ordered wing hit; manual bombing is not proved by this tool.
  *
  * After the briefing click, this harness only presses keys and reads state. No world, HP, weapon,
  * fuel or landing state is written, so what it proves is that the assignments are actually
@@ -36,8 +37,13 @@ try {
   await page.evaluate(async () => {
     const resource = (re) => performance.getEntriesByType("resource").map((e) => e.name).findLast((n) => re.test(n));
     window.midway = (await import(resource(/\/src\/game\.ts(?:\?|$)/))).default.scene;
-    window.midwayMath = await import(resource(/\/src\/sim\/math\.ts(?:\?|$)/));
   });
+  const adapter = await page.evaluate(async () => {
+    const a = await navigator.gpu.requestAdapter();
+    return a ? { vendor: a.info.vendor, architecture: a.info.architecture } : null;
+  });
+  assert.ok(adapter?.vendor && !/swiftshader|lavapipe|llvmpipe/i.test(JSON.stringify(adapter)), `hardware WebGPU adapter required: ${JSON.stringify(adapter)}`);
+  log("adapter", adapter);
   await mkdir(OUT, { recursive: true });
 
   /** Read-only snapshot of everything the two runs steer by. */
@@ -46,8 +52,6 @@ try {
       const b = window.midway.battle;
       const p = b.player;
       const contacts = [...b.contacts.values()].filter((c) => c.kind === "carrier");
-      const ship = b.ships.find((s) => s.id === b.sortie.target);
-      const impact = window.midwayMath.bombImpact(p, { x: p.vx, y: p.vy, z: p.vz }, 20);
       return {
         status: b.status,
         time: b.time,
@@ -69,9 +73,7 @@ try {
         ready: b.approach().ready,
         cues: b.approach().cues,
         canAccelerate: b.canAccelerate(),
-        targetRange: ship ? Math.hypot(ship.x - p.x, ship.z - p.z) : null,
-        // How far short of, or beyond, the designated deck the bomb would land right now.
-        aimError: ship ? Math.hypot(impact.x - ship.x, impact.z - ship.z) : null,
+        wing: b.wingStatus(),
       };
     });
 
@@ -82,10 +84,12 @@ try {
   };
   /** Advance real time in small slices, watching for the run going wrong. */
   const until = async (label, predicate, seconds, onTick = async () => {}) => {
+    log(label, { waiting: true });
     const deadline = Date.now() + seconds * 1000;
     for (;;) {
       const s = await look();
       if (s.status === "lost") throw new Error(`${label}: the aircraft was lost — ${JSON.stringify(s)}`);
+      if (s.elapsed > LIMIT) throw new Error(`${label}: exceeded ${LIMIT} simulated seconds — ${JSON.stringify(s)}`);
       if (predicate(s)) return s;
       if (Date.now() > deadline) throw new Error(`${label}: gave up after ${seconds}s — ${JSON.stringify(s)}`);
       await onTick(s);
@@ -111,7 +115,7 @@ try {
   };
 
   const recover = async (label) => {
-    await press("KeyH");
+    if ((await look()).nav !== "home") await press("KeyH");
     await until(`${label}: groove`, (s) => s.phase === "groove" || s.ready, 1500, transit);
     await releaseShift();
     const ready = await until(`${label}: ready for L`, (s) => s.ready, 900);
@@ -145,33 +149,23 @@ try {
   await page.click("#start-air");
   keys.length = 0;
   await press("KeyT");
-  await until("strike: find a carrier", (s) => s.carrierContacts > 0, 1500, transit);
+  await until("strike: find a carrier", (s) => s.freshCarrier, 1500, transit);
   await releaseShift();
-  // Designate, order the wing onto the same carrier, and fly the course-hold to it.
+  // Order the designated strike and return under course hold while the fleet's scouts report.
+  // Initial wing aircraft are unarmed scouts/fighters; the carrier launches armed aircraft later.
   if (!(await look()).target) await press("Tab");
   await until("strike: designated", (s) => !!s.target, 30);
   await press("Digit2");
-  await press("KeyT");
-  await until("strike: run in", (s) => s.targetRange !== null && s.targetRange < 2600, 1500, transit);
+  await press("KeyH");
+  const hit = await until("strike: confirmed wing hit", (s) => s.objective === "achieved", 1500, transit);
   await releaseShift();
-  // Push over onto the target with the dive brakes out, and release on the aiming circle.
-  await press("KeyF");
-  await page.keyboard.down("ArrowUp");
-  await until("strike: nose down", (s) => s.y < 900 || s.aimError < 220, 60);
-  await page.keyboard.up("ArrowUp");
-  const aimed = await until("strike: on the aiming circle", (s) => s.aimError !== null && s.aimError < 45, 60);
-  await press("KeyB");
-  log("bomb away", { y: +aimed.y.toFixed(0), speed: +aimed.speed.toFixed(1), aimError: +aimed.aimError.toFixed(1) });
-  await page.keyboard.down("ArrowDown");
-  await page.waitForTimeout(1200);
-  await page.keyboard.up("ArrowDown");
-  await press("KeyF");
-  const hit = await until("strike: objective", (s) => s.objective === "achieved", 90);
-  log("strike objective", { elapsed: +hit.elapsed.toFixed(1) });
+  log("ordered-wing objective", { elapsed: +hit.elapsed.toFixed(1), wing: hit.wing });
   await page.screenshot({ path: `${OUT}/06-strike-hit.png` });
   const strikeEnd = await recover("strike");
   await page.screenshot({ path: `${OUT}/07-strike-debrief.png` });
   runs.strike = await page.evaluate(() => window.midway.battle.sortie.result);
+  assert.ok(runs.strike.wingHits > 0, "the explicitly ordered wing landed a credited hit");
+  assert.equal(runs.strike.personalHits, 0, "this run proves ordered-wing credit, not manual bombing");
   runs.strikeKeys = [...keys];
   log("strike run", { ...runs.strike, keys: runs.strikeKeys.join(" "), readyCues: strikeEnd.ready.cues });
 

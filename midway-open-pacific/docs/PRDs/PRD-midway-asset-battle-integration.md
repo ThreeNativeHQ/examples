@@ -497,6 +497,31 @@ and the stock warning visible beside it in the inspected `screenshots/battle-rev
 Final `pnpm typecheck` and `pnpm exec vite build` pass. This slice owns
 `battle.ts`, `Midway.ts`, `check-carrier-ops.mjs`, `capture-sortie.mjs` and this checkpoint only.
 
+**Third review slice (AC-24, normal sortie regression):** Owns `tools/capture-sortie-runs.mjs`,
+the final-approach guidance in `battle.ts`, `check-flight.mjs` and this checkpoint.
+After the restart repair, the natural recon again recovered in 264.15
+simulated seconds; the old strike script then ditched with all three bombs still aboard. Its
+second T disables course hold, and its fixed nose-down input remains held until 900 m rather
+than responding to attitude. No flight-model defect is established by this failed pilot script.
+Replace that leg with the existing ordered-wing route: sight, designate, order 2,
+return H, wait for confirmed wing credit, recover L. The original sortie acceptance explicitly
+allows an ordered-wing hit. Keep recovered outcome and the 720-second limit, add attribution
+assertions, and label the result an ordered-wing strike. The separate injected player-hit
+capture remains; natural manual bombing is not established. Run the wrapped two-sortie browser
+gate on the isolated checkout and inspect both debriefs before recording acceptance.
+The no-report normal-action diagnostic confirms a wing hit at 394.27 seconds and accepts L at
+461.78, but ditches at 523.48: extend the existing flight check with that late recovery regression,
+trace the moving-deck approach and repair the game-owned guidance before browser acceptance.
+The reported variant exceeds 720 seconds; do not weaken the pacing bound to accept it.
+The trace found a steady, healthy Enterprise: the aircraft oscillated across its centreline,
+missed the narrow deck and remained on assisted descent even below deck height. Final bank
+demand now brakes lateral velocity through the existing `FlightModel`; flight forces are
+unchanged. A missed bow clears descent guidance regardless of altitude and restores the climb
+target. The normal-entry regression first failed with a lost result at 523.48 seconds; with the
+lineup correction it recovers at 484.93 seconds, 100% airframe and one confirmed wing hit.
+The focused low-bolter regression also failed first: final assist stayed engaged alongside the
+bow at deck height plus 2 m. Independent code review: PASS. Final browser acceptance is pending.
+
 **Status:** IN PROGRESS
 **Remaining:** AI engine flight, complete aircraft articulation, measured carrier contact geometry and full player/deck inventory acceptance.
 **ACs:** AC-3–9.

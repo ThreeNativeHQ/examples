@@ -36,7 +36,6 @@ import {
   finalReady,
   GLIDE,
   GROOVE_FLARE,
-  GROOVE_LEAD,
   recoveryDeck,
   reserveEstimate,
   routeLength,
@@ -1939,7 +1938,8 @@ export class Battle {
       this.event("notice", { text: "COURSE HOLD DISENGAGED — YOU HAVE CONTROL" });
     }
     if (p.autopilot) {
-      let nav = this.navigationPoint;
+      const nav = this.navigationPoint;
+      let finalBank: number | undefined;
       let desiredAlt = p.nav === "home" ? (nav.y ?? 350) : 1800;
       if (p.landingAssist) {
         const s = this.ships.find((s: Any) => s.id === p.landingAssist);
@@ -1952,14 +1952,10 @@ export class Battle {
           this.voice("R22");
         } else {
           const loc = localPoint(p, s);
-          const f = forward(s.heading);
-          // Chase a point on the centreline ahead of the aircraft. A fixed waypoint is either
-          // passed — and the assist banks hard away at deck height — or so far off that a
-          // thirty-metre lineup error produces no correction at all. The lead therefore closes with
-          // the deck: held at 400 m all the way in, the groove arrived 16 m off the centreline,
-          // which is abeam a 20 m deck rather than on it.
-          const lead = loc.forward + clamp(-loc.forward * 0.5, 60, GROOVE_LEAD);
-          nav = { x: s.x + f.x * lead, z: s.z + f.z * lead };
+          // Brake lateral motion before reaching the centreline. Chasing a shrinking lookahead
+          // point oscillated across the narrow deck even while the HUD still promised a final.
+          const lateralSpeed = p.vx * Math.cos(s.heading) + p.vz * Math.sin(s.heading);
+          finalBank = clamp((-loc.right * 0.1 - lateralSpeed) * 0.1, -0.3, 0.3);
           // The glide path aims at the deck and keeps descending through it, because an assist that
           // levels at deck height never touches: it floats the length of the ship and off the bow.
           const touch = s.deckHeight + gearClearance(p) - 3;
@@ -1968,12 +1964,14 @@ export class Battle {
           p.flaps = 1;
           p.brakes = false;
           p.throttle = clamp(0.59 + (50 - (p.ias || p.speed)) * 0.027, 0.12, 0.98);
-          if (loc.forward > 100 && p.y > s.deckHeight + 6) {
+          if (loc.forward > s.deckLength / 2 - 10) {
             // A bolter goes round again on the same guidance. Handing back an unattended aircraft
-            // at full power and no autopilot is how a missed wire became a ditching.
+            // or keeping a low miss on final descent both turn a missed wire into a ditching.
             p.landingAssist = null;
             p.nav = "home";
             p.throttle = 1;
+            finalBank = undefined;
+            desiredAlt = this.approach().altitude;
             this.say("LSO", "Bolter! Full power; climb out and circle for another approach.", true);
           }
         }
@@ -1998,7 +1996,7 @@ export class Battle {
         if ((p.stall ?? 0) > 0.25 || (p.ias ?? p.speed) < 42) p.throttle = 1;
       }
       if (p.autopilot) {
-        const desiredBank = clamp(angleDelta(bearing(p, nav), p.heading) * 0.9, -0.62, 0.62);
+        const desiredBank = finalBank ?? clamp(angleDelta(bearing(p, nav), p.heading) * 0.9, -0.62, 0.62);
         const currentBank = -p.roll;
         controls.turn = clamp((desiredBank - currentBank) * 2.5 - p.rollRate * 0.7, -1, 1);
         // The return leg tracks a glide path rather than a cruise altitude, so it needs to close a
