@@ -84,6 +84,7 @@ const errors = [];
 const frameBudgetWindows = [];
 const frameHitches = [];
 let frameBudgetLatest = null;
+const projectionReports = [];
 const report = {
   tool: "capture-battle-profile",
   realCombat: true,
@@ -126,6 +127,14 @@ try {
         frameHitches.push({ atMs: Date.now(), ...JSON.parse(text.slice("TN_FRAME_HITCH:".length)) });
       } catch {
         errors.push(`unparseable TN_FRAME_HITCH line: ${text}`);
+      }
+    } else if (text.startsWith("TN_RENDER_PROJECTION:")) {
+      // The engine's own render-projection verdict: whether the authored scene was re-batched or
+      // declined, and why. Emitted once per verdict change; the same no-API console contract.
+      try {
+        projectionReports.push({ atMs: Date.now(), ...JSON.parse(text.slice("TN_RENDER_PROJECTION:".length)) });
+      } catch {
+        errors.push(`unparseable TN_RENDER_PROJECTION line: ${text}`);
       }
     }
   });
@@ -746,6 +755,20 @@ try {
     hitches: frameHitches,
     unavailableReason: frameBudgetWindows.length ? null : "no completed TN_FRAME_BUDGET window arrived (default report window is 300 presented frames)",
   };
+  // The engine's own render-projection verdict: active batching or a declined authored scene.
+  report.renderProjection = {
+    marker: "TN_RENDER_PROJECTION",
+    reports: projectionReports,
+    latest: projectionReports.length ? projectionReports[projectionReports.length - 1] : null,
+  };
+  if (projectionReports.length) {
+    const p = projectionReports[projectionReports.length - 1];
+    console.log(
+      `render projection: projecting ${p.projecting} reason ${p.reasonCode}${p.reason ? ` (${p.reason})` : ""} sourceRenderables ${p.sourceRenderables} drawsPlanned ${p.drawsPlanned} batches ${p.batches} instanced ${p.instancedBatches} material ${p.materialBatches} exact ${p.exactObjects}`,
+    );
+  } else {
+    console.log("render projection: no TN_RENDER_PROJECTION marker captured (verdict may not have changed during the run)");
+  }
   if (frameBudgetLatest) {
     const p = frameBudgetLatest.phases || {};
     const su = frameBudgetLatest.surface || {};

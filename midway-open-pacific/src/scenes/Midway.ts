@@ -65,28 +65,25 @@ export class Midway extends Scene<GameState, undefined> {
     this.ctx = ctx;
     this.battle = new Battle();
     this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer, add: (object) => ctx.add(object) }, this.battle);
-    // The combat particle buffers are repacked for the camera once per actual world draw. The
-    // engine's own beforeRender phase keeps the packing off the particle meshes: an own mesh
-    // onBeforeRender marks the whole scene un-batchable at the full roster.
-    this.cleanups.push(ctx.beforeRender(() => this.world.particles.prepare(this.world.camera.position)));
-    // Midway has one main camera and buffer-only draw hooks. Prepare world transforms once,
-    // then reuse them in shadow and reflection passes (which draw through their own cameras).
+    // Prepare the frame once per actual world draw, in the engine's before-render phase: it runs
+    // after the last fixed update and before projection reconciles, on the projected and the
+    // declined path alike. The authored scene has one main camera but a reflection pass re-renders
+    // it, so `matrixWorldAutoUpdate` stays off and this single walk replaces three's per-render
+    // walk; the particle buffers repack here too, because an own mesh `onBeforeRender` would mark
+    // the whole scene un-batchable at the full roster. A scene `onBeforeRender` walk is wrong: the
+    // projection mirror is what renders when batching is active, so that hook never fires there.
     const scene = ctx.scene;
     const savedAutoUpdate = scene.matrixWorldAutoUpdate;
-    if (savedAutoUpdate) {
-      const savedOnBeforeRender = scene.onBeforeRender;
-      const hadOwnHook = Object.hasOwn(scene, "onBeforeRender");
-      scene.matrixWorldAutoUpdate = false;
-      scene.onBeforeRender = (...args) => {
-        if (args[2] === ctx.camera) scene.updateMatrixWorld();
-        savedOnBeforeRender.apply(scene, args);
-      };
-      this.cleanups.push(() => {
-        if (hadOwnHook) scene.onBeforeRender = savedOnBeforeRender;
-        else Reflect.deleteProperty(scene, "onBeforeRender");
-        scene.matrixWorldAutoUpdate = savedAutoUpdate;
-      });
-    }
+    scene.matrixWorldAutoUpdate = false;
+    this.cleanups.push(() => {
+      scene.matrixWorldAutoUpdate = savedAutoUpdate;
+    });
+    this.cleanups.push(
+      ctx.beforeRender(() => {
+        scene.updateMatrixWorld();
+        this.world.particles.prepare(this.world.camera.position);
+      }),
+    );
     this.hud = new Hud(this.battle, this.world);
     this.audio = new Soundscape(
       this.audioBuffers,
