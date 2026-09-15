@@ -66,8 +66,8 @@
       "runtimeReady": true
     },
     "performance": {
-      "maxPassDrawCalls": { "main": 430 },
-      "maxPassTriangles": { "main": 3400000 }
+      "maxPassDrawCalls": { "main": 260 },
+      "maxPassTriangles": { "main": 1650000 }
     }
   }
 }

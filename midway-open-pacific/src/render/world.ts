@@ -419,6 +419,9 @@ export class WorldView {
           const plane = addFloats(createAirframe("b5n2", "ai"));
           plane.scale.setScalar(0.86);
           markReflected(plane);
+          // Range-gated, so it starts out of the draw: the first world frame can be submitted
+          // before any fixed-step update has run, and `placeScouts` is what turns it on.
+          plane.visible = false;
           this.scene.add(plane);
           this.scouts.set(scout.id, plane);
         }
@@ -427,6 +430,11 @@ export class WorldView {
       // Parked aircraft are hull children, but the water reflection excludes the deck load.
       for (const planes of [mesh.userData.parked ?? [], mesh.userData.decor ?? []] as T.Object3D[][])
         for (const plane of planes) plane.traverse((o) => o.layers.disable(REFLECTED_LAYER));
+      // Range-gated, and this hull has no position or visibility yet: the engine's fixed-step loop
+      // can submit its first world frame with zero updates elapsed (the loop is released the frame
+      // the loader clears), so a hull left at the default `visible = true` draws — at the origin —
+      // for that one frame. `update` places it and applies the far-field gate from then on.
+      mesh.visible = false;
       this.scene.add(mesh);
       this.meshes.set(s.id, mesh);
       this.freezeStatic(mesh);
@@ -919,6 +927,8 @@ export class WorldView {
     const m = importedAircraftFor(a)();
     // The loan marker, not the model: both levels draw the same real airframe.
     m.userData.detailed = detail;
+    // Range-gated like the hulls: out of the draw until `update` places it and reads its range.
+    m.visible = false;
     // What sim airframe this mesh draws, so captures and the identity read never guess from names.
     m.userData.airframe = a.airframe;
     addDamageVisuals(m);
