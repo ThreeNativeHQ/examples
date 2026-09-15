@@ -44,6 +44,22 @@ function importedAircraftFor(a: { team: string; kind: string }): () => T.Group {
 const WORLD_UP = new T.Vector3(0, 1, 0);
 
 /**
+ * Distance past which a hull's full imported detail stops paying.
+ *
+ * The three US carriers are the case: ~347k triangles and ~280–300 meshes each, stationed at
+ * 17.5–18.8 km where the whole hull covers 9–13 px — and mirrored past the water's own far cut
+ * (8 km, `FAR_RANGE` in ocean.ts), so their reflection is not sampled either. At 15 km every hull
+ * gated here measured under ~16 px; see report-X2 for the ladder. Hiding rather than swapping to a
+ * stand-in, because the game ships no reduced hull and at this size a second model would be the same
+ * specks with another thing to keep in sync. Midway Atoll is not in `b.ships`, so it is never gated:
+ * an 18 km horizon feature worth 7,520 readable pixels.
+ */
+const FAR_HULL = 15000;
+
+/** Beyond this player range an aircraft is a sub-pixel point on the horizon (0 px measured at 17–18 km). */
+const FAR_AIRCRAFT = 12000;
+
+/**
  * Idle a parked aircraft's propeller. Every parked airframe is a real model now: the Devastator
  * through its own animator, the rest through the `propeller` pivot they all publish.
  */
@@ -556,7 +572,10 @@ export class WorldView {
       const motion = moving ? shipMotion(s, time, this.ripples.heightAt) : {x:0,y:0,z:0,pitch:0,roll:0};
       m.position.set(s.x + motion.x, s.y + motion.y, s.z + motion.z);
       m.rotation.set(motion.pitch, -s.heading, s.sunk ? s.sink * .35 : motion.roll + (s.list ?? 0), "YXZ");
-      m.visible = s.sink < 0.95;
+      // The camera, not the player, is what decides whether a hull is a speck: it is also the pass
+      // that has to pay for the geometry. This is the hull's distance LOD, and the only one it has.
+      const camD = distance2(s, this.camera.position);
+      m.visible = s.sink < 0.95 && camD < FAR_HULL;
       // The scouts this hull carries, each drawn where its own state puts it. Aboard and alongside
       // are on the ship and ride her motion; the airborne states are over the sector the simulation
       // is searching, at the same `SCOUT_ALTITUDE` the observation sweep files reports from. A lost
@@ -566,7 +585,6 @@ export class WorldView {
       // The park is a visual LOD: it is worth drawing while the camera is close, wherever the
       // player is, exactly as the hull's own LOD range is read from the camera. A carrier a
       // player never approaches keeps its park out of the draw.
-      const camD = distance2(s, this.camera.position);
       updateShipScars(m, s, d, this.quality);
       for (const a of (m.userData.parked ?? []) as T.Group[]) {
         const type = a.userData.simAirframe as string;
@@ -645,7 +663,7 @@ export class WorldView {
       if (load) load.visible = a.bombs > 0;
       if (m.userData.torpedoLoad) (m.userData.torpedoLoad as T.Object3D).visible = a.torpedo > 0;
       updateDamageVisuals(m, a);
-      m.visible = range < 18000;
+      m.visible = range < FAR_AIRCRAFT;
     }
     for (const [id, m] of this.meshes) if (id.startsWith("air-") && !live.has(id)) {
       this.scene.remove(m);
