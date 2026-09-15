@@ -6,6 +6,7 @@ import { distance2, forward, localPoint } from "../sim/math.js";
 import { addFloats, ellipsoid, mat, wakeTexture } from "./assets.js";
 import { type CarrierModelId, createCarrier, createIjnCarrier, createMitchell, shipModelFor } from "./imported-ships.js";
 import { createAirframe, createDouglas, animateDouglas, animateImportedAirframe, disposeAirframe, spinPropeller } from "./imported-aircraft.js";
+import { airframeLod } from "./airframe-lod.js";
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
 import { animateDevastator, disposeDevastator } from "./devastator.js";
@@ -74,6 +75,31 @@ const FAR_AIRCRAFT = 12000;
  * camera's, exactly as `FAR_HULL` already does for hulls.
  */
 const MIN_AIRCRAFT_PIXELS = 2;
+
+/**
+ * The projected size, in render-camera pixels, below which an aircraft draws its merged stand-in.
+ *
+ * `MIN_AIRCRAFT_PIXELS` above stops drawing a speck; this one stops paying 22–95 draw submits for an
+ * aircraft whose whole merged silhouette is a few tens of pixels across (see `airframe-lod.ts`).
+ * Above the line the full airframe keeps every animated node and every material. The number itself
+ * comes from the report-REC ladder: each rung's main draws and same-build pixel diff against a
+ * control, read at the recovery approach, the cockpit, chase and wide views.
+ */
+const MERGED_AIRFRAME_PIXELS = 36;
+
+/**
+ * The line `MERGED_AIRFRAME_PIXELS` sets, with a runtime override for the report-REC A/B ladder.
+ *
+ * The ladder needs the merged variant on and off within one build, so its probes set
+ * `globalThis.MIDWAY_MERGED_PIXELS`; 0 turns it off entirely and an absent value is the constant.
+ * Verification only — the game never writes it.
+ */
+function mergedAirframePixels(): number {
+  const raw = (globalThis as { MIDWAY_MERGED_PIXELS?: unknown }).MIDWAY_MERGED_PIXELS;
+  if (raw === undefined || raw === null) return MERGED_AIRFRAME_PIXELS;
+  const override = Number(raw);
+  return Number.isFinite(override) ? override : MERGED_AIRFRAME_PIXELS;
+}
 
 /**
  * Idle a parked aircraft's propeller. Every parked airframe is a real model now: the Devastator
@@ -655,6 +681,7 @@ export class WorldView {
     // bounding-sphere radius times this over its distance. Read once, not per aircraft.
     const focalPx = (this.host.viewport.size.height * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360);
     const camPos = this.camera.position;
+    const mergedPixels = mergedAirframePixels();
     for (const a of b.aircraft) {
       live.add(a.id);
       const range = distance2(a, p);
@@ -674,25 +701,35 @@ export class WorldView {
       if (m.userData.detailed) detailed += 1;
       m.position.set(a.x, a.y, a.z);
       m.rotation.set(a.pitch, -a.heading, a.roll, "YXZ");
-      const gearDown = (a.mode === "launch" && a.age < 4) || (a.mode === "rtb" && a.y < 80);
-      if (m.userData.devastator) {
-        animateDevastator(m, { rpm: a.engineCut ? 0.1 : 0.82, gearPos: gearDown ? 1 : 0, torpedo: a.torpedo ?? 0 }, dt);
-      } else if (m.userData.douglas) {
-        // The imported Douglas drives its propeller, gear and control surfaces through its own
-        // clips rather than the generic prop/gear handles.
-        animateDouglas(m, { rpm: a.engineCut ? 0.1 : 0.82, gearPos: gearDown ? 1 : 0 }, dt);
-      } else {
-        const prop = m.userData.prop as T.Object3D | undefined;
-        if (prop) prop.rotation.z += dt * (a.engineCut ? 8 : 55);
-        const gear = m.userData.gear as T.Object3D | undefined;
-        if (gear) gear.visible = gearDown;
-      }
-      const load = m.userData.load as T.Object3D | undefined;
-      if (load) load.visible = a.bombs > 0;
-      if (m.userData.torpedoLoad) (m.userData.torpedoLoad as T.Object3D).visible = a.torpedo > 0;
-      updateDamageVisuals(m, a);
       const camD = Math.hypot(a.x - camPos.x, a.y - camPos.y, a.z - camPos.z);
       const projectedPx = (2 * (m.userData.radius as number) * focalPx) / Math.max(1, camD);
+      // Below the merged line the airframe is one draw: hide the full content — model, gear, stores
+      // and damage, all under `body` — in a single write and show the static stand-in instead. Above
+      // it nothing changes and every animator runs, so a resolvable aircraft is never frozen.
+      const merged = Boolean(m.userData.low) && projectedPx < mergedPixels;
+      if (m.userData.low) {
+        (m.userData.body as T.Object3D).visible = !merged;
+        (m.userData.low as T.Object3D).visible = merged;
+      }
+      if (!merged) {
+        const gearDown = (a.mode === "launch" && a.age < 4) || (a.mode === "rtb" && a.y < 80);
+        if (m.userData.devastator) {
+          animateDevastator(m, { rpm: a.engineCut ? 0.1 : 0.82, gearPos: gearDown ? 1 : 0, torpedo: a.torpedo ?? 0 }, dt);
+        } else if (m.userData.douglas) {
+          // The imported Douglas drives its propeller, gear and control surfaces through its own
+          // clips rather than the generic prop/gear handles.
+          animateDouglas(m, { rpm: a.engineCut ? 0.1 : 0.82, gearPos: gearDown ? 1 : 0 }, dt);
+        } else {
+          const prop = m.userData.prop as T.Object3D | undefined;
+          if (prop) prop.rotation.z += dt * (a.engineCut ? 8 : 55);
+          const gear = m.userData.gear as T.Object3D | undefined;
+          if (gear) gear.visible = gearDown;
+        }
+        const load = m.userData.load as T.Object3D | undefined;
+        if (load) load.visible = a.bombs > 0;
+        if (m.userData.torpedoLoad) (m.userData.torpedoLoad as T.Object3D).visible = a.torpedo > 0;
+        updateDamageVisuals(m, a);
+      }
       m.visible = range < FAR_AIRCRAFT && projectedPx >= MIN_AIRCRAFT_PIXELS;
     }
     for (const [id, m] of this.meshes) if (id.startsWith("air-") && !live.has(id)) {
@@ -947,6 +984,19 @@ export class WorldView {
 
   private buildAircraft(a: any, detail: boolean): T.Group {
     const m = importedAircraftFor(a)();
+    // The merged stand-in, built once per airframe type from this first instance and shared by every
+    // later one. It is a sibling of the full model so the per-frame gate can show either without a
+    // rebuild; `airframe-lod.ts` owns the geometry's lifetime because every instance shares it.
+    const lod = airframeLod(m);
+    if (lod) {
+      const low = new T.Mesh(lod.geometry, lod.material);
+      low.name = `${m.name} (merged)`;
+      low.castShadow = true;
+      low.receiveShadow = true;
+      low.visible = false;
+      m.add(low);
+      m.userData.low = low;
+    }
     // The loan marker, not the model: both levels draw the same real airframe.
     m.userData.detailed = detail;
     // Range-gated like the hulls: out of the draw until `update` places it and reads its range.
@@ -963,6 +1013,16 @@ export class WorldView {
       m.userData.torpedoLoad = torpedo;
     }
     m.userData.kind = a.kind;
+    // The full airframe under one child, so the gate hides all of it — model, gear, stores and
+    // damage — with a single write and shows the merged stand-in instead.
+    if (m.userData.low) {
+      const body = new T.Group();
+      body.name = "airframe";
+      for (const child of [...m.children]) if (child !== m.userData.low) body.add(child);
+      body.updateMatrix();
+      m.add(body);
+      m.userData.body = body;
+    }
     // The radius the pixel gate reads, measured once from the built model rather than guessed from
     // an airframe table: a Zero, a Kate and a Douglas span differently, and a stand-in must not
     // inherit another type's size.
