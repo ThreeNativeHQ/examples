@@ -1010,63 +1010,65 @@ function createGeometryTools(Tg: typeof T, materials: CockpitMaterials, root: T.
     for (let i = 0; i < src.length; i += 1) dst.push(src[i]);
   }
   function optimize() {
+    // The toolkit's `root` is the static shell group; the live controls hang off its sibling
+    // `animatedRoot`, which this never visits, so a gauge needle or a lever can never be dragged
+    // into a batch. Batch the shell by material across every part rather than within one part: the
+    // same surface used by two parts becomes one draw while two surfaces never do. Every triangle,
+    // normal and UV is unchanged; only the draw count falls.
     root.updateMatrixWorld(true);
-    for (const group of Object.values(parts)) {
-      if (group.name === "Fasteners") continue;
-      const batches = new Map<string, T.Mesh[]>();
-      group.traverse((o) => {
-        const mesh = o as T.Mesh;
-        if (mesh.isMesh && !(mesh as any).isInstancedMesh) {
-          const key = (mesh.material as T.Material).uuid;
-          if (!batches.has(key)) batches.set(key, []);
-          batches.get(key)!.push(mesh);
-        }
-      });
-      for (const list of batches.values()) {
-        const positions: number[] = [];
-        const normals: number[] = [];
-        const uvs: number[] = [];
-        const indices: number[] = [];
-        let offset = 0;
-        for (const o of list) {
-          const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
-          const p = g.attributes.position as T.BufferAttribute;
-          const n = g.attributes.normal as T.BufferAttribute;
-          const uv = g.attributes.uv as T.BufferAttribute | undefined;
-          pushArray(positions, p.array as ArrayLike<number>);
-          pushArray(normals, n.array as ArrayLike<number>);
-          if (uv) pushArray(uvs, uv.array as ArrayLike<number>);
-          else for (let i = 0; i < p.count; i += 1) uvs.push(0, 0);
-          if (g.index) {
-            const source = g.index.array as ArrayLike<number>;
-            for (let i = 0; i < source.length; i += 1) indices.push(source[i] + offset);
-          } else for (let i = 0; i < p.count; i += 1) indices.push(i + offset);
-          offset += p.count;
-          g.dispose();
-          o.parent!.remove(o);
-          o.geometry.dispose();
-        }
-        const g = new Tg.BufferGeometry();
-        g.setAttribute("position", new Tg.Float32BufferAttribute(positions, 3));
-        g.setAttribute("normal", new Tg.Float32BufferAttribute(normals, 3));
-        g.setAttribute("uv", new Tg.Float32BufferAttribute(uvs, 2));
-        g.setAttribute("uv1", new Tg.Float32BufferAttribute(uvs, 2));
-        g.setIndex(indices);
-        g.computeBoundingSphere();
-        const o = new Tg.Mesh(g, list[0].material);
-        o.name = group.name + " · " + (list[0].material as T.Material).name;
-        o.castShadow = !(o.material as T.Material).transparent;
-        o.receiveShadow = !(o.material as T.Material).transparent;
-        if ((o.material as T.Material).transparent) o.renderOrder = 10;
-        group.add(o);
-        // Every vertex here was already baked through its source `matrixWorld`, so this merged
-        // mesh's own local transform is identity and can never change again. Compose it once and
-        // stop recomposing it every frame. `matrixWorldAutoUpdate` stays on, so the aircraft, the
-        // carrier under it and the camera still carry the whole cockpit exactly as before — only
-        // the local recomposition of a constant stops.
-        o.updateMatrix();
-        o.matrixAutoUpdate = false;
+    const batches = new Map<string, T.Mesh[]>();
+    root.traverse((o) => {
+      const mesh = o as T.Mesh;
+      if (!mesh.isMesh || (mesh as any).isInstancedMesh) return;
+      const key = (mesh.material as T.Material).uuid;
+      if (!batches.has(key)) batches.set(key, []);
+      batches.get(key)!.push(mesh);
+    });
+    for (const list of batches.values()) {
+      const material = list[0].material as T.Material;
+      const positions: number[] = [];
+      const normals: number[] = [];
+      const uvs: number[] = [];
+      const indices: number[] = [];
+      let offset = 0;
+      for (const o of list) {
+        const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+        const p = g.attributes.position as T.BufferAttribute;
+        const n = g.attributes.normal as T.BufferAttribute;
+        const uv = g.attributes.uv as T.BufferAttribute | undefined;
+        pushArray(positions, p.array as ArrayLike<number>);
+        pushArray(normals, n.array as ArrayLike<number>);
+        if (uv) pushArray(uvs, uv.array as ArrayLike<number>);
+        else for (let i = 0; i < p.count; i += 1) uvs.push(0, 0);
+        if (g.index) {
+          const source = g.index.array as ArrayLike<number>;
+          for (let i = 0; i < source.length; i += 1) indices.push(source[i] + offset);
+        } else for (let i = 0; i < p.count; i += 1) indices.push(i + offset);
+        offset += p.count;
+        g.dispose();
+        o.parent!.remove(o);
+        o.geometry.dispose();
       }
+      const g = new Tg.BufferGeometry();
+      g.setAttribute("position", new Tg.Float32BufferAttribute(positions, 3));
+      g.setAttribute("normal", new Tg.Float32BufferAttribute(normals, 3));
+      g.setAttribute("uv", new Tg.Float32BufferAttribute(uvs, 2));
+      g.setAttribute("uv1", new Tg.Float32BufferAttribute(uvs, 2));
+      g.setIndex(indices);
+      g.computeBoundingSphere();
+      const o = new Tg.Mesh(g, material);
+      o.name = root.name + " · " + material.name;
+      o.castShadow = !material.transparent;
+      o.receiveShadow = !material.transparent;
+      if (material.transparent) o.renderOrder = 10;
+      root.add(o);
+      // Every vertex here was already baked through its source `matrixWorld` into the shell, so
+      // this merged mesh's local transform is identity and can never change again. Compose it once and stop
+      // recomposing it every frame. `matrixWorldAutoUpdate` stays on, so the aircraft, the carrier
+      // under it and the camera still carry the whole cockpit exactly as before — only the local
+      // recomposition of a constant stops.
+      o.updateMatrix();
+      o.matrixAutoUpdate = false;
     }
   }
   return {
