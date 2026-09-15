@@ -102,6 +102,30 @@ function mergedAirframePixels(): number {
 }
 
 /**
+ * The projected size, in render-camera pixels, below which a hull draws its merged stand-in.
+ *
+ * `FAR_HULL` already hides a hull the camera cannot resolve at all; this is the wider line where the
+ * hull is still a resolvable speck and a stand-in is indistinguishable, but one draw instead of a
+ * hundred. The number comes from the report-HULL ladder against a same-build control; the shipped
+ * rung is the conservative one, chosen with margin below the range a player identifies or attacks a
+ * ship, not the largest saving. The near carrier the player lands on and any hull close enough to
+ * attack are far above the line and keep full detail.
+ */
+const MERGED_HULL_PIXELS = 24;
+
+/**
+ * The line `MERGED_HULL_PIXELS` sets, with the same runtime override the airframe gate uses so the
+ * ladder can move it inside one build. 0 turns the stand-in off; an absent value is the constant.
+ * Verification only — the game never writes it.
+ */
+function mergedHullPixels(): number {
+  const raw = (globalThis as { MIDWAY_HULL_PIXELS?: unknown }).MIDWAY_HULL_PIXELS;
+  if (raw === undefined || raw === null) return MERGED_HULL_PIXELS;
+  const override = Number(raw);
+  return Number.isFinite(override) ? override : MERGED_HULL_PIXELS;
+}
+
+/**
  * Idle a parked aircraft's propeller. Every parked airframe is a real model now: the Devastator
  * through its own animator, the rest through the `propeller` pivot they all publish.
  */
@@ -132,14 +156,16 @@ function spinParked(m: T.Group, dt: number): void {
  * not sunk, because they already bake the waterline at y = 0 — `tools/inspect-glb.mjs` measures
  * `hornet.glb` at min.y -4.14 and `akagi.glb` at -7.55, which is their draught, below it.
  */
-const CARRIER_MODEL: Readonly<Record<string, { id: CarrierModelId; classId?: string }>> = {
-  "USS Enterprise": { id: "enterprise" },
-  "USS Hornet": { id: "hornet" },
+const CARRIER_MODEL: Readonly<Record<string, { id: CarrierModelId; classId?: string; lod?: string }>> = {
+  // `lod` names the shared model a stand-in is keyed by. The three Yorktown class carriers all draw
+  // `hornet.glb`, so they build one merged hull between them instead of one 347k-triangle copy each.
+  "USS Enterprise": { id: "enterprise", lod: "hornet" },
+  "USS Hornet": { id: "hornet", lod: "hornet" },
   Akagi: { id: "akagi" },
   // No `classId`, deliberately: CV-5 is drawn from the supplied `hornet.glb` like her two sisters,
   // and that model bakes its waterline at y = 0 rather than its keel, so sinking it by a class
   // draught would put her 7.9 m under.
-  "USS Yorktown": { id: "yorktown" },
+  "USS Yorktown": { id: "yorktown", lod: "hornet" },
   Kaga: { id: "kaga", classId: "kaga" },
   Soryu: { id: "soryu", classId: "soryu" },
   Hiryu: { id: "hiryu", classId: "hiryu" },
@@ -408,6 +434,7 @@ export class WorldView {
         mesh = new T.Group();
         mesh.add(detailed);
         mesh.userData.importedShip = true;
+        this.addHullLod(mesh, detailed, classId);
       } else if (s.kind === "carrier") {
         const model = CARRIER_MODEL[s.name];
         const detailed = model ? createCarrier(model.id) : createIjnCarrier(s.name);
@@ -425,6 +452,10 @@ export class WorldView {
         mesh.userData.importedShip = true;
         mesh.userData.parked = [];
         mesh.userData.decor = [];
+        // The stand-in is baked here, before the park and the decorative B-25 are added, so it never
+        // carries them — they already hide past `camD < 1900`, and baking their spinning propellers
+        // into a frozen far hull would draw the parked deck load at a range the park gate excludes.
+        this.addHullLod(mesh, detailed, model?.lod ?? model?.classId ?? model?.id ?? s.name);
         // The park draws this ship's own ready inventory, one airframe per type it carries. A type
         // that leaves the ready line — launched, wrecked, written off — hides its own parked
         // aircraft and nothing else; the surviving types stay spotted. `ai` is the reduced build
@@ -614,6 +645,11 @@ export class WorldView {
     this.setAirframe();
     this.wallTime = wallTime;
     const time = briefing ? wallTime : b.time;
+    // Pixels per radian for the render camera: an object's projected diameter is twice its
+    // bounding-sphere radius times this over its distance. Read once, before both the hull and the
+    // aircraft gates, because both are the same camera's projection.
+    const focalPx = (this.host.viewport.size.height * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360);
+    const hullPixels = mergedHullPixels();
     for (const s of b.ships) {
       const m = this.meshes.get(s.id);
       if (!m) continue;
@@ -626,6 +662,17 @@ export class WorldView {
       // that has to pay for the geometry. This is the hull's distance LOD, and the only one it has.
       const camD = distance2(s, this.camera.position);
       m.visible = s.sink < 0.95 && camD < FAR_HULL;
+      // Below `MERGED_HULL_PIXELS` the whole hull collapses to one merged draw. Two hulls are never
+      // swapped: the carrier the player lands on (`b.home`, which must keep its deck and island exact)
+      // and any hull the player is close enough to attack — both sit far above the pixel line. A
+      // sinking hull changes shape with `s.sink` and is watched from close up, so it too keeps detail.
+      const low = m.userData.hullLow as T.Mesh | undefined;
+      if (low) {
+        const px = (2 * (m.userData.hullRadius as number) * focalPx) / Math.max(1, camD);
+        const merged = m.visible && s !== b.home && s.sink <= 0 && px < hullPixels;
+        (m.userData.hullBody as T.Object3D).visible = !merged;
+        low.visible = merged;
+      }
       // The scouts this hull carries, each drawn where its own state puts it. Aboard and alongside
       // are on the ship and ride her motion; the airborne states are over the sector the simulation
       // is searching, at the same `SCOUT_ALTITUDE` the observation sweep files reports from. A lost
@@ -677,9 +724,6 @@ export class WorldView {
     }
     const live = new Set<string>();
     let detailed = 0;
-    // Pixels per radian for the render camera: an aircraft's projected diameter is twice its
-    // bounding-sphere radius times this over its distance. Read once, not per aircraft.
-    const focalPx = (this.host.viewport.size.height * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360);
     const camPos = this.camera.position;
     const mergedPixels = mergedAirframePixels();
     for (const a of b.aircraft) {
@@ -980,6 +1024,35 @@ export class WorldView {
     void a;
     if (had) return range < 1500;
     return range < 1100 && granted < 10;
+  }
+
+  /**
+   * Give one hull a merged stand-in, grouped the way the airframe gate groups its full model.
+   *
+   * `detailed` is the imported hull and nothing else at this point: the park, the decor, the crew and
+   * the deck scars are added to `mesh` afterwards, so `body` holds exactly the static hull — and the
+   * moving elevator, were one ever published on `mesh.userData.elevator`, is a `mesh` child too and
+   * stays live. The gate in `update` hides `body` and shows `low` below `MERGED_HULL_PIXELS`; above
+   * it nothing changes and the hull keeps every material, turret and cable.
+   */
+  private addHullLod(mesh: T.Group, detailed: T.Group, key: string): void {
+    const lod = airframeLod(detailed, key);
+    if (!lod) return;
+    const low = new T.Mesh(lod.geometry, lod.material);
+    low.name = `${detailed.name} (merged)`;
+    low.castShadow = true;
+    low.receiveShadow = true;
+    low.visible = false;
+    const body = new T.Group();
+    body.name = "hull";
+    for (const child of [...detailed.children]) body.add(child);
+    detailed.add(body);
+    // A sibling of `body`, not of `detailed`: it shares `detailed`'s frame, which is where the merge
+    // was baked, and is hidden and shown against `body` alone.
+    detailed.add(low);
+    mesh.userData.hullBody = body;
+    mesh.userData.hullLow = low;
+    mesh.userData.hullRadius = lod.geometry.boundingSphere?.radius ?? 0;
   }
 
   private buildAircraft(a: any, detail: boolean): T.Group {

@@ -23,14 +23,21 @@ export interface AirframeLod {
   material: T.Material;
 }
 
-/** Per-airframe cache keyed by the built group's name (`Mitsubishi A6M3`, `Douglas TBD-1 Devastator`, ...). */
+/** Merged stand-ins, keyed by build (`Mitsubishi A6M3`, `Douglas TBD-1 Devastator`, `hornet`, ...). */
 const cache = new Map<string, AirframeLod | null>();
 /** Average texture colour, keyed by texture uuid, so a material shared by many meshes samples once. */
 const textureColour = new Map<string, T.Color>();
 
-/** The merged stand-in for `full`, built and cached on first request. Null when there is nothing to merge. */
-export function airframeLod(full: T.Object3D): AirframeLod | null {
-  const key = full.name || `${full.type}#${full.id}`;
+/**
+ * The merged stand-in for `full`, built and cached on first request. Null when there is nothing to merge.
+ *
+ * A hull reuses this: one supplied carrier is 246k–347k triangles across 94–146 meshes and, drawn
+ * just inside `FAR_HULL` for a speck, costs more draw submissions than the entire parked deck load.
+ * The explicit `key` lets the three US carriers that share `hornet.glb` — and any two ships of one
+ * catalog class — build and share one stand-in instead of one per ship name. The geometry is baked
+ * in `full`'s own local frame, so the caller shows it as a sibling of `full` inside the same parent.
+ */
+export function airframeLod(full: T.Object3D, key = full.name || `${full.type}#${full.id}`): AirframeLod | null {
   const cached = cache.get(key);
   if (cached !== undefined) return cached;
   const built = buildLod(full);
