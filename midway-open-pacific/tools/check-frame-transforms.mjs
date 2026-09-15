@@ -64,6 +64,25 @@ try {
   report.adapter = adapter;
   console.log(`adapter ${JSON.stringify(adapter)}`);
 
+  report.deckReflection = await page.evaluate(async () => {
+    const { REFLECTED_LAYER } = await import("/src/render/ocean.ts");
+    let nodes = 0, reflected = 0, missingMainLayer = 0, reflectedHulls = 0;
+    for (const ship of window.midway.world.meshes.values()) {
+      if (ship.layers.isEnabled(REFLECTED_LAYER)) reflectedHulls++;
+      for (const planes of [ship.userData.parked ?? [], ship.userData.decor ?? []])
+        for (const plane of planes) plane.traverse((o) => {
+          nodes++;
+          if (o.layers.isEnabled(REFLECTED_LAYER)) reflected++;
+          if (!o.layers.isEnabled(0)) missingMainLayer++;
+        });
+    }
+    return { nodes, reflected, missingMainLayer, reflectedHulls };
+  });
+  assert.ok(report.deckReflection.nodes > 0 && report.deckReflection.reflectedHulls > 0, "deck load and reflected hulls observed");
+  assert.equal(report.deckReflection.reflected, 0, "parked/decorative aircraft excluded from the water reflection");
+  assert.equal(report.deckReflection.missingMainLayer, 0, "deck load retains the main camera layer");
+  console.log(`deck reflection ${JSON.stringify(report.deckReflection)}`);
+
   await page.evaluate(() => {
     const s = window.midway;
     const w = s.world;

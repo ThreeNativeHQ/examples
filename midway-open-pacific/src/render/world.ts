@@ -390,6 +390,9 @@ export class WorldView {
         }
       }
       markReflected(mesh);
+      // Parked aircraft are hull children, but the water reflection excludes the deck load.
+      for (const planes of [mesh.userData.parked ?? [], mesh.userData.decor ?? []] as T.Object3D[][])
+        for (const plane of planes) plane.traverse((o) => o.layers.disable(REFLECTED_LAYER));
       this.scene.add(mesh);
       this.meshes.set(s.id, mesh);
 

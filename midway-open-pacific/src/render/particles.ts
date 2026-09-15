@@ -140,21 +140,10 @@ export class CombatParticles {
   emitters = new Map<string, { carry: number; previous: IParticle; time: number }>();
   lastTime = 0;
   scene: T.Scene;
-  /** World position of the camera actually drawing a batch, filled per render, not per update. */
-  #renderCamera = new T.Vector3();
 
   constructor(scene: T.Scene) {
     this.scene = scene;
     scene.add(this.smokeBatch.mesh, this.glowBatch.mesh);
-    // Packing belongs to the draw, not the simulation: several fixed updates can run before one
-    // rendered frame, and a batch only needs the latest state at the moment it is drawn. The mesh's
-    // own render hook runs immediately before that draw with the real render camera.
-    const packBeforeDraw = (pool: ParticlePool, batch: any, sort: boolean) => (_r: any, _s: any, camera: T.Camera) => {
-      camera.getWorldPosition(this.#renderCamera);
-      this.writeBatch(pool, batch, this.#renderCamera, sort);
-    };
-    this.smokeBatch.mesh.onBeforeRender = packBeforeDraw(this.smoke, this.smokeBatch, true);
-    this.glowBatch.mesh.onBeforeRender = packBeforeDraw(this.glow, this.glowBatch, false);
   }
 
   spread(s = 1): number {
@@ -328,6 +317,8 @@ export class CombatParticles {
       }
     }
     for (const [key, e] of this.emitters) if (b.time - e.time > 2) this.emitters.delete(key);
+    this.writeBatch(this.smoke, this.smokeBatch, camera, true);
+    this.writeBatch(this.glow, this.glowBatch, camera, false);
   }
 
   writeBatch(pool: ParticlePool, b: any, camera: T.Vector3, sort: boolean): void {

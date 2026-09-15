@@ -31,6 +31,11 @@
  *      MIDWAY_MATRIX_COMPARE=1 runs the frozen static matched fixture through ABBA
  *      current/once/once/current matrices stages (diagnostic prototype, not shipped engine
  *      semantics; onBeforeRender/onAfterRender compatibility is unresolved).
+ *      MIDWAY_PROJECTION_AUDIT=1 runs a frozen fixture in current draw-hook packing and in exact
+ *      legacy fixed-update packing with every own render hook deleted (so the engine can
+ *      reclassify), each held for the projection rescan cadence, and records the census + markers.
+ *      MIDWAY_PROJECTION_CROWD=1 does the same at the full supported roster: the capture-performance
+ *      crowd fixture fills to ACTIVE_CAP via Battle.launch before the freeze.
  */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -79,14 +84,19 @@ const browser = await chromium.launch({
   ],
 });
 const errors = [];
-const report = { tool: "capture-flak-hunt", fixture: true, url: URL, phases: {} };
+const report = { tool: "capture-flak-hunt", fixture: true, url: URL, phases: {}, markers: [] };
 
 try {
   await mkdir(OUT, { recursive: true });
   const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(m.text());
+    const text = m.text();
+    if (m.type() === "error") errors.push(text);
+    // Engine markers: TN_STARTUP_WARMUP proves whether first-use compilation was paid at launch;
+    // TN_RENDER_PROJECTION reports the render-projection decision and its reasonCode.
+    if (/^TN_(STARTUP|RENDER_PROJECTION|ALPHA_ANTIALIASING)/.test(text))
+      report.markers.push({ type: m.type(), at: Date.now(), text });
   });
 
   await page.goto(URL);
@@ -133,14 +143,18 @@ try {
       ring: {},
       longTasks: {},
       gpu: {},
+      censusBefore: {},
+      __auditFrame: 0,
       fixture: { label: "synthetic-flak-bursts", injections: 0, syntheticBullets: 0, fxBursts: 0, hidden: false },
     };
     window.__probe = P;
 
     // A small RAF ring, kept so a transient stall shows as one huge interval beside its cause.
+    // `__auditFrame` counts OUTER presented frames, the cadence the engine's projection rescan uses.
     let prev = performance.now();
     const rAF = () => {
       const now = performance.now();
+      P.__auditFrame += 1;
       const arr = P.ring[P.phase];
       if (arr) {
         arr.push(+(now - prev).toFixed(2));
@@ -158,6 +172,105 @@ try {
     } catch {
       // longtask is not universally supported; the RAF ring still catches the gap.
     }
+
+    // The pipeline census lives on the engine renderer wrapper (`ctx.renderer`); `w.renderer` is
+    // `ctx.renderer.raw` (world.ts:269) and does not carry it. The wrapper adds it at
+    // @threenative/core dist index.js:7667; enabled unless config.renderer.pipelineCensus === false.
+    const censusOf = () => {
+      try {
+        const engineRenderer = s.ctx?.renderer;
+        return typeof engineRenderer?.pipelineCensus === "function" ? engineRenderer.pipelineCensus() : null;
+      } catch {
+        return null;
+      }
+    };
+    // Compact, bounded: counts + whole-scene markers + only the sync/notable events, so probe.json
+    // stays small. A large `serviceMs` is a synchronous first-use compile on the main thread.
+    const censusSummary = (snap) => {
+      if (!snap) return null;
+      const events = snap.events || [];
+      const notable = [];
+      for (const e of events) {
+        const object = e.provenance?.object?.name ?? null;
+        const material = e.provenance?.material?.name ?? null;
+        if ((e.serviceMs ?? 0) >= 5 || /smoke|glow|tracer|particle|line|basic/i.test(`${object ?? ""} ${material ?? ""}`))
+          notable.push({ seq: e.sequence, kind: e.kind, pass: e.pass, status: e.status, serviceMs: e.serviceMs, promiseMs: e.promiseMs, object, material, beforeFirstPresent: e.beforeFirstPresent, reasons: e.reasons });
+      }
+      return {
+        complete: snap.complete,
+        unsupported: snap.unsupported,
+        incompleteReasons: snap.incompleteReasons,
+        counts: snap.counts,
+        firstPresent: snap.firstPresent ?? null,
+        totalEvents: events.length,
+        beforeFirstPresentEvents: events.filter((e) => e.beforeFirstPresent === true).length,
+        notable,
+      };
+    };
+    P.census = censusOf;
+    P.censusSummary = censusSummary;
+
+    // Wait OUTER rendered frames (rAF ticks), the cadence at which the projection reconcile/rescan
+    // is driven. DECLINE_RESCAN_FRAMES is 60 in the installed bytes (index.js:5904).
+    P.waitFrames = (n) =>
+      new Promise((resolve) => {
+        const target = P.__auditFrame + n;
+        const tick = () => (P.__auditFrame >= target ? resolve() : requestAnimationFrame(tick));
+        requestAnimationFrame(tick);
+      });
+
+    // MIDWAY_PROJECTION_AUDIT: compare the current draw-hook packing with the exact legacy
+    // fixed-update packing while REMOVING the own render hooks (delete, never a noop assign, which
+    // would still trip hasRenderHook) so the engine can reclassify the scene. The legacy mode also
+    // restores matrixWorldAutoUpdate=true and drops the scene-root own hook, i.e. the state before
+    // the parent's one-traversal fix. Restores the exact own-hook/flag state on return.
+    P.installProjectionAudit = () => {
+      const scene = w.scene;
+      const p = w.particles;
+      const original = {
+        update: p.update,
+        smokeHook: p.smokeBatch.mesh.onBeforeRender,
+        glowHook: p.glowBatch.mesh.onBeforeRender,
+        smokeOwn: Object.hasOwn(p.smokeBatch.mesh, "onBeforeRender"),
+        glowOwn: Object.hasOwn(p.glowBatch.mesh, "onBeforeRender"),
+        rootHook: scene.onBeforeRender,
+        rootOwn: Object.hasOwn(scene, "onBeforeRender"),
+        autoUpdate: scene.matrixWorldAutoUpdate,
+      };
+      P.deferredPacking = original.smokeOwn && original.glowOwn;
+      P.__auditRestore = () => {
+        p.update = original.update;
+        const meshes = [
+          [p.smokeBatch.mesh, original.smokeOwn, original.smokeHook],
+          [p.glowBatch.mesh, original.glowOwn, original.glowHook],
+        ];
+        for (const [mesh, own, hook] of meshes) {
+          if (own) mesh.onBeforeRender = hook;
+          else delete mesh.onBeforeRender;
+        }
+        if (original.rootOwn) scene.onBeforeRender = original.rootHook;
+        else delete scene.onBeforeRender;
+        scene.matrixWorldAutoUpdate = original.autoUpdate;
+      };
+      P.setPackingMode = (mode) => {
+        if (mode === "current") {
+          P.__auditRestore();
+          return "current";
+        }
+        // Legacy: pack per fixed update, no own hooks anywhere, default world-matrix auto-update.
+        delete p.smokeBatch.mesh.onBeforeRender;
+        delete p.glowBatch.mesh.onBeforeRender;
+        delete scene.onBeforeRender;
+        scene.matrixWorldAutoUpdate = true;
+        p.update = function (b2, camera) {
+          original.update.call(this, b2, camera);
+          // Only the discarded draw-hook candidate needs packing restored here.
+          if (original.smokeOwn) this.writeBatch(this.smoke, this.smokeBatch, camera, true);
+          if (original.glowOwn) this.writeBatch(this.glow, this.glowBatch, camera, false);
+        };
+        return "legacy";
+      };
+    };
 
     const wrap = (owner, key, name) => {
       const original = owner[key];
@@ -272,6 +385,7 @@ try {
       P.ring[name] = [];
       P.longTasks[name] = [];
       P.gpu[name] = [];
+      P.censusBefore[name] = censusSummary(censusOf());
     };
 
     P.renderSnapshot = () => ({
@@ -447,7 +561,7 @@ try {
     if (profileOut) await writeFile(join(OUT, `${name}.cpuprofile`), JSON.stringify(profileOut.profile ?? profileOut));
     const snap = await page.evaluate((p) => {
       const P = window.__probe;
-      const out = { series: P.series[p], ring: P.ring[p], longTasks: P.longTasks[p], gpu: P.gpu[p], render: P.renderSnapshot(), tracer: P.tracerSnapshot() };
+      const out = { series: P.series[p], ring: P.ring[p], longTasks: P.longTasks[p], gpu: P.gpu[p], render: P.renderSnapshot(), tracer: P.tracerSnapshot(), census: P.censusSummary(P.census()), censusBefore: P.censusBefore[p] ?? null };
       if (P.__fixtureUndo) {
         P.__fixtureUndo();
         P.__fixtureUndo = null;
@@ -465,6 +579,8 @@ try {
       longTasks: snap.longTasks,
       render: snap.render,
       tracer: snap.tracer,
+      census: snap.census,
+      censusBefore: snap.censusBefore,
     };
     metrics.ringWorst = snap.ring.length ? snap.ring.filter(Number.isFinite).reduce((m, x) => Math.max(m, x), 0) : null;
     report.phases[name] = metrics;
@@ -482,7 +598,108 @@ try {
     note: "A is the live natural battle; B/C inject labelled flak projectiles and battle.fx bursts",
   };
 
-  if (process.env.MIDWAY_MATRIX_COMPARE) {
+  if (process.env.MIDWAY_PROJECTION_AUDIT || process.env.MIDWAY_PROJECTION_CROWD) {
+    // Baseline batching eligibility: identical frozen fixture, two packing modes, each held for
+    // enough OUTER rendered frames for the engine's decline rescan (60) plus margin. The current
+    // mode preserves the installed packing path; the legacy mode deletes every own
+    // hook and restores matrixWorldAutoUpdate=true, so the scan can classify the authored scene
+    // without the renderHook block. The scene mirror never copies a root onBeforeRender (core
+    // index.js:5971), so packing must stay off the root either way.
+    //
+    // MIDWAY_PROJECTION_CROWD=1 uses the full supported roster: the exact capture-performance.mjs
+    // MIDWAY_CROWD fixture fills to ACTIVE_CAP through Battle.launch only, BEFORE the freeze. No
+    // aircraft record, task/AI field, inventory, HP or cap is synthesised and nothing is cloned.
+    const AUDIT_FRAMES = 80;
+    const CROWD = !!process.env.MIDWAY_PROJECTION_CROWD;
+    const projMarker = () => {
+      const list = report.markers.filter((m) => m.text.startsWith("TN_RENDER_PROJECTION"));
+      return { count: list.length, text: list.at(-1)?.text ?? null };
+    };
+    if (CROWD) {
+      await page.evaluate((cap) => {
+        const b = window.midway.battle;
+        const w = window.midway.world;
+        const carriers = b.ships.filter((s) => s.kind === "carrier" && !s.sunk && s.air);
+        const roles = ["fighter", "bomber", "torpedo"];
+        let guard = 0;
+        while (b.activeAircraft < cap && guard < 40000) {
+          for (const s of carriers) {
+            if (b.activeAircraft >= cap) break;
+            for (const role of roles) {
+              const before = b.activeAircraft;
+              b.launch(s, role);
+              if (b.activeAircraft > before) break;
+            }
+          }
+          b.step(1 / 60, {});
+          guard += 1;
+        }
+        const air = b.aircraft.filter((a) => a.hp > 0);
+        const cx = air.reduce((n, a) => n + a.x, 0) / Math.max(1, air.length);
+        const cz = air.reduce((n, a) => n + a.z, 0) / Math.max(1, air.length);
+        const orig = w.updateCamera.bind(w);
+        w.updateCamera = function (dt, briefing, time) {
+          orig(dt, briefing, time);
+          this.camera.position.set(cx, 5000, cz + 8000);
+          this.camera.up.set(0, 1, 0);
+          this.camera.fov = 60;
+          this.camera.lookAt(cx, 100, cz);
+          this.camera.updateProjectionMatrix();
+          this.camera.updateMatrixWorld();
+        };
+        w.setCamera(2);
+      }, 68);
+      report.crowdFixture = await page.evaluate(() => {
+        const b = window.midway.battle;
+        const w = window.midway.world;
+        return {
+          activeAircraft: b.activeAircraft,
+          aircraftRecords: b.aircraft.length,
+          aliveAircraft: b.aircraft.filter((a) => a.hp > 0).length,
+          carriers: b.ships.filter((s) => s.kind === "carrier" && !s.sunk).length,
+          bullets: b.bullets.length,
+          effects: b.effects.length,
+          cameraMode: w.cameraMode,
+        };
+      });
+    } else {
+      await runPhase("fill-flak", { fixture: { interval: FLAK_INTERVAL, count: FLAK_COUNT }, profile: false });
+    }
+    report.matchedFixture = await page.evaluate(() => {
+      const s = window.midway;
+      s.battle.step = () => {};
+      s.world.updateCamera = () => {};
+      return window.__probe.renderSnapshot();
+    });
+    await page.evaluate(() => window.__probe.installProjectionAudit());
+    await page.evaluate(() => window.__probe.setPackingMode("current"));
+    await page.evaluate((n) => window.__probe.waitFrames(n), AUDIT_FRAMES);
+    const currentPhase = await runPhase("audit-current", { profile: false, sampleMs: Math.min(SAMPLE_MS, 4000) });
+    currentPhase.projectionMarker = projMarker();
+    await page.evaluate(() => window.__probe.setPackingMode("legacy"));
+    await page.evaluate((n) => window.__probe.waitFrames(n), AUDIT_FRAMES);
+    const legacyPhase = await runPhase("audit-legacy", { profile: false, sampleMs: Math.min(SAMPLE_MS, 4000) });
+    legacyPhase.projectionMarker = projMarker();
+    await page.evaluate(() => window.__probe.setPackingMode("current"));
+    report.projectionAudit = {
+      crowd: CROWD,
+      currentDeferredPacking: await page.evaluate(() => window.__probe.deferredPacking),
+      framesPerMode: AUDIT_FRAMES,
+      declineRescanFrames: 60,
+      modes: ["audit-current", "audit-legacy"],
+      note: "legacy deletes particle mesh and scene-root own hooks and restores matrixWorldAutoUpdate=true",
+    };
+    const projMarkers = report.markers.filter((m) => m.text.startsWith("TN_RENDER_PROJECTION"));
+    console.log(`projection audit: crowd=${CROWD} ${projMarkers.length} TN_RENDER_PROJECTION marker(s); latest ${projMarkers.at(-1)?.text ?? "none"}`);
+    const legacyMarker = legacyPhase.projectionMarker.text ? JSON.parse(legacyPhase.projectionMarker.text.replace("TN_RENDER_PROJECTION:", "")) : null;
+    const currentMarker = currentPhase.projectionMarker.text ? JSON.parse(currentPhase.projectionMarker.text.replace("TN_RENDER_PROJECTION:", "")) : null;
+    report.projectionAudit.regressed = currentMarker?.projecting === false && legacyMarker?.projecting === true;
+    if (report.projectionAudit.regressed)
+      console.log("PROJECTION REGRESSION: current path declines batching while the legacy path projects.");
+    else console.log(`projection retained: current=${currentMarker?.projecting} legacy=${legacyMarker?.projecting}`);
+    const warmMarkers = report.markers.filter((m) => m.text.startsWith("TN_STARTUP"));
+    console.log(`startup markers: ${warmMarkers.map((m) => m.text.slice(0, 160)).join(" | ") || "none"}`);
+  } else if (process.env.MIDWAY_MATRIX_COMPARE) {
     // Static matched fixture: identical frozen clock, camera and particle population across ABBA.
     // This mode only prototypes the once-per-frame world update; it is not shipped engine semantics
     // and does not resolve onBeforeRender/onAfterRender compatibility.
@@ -522,6 +739,8 @@ try {
     });
     if (process.env.MIDWAY_COMPARE_PARTICLE_PREP) await page.evaluate(() => {
       const w = window.midway.world, p = w.particles;
+      if (!Object.hasOwn(p.smokeBatch.mesh, "onBeforeRender") || !Object.hasOwn(p.glowBatch.mesh, "onBeforeRender"))
+        throw new Error("Particle-preparation comparison requires the discarded draw-hook candidate; the current source restores fixed-update packing.");
       const update = p.update;
       const smoke = p.smokeBatch.mesh.onBeforeRender, glow = p.glowBatch.mesh.onBeforeRender;
       window.__setLegacyPrep = (legacy) => {

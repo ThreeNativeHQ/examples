@@ -1,6 +1,6 @@
 # PRD-midway-flak-hunt-20260914 — Trace corruption and combat profiling
 
-**Status:** IN PROGRESS
+**Status:** IN PROGRESS — full-roster audit rejected particle mesh hooks; rolled back, engine frame-preparation seam under investigation
 **Complexity:** 5 (MEDIUM); risk override: none. Target expanded by the user to stable 60 FPS throughout gameplay.
 **Owner:** Codex; OpenCode DeepSeek v4.1 Flash handles bounded exploration and probes.
 **Depends on:** Existing capture-performance.mjs and installed engine diagnostics.
@@ -50,7 +50,7 @@ Static visibility comparison held battle time and particle population fixed (vis
 
 The separate simulation stress probe used 68 aircraft/19 ships and explicitly synthetic bullet populations. 850 near-plane gun rounds cost `updateWeapons` p95 7.66 ms; 850 flak rounds cost 0.30 ms. This is a stress ceiling, not the observed live battle. It was built from a concurrently changing primary checkout, so use it to identify the collision path, not claim a before/after improvement.
 
-### Live battle and first delivered fix
+### Live battle and particle candidate (later rolled back)
 
 `tools/capture-battle-profile.mjs` uses real AI/gunnery after one disclosed placement 2400 m astern of Akagi at 1800 m altitude. At 1920×1080 on NVIDIA/Turing it recorded 84 AA events, 85 flak bursts and 16.28 simulated seconds during the sample. Player stayed alive; damage, ship fires and water impacts were not observed. Render CPU p95 43.4 ms; full Battle.step p95 0.8 ms; ship/aircraft updates ≤0.3 ms each, weapons ≤0.1 ms. CPU sampling: 0.1% GC, world-matrix traversal the largest self-time function. Raw evidence: `/tmp/midway-flak-hunt/battle/`.
 
@@ -85,3 +85,19 @@ An additional close-combat run disabled Chromium frame limiting/vsync and enable
 Integration review identified that mesh-owned render hooks force the engine's automatic scene projection to decline. The pre-change runtime eligibility is still unknown, so a dedicated before/after eligibility and pipeline-census audit is required before accepting the particle scheduling change as a net optimization. The original screenshot artifact is still unreproduced; fixed buffer capacities exclude the observed allocation/overrun hypothesis, not every possible CPU or GPU defect.
 
 The installed launch playtest also passed (exit 0): `bash tools/capture-lock.sh timeout 120s node node_modules/@threenative/playtest/dist/runner/cli.js --scenario playtests/launch.playtest.json --url http://127.0.0.1:5396 --browser-recipe webgpu --headed --timeout 45000`. Raw output: `/tmp/midway-flak-hunt/launch-final.log`. This verifies the existing launch scenario, not a sustained 60 FPS target.
+
+### Batching and pipeline audit
+
+A frozen comparison removed the particle mesh hooks and scene-root hook entirely (not no-op callbacks) and restored original auto transforms and fixed-update packing. After allowing the engine's 60-frame reclassification, the original path also declined batching: `notWorthwhile`, predicting 1659 draw candidates from 2189. Current hooks report `renderHook`; both paths produced zero batches, 738 draws and identical geometry. Thus no active batching was lost in this measured roster. This does not prove eligibility for every future population; the supported 68-aircraft roster needs a separate audit.
+
+Pipeline census stayed at 88 creations across the flak and audit phases; no new pipeline was created then. No automatic startup-warmup marker was captured. The isolated launch playtest separately recorded 96 pipeline creations, zero failures/pending, and a longest recorded synchronous pipeline service time of 1.3 ms. These observations do not reproduce or identify the user's original multi-second stall. Source-side shader graph construction and the user's first uncached run remain outside that narrow timing statement. Evidence: `/tmp/midway-flak-hunt/projection-audit/` and `launch-final.log`.
+
+### Full-roster regression found and removed
+
+At `ACTIVE_CAP=68` (populated through real `Battle.launch` calls), the original path does project: 144 batches, 2778 projected objects, 3670 renderables reduced to 1036 candidates. The particle mesh hooks disabled this optimization. Their p95 renderer time was 67.8 ms versus 39.5 ms in the original projected path; projection also raised triangles from 2.39M to 5.26M at that vantage, so its full GPU tradeoff remains separate. The hook-based particle candidate is **rejected and rolled back** in both primary and isolated source. Other lanes' particle emission changes are preserved. Its regression check is pending replacement with a test of a batching-compatible engine frame boundary.
+
+This is why the 22-aircraft result cannot qualify the whole game. Evidence: `/tmp/midway-flak-hunt/projection-crowd/`. The source root hook is not a safe particle-packing replacement: the engine mirror does not forward it. Investigating the existing engine lifecycle contract before adding any API.
+
+### Parked-aircraft reflection correction
+
+The existing reflection marker recursively included the parked/decorative deck load despite its documented exclusion. A frozen ABBA toggle found all 1983 deck-load nodes carrying the reflection layer. Removing only that layer cut exactly 40 draws and 41,046 triangles, with zero changes to main-camera eligibility/visibility or simulation/particle population. CPU/GPU variation exceeded the timing delta; no FPS saving is claimed. The primary/snapshot now exclude those subtrees in three lines using standard Three.js layers. The existing five-view transform check also checks that hulls remain reflected and all deck-load nodes retain the main layer while losing the reflected layer. Evidence: `/tmp/midway-flak-hunt/reflection-compare/`.

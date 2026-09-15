@@ -23,8 +23,16 @@
  *      MIDWAY_SAMPLE_MS (20000), MIDWAY_CAMERA (1 cockpit), MIDWAY_WIDTH/HEIGHT (1600x900),
  *      MIDWAY_BATTLE_ALTITUDE (1800 m), MIDWAY_BATTLE_STANDOFF (2400 m), MIDWAY_UNCAPPED=1 for the
  *      Chromium frame-rate/vsync flags, MIDWAY_CPU_PROFILE=0 to skip CDP CPU sampling (throughput).
+ *
+ *      MIDWAY_REFLECTION_COMPARE=1 runs the reflection ABBA compare instead of the combat sample:
+ *      the real close battle (alt 350 m, standoff 1500 m), frozen after warm-up, four phases of
+ *      unchanged / parked+decor reflected-layer excluded / excluded / unchanged. Extra env:
+ *      MIDWAY_REFLECTION_OUT (screenshots), MIDWAY_REFLECTION_CAP_MS (90000 wall cap per phase),
+ *      MIDWAY_REFLECTION_MIN_MS (2500), MIDWAY_REFLECTION_FRAMES (30 minimum outer frames),
+ *      MIDWAY_REFLECTION_READY (/tmp/midway-flak-hunt/reflection-probe-ready probe gate).
  */
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium } from "playwright";
@@ -36,8 +44,11 @@ const SAMPLE_MS = Number(process.env.MIDWAY_SAMPLE_MS || 20000);
 const CAMERA = Number(process.env.MIDWAY_CAMERA || 1);
 const WIDTH = Number(process.env.MIDWAY_WIDTH || 1600);
 const HEIGHT = Number(process.env.MIDWAY_HEIGHT || 900);
-const ALTITUDE = Number(process.env.MIDWAY_BATTLE_ALTITUDE || 1800);
-const STANDOFF = Number(process.env.MIDWAY_BATTLE_STANDOFF || 2400);
+// MIDWAY_REFLECTION_COMPARE runs the parent's real close battle (alt 350 m, standoff 1500 m)
+// unless the caller states its own figures; the ordinary battle tool keeps its old defaults.
+const REFLECTION_COMPARE = process.env.MIDWAY_REFLECTION_COMPARE === "1";
+const ALTITUDE = Number(process.env.MIDWAY_BATTLE_ALTITUDE || (REFLECTION_COMPARE ? 350 : 1800));
+const STANDOFF = Number(process.env.MIDWAY_BATTLE_STANDOFF || (REFLECTION_COMPARE ? 1500 : 2400));
 const UNCAPPED = process.env.MIDWAY_UNCAPPED === "1";
 const CPU_PROFILE = process.env.MIDWAY_CPU_PROFILE !== "0";
 assert.ok(Number.isFinite(ALTITUDE) && ALTITUDE > 0, `MIDWAY_BATTLE_ALTITUDE must be positive, got ${process.env.MIDWAY_BATTLE_ALTITUDE}`);
@@ -54,6 +65,17 @@ const stats = (arr) => {
 
 const browserArgs = ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--disable-gpu-sandbox", "--ignore-gpu-blocklist", "--ozone-platform=x11"];
 if (UNCAPPED) browserArgs.push("--disable-frame-rate-limit", "--disable-gpu-vsync");
+// The reflection probe must not launch until the concurrent projection audit releases the gate.
+// No browser (and so no WebGPU device) is created before the marker exists. Fail closed on timeout.
+if (REFLECTION_COMPARE) {
+  const ready = process.env.MIDWAY_REFLECTION_READY || "/tmp/midway-flak-hunt/reflection-probe-ready";
+  const deadline = Date.now() + Number(process.env.MIDWAY_REFLECTION_READY_TIMEOUT_MS || 300000);
+  while (!existsSync(ready)) {
+    if (Date.now() > deadline) throw new Error(`reflection probe gate was never released: ${ready}`);
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  console.log(`reflection probe gate released: ${ready}`);
+}
 const browser = await chromium.launch({
   headless: false,
   args: browserArgs,
@@ -154,6 +176,254 @@ try {
   assert.ok(hold.autopilot, `KeyT must engage course hold: ${JSON.stringify(hold)}`);
   report.courseHold = hold;
 
+  if (REFLECTION_COMPARE) {
+    // Reflection ABBA compare (diagnostic only; no source edits). The same real close battle, then
+    // the scene update is frozen so camera, clock and populations are held while the renderer keeps
+    // drawing. Four phases toggle REFLECTED_LAYER on the nodes rooted in a ship's own
+    // `userData.parked` / `userData.decor` — the parked deck load `markReflected`'s comment says is
+    // excluded but which `markReflected(mesh)` in src/render/world.ts actually marks, because the
+    // park and the B-25 are added to the hull before that traverse. Every original mask is recorded
+    // and restored, and the main camera's eligible/visible mesh counts are asserted unchanged.
+    const REFL_OUT = process.env.MIDWAY_REFLECTION_OUT || OUT;
+    await mkdir(REFL_OUT, { recursive: true });
+    const medianOf = (xs) => {
+      const a = xs.filter(Number.isFinite).sort((x, y) => x - y);
+      return a.length ? a[Math.min(a.length - 1, Math.round((a.length - 1) * 0.5))] : NaN;
+    };
+    const discovery = await page.evaluate(async () => {
+      const s = window.midway;
+      const w = s.world;
+      const url = performance
+        .getEntriesByType("resource")
+        .map((e) => e.name)
+        .findLast((n) => /\/src\/render\/ocean\.ts(?:\?|$)/.test(n));
+      if (!url) throw new Error("ocean.ts module not found; cannot discover REFLECTED_LAYER");
+      const { REFLECTED_LAYER } = await import(url);
+      const originals = [];
+      const ships = [];
+      let onReflectedLayer = 0;
+      for (const [id, mesh] of w.meshes) {
+        const lists = [mesh.userData?.parked, mesh.userData?.decor].filter(Boolean);
+        if (!lists.length) continue;
+        let roots = 0;
+        let nodes = 0;
+        for (const list of lists)
+          for (const root of list) {
+            roots += 1;
+            root.traverse((o) => {
+              if (!o.layers) return;
+              originals.push({ o, mask: o.layers.mask });
+              if ((o.layers.mask & (1 << REFLECTED_LAYER)) !== 0) onReflectedLayer += 1;
+              nodes += 1;
+            });
+          }
+        ships.push({ id, roots, nodes });
+      }
+      const state = { layer: REFLECTED_LAYER, originals, ships, onReflectedLayer, phase: "boot", excluded: false, render: {}, perframe: {}, gpu: {} };
+      state.apply = (exclude) => {
+        for (const { o, mask } of originals) o.layers.mask = exclude ? mask & ~(1 << REFLECTED_LAYER) : mask;
+        state.excluded = exclude;
+      };
+      state.start = (name) => {
+        state.phase = name;
+        state.render[name] = [];
+        state.perframe[name] = [];
+        state.gpu[name] = [];
+      };
+      state.snapshot = () => {
+        const b = s.battle;
+        let particles = null;
+        try {
+          particles = { smoke: w.particles.smokeBatch.geometry.instanceCount, glow: w.particles.glowBatch.geometry.instanceCount };
+        } catch {
+          // particle batches are optional in this build; the population check then reports null
+        }
+        return {
+          time: +b.time.toFixed(3),
+          status: b.status,
+          aircraft: b.aircraft.filter((a) => a.hp > 0).length,
+          activeAircraft: b.activeAircraft,
+          ships: b.ships.filter((x) => !x.sunk).length,
+          bullets: b.bullets.length,
+          effects: b.effects.length,
+          particles,
+          player: { hp: b.player.hp, y: +b.player.y.toFixed(1) },
+          camera: { mode: w.cameraMode, x: +w.camera.position.x.toFixed(1), y: +w.camera.position.y.toFixed(1), z: +w.camera.position.z.toFixed(1) },
+        };
+      };
+      // Main-camera eligibility exactly as the renderer tests it: visible ancestor chain and a
+      // layer-mask intersection, then a frustum projection. Disabling REFLECTED_LAYER must move
+      // neither number, which is the proof the main view is untouched.
+      state.mainCamera = () => {
+        const cam = w.camera;
+        const tmp = new cam.position.constructor();
+        let eligible = 0;
+        let visible = 0;
+        w.scene.traverse((o) => {
+          if (!o.isMesh) return;
+          for (let p = o; p; p = p.parent) if (!p.visible) return;
+          if (!cam.layers.test(o.layers)) return;
+          eligible += 1;
+          o.getWorldPosition(tmp);
+          tmp.project(cam);
+          if (tmp.x >= -1 && tmp.x <= 1 && tmp.y >= -1 && tmp.y <= 1 && tmp.z >= -1 && tmp.z <= 1) visible += 1;
+        });
+        return { eligible, visible };
+      };
+      window.__refl = state;
+      return { layer: REFLECTED_LAYER, ships, parkedDecorNodes: originals.length, onReflectedLayer };
+    });
+    report.reflection = {
+      mode: "ABBA-reflection-layer",
+      note: "real close battle, frozen scene update; only REFLECTED_LAYER on ship.userData.parked/decor nodes is toggled",
+      discovery,
+      warmMs: WARM_MS,
+      phases: {},
+      gpuTimestamps: null,
+      delta: null,
+    };
+    console.log(
+      `reflection layer ${discovery.layer}: ${discovery.ships.length} ships, ${discovery.parkedDecorNodes} parked/decor nodes (${discovery.onReflectedLayer} on the reflected layer)`,
+    );
+    if (discovery.onReflectedLayer === 0) console.log("  WARNING: no parked/decor node carries the reflected layer; the toggle is a no-op on this build");
+
+    await page.waitForTimeout(WARM_MS);
+    // Freeze the scene update only: the battle step and the camera update stop, holding clock,
+    // camera and populations; world packing and the renderer keep running. The render wrapper is
+    // the existing outermost-call timer pattern, so a nested reflection render is charged once.
+    await page.evaluate(() => {
+      const r = window.midway.world.renderer;
+      const original = r.render;
+      let depth = 0;
+      r.render = function (...args) {
+        depth += 1;
+        const outer = depth === 1;
+        const t0 = outer ? performance.now() : 0;
+        try {
+          return original.apply(this, args);
+        } finally {
+          depth -= 1;
+          if (outer) (window.__refl.render[window.__refl.phase] ||= []).push(+(performance.now() - t0).toFixed(3));
+        }
+      };
+      window.__refl.undoWrap = () => {
+        r.render = original;
+      };
+      const b = window.midway.battle;
+      const bs = b.step;
+      const uc = window.midway.world.updateCamera;
+      b.step = () => {};
+      window.midway.world.updateCamera = () => {};
+      window.__refl.undoFreeze = () => {
+        b.step = bs;
+        window.midway.world.updateCamera = uc;
+      };
+    });
+    const gpuSupported = await page.evaluate(async () => {
+      try {
+        const r = window.midway.world.renderer;
+        r.trackTimestamp = true;
+        await r.resolveTimestampsAsync("render");
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    report.reflection.gpuTimestamps = gpuSupported;
+    console.log(`gpu timestamp queries: ${gpuSupported ? "available" : "unavailable"}`);
+
+    const PHASE_CAP_MS = Number(process.env.MIDWAY_REFLECTION_CAP_MS || 90000);
+    const PHASE_MIN_MS = Number(process.env.MIDWAY_REFLECTION_MIN_MS || 2500);
+    const FRAME_TARGET = Number(process.env.MIDWAY_REFLECTION_FRAMES || 30);
+    const runPhase = async (name, excluded) => {
+      await page.evaluate((e) => window.__refl.apply(e), excluded);
+      await page.evaluate((n) => window.__refl.start(n), name);
+      const out = await page.evaluate(
+        async ({ name: n, target, capMs, minMs }) => {
+          const refl = window.__refl;
+          const r = window.midway.world.renderer;
+          const t0 = performance.now();
+          let frames = 0;
+          await new Promise((resolve) => {
+            const tick = async (now) => {
+              frames += 1;
+              refl.perframe[n].push({ draws: r.info.render.drawCalls, triangles: r.info.render.triangles });
+              try {
+                await r.resolveTimestampsAsync("render");
+                const t = r.info.render.timestamp;
+                if (t > 0) refl.gpu[n].push(t);
+              } catch {
+                // no timestamp support; the gpu series stays empty and is reported as unavailable
+              }
+              const elapsed = now - t0;
+              if ((frames >= target && elapsed >= minMs) || elapsed >= capMs) resolve();
+              else requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          });
+          return {
+            frames,
+            wallMs: +(performance.now() - t0).toFixed(1),
+            render: refl.render[n],
+            gpu: refl.gpu[n],
+            perframe: refl.perframe[n],
+            snapshot: refl.snapshot(),
+            mainCamera: refl.mainCamera(),
+          };
+        },
+        { name, target: FRAME_TARGET, capMs: PHASE_CAP_MS, minMs: PHASE_MIN_MS },
+      );
+      await page.screenshot({ path: join(REFL_OUT, `reflection-${name}.png`) });
+      const metrics = {
+        label: name,
+        excluded,
+        frames: out.frames,
+        wallMs: out.wallMs,
+        render: stats(out.render),
+        gpu: stats(out.gpu),
+        draws: stats(out.perframe.map((p) => p.draws)),
+        triangles: stats(out.perframe.map((p) => p.triangles)),
+        snapshot: out.snapshot,
+        mainCamera: out.mainCamera,
+      };
+      report.reflection.phases[name] = metrics;
+      console.log(
+        `${name.padEnd(14)} frames ${out.frames} wall ${out.wallMs}ms | render p95 ${metrics.render.p95}ms gpu p95 ${metrics.gpu.p95 ?? "n/a"} | draws p50 ${metrics.draws.p50} tri p50 ${metrics.triangles.p50} | eligible ${out.mainCamera.eligible} visible ${out.mainCamera.visible} | time ${out.snapshot.time} ac ${out.snapshot.aircraft} particles ${JSON.stringify(out.snapshot.particles)}`,
+      );
+      assert.ok(out.frames >= FRAME_TARGET, `${name}: ${out.frames} outer frames observed (< ${FRAME_TARGET})`);
+      return metrics;
+    };
+
+    const phases = [["A1-unchanged", false], ["B1-excluded", true], ["B2-excluded", true], ["A2-unchanged", false]];
+    for (const [name, excluded] of phases) await runPhase(name, excluded);
+
+    const held = phases.map(([name]) => report.reflection.phases[name]);
+    for (const h of held) {
+      assert.equal(h.snapshot.time, held[0].snapshot.time, `frozen battle clock changed in ${h.label}`);
+      assert.equal(h.snapshot.aircraft, held[0].snapshot.aircraft, `aircraft population changed in ${h.label}`);
+      assert.deepEqual(h.snapshot.particles, held[0].snapshot.particles, `particle population changed in ${h.label}`);
+      assert.equal(h.mainCamera.eligible, held[0].mainCamera.eligible, `main-camera eligible meshes changed in ${h.label}`);
+      assert.equal(h.mainCamera.visible, held[0].mainCamera.visible, `main-camera visible meshes changed in ${h.label}`);
+    }
+    const A = ["A1-unchanged", "A2-unchanged"].map((n) => report.reflection.phases[n]);
+    const B = ["B1-excluded", "B2-excluded"].map((n) => report.reflection.phases[n]);
+    report.reflection.delta = {
+      draws: medianOf(A.map((p) => p.draws.p50)) - medianOf(B.map((p) => p.draws.p50)),
+      triangles: medianOf(A.map((p) => p.triangles.p50)) - medianOf(B.map((p) => p.triangles.p50)),
+      renderMs: medianOf(A.map((p) => p.render.p95)) - medianOf(B.map((p) => p.render.p95)),
+    };
+    // Restore every original mask, then release the frozen scene.
+    await page.evaluate(() => {
+      window.__refl.apply(false);
+      window.__refl.undoFreeze?.();
+      window.__refl.undoWrap?.();
+    });
+    console.log(
+      `reflection delta A-B: draws ${report.reflection.delta.draws} triangles ${report.reflection.delta.triangles} renderP95 ${report.reflection.delta.renderMs}ms; all masks restored`,
+    );
+  }
+
+  if (!REFLECTION_COMPARE) {
   // One persistent instrumentation pass. Every series is charged to its outermost call only, so a
   // re-entrant render is counted once; the series nest and are reported separately, never summed.
   const installed = await page.evaluate(() => {
@@ -429,6 +699,7 @@ try {
   } else {
     report.endNote = "player status ended before the sample; no sample taken and no revival performed";
     console.log(`ended before sample: ${JSON.stringify(report.end)} — ${report.endNote}`);
+  }
   }
 
   // Browser errors fail the run.
