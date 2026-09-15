@@ -61,12 +61,15 @@ export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
   // behind the camera. `markReflected` is the other half of this, in src/render/world.ts.
   const surface=new WaterSurface3D({level:0,maxThickness:14,reflection:{resolutionScale:.5,layers:1<<REFLECTED_LAYER}});
 
-  // Logarithmic rings keep metre-scale triangles beside the carrier and reach the horizon.
-  // Ring count sets how finely the swell is sampled at range, and the ships sit at range: at
-  // 156 rings the spacing out at 300m was 21m, so a 45m wave got two vertices and the sea
-  // flattened into ripples exactly where a destroyer is being looked at. Doubling the rings
-  // halves that spacing and costs only vertices, not another wave evaluation per pixel.
-  const segments = 320, rings = 360, positions = [0, 0, 0], indices: number[] = [];
+  // Logarithmic rings keep metre-scale triangles beside the carrier and reach the horizon. The
+  // grid was 320x360 (230,080 triangles, drawn twice as 460,160 with the transparent double-sided
+  // pass). The look is carried by the analytic swell normals and the ripple normal map, not by the
+  // displaced geometry: a 0.65 m swell at the 300 m the swell is actually read from is under two
+  // screen pixels, so the tessellation was buying silhouette detail no pixel could show. 160x180 is
+  // a quarter of the triangles (57,440) and, measured across the cockpit at 350 m and 13 m, the
+  // carrier deck, a 35 m pass and the Midway shoreline, is visually indistinguishable — the rung
+  // and its 4x increase differ from the shipped sea by the same sub-pixel amount.
+  const segments = 160, rings = 180, positions = [0, 0, 0], indices: number[] = [];
   const growth = Math.log(1 + 100000 / 1.6) / rings;
   for (let r = 0; r < rings; r++) {
     const radius = 1.6 * (Math.exp((r + 1) * growth) - 1);

@@ -67,7 +67,7 @@
     },
     "performance": {
       "maxPassDrawCalls": { "main": 260 },
-      "maxPassTriangles": { "main": 1650000 }
+      "maxPassTriangles": { "main": 1300000 }
     }
   }
 }
