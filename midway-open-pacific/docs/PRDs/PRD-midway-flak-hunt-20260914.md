@@ -415,7 +415,8 @@ performance one, and it is not waived.
 
 The `perf/projection-dirty` engine fix is adopted (2026-09-14). Content-hashed core
 `threenative-core-0.3.2-projdirty-12c96c25114f.tgz` (sha256 `12c96c25...bdd858`, packed from
-`.worktrees/projection-dirty`, base `b1cae8803`) replaces `battle-fix-27e4fce23867` in
+`.worktrees/projection-dirty`, base `b1cae8803`, committed there as `f7c64c5fc`; focused core
+regression `renderProjection.spec.ts` 66/66) replaces `battle-fix-27e4fce23867` in
 `package.json` (dependency and `pnpm.overrides`) and `pnpm-lock.yaml`; `pnpm install` exit 0. The
 installed `dist/index.js:5995` now reads
 `if (this.#source.matrixWorldAutoUpdate === true) this.#source.updateMatrixWorld();`.
