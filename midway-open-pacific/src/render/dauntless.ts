@@ -9,15 +9,18 @@ export function createDauntlessGear(under: T.Material = mat(0xb7beb9)) {
   const darkSteel = mat(0x26333c, { metalness: 0.7, roughness: 0.35 });
   const staticParts = new T.Group();
   const gear = new T.Group();
+  gear.name = "Gear assembly";
   const gearLegs: any[] = [];
   for (const sign of [-1, 1]) {
     const leg = new T.Group();
+    leg.name = "Gear leg";
     leg.position.set(sign * 1.51, -0.3, -0.65);
     rod(leg, [0, 0, 0], [0, -1.22, 0], 0.064, steel);
     rod(leg, [sign * 0.1, -0.1, 0.04], [sign * 0.16, -1.2, -0.06], 0.034, darkSteel);
     rod(leg, [sign * 0.1, -0.45, 0], [sign * 0.36, -0.95, 0], 0.034, steel);
     rod(leg, [sign * 0.36, -0.95, 0], [sign * 0.12, -1.22, 0], 0.034, steel);
     const wheel = cylinder(leg, 0.35, 0.35, 0.22, sign * 0.1, -1.19, 0, rubber, 28);
+    wheel.name = "Gear wheel";
     wheel.geometry.rotateZ(Math.PI / 2);
     wheel.rotation.set(0, 0, 0);
     const axle = cylinder(leg, 0.14, 0.14, 0.24, sign * 0.1, -1.19, 0, steel, 20);

@@ -772,3 +772,39 @@ approaches are named above), `scanProjection` at roughly 11.5 % of active CPU re
 never-changing classification every projecting frame while the *declined* path already has a
 60-frame cadence guard, and the main camera pass itself at about 856 draws.
 
+### Candidate 6 rejected before implementation: a cadence gate on the projecting scan
+
+`scanProjection` is 3.73 % of the sampled window inclusive (about 11.5 % of active CPU) and re-walks
+all 2189 renderables every projecting frame, while the *declined* path already throttles on
+`#framesSinceDeclineScan` / `DECLINE_RESCAN_FRAMES = 60`. The symmetry is tempting and the answer is
+still no.
+
+The correctness trap first: while projecting, the renderer draws the mirror, so an object absent from
+the plan is not drawn at all. A plain frame-cadence throttle would make a newly spawned aircraft,
+bomb or tracer **invisible for up to a second**.
+
+Then the inputs. Every classification input — material identity, `transparent`, material array vs
+single, geometry identity, `renderOrder`, `castShadow` / `receiveShadow` / `frustumCulled` /
+`layers.mask`, custom depth and distance materials, morph attributes, `drawRange`, `indirect`, the
+`isInstancedMesh` / `isBatchedMesh` / `isSkinnedMesh` / `isLOD` / `isSprite` / `isPoints` / `isLine`
+class flags, and `onBeforeRender` / `onAfterRender` hooks — is a plain mutable field on `Object3D`,
+`Material` or `BufferGeometry` with **no change notification**. Nothing signals a material swap or a
+flag flip before the frame draws. The only detector sufficient for all of them is the classification
+itself.
+
+Measured, not assumed. A child-count-plus-ids signature is 17x cheaper than the scan (0.031 ms
+against 0.541 ms per frame in a node model at the real composition) and is **byte-identical across a
+material swap and across a `castShadow` flip**, both of which move the plan — so it is blind exactly
+where the trap bites. A fuller per-object classification key costs 0.133 ms, is still incomplete
+against the list above, and would need the scan workspace retained across frames, which today's
+`reconcile` releases in its `finally`.
+
+The honest ceiling: the walk a sufficient gate must still pay is 2.0 % of the window and the grouping
+it could skip is 1.27 %, so the best case saves about **1.3 % of the window (~4 % of active CPU)**,
+not 11.5 %, at a large correctness cost. **NO SAFE GATE.** Evidence: `/tmp/midway-60fps/report-O.md`.
+
+One useful fact fell out of it and is worth keeping: **`object.visible` is not a scan input.**
+`projection-apply.ts` syncs visibility every frame, so visibility is the one per-frame per-object
+change that cannot churn the batch classification — unlike `layers`, `castShadow` and
+`frustumCulled`, which are batch-keyed.
+

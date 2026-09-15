@@ -28,6 +28,10 @@ const config: IThreeNativeConfig = {
     // source runs on the WebGPU backend on web and native.
     resolutionScale: "auto",
     alphaAntialiasing: true,
+    // The scene-render projection measured as a net loss here (P1: paid reconcile, no frame-time
+    // win, multi-second engagement freeze, and a darker mirror image). Decline it: no mirror, no
+    // scan, the authored scene every frame.
+    projection: false,
   },
   ui: { renderer: "web" },
 };

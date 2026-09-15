@@ -64,7 +64,7 @@ export class Midway extends Scene<GameState, undefined> {
   enter(ctx: ICtx<GameState, undefined>): void {
     this.ctx = ctx;
     this.battle = new Battle();
-    this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer, add: (object) => ctx.add(object) }, this.battle);
+    this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer, viewport: ctx.viewport, add: (object) => ctx.add(object) }, this.battle);
     // The combat particle buffers are repacked for the camera once per actual world draw. The
     // engine's own beforeRender phase keeps the packing off the particle meshes: an own mesh
     // onBeforeRender marks the whole scene un-batchable at the full roster.
@@ -84,6 +84,10 @@ export class Midway extends Scene<GameState, undefined> {
       });
     }
     this.hud = new Hud(this.battle, this.world);
+    // HUD state, timers and input feedback update on every fixed simulation tick; the canvas is
+    // drawn once per presented frame from the latest state. `hud.update` used to clear and redraw
+    // here for every fixed tick, so catch-up ticks repainted states that were never presented.
+    this.cleanups.push(ctx.beforeRender(() => this.hud.draw()));
     this.audio = new Soundscape(
       this.audioBuffers,
       new AudioBus({ camera: ctx.camera, maxVoices: 48 }),

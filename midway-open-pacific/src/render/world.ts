@@ -147,6 +147,15 @@ function markReflected(root: T.Object3D): void {
   root.traverse((o) => o.layers.enable(REFLECTED_LAYER));
 }
 
+/**
+ * A node whose own local matrix is rewritten after creation, or that carries an unnamed moving
+ * child (the SBD gear legs), so it and its whole subtree must keep `matrixAutoUpdate`. Matched
+ * case-insensitively as substrings. Everything else under a frozen root is composed once and then
+ * never again; a node whose parent moves stays correct because Three forces the parent's matrix
+ * down through the children.
+ */
+const MOVING_NODE = /threenativepivot|cockpit controls|propeller|aileron|rudder|flap|elevator|gear|wingport|wingstarboard|canopy|torpedo|hook|wheel/i;
+
 /** Scratch for one scout's seat on its ship, refilled per scout. */
 const SCOUT_SEAT = new T.Vector3();
 /** Where a flying scout is drawn. `SCOUT_ALTITUDE` in the simulation is its observation height. */
@@ -213,6 +222,8 @@ export interface IWorldHost {
   scene: T.Scene;
   camera: T.PerspectiveCamera;
   renderer: { raw: unknown };
+  /** The engine's cached drawable size, updated by its resize observer — never a layout read. */
+  viewport: { readonly size: { readonly width: number; readonly height: number } };
   add: (object: T.Object3D) => unknown;
 }
 
@@ -260,6 +271,9 @@ export class WorldView {
   private tmp = new T.Vector3();
   private look = new T.Vector3();
   private targetCamera = new T.Vector3();
+  /** Composed-local-matrix freeze for static nodes, and the verification switch that reverses it. */
+  freezeStatics = true;
+  private frozen = new Set<T.Object3D>();
 
   constructor(host: IWorldHost, battle: any) {
     this.host = host;
@@ -277,6 +291,7 @@ export class WorldView {
     // The reference used r140 legacy light units (PI brighter) and linear hex colours.
     const hemi = new T.HemisphereLight(0xb5cedd, 0x243745, 0.9);
     this.scene.add(hemi);
+    this.freezeNode(hemi);
     this.sun = new T.DirectionalLight(SUN_COLOR, 2.6);
     this.sun.position.set(-200, 140, -240);
     this.scene.add(this.sun);
@@ -291,10 +306,13 @@ export class WorldView {
     this.makeSky();
     this.ripples = createRipples();
     this.scene.add(this.ripples.effects.group);
+    this.freezeNode(this.ripples.effects.group);
     this.makeOcean();
     this.makeWorld();
     this.makeTracers();
     this.particles = new CombatParticles(this.scene);
+    this.freezeNode(this.particles.smokeBatch.mesh);
+    this.freezeNode(this.particles.glowBatch.mesh);
   }
 
   makeSky(): void {
@@ -395,6 +413,7 @@ export class WorldView {
         for (const plane of planes) plane.traverse((o) => o.layers.disable(REFLECTED_LAYER));
       this.scene.add(mesh);
       this.meshes.set(s.id, mesh);
+      this.freezeStatic(mesh);
 
     }
     this.crew = new DeckCrew();
@@ -403,6 +422,7 @@ export class WorldView {
     island.position.set(b.island.x, 0, b.island.z);
     markReflected(island);
     this.scene.add(island);
+    this.freezeNode(island);
     this.setAirframe();
   }
 
@@ -411,6 +431,7 @@ export class WorldView {
     if (this.playerMesh?.userData.airframe === type) return;
     if (this.playerMesh) {
       this.playerMesh.removeFromParent();
+      this.forgetFrozen(this.playerMesh);
       if (this.playerMesh.userData.devastator) disposeDevastator(this.playerMesh);
       else if (this.playerMesh.userData.importedAircraft) disposeAirframe(this.playerMesh);
       this.disposeModel(this.playerMesh);
@@ -422,6 +443,7 @@ export class WorldView {
     this.playerMesh.userData.airframe = type;
     addDamageVisuals(this.playerMesh);
     this.scene.add(this.playerMesh);
+    this.freezeStatic(this.playerMesh);
     this.snap = true;
   }
 
@@ -433,6 +455,51 @@ export class WorldView {
     this.lookActive = false;
   }
 
+  /**
+   * Compose a static subtree once, then stop Three recomposing its local matrix every frame.
+   *
+   * Only the subtree below `root` is frozen: the moving root (a ship, an aircraft, the player) must
+   * keep composing its own matrix. `freezeNode` bakes each node's current transform with
+   * `updateMatrix()` before it opts out, which is why this must run at creation, after the
+   * transform is placed. `MOVING_NODE` protects every node a later animator writes.
+   */
+  private freezeStatic(root: T.Object3D): void {
+    for (const child of root.children) this.freezeNode(child);
+  }
+
+  private freezeNode(node: T.Object3D): void {
+    if (!this.freezeStatics || MOVING_NODE.test(node.name)) return;
+    node.updateMatrix();
+    node.matrixAutoUpdate = false;
+    this.frozen.add(node);
+    for (const child of node.children) this.freezeNode(child);
+  }
+
+  /** Drop a released subtree from the freeze set, so a LOD rebuild cannot accumulate stale nodes. */
+  private forgetFrozen(root: T.Object3D): void {
+    root.traverse((o) => this.frozen.delete(o));
+  }
+
+  /**
+   * Reverse (or reapply) the static freeze for a same-page A/B.
+   *
+   * Turning the freeze off restores per-frame composition for every node already frozen and marks
+   * them dirty; turning it back on only re-freezes nodes frozen before, so it is a verification
+   * switch for a fixed population, never a game path. Game code never calls this.
+   */
+  setStaticFreeze(on: boolean): void {
+    if (on === this.freezeStatics) return;
+    this.freezeStatics = on;
+    for (const node of this.frozen)
+      if (on) {
+        node.updateMatrix();
+        node.matrixAutoUpdate = false;
+      } else {
+        node.matrixAutoUpdate = true;
+        node.matrixWorldNeedsUpdate = true;
+      }
+  }
+
   makeTracers(): void {
     const geom = new T.BufferGeometry();
     geom.setAttribute("position", new T.BufferAttribute(this.tracerPositions, 3).setUsage(T.DynamicDrawUsage));
@@ -441,6 +508,7 @@ export class WorldView {
     this.tracers = new T.LineSegments(geom, new T.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending }));
     this.tracers.frustumCulled = false;
     this.scene.add(this.tracers);
+    this.freezeNode(this.tracers);
   }
 
   setQuality(q: string): void {
@@ -458,6 +526,7 @@ export class WorldView {
     this.ripples.reset();
     for (const [id, m] of this.meshes) if (id.startsWith("air-")) {
       this.scene.remove(m);
+      this.forgetFrozen(m);
       this.disposeModel(m);
       this.meshes.delete(id);
     }
@@ -466,8 +535,10 @@ export class WorldView {
 
   project(p: any): { x: number; y: number; visible: boolean; depth: number } {
     const v = this.tmp.set(p.x, p.y || 0, p.z).project(this.camera);
-    const w = this.renderer.domElement.clientWidth || window.innerWidth;
-    const h = this.renderer.domElement.clientHeight || window.innerHeight;
+    // The cached viewport size, not `clientWidth`/`clientHeight`: reading those after the HUD's own
+    // DOM/text writes dirtied layout forced a synchronous re-layout on every projected marker.
+    const w = this.host.viewport.size.width;
+    const h = this.host.viewport.size.height;
     return { x: (v.x * 0.5 + 0.5) * w, y: (-0.5 * v.y + 0.5) * h, visible: v.z > -1 && v.z < 1 && Math.abs(v.x) < 1.15 && Math.abs(v.y) < 1.15, depth: v.z };
   }
 
@@ -842,6 +913,7 @@ export class WorldView {
       m.userData.torpedoLoad = torpedo;
     }
     m.userData.kind = a.kind;
+    this.freezeStatic(m);
     return m;
   }
 
@@ -884,6 +956,7 @@ export class WorldView {
 
   /** Give up one aircraft's mesh without touching geometry another instance still shares. */
   private releaseAircraft(m: T.Object3D): void {
+    this.forgetFrozen(m);
     if (m.userData.devastator) disposeDevastator(m as T.Group);
     else if (m.userData.douglas || m.userData.importedAircraft) disposeAirframe(m as T.Group);
     this.disposeModel(m);

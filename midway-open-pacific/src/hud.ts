@@ -26,6 +26,7 @@ export class Hud {
   ctx: CanvasRenderingContext2D;
   lastRadio = "";
   lastContacts = "";
+  lastTip = "";
   toastUntil = 0;
   hitFlash = 0;
   mapOpen = false;
@@ -60,15 +61,18 @@ export class Hud {
     return this.view?.cameraMode === 1 && !this.view?.followBomb;
   }
 
+  /**
+   * State, timers and DOM text: runs on every fixed simulation tick. It draws nothing — the canvas
+   * is painted by `draw` once per presented frame, so a catch-up burst of ticks cannot repaint HUD
+   * states that will never be shown, and no canvas draw reads layout.
+   */
   update(dt: number, speed = 1): void {
     const b = this.b;
     const p = b.player;
     void speed;
-    this.ctx.clearRect(0, 0, innerWidth, innerHeight);
     this.hitFlash = Math.max(0, this.hitFlash - dt * 1.5);
     $("damage").style.opacity = String(this.hitFlash * 0.7 + (p.hp < 30 ? 0.16 : 0));
     if (b.status === "briefing") return;
-    this.drawFlight();
     this.tick += dt;
     if (this.tick < 0.1) return;
     this.tick = 0;
@@ -192,7 +196,10 @@ export class Hud {
     else if (p.mode === "flight" && b.time < 100) tip = "<strong>← → BANK · ↓ RAISES THE NOSE</strong> · T holds course · <strong>?</strong> opens the flight manual";
     else if (p.brakes && p.pitch < -0.25) tip = "<strong>DIVE BRAKES EXTENDED</strong> · the amber circle predicts impact · B releases a bomb";
     else if (p.nav === "home") tip = "<strong>RECOVERY — APPROACH FROM ASTERN</strong> · gear down · below 600 ft · under 140 kt · L within 700 m";
-    $("center-tip").innerHTML = tip;
+    if (tip !== this.lastTip) {
+      this.lastTip = tip;
+      $("center-tip").innerHTML = tip;
+    }
     const cueLine = $$("approach-cues");
     if (cueLine) {
       if (p.mode === "flight" && p.nav === "home") {
@@ -223,6 +230,13 @@ export class Hud {
       this.drawMap();
       this.updateContactList();
     }
+  }
+
+  /** One canvas paint of the latest state, once per presented frame. */
+  draw(): void {
+    this.ctx.clearRect(0, 0, innerWidth, innerHeight);
+    if (this.b.status === "briefing") return;
+    this.drawFlight();
   }
 
   drawFlight(): void {

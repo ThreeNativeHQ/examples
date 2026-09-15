@@ -342,6 +342,10 @@ export function animateDouglas(root: T.Group, p: IDouglasControls, dt: number): 
     group.rotation.z = (-sign * (1 - (p.gearPos ?? 1)) * Math.PI) / 2;
     wheel.rotation.x = p.wheelAngle ?? 0;
   }
+  // The supplied Douglas is exported gear-up and has no wheel wells for this added gear to fold
+  // into, so a folded leg hangs in open air under the wing and reads as a pale box from above.
+  // With the gear up the aircraft simply carries none: draw the assembly only while it is down.
+  gear.gear.visible = (p.gearPos ?? 1) > 0.02;
   player.update(dt);
 }
 
