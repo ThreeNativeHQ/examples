@@ -1,6 +1,6 @@
 # PRD-midway-flak-hunt-20260914 — Trace corruption and combat profiling
 
-**Status:** DONE for the confirmed engine defect and the once-per-draw preparation seam. The engine fix and `ctx.beforeRender` were squashed to `origin/develop` (`b1cae8803`, fixes #248) and adopted in the game via the content-hashed `battle-fix-27e4fce23867` tarball; browser proof green, native proof partial (unrelated fixture audio error). The stable 60 FPS target remains UNMET.
+**Status:** OPEN for the stable 60 FPS target. The earlier engine defect and `ctx.beforeRender` seam are DONE and on `origin/develop` (`b1cae8803`, fixes #248). This session removed a redundant whole-scene transform walk and an unsampled projected shadow map (engine `d78fe429d`, game `63353412c`, both committed locally and **not pushed**); all game gates green. Stable 60 FPS remains UNMET and cannot be measured on this host — see "Where this leaves the loop".
 **Complexity:** 5 (MEDIUM); risk override: none. Target expanded by the user to stable 60 FPS throughout gameplay.
 **Owner:** Codex; OpenCode DeepSeek v4.1 Flash handles bounded exploration and probes.
 **Depends on:** Existing capture-performance.mjs and installed engine diagnostics.
@@ -461,3 +461,314 @@ the engine fix enables needs a game that marks its measured-static subtrees
 (`matrixWorldAutoUpdate = false`); Midway does not request a static list here, and the doc's
 execution order keeps that behind the structural-plan work. Stable 60 remains unmet, and the two
 correctness questions above (per-pass batching, projected/declined image parity) remain open.
+### Candidate 3 rejected: gating the sun light itself
+
+`castShadow` on the single sun `DirectionalLight` is not batched and has no group key, so gating the
+light instead of its casters left the projection verdict untouched (`projected`, 99 batches, 723
+candidates, identical on and off) and the main pass unchanged (1423 draws / 4,808,382 triangles in
+every leg). It still fails, for two independent reasons, and was reverted.
+
+An altitude ladder with frozen camera and battle time — on deck, 20, 50, 100, 150, 250, 350 m —
+found **no pixel-neutral altitude**. Every rung differs by ~434,000 of 2,073,600 px (20.9 %) between
+the light casting and not. The reason is structural: the shadow camera is centred on the player, so
+the player's own airframe is always inside the volume and its cockpit self-shadow is always part of
+the image. There is no altitude at which the sun's shadow stops contributing, so there is no
+threshold to set.
+
+Worse, an airborne start with the light already disabled makes Three's `ShadowNode.updateShadow`
+dereference a null `depthTexture` every frame and freezes the canvas. Reproduced three times with
+the gate and, decisively, **also with the gate's logic removed entirely** — a bare wrapper forcing
+`sun.castShadow = false` from the first frame reproduces it, while toggling the light off after the
+scene has booted with it on does not. So it is the renderer starting with its only shadow light
+disabled, not the gate. Recorded, not chased.
+
+The deck fixture passed cleanly again (0 px of 2,073,600, main and verdict unchanged).
+`pnpm typecheck`, `pnpm exec vite build` and `check-particle-render` exited 0; the change still
+cannot ship. Evidence: `/tmp/midway-60fps/report-E.md`.
+
+### Candidate 4: the projection mirror clones the sun, and both suns draw a shadow map
+
+A hypothesis that the shadow map was re-rendered for the ocean's reflection pass was **disproved**,
+and the disproof is worth more than the hypothesis. Wrapping `renderer.render` as a stack and
+attributing every `renderer.info.update` submission to the innermost active render call gives, for
+one presented frame of the airborne fixture:
+
+```
+world render (world camera) — the projection MIRROR scene
+  Shadow Map [ID: 9335]   158 draws / 894,464 tris   light = the projection's clone of the sun
+  Scene [ Reflector ]     528 draws / 1,679,925 tris  reflection pass — no shadow render inside it
+  Shadow Map [ID: 872]    158 draws / 894,464 tris   light = the authored w.sun
+```
+
+There are **two shadow-casting lights, not one map drawn twice**: the authored `w.sun` in the source
+scene and the `light.clone()` the projection mirror makes in `ProjectionMirror.#syncLights`. Both
+update from `ShadowNode.updateBefore` while objects render; the reflector pass is a sibling and
+renders no shadow map. On the deck fixture, where projection declines, there is exactly one light and
+one map (321 draws / 817,087 triangles) — which is itself the proof.
+
+That reconciles the 316-versus-158 discrepancy between the two earlier probes: both summed every
+`ShadowMap` submission in the frame without deduplicating by light, and the earlier A/B/B/A page
+happened to capture a one-light state. Re-running the unchanged probe on the current tree reads 316.
+
+So while projecting, one full shadow map — **158 draws and 894,464 triangles, about 9 % of the
+frame's draws and 14 % of its triangles** — is rendered every frame and never sampled. Also recorded:
+three 0.185.1's WebGPU renderer has no `shadowMap.autoUpdate`; the node path reads per-light
+`light.shadow.autoUpdate` / `needsUpdate` in `ShadowNode.updateBefore`, which is the mechanism any
+fix must use. Baseline gates on the unchanged tree: `pnpm typecheck` 0, `pnpm exec vite build` 0,
+`check-particle-render` PASS, `playtests/launch.playtest.json` pass. Evidence:
+`/tmp/midway-60fps/report-F.md` and its three probes.
+
+### Candidate 4 shipped: the authored light's shadow map goes offline while projecting
+
+Established from three 0.185.1's own source, not by inference. `#syncLights` does `light.clone()` and
+adds the clone to the mirror; `DirectionalLight.copy` clones the shadow (`three.core.js:47418`) and
+`LightShadow.copy` clones its camera (`:46030-46032`, `:46057-46060`), so the two lights have
+separate maps. `renderer.render` projects the scene it is handed (`three.webgpu.js:60191`),
+`_projectObject` collects that scene's lights (`:62323-62325`), `RenderList.finish` builds
+`lightsNode.setLights(lightsArray)` (`:33542`) and every render object takes `renderList.lightsNode`
+(`:59975`); a material overrides that only through `material.lightsNode`, which is null by default
+and which the engine never sets. **The drawn pixels read the clone's map; the authored sun's map is
+dead work.** `ShadowNode.updateBefore` reads per-light `shadow.needsUpdate || shadow.autoUpdate`
+(`:45528`), which is the switch used.
+
+`projection-apply.ts` now captures the authored light's `shadow.autoUpdate` when the mirror takes the
+light, sets it false, and restores the captured value on retire, on decline and in `releaseAll`. A
+light that was already off is never forced on; a scene that never projects is untouched. RED→GREEN on
+three lifecycle cases (`expected true to be false` before, 71/71 after); whole core suite 113 files /
+1281 tests exit 0; `pnpm typecheck` ends at the 2 pre-existing `examples/fps-friction` errors, none in
+a changed file. Packed as
+`.packages/threenative-core-0.3.2-projshadow-bb0d10b1b34a.tgz`
+(sha256 `bb0d10b1b34a89c1cb6c7939dc27b3b6b3ed2f62646afec04a24bc8bd3f8bc54`), carrying both engine
+changes. Evidence: `/tmp/midway-60fps/report-G.md`.
+
+### Candidate 1 shipped and verified in the game, with the game half it needs
+
+Installing the guard alone **breaks the game**, and the check caught it. While projecting, the
+renderer is handed the mirror, so Three never calls `onBeforeRender` on the authored scene: Midway's
+own walk fired 0 times per frame and the authored world matrices went stale —
+`tools/check-frame-transforms.mjs` failed with `maxWorldDiff` 0.537 in cockpit, 56.13 in chase and
+110.27 in wide, and `rootWalks` 0.
+
+The game half is one hunk in `src/scenes/Midway.ts`: the per-draw walk moves from
+`scene.onBeforeRender` to `ctx.beforeRender(() => scene.updateMatrixWorld())`, the seam the engine
+runs once per world draw *before* `projection.reconcile()`. `scene.matrixWorldAutoUpdate = false`
+stays, and the original state is still restored on exit. With it, the gate passes with every phase at
+`rootWalks/frames = 1`, `maxWorldDiff 0` and `changed true`.
+
+Measured on the frozen airborne fixture with the sim running, 60 frames:
+
+| core | authored-scene walks / frame | forced | `updateMatrix` composes / frame |
+| --- | ---: | ---: | ---: |
+| old | 2.0 | 1.0 (engine) | 13,266 |
+| new + game hunk | **1.0** | 0 | **6,703** |
+| new, without the game hunk | 0 | 0 | 140 — **stale, rejected** |
+
+Draws, triangles and the projection verdict are identical old and new on both fixtures (air 1384
+main draws / 4,806,383 tris, `projected`, 723 candidates, 99 batches; deck 366 / 2,202,170,
+`notWorthwhile`, 1665 candidates). Pixel differences were bounded against same-core controls: the
+airborne 115 px at maxΔ6 sits under a 132 px same-core control, and the deck 9891 px at maxΔ195
+reproduces with the core held fixed and is a bimodal deck-crew and propeller animation phase from
+page-load timing, confined to one bounding box. Motion confirmed live: 59 of 60 frame transitions
+moved player, ship, AI aircraft, propeller and a bone. Game gates all exit 0 — typecheck, vite build,
+`check-particle-render` PASS, `check-fleet` PASS, `check-frame-transforms` PASS, launch playtest
+`pass: true`. **No timing or FPS gain is claimed from this host.** Evidence:
+`/tmp/midway-60fps/report-H.md`.
+
+Installed and verified in the game on the same frozen deterministic fixtures (airborne state hash
+960,838,321, deck 953,154,903, t = 30), reinstalling between legs:
+
+| fixture | core | shadow renders / frame | shadow draws / triangles |
+| --- | --- | ---: | ---: |
+| airborne | `projdirty` | 2 | 316 / 1,788,928 |
+| airborne | `projshadow` | **1** | **158 / 894,464** |
+| deck | `projdirty` | 1 | 321 / 817,087 |
+| deck | `projshadow` | 1 | 321 / 817,087 |
+
+The authored sun's `shadow.autoUpdate` reads `true` on the old core and `false` on the new one while
+airborne, and `true` on both on the deck, where projection declines. Main pass identical on both
+fixtures (air 1384 / 4,806,383; deck 366 / 2,202,170) and `TN_RENDER_PROJECTION` byte-identical
+(air `projected`, 723 candidates, 99 batches; deck `notWorthwhile`, 1665 candidates, 0 batches).
+
+Pixels, stated against same-core controls rather than against zero: airborne cross-core 98 px of
+2,073,600 at maxΔ5, inside the 51–286 px same-core range in the same 11-row gun-sight bounding box;
+deck cross-core **0 px**, against a 7283 px same-core bimodal crew and propeller phase. Crops of the
+airborne frame are visually identical; no shadow is lost.
+
+The restore path was measured, not asserted. Forcing a decline at runtime: projecting `autoUpdate`
+false with one 158-draw map; declined `autoUpdate` **true** with the authored map back at 135 draws /
+413,614 triangles; re-projecting after the 60-frame rescan returns to false and 158 draws; and
+`game.goto("midway")` teardown restores it false → true. Cross-core pixel difference at those states
+is 7 px projected and 2 px declined. Game gates on the final tree all exit 0: typecheck, vite build,
+`check-particle-render`, `check-fleet`, `check-frame-transforms` (ratio 1 every phase, `maxWorldDiff`
+0) and the launch playtest `pass: true`. **No timing or FPS gain is claimed.** Evidence:
+`/tmp/midway-60fps/report-I.md`.
+
+Note recorded and out of scope: the projected (mirror) frame and the declined (authored) frame differ
+by 1,985,767 px at maxΔ181, **identically on both cores**, so that gap predates these changes. It is
+the same correctness question raised above — projection should be visually transparent — and it is
+not waived.
+
+Side effect worth keeping: with the duplicate shadow map gone, batching is no longer a draw wash at
+this roster. Projected now totals 1542 draws (1384 main + 158 shadow) against 1741 declined
+(1606 + 135), so the projection lane is genuinely ahead where it previously broke even.
+
+### Delivered-tree timing, and why this host cannot answer the 60 FPS question
+
+Three 30 s close-combat runs on the delivered tree (core `projshadow-bb0d10b1b34a` + the
+`ctx.beforeRender` hunk), same fixture as the recorded baseline, load and GPU utilisation recorded
+before and after each run:
+
+| run | fps | hitches | update | render | hostGap | GPU | custom p50/p95 | step p95 | load before → after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | --- |
+| off | 7.29 | 3 | 8.37 | 51.55 | 97.22 | 9.02 | 22.0 / 29.4 | 1.0 | 13.51 → 12.05 |
+| on | 8.17 | 3 | 7.47 | 42.53 | 88.37 | 8.81 | 17.9 / 23.9 | 0.9 | 11.26 → 11.42 |
+| off2 | 8.18 | 3 | 7.27 | 42.65 | 88.39 | 12.08 | 18.3 / 23.1 | 0.9 | 7.86 → 11.23 |
+| baseline off | 5.95 | 6 | 16.74 | 121.19 | 93.79 | 10.40 | 47.2 / 121.9 | 3.0 | 12.9 → 25.5 across the three |
+| baseline on | 7.35 | 4 | 9.34 | 63.31 | 90.52 | 8.42 | 23.6 / 40.6 | 1.1 | |
+| baseline off2 | 8.31 | 3 | 7.78 | 49.96 | 80.88 | 2.98 | 22.6 / 28.7 | 0.9 | |
+
+All three runs were live (sim advanced 21.1 / 23.8 / 23.0 s of 30 s wall, 200-233 AA events,
+106-121 flak bursts, 11-15 damage events, player alive), and no run logged a console error.
+
+**These absolute numbers are not comparable to the baseline and no FPS gain is claimed from them.**
+The baseline ran at load 12.9 rising to 25.5 on 24 cores; these ran at 7.9-13.5. The delivered fps
+is higher, and that is at least partly the lighter host. The admissible evidence is each quantity's
+share of that run's own ACTIVE CPU, which cancels the profiler's idle differences:
+
+| quantity | baseline share of active CPU | delivered share of active CPU |
+| --- | ---: | ---: |
+| `reconcile` inclusive | 23.64 % | **16.36 %** |
+| `updateMatrixWorld` self | 8.70 % | 8.35 % |
+| `renderShadow` + `updateShadow` inclusive | 16.37 % | 18.66 % |
+
+`reconcile` fell materially, which is the change that was made. `updateMatrixWorld` self is flat,
+because the walk that was removed was one of several — the mirror scene and the shadow pass walk
+their own graphs, so halving the authored scene's composes (13,266 → 6,703) moves less of that
+function than the count suggests. The shadow share *rose* as a fraction even though its absolute cost
+fell (2034 ms → 1896 ms), because total active CPU fell further (12.42 s → 10.16 s over comparable
+windows). Shares can move against you while the work goes down; both numbers are reported.
+
+**Stable 60 FPS remains UNMET and this rig cannot decide it.** No run held a 16.7 ms frame; whole-frame
+`render` mean was 51.55 / 42.53 / 42.65 ms. More importantly, `hostGap` — the time outside the game's
+own callback — was 88-97 ms of a ~125-137 ms frame, roughly 70 % of it, while the game's own
+`update + render` was 50-60 ms and the GPU 9-12 ms. The harness presents to a throwaway Xvfb display
+on a host carrying an unrelated multi-day VM; the user observes 40-50 FPS on the same machine. So the
+measured frame here is five to six times the user's, and the dominant term is presentation the game
+does not control. Every optimisation in this session can only address the ~30 % that is game work.
+
+The consequence for this PRD: **the 60 FPS verdict has to be taken on the user's own display**, and
+the in-harness evidence must stay what it has been — deterministic counts (draws, triangles, shadow
+renders, matrix walks and composes, projection verdicts) and profile shares, never frame times.
+
+### Candidate 5: the water reflects 8 km past the range it can sample
+
+Measured on the frozen airborne fixture. The reflection pass renders into a **960 x 540**
+colour-only target (half the drawing buffer, `resolutionScale 0.5`, no MSAA) and costs **528 draws /
+1,679,925 triangles**. What it draws: 272 exact meshes (1,088,470 tris) and 256 batched sub-draws
+(591,455 tris) — the hero carrier 1.4-1.7 km away, three detailed US carriers at 17.8 / 18.1 /
+19.1 km, Midway Atoll at 18.5 km, two floatplane scouts at 7.2 and 8.5 km, and about fifteen distant
+LOD ships. Nothing airborne, no crew, tracers, particles or parked aircraft — those are already off
+`REFLECTED_LAYER`.
+
+`ocean.ts:21` sets `FAR_RANGE = 8000` and `ocean.ts:138` replaces the mirror read with a sky lookup
+beyond it. So **338 of 528 draws (64 %) and 1,295,258 of 1,679,925 triangles (77 %) are provably
+never sampled** by the conservative bounding-sphere-near-edge test — 473 draws / 1,452,565 triangles
+by object centre. At 350 m the only reflection a player can see is the faint smeared hull and wake of
+the carrier 1.5 km away; the 18 km ships and the atoll contribute nothing but sky and haze.
+
+**No safe cut exists from game code, and the search for one is recorded rather than attempted.** The
+only batch-neutral lever is the reflection camera's own frustum, and three's
+`ReflectorBaseNode.updateBefore` overwrites `virtualCamera.near`, `far` and `projectionMatrix` from
+the main camera on every reflection render (`three.webgpu.js:37988-37992`); setting the virtual
+camera's far to 8000 every frame was measured to leave it at 95000 with the reflected draws
+unchanged. Setting the *main* camera's far does cut the reflected pass (1383 → 918 draws) but culls
+the main pass with it. Core's `WaterSurface3D` exposes no reflection near or far — its only
+virtual-camera wrapper sets the layers mask. The remaining game-side lever, the per-object
+`REFLECTED_LAYER`, is batch-keyed (`batchFlagsOf` keys on `layers.mask`, `castShadow`,
+`receiveShadow`, `frustumCulled`) and so cannot be distance-gated per frame without repeating the
+candidate-2 failure; and no object class is provably never sampled, since the atoll and the US
+carriers come within a few kilometres in normal play. Evidence: `/tmp/midway-60fps/report-K.md`.
+
+This is precisely a case the charter assigns to the engine: the game cannot write it portably because
+the seam is inside Three's reflector, and the package chooses no appearance — the distance arrives as
+a call argument, so the game can change the look completely without editing package code.
+
+Candidate 5 is **blocked at the engine, and the block is physics, not effort.** An attempt to add a
+`reflection.far` option to `WaterSurface3D` — validated, defaulting to today's behaviour, applied
+from the existing virtual-camera wrapper — made the far value correct and still did not cull.
+`ReflectorBaseNode.updateBefore` applies Lengyel oblique near-plane clipping after copying the
+camera (`three.webgpu.js:38001-38033`), which swings the near plane onto the water surface and, in
+Lengyel's own words, inescapably destroys the conventional far plane; three then derives the far
+plane from the oblique row (`Frustum.js:116`), so `camera.far` has nothing to narrow. Measured
+against the real `updateBefore` with a stub renderer:
+
+```
+camera.far 95000
+plain   virtual far 95000  ndc@95000 0.2968  culls 20000: false  culls 100000: false
+clamped virtual far  8000  ndc@8000  0.2575  culls 20000: false  culls 100000: false
+ordinary camera            ndc@95000 1.0000  culls 100000: true
+```
+
+The option was reverted rather than shipped: an option that does not cull would be a false
+capability, and the template contract would then document something that does not exist. No
+`reflectfar` tarball was produced. Report-K's claim that setting the main camera's far cut the
+reflected pass (1383 → 918 draws) is also **withdrawn**: the probe counted every non-shadow
+render-target draw, and what fell was the main pass's own offscreen draws, whose projection is not
+oblique. Evidence: `/tmp/midway-60fps/report-L.md`.
+
+Two paths remain for a future attempt, neither of them the one tried: reconstructing a finite far
+*after* the oblique pass (a second seam), or the per-object `reflection.layers` mask, which is
+batch-keyed and cannot be distance-gated per frame. Both need a GPU re-measure, not a node test.
+
+### Integration (2026-09-14, this session)
+
+Both verified changes are committed locally in the primary checkouts. **Neither repository was
+pushed**, and no worktree was removed.
+
+- Engine `develop` `d78fe429d8e6ec483ca872219c35142a999e042a` —
+  `fix(core): stop re-walking static scene transforms and drop the unsampled projected shadow map`.
+  The `matrixWorldAutoUpdate` guard was already on primary as `3c78a7e22`, so the applied delta was
+  the +146 lines in `projection-apply.ts` and the spec. From the primary:
+  `pnpm --filter ./packages/core build` 0, `renderProjection.spec.ts` 0 (71 passed),
+  `pnpm typecheck` 0. Packed as
+  `.packages/threenative-core-0.3.2-projfix-b2629381e2dc.tgz`
+  (sha256 `b2629381e2dc68cda0b05a6ac27c232799377a024ff7cabe45256724054da301`).
+- Game `main` `63353412c550b308ae6161d3e06014abf83c9362` —
+  `perf(midway): prepare scene transforms on the engine's per-draw seam`, which is
+  `src/scenes/Midway.ts` plus the core repoint. Gates from the primary on its own port 5397:
+  `pnpm install` 0, `pnpm typecheck` 0, `pnpm exec vite build` 0, `check-particle-render` 0,
+  `check-fleet` 0, `check-catalog` 0, `check-frame-transforms` 0 (ratio 1.0 in all five views —
+  44/44 briefing, 41/41 deck, 37/37 cockpit, 38/38 chase, 41/41 wide — `maxWorldDiff` 0, adapter
+  nvidia/turing), launch playtest `pass: true`. The port was released afterwards.
+
+Left untouched because they belong to other lanes: the engine's
+`packages/core/mcp/engine-server.mjs`, which went dirty mid-session, and every other worktree and
+its dirty files. Evidence: `/tmp/midway-60fps/report-N.md`.
+
+### Where this leaves the loop
+
+Removed per presented frame, by deterministic count rather than by timing:
+
+| | before | after |
+| --- | ---: | ---: |
+| authored-scene transform walks | 2 (one of them forced) | **1** |
+| `updateMatrix` composes | 13,266 | **6,703** |
+| shadow map renders (airborne, projecting) | 2 | **1** |
+| shadow draws / triangles (airborne) | 316 / 1,788,928 | **158 / 894,464** |
+| `reconcile` share of active CPU | 23.64 % | **16.36 %** |
+
+Four candidates were rejected with their evidence rather than shipped: per-object `castShadow`
+distance gating (splits the engine's batch groups and makes projection decline), gating the sun light
+itself (no pixel-neutral altitude exists, and an airborne start with the only shadow light off
+crashes three's `ShadowNode`), the double-shadow-render hypothesis (disproved — it was two lights,
+which is what led to the fix that shipped), and a reflection far plane (oblique clipping destroys the
+far plane).
+
+**AC-5 is still unmet, and this harness cannot settle it.** The next work needs one thing this
+session could not get: a frame-time measurement on the user's own display, unloaded. Until then the
+ranked remaining targets, all CPU draw submission, are: the reflector pass at 528 draws / 1.68 M
+triangles with 64 % of it provably unsampled (blocked on the oblique far plane; the two remaining
+approaches are named above), `scanProjection` at roughly 11.5 % of active CPU re-deriving an almost
+never-changing classification every projecting frame while the *declined* path already has a
+60-frame cadence guard, and the main camera pass itself at about 856 draws.
+
