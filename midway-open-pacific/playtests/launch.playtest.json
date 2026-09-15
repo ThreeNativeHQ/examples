@@ -64,6 +64,10 @@
       "noConsoleErrors": true,
       "noNetworkErrors": true,
       "runtimeReady": true
+    },
+    "performance": {
+      "maxPassDrawCalls": { "main": 270, "shadow": 410, "reflection": 125 },
+      "maxPassTriangles": { "main": 1600000, "shadow": 1020000, "reflection": 595000 }
     }
   }
 }
