@@ -1,6 +1,6 @@
 # PRD-midway-flak-hunt-20260914 — Trace corruption and combat profiling
 
-**Status:** OPEN for the stable 60 FPS target. The earlier engine defect and `ctx.beforeRender` seam are DONE and on `origin/develop` (`b1cae8803`, fixes #248). This session removed a redundant whole-scene transform walk and an unsampled projected shadow map (engine `d78fe429d`, game `63353412c`, both committed locally and **not pushed**); all game gates green. Stable 60 FPS remains UNMET and cannot be measured on this host — see "Where this leaves the loop".
+**Status:** OPEN for the stable 60 FPS target. The earlier engine defect and `ctx.beforeRender` seam are DONE and on `origin/develop` (`b1cae8803`, fixes #248). ~~This session removed a redundant whole-scene transform walk and an unsampled projected shadow map (engine `d78fe429d`, game `63353412c`, both committed locally and **not pushed**); all game gates green. Stable 60 FPS remains UNMET and cannot be measured on this host — see "Where this leaves the loop".~~ **Superseded 2026-09-15:** the transform-walk and duplicate-shadow-map fixes landed as engine `d78fe429d` on `develop`; the owner's own real-display trace then re-ranked the problem, the engine render projection was opted out entirely, and ten measured cuts shipped in game `8c769c2 b094791 45fd225 5b4a65f b015f70 65e370f 37c2c3b 7b22a31` on engine `feat/engine-consolidated` `9bdf8a48e`+`edf9a9c3c`. Stable 60 FPS remains UNMET: real per-pass GPU is 17.6 ms at 1920×1080 with 4× MSAA and every GPU cut is visible, so the verdict belongs on the owner's own display. See "Update 2026-09-15" at the end.
 **Complexity:** 5 (MEDIUM); risk override: none. Target expanded by the user to stable 60 FPS throughout gameplay.
 **Owner:** Codex; OpenCode DeepSeek v4.1 Flash handles bounded exploration and probes.
 **Depends on:** Existing capture-performance.mjs and installed engine diagnostics.
@@ -24,7 +24,7 @@ Diagnose the supplied cockpit screenshot's long tracer lines after a multi-secon
 - [x] AC-2 [local; actor: agent]: Measure quiet versus flak-active comparable workloads, with adapter/resolution/population and CPU/GPU observations; save raw local artifacts. Live diagnostic and fixed-population visibility/packing comparisons are saved; timing variance is disclosed.
 - [x] AC-3 [local; actor: agent]: Rank measured hotspots and smallest root-cause fixes; verify any implemented correction with a focused check and real rendered frame. The confirmed root cause is an engine defect: `projection-apply.ts` built every `isLine` proxy as a plain `Line`, so projected `LineSegments`/`LineLoop` became connected strips. Fixed and verified red→green (62 projection tests; 68 focused engine tests), with the rendered tracer asserted `LineSegments` on the crowded-68 and static ABBA browser captures.
 - [x] AC-4 [local; actor: agent]: Record limitations and exact commands here, preserve unrelated work, and audit the isolated checkout for cleanup. Exact commands, exits and limitations are recorded under "Final integration and verification"; other lanes' edits are preserved and both worktrees are retained (see summary).
-- [ ] AC-5 [local; actor: agent]: Verify the 16.7 ms frame target under representative deck, cockpit, battle/flak, water-impact and recovery workloads, including sustained testing; report unmet budgets explicitly. Hidden-display cadence is not proof of real-play presentation FPS. **Remains unmet**: no representative workload holds a 16.7 ms frame budget; see the workload table and captures below.
+- [ ] AC-5 [local; actor: agent]: Verify the 16.7 ms frame target under representative deck, cockpit, battle/flak, water-impact and recovery workloads, including sustained testing; report unmet budgets explicitly. Hidden-display cadence is not proof of real-play presentation FPS. **Remains unmet**: no representative workload holds a 16.7 ms frame budget; see the workload table and captures below. **(2026-09-15) Still unmet and now quantified:** the whole-session re-measurement holds no 16.7 ms frame either (whole-frame `render` mean 18.74–21.09 ms, the game's own `update + render` 24.6–27.6 ms, and 101.5–106.0 ms of every ~120–134 ms frame is `hostGap` the game does not control), while real per-pass GPU is 17.6 ms at 1920×1080 4× MSAA. AC-5 closes only on a frame-time capture on the owner's own unloaded display at the owner's window size (1472×935, 1,376,320 px), reporting p50/p95/p99 and stalls for the full frame with per-pass GPU beside it — not the single lagged `gpuMs`.
 
 ## Execution phases
 
@@ -188,6 +188,13 @@ check `ci-required`) — entered under the user's explicit authorization to squa
 
 ## Next developer: execute this loop until stable 60 FPS
 
+> **(2026-09-15) Read the "Update 2026-09-15" section at the end of this document before executing any
+> step below.** The ordered loop assumed the render projection would stay on and that CPU draw
+> submission was the whole cost. The owner's real-display trace re-ranked both: the projection is now
+> opted out (steps 2 and 3 no longer apply to it), the GPU is a real 17.6 ms per-pixel cost, and
+> `hostGap` (~81 %) means this harness cannot settle the target. The deterministic counts and the
+> rejected-candidate reasons below remain valid and are the engine's next design constraints.
+
 **Target:** keep each presented frame within 16.67 ms at 1920×1080, DPR 1 on the user's NVIDIA WebGPU machine, through briefing/deck, takeoff, cockpit/chase/wide views, close combat/flak, impacts/fires, the full 68-aircraft roster and recovery. Do not call this finished from average FPS, a short frozen scene or a GPU-only PASS. Record p50/p95/p99, worst frame, counts above 16.67/33/100 ms, and stalls; sustain each live workload for at least 5 minutes after startup. Record cold first-use transitions separately so warmup cannot hide combat hitches. A finite run cannot guarantee every possible frame; report its actual coverage and exceptions.
 
 ### 1. Establish an honest baseline before editing
@@ -261,9 +268,14 @@ the whole presented frame is recorded, not only the custom wraps. Three 30 s clo
 (NVIDIA/Turing, 1920x1080, DPR 1, `resolutionScale 1`, `atFloor false`, live AA/flak/damage, player
 alive) exited 0: `/tmp/midway-flak-hunt/cpu-next-{off,on,off2}/`.
 
-**GPU is not the budget.** Whole-frame `render` mean was 121.19 / 63.31 / 49.96 ms while GPU was
+~~**GPU is not the budget.** Whole-frame `render` mean was 121.19 / 63.31 / 49.96 ms while GPU was
 10.40 / 8.42 / 2.98 ms; `overlay` and `residual` were ~0 and simulation `update` 7.8-16.7 ms. CPU
-draw submission and projection, not GPU execution, own the frame.
+draw submission and projection, not GPU execution, own the frame.~~ **WRONG, corrected 2026-09-15
+(report-GPU1):** those GPU figures were single instantaneous, lagged `info.render.timestamp` reads
+(`gpuAgeFrames` up to 8, 3.5× spread), not a per-frame measurement; the real per-pass GPU cost is
+**17.6 ms** at 1920×1080 4× MSAA (main 11.9, reflection 4.1, shadow 0.7) and always was. CPU draw
+submission and projection *did* dominate the frame at the time, but the GPU is not free and is now
+the second-largest cost. See "Update 2026-09-15".
 
 **Absolute FPS on this host is not usable.** Identical configuration gave 5.95 / 7.35 / 8.31 fps
 with load average 12.9 -> 25.5 on 24 cores (other lanes plus a long-running qemu VM). The user
@@ -364,9 +376,12 @@ keeping the deck case (hull, parked load and crew are inside ±80 m when the pla
 always keeping the player. Evidence: `/tmp/midway-60fps/report-C.md`,
 `/tmp/midway-60fps/report-C-frame.png`.
 
-This also re-ranks PRD step 3. Offscreen instanced geometry is real, but **triangles are not the
-budget**: GPU p95 was 3-10 ms against 50-121 ms of CPU. Its cost lands on the CPU through the shadow
-pass's draw submissions, which is what this candidate removes.
+This also re-ranks PRD step 3. Offscreen instanced geometry is real, but ~~**triangles are not the
+budget**: GPU p95 was 3-10 ms against 50-121 ms of CPU.~~ **Corrected 2026-09-15 (report-GPU1):**
+that GPU p95 was the same under-measurement as above; the real GPU is **per-pixel, not per-triangle**,
+at ~17.6 ms, so removing triangles does not by itself buy GPU time. At the time CPU draw submission
+nonetheless dominated, and its cost lands on the CPU through the shadow pass's draw submissions, which
+is what this candidate removes.
 
 ### Candidate 2 rejected as implemented, and what it exposed
 
@@ -651,7 +666,11 @@ windows). Shares can move against you while the work goes down; both numbers are
 **Stable 60 FPS remains UNMET and this rig cannot decide it.** No run held a 16.7 ms frame; whole-frame
 `render` mean was 51.55 / 42.53 / 42.65 ms. More importantly, `hostGap` — the time outside the game's
 own callback — was 88-97 ms of a ~125-137 ms frame, roughly 70 % of it, while the game's own
-`update + render` was 50-60 ms and the GPU 9-12 ms. The harness presents to a throwaway Xvfb display
+`update + render` was 50-60 ms and the GPU 9-12 ms. **(2026-09-15)** After the projection opt-out and the
+ten cuts, the same harness, whole-session: `render` mean **18.74-21.09 ms**, the game's own
+`update + render` **24.6-27.6 ms (19-21 % of the frame)**, `hostGap` **101.5-106.0 ms** of a
+~120-134 ms frame — now **~81 %**, up from ~70 %, precisely because the game's own share fell. No run
+held a 16.7 ms frame. The harness presents to a throwaway Xvfb display
 on a host carrying an unrelated multi-day VM; the user observes 40-50 FPS on the same machine. So the
 measured frame here is five to six times the user's, and the dominant term is presentation the game
 does not control. Every optimisation in this session can only address the ~30 % that is game work.
@@ -765,12 +784,16 @@ which is what led to the fix that shipped), and a reflection far plane (oblique 
 far plane).
 
 **AC-5 is still unmet, and this harness cannot settle it.** The next work needs one thing this
-session could not get: a frame-time measurement on the user's own display, unloaded. Until then the
+session could not get: a frame-time measurement on the user's own display, unloaded. ~~Until then the
 ranked remaining targets, all CPU draw submission, are: the reflector pass at 528 draws / 1.68 M
 triangles with 64 % of it provably unsampled (blocked on the oblique far plane; the two remaining
 approaches are named above), `scanProjection` at roughly 11.5 % of active CPU re-deriving an almost
 never-changing classification every projecting frame while the *declined* path already has a
-60-frame cadence guard, and the main camera pass itself at about 856 draws.
+60-frame cadence guard, and the main camera pass itself at about 856 draws.~~ **Superseded 2026-09-15:**
+the projection was opted out, which deleted `scanProjection`, `reconcile` and `walkProjection` from
+execution entirely (report-V1), and the far-field cut took the reflector pass from 528 draws /
+1.68 M triangles to 230 / 0.52 M. The remaining constraint is the **per-pixel GPU** and the owner's
+display — see "Update 2026-09-15" at the end.
 
 ### Candidate 6 rejected before implementation: a cadence gate on the projecting scan
 
@@ -807,4 +830,185 @@ One useful fact fell out of it and is worth keeping: **`object.visible` is not a
 `projection-apply.ts` syncs visibility every frame, so visibility is the one per-frame per-object
 change that cannot churn the batch classification — unlike `layers`, `castShadow` and
 `frustumCulled`, which are batch-keyed.
+
+---
+
+## Update 2026-09-15 — the owner's own trace re-ranked everything
+
+This section is the running record's catch-up: the owner's real-display trace, the ten changes it
+unblocked, the candidates it killed, the whole-session re-measurement, the GPU finding, and two engine
+defects this session found and did not fix. Earlier sections are left as written except where struck
+above with an explicit correction.
+
+### The turning point: a trace on the owner's own display, not on this harness
+
+`docs/performance-trace-20260914-214518.md` inspects the owner's own DevTools recording
+(33.742835 s; `/home/joao/Downloads/Trace-20260914T214518.json.gz`, sha256 `f1c6cb82…`; checkout
+`af4910d`; installed core `projfix-b2629381e2dc`; 254,292 events, 177,382 CPU samples). Every earlier
+number in this PRD came from a throwaway Xvfb on a loaded host; this one is the owner's machine, and it
+re-ordered the whole investigation. Its phase table:
+
+| Trace interval | Game callbacks | Mean callback work | Mean start interval | Callback cadence |
+| --- | ---: | ---: | ---: | ---: |
+| 5–10 s | 135 | **34.898 ms** | 37.021 ms | **27.01/s** |
+| 10–15 s | 127 | 37.259 ms | 39.179 ms | 25.52/s |
+| 15–20 s | 93 | 50.943 ms | 53.806 ms | 18.59/s |
+| 30–33.743 s | 57 | **61.208 ms** | 64.607 ms | **15.48/s** |
+
+The game ran at ~27 callbacks/s before batching engaged and ~15/s after, and **every** callback missed
+16.67 ms (579/579). One `FixedStepLoop.#frameCallback` spanning 21.359975–26.710799 s lasted
+**5,350.824 ms** (4,488.403 ms of recorded thread CPU), with `Nodes.getForRender → NodeBuilder.build`
+synchronously constructing shader graphs (4,115.26 ms) as the projection took over mid-flight. Main
+thread was 96.31 % busy, 211 tasks exceeded 50 ms, GC was 0.1–0.6 % of the window (86.6 % of GC pause
+inside the freeze), and `Hud.update` cost 1.334 s including 121 Layout events (106.688 ms) initiated by
+`WorldView.project → Hud.drawFlight`. The trace named **projection activation** as the freeze and
+**projection reconciliation** (14.94 ms/game frame afterwards) as the recurring cost — which is why the
+first shipped change is the opt-out, not another cache.
+
+### What shipped
+
+Game commits are local (no push); the engine commits are `feat/engine-consolidated`, whose tarballs the
+game installs. On the shipped tree every game gate exits 0: `pnpm typecheck`, `pnpm exec vite build`,
+`check-particle-render`, `check-fleet`, `check-catalog`, `check-asset-polish`, `check-frame-transforms`,
+`probe-ocean` and the launch playtest.
+
+| change | commit | measured effect |
+| --- | --- | --- |
+| render-projection opt-out (`renderer.projection:false`, `reasonCode:"disabled"`) | game `8c769c2` (core `0.3.2-reflect`) | `reconcile` mean **4.46 → 0.014 ms**; callback span p50 19.6 → 15.1 ms; callbacks >1 s **1 → 0** — the engagement freeze is gone |
+| sky/environment rotation copy onto the projection mirror (`backgroundRotation` / `environmentRotation`, report-T2) | engine `9bdf8a48e` (shipped via game `8c769c2`) | the takeover darkening (−3.0 / −3.56 mean luminance) is gone. Cause, found not guessed: the mirror is a bare `new Scene()`, so it wrote yaw 0 while the game authored `SKY_ROTATION.y = 2.76` (`src/render/environment.ts:9`, applied `world.ts:305-306`); the rotation-zero control showed Δ+0.4 |
+| HUD draw-once per presented frame (report-P3) | `8c769c2` | `drawFlight` per presented frame **4.518 → 1.000**; `WorldView.project → Hud.drawFlight` Layout events **0.404 → 0**/frame; HUD canvas byte-identical |
+| static transform freeze (report-W1 cut 2) | `8c769c2` | local-matrix compositions **7,247 → 2,905**/frame (−60 %); `maxWorldDiff` 0 in all five views; moving nodes exempted |
+| SBD retracted-gear fix (report-T3) | `8c769c2` | the two pale under-wing boxes are gone in chase/wide; the gear still draws on deck (`gearPos 1`, `visible true`) |
+| far-field cut (`FAR_HULL 15000`, `FAR_AIRCRAFT 12000`, report-X3) | `b094791` | draws **1,555 → 849** (−45 %), triangles **4,902,321 → 2,533,415** (−48 %), `_projectObject` visits −14 %; 23 / 66 / 0 px changed on airborne / hard-bank / deck — removal only, no hull pops in |
+| cockpit shell batched by material across all six parts (report-H1) | `5b4a65f` | player meshes **188 → 164**; player main draws **153 → 131**, shadow **116 → 93**; triangles unchanged, every animated node still moves |
+| engine consolidation + per-pass budget gate | game `45fd225`; engine `9bdf8a48e` + `edf9a9c3c` | `assert.performance.maxPassDrawCalls` / `maxPassTriangles` per pass in `TN_FRAME_BUDGET`; the launch budget is declared and enforced |
+| first-frame visibility gate (ships/hulls start hidden until the first `world.update`, report-F1) | `65e370f` | first world frame **401 d / 2,726,004 t → 215 / 1,482,258**; whole-run shadow max **1,301 → 328**, reflection **244 → 135**; steady p95/p50 byte-identical |
+| launch budget re-measured from representative runs | `b015f70` | window 401 d / 2,726,004 t; limits `maxPassDrawCalls.main` 430 and `maxPassTriangles.main` 3,400,000; the far-field revert still fails closed |
+| ocean grid quarter (320×360 → 160×180, report-O1) | `37c2c3b` | sea **460,160 → 114,880** triangles; cockpit main **1,602,815 → 1,257,535**; significant wave height unchanged at Hs 1.14 m; pixel change at the same level as a 4× *increase* (aliasing, no lost shape) |
+| single-pass sea (`forceSinglePass:true`, report-O2) | `7b22a31` | sea **2 draws / 114,880 → 1 draw / 57,440**; 0 px changed on every fixture, including the under-water camera state the free-look can reach |
+
+Engine `d78fe429d` on `develop` (stop re-walking static transforms; drop the unsampled projected shadow
+map) predates this and remains in the line.
+
+### Rejected candidates, and the evidence that rejected them
+
+A rejected candidate with its reason is the engine's next design constraint:
+
+- **Per-object `castShadow` distance gating** — `castShadow` is part of the engine's batch group key, so gating it per object split the groups, pushed predicted draw candidates from 723 to 1,661 of 2,189, and made the projection decline the whole scene. Airborne image changed 96.6 % of pixels; the deck fixture was pixel-identical, which is the trap. `pnpm typecheck`, `vite build` and `check-particle-render` all still passed.
+- **Gating the sun `DirectionalLight` itself** — no pixel-neutral altitude exists (every rung on deck/20/50/100/150/250/350 m differs by ~434,000 of 2,073,600 px, because the player's own airframe is always inside the shadow volume); worse, an airborne start with the only shadow light off dereferences a null `depthTexture` and freezes the canvas, with or without the gate.
+- **The double-shadow-render hypothesis** — disproved: the frame has two shadow-casting lights, the authored `w.sun` and the `light.clone()` the mirror makes, drawing two separate maps; the reflector pass renders none. The authored map is never sampled while projecting — which became the shipped fix.
+- **A reflection far plane** — three's oblique near-plane clipping in `ReflectorBaseNode.updateBefore` destroys the conventional far plane, so `camera.far` has nothing to narrow (`virtual far 95000`, `ndc@95000 0.2968`, culling nothing). The option was reverted rather than shipped as a false capability; report-K's main-camera-far claim is withdrawn.
+- **A cadence gate on the projecting scan** — while projecting, an object absent from the plan is not drawn, so a plain throttle makes a newly spawned aircraft/bomb/tracer invisible for up to a second; a child-count/ids signature is byte-identical across a material swap and a `castShadow` flip; best case saves ~1.3 % of the window. NO SAFE GATE.
+- **Reflection `refreshInterval:2`** — NOT adopted. The 1920×1080 moving-camera check showed the one-frame-stale mirror in the water; the surface stays at interval 1.
+- **A blanket `side: FrontSide`** — the sea is culled and gone from the under-water camera state `lookPitch = −0.8` can actually reach (1,433,347 px changed, aircraft seen through a hole). `forceSinglePass:true` keeps `DoubleSide` and is the shipped alternative.
+- **Every GPU rung** (report-GPU1, RTX 2080, verdict **NO SAFE CUT**): MSAA 4→1 saves 6.45 ms but is visibly jagged on exactly the canopy rigging and rivets the owner called out (13.8 % global, 35.1 % ship-water); `resolutionScale 1→0.85` saves 2.7 ms but softens the dials and needles (19 % of deck panel); reflection 0.5→0.25 saves 0.10 ms and shadow 2048→1024 saves 0.05 ms with the image unchanged. The two free rungs save nothing; the two that save are visible.
+
+### The whole-session measurement (report-V1)
+
+On `7b22a31`, three 30 s close-combat runs (350 m altitude, 1,500 m astern Akagi), load 8.7–12.9,
+`nvidia/turing`, projection `disabled`, player alive, no console errors:
+
+| run | fps | update | render | hostGap | gpuMs (see defect 1) | per-pass main / reflection / shadow draws (mean) |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| off | 7.48 | 6.53 | 21.09 | 106.02 | 15.95 | 295.1 / 138.0 / 102.8 |
+| on | 8.25 | 5.96 | 18.84 | 103.00 | 15.96 | 295.0 / 139.3 / 102.0 |
+| off2 | 8.36 | 5.85 | 18.74 | 101.53 | 16.38 | 295.8 / 137.7 / 102.2 |
+
+Against the recorded baseline (`render` mean 121.19 ms, active CPU 12,423 ms) the game's own work is now
+24.6–27.6 ms. Each quantity as a share of **its own run's active CPU** (shares cancel the profiler's idle
+differences; absolute fps is not comparable across host loads):
+
+| quantity (inclusive) | baseline | delivered | now |
+| --- | ---: | ---: | ---: |
+| `onRender` | 81.0 % | 79.0 % | 65.5 % |
+| `three render` | 56.5 % | 52.4 % | 48.4 % |
+| `_renderObjects` | 29.9 % | 33.3 % | 42.6 % |
+| `_renderTransparents` | 23.7 % | 16.4 % | 11.4 % |
+| `updateBefore` | 20.3 % | 12.7 % | 18.3 % |
+| ├ `renderShadow` | 8.2 % | 9.3 % | 9.3 % |
+| └ `updateShadow` | 8.2 % | 9.4 % | 9.4 % |
+| `reconcile` | 23.6 % | 16.4 % | **0 % (absent)** |
+| `scanProjection` | 12.0 % | 11.5 % | **0 % (absent)** |
+| `game update` | 18.2 % | 20.2 % | 32.7 % |
+| `updateMatrixWorld` self | 8.7 % | 8.4 % | 8.6 % |
+| `frameCallback` (= active) | 99.7 % | 99.8 % | 99.4 % |
+
+Absolute active CPU **12,423 → 4,590 ms** (37 % of baseline, 45 % of the delivered era). **`reconcile`,
+`scanProjection` and `walkProjection` do not appear in the profile at all** — the opt-out removed them
+from execution (`updateMatrixWorld` self fell 849 → 396 ms, and `update`/`_renderObjects` shares rose
+while their absolute costs fell, so both the share and the absolute number are reported).
+
+### Why this harness cannot answer the 60 FPS question
+
+`hostGap` is now **101.5–106.0 ms** of a ~120–134 ms presented frame, so the game's own
+`update + render` (24.6–27.6 ms) is **19–21 %** of it; the other ~81 % is browser presentation on a
+throwaway Xvfb that the game does not control (it was ~70 % before, and rose only because the game's own
+share fell). No run held 16.7 ms — neither the `render` phase nor the presented frame. Further
+optimisation can only touch the remaining fifth. **The 60 FPS verdict belongs on the owner's own
+unloaded display, at the owner's window size**; the in-harness evidence must stay deterministic counts
+(draws, triangles, shadow renders, matrix walks and composes, projection verdicts) and profile shares,
+never frame times.
+
+### The GPU finding (report-GPU1) — the most important new fact
+
+Real per-pass GPU on an RTX 2080 at **1920×1080, DPR 1, `resolutionScale 1`, `sampleCount 4`**, three
+independent sessions agreeing to ±0.1 ms:
+
+| pass | GPU p50 | share | draws / triangles p50 (engine) |
+| --- | ---: | --- | --- |
+| main (canvas) | **11.90–11.99 ms** | 68 % | 471 / 1,142,387 |
+| reflection (960×540) | **4.01–4.07 ms** | 23 % | 229 / 475,099 |
+| shadow (2048²) | **0.66 ms** | 4 % | 93 / 412,774 |
+| unattributed render call | 0.91 ms | 5 % | — |
+| **aggregate** | **17.6 ms** | 100 % | 793 / 2,030,260 |
+
+The cost is **per-pixel / per-attachment, not per-triangle**: `resolutionScale 1→0.85` cuts main by
+1.7 ms and reflection by 0.9 ms with triangles unchanged, and quartering the ocean grid removed vertices
+that cannot touch fragment cost. A deliberate CPU-load phase (120 ms busy-wait per frame) raised GPU
+17.6 → 20.6 ms, so CPU-bound pacing cannot explain the old low reads. **Every GPU cut that saves is
+visible**, so **60 FPS at 1920×1080 with 4× MSAA is not reachable for this scene without a visual
+concession** — MSAA or resolution, both of which the owner has already named as unacceptable. The auto
+scaler never engaged (`atFloor false`, stayed 1.0). **The owner's actual window in the trace is
+1472×935 = 1,376,320 px, 66 % of 1920×1080's 2,073,600**, so the owner's real GPU budget is below this
+17.6 ms figure and the target to measure against is that window, not 1080p. (The brief for this update
+said 63 %; the measured ratio of the two pixel counts is 66 % — recorded rather than rounded down.)
+
+### Two engine defects found and not yet fixed
+
+1. **`gpuMs` is one instantaneous, lagged `info.render.timestamp`.** `gpuAgeFrames` reached **8**, with
+   a **3.5× spread** between reads, so the recorded baseline showed 2.98–10.40 ms of GPU when the real
+   cost was always ~17 ms. It must report the timestamp pool's **per-frame mean and p95**, not one
+   sample; until it does, every `gpuMs` number in the earlier sections of this PRD is an
+   under-measurement. Evidence: `/tmp/midway-60fps/report-GPU1.md`.
+2. **PRD-377 mis-cites its own config surface.** Its §1 table says the starter uses "the existing
+   exported `ThreeNativeConfig` from `@threenative/playtest`"; the type is **`IThreeNativeConfig` from
+   `@threenative/core`** (`packages/core/src/config.ts`, re-exported `index.ts:116-128`), and it also
+   references a model-list config shape (`models:[{name,glb,kind}]`) that **does not exist in this
+   repository** — that is the external `threenative-asset-mcp` Unreal scene manifest. Evidence:
+   `/tmp/midway-60fps/report-L2.md:13,103`.
+
+### PRD-377 status (recorded so nobody repeats it)
+
+PRD-377 phases 0–1 (config contract: `packages/create-threenative/__tests__/lod-config.spec.ts`
+**30 tests** green) and its generation phase (`packages/assets/__tests__/lod-generation.spec.ts`
+**17 tests** green, `TN_discrete_lod`, `packages/assets/src/lod/`) are built **uncommitted on
+`feat/auto-lod-config`** off `develop` `d32eb643a`; **six of its eight closure gates are unreachable on
+this machine** (they need a browser/GPU capture, an owned native host and mobile devices, with the
+capture lock held). The decisive fact for this game: its default **`minTriangles: 5000` floor is per
+primitive**, while Midway's Enterprise/Hornet/Yorktown are 347,497 triangles spread over 280–301 meshes
+— **~1,150–2,700 triangles per primitive** — so **auto-LOD as specified generates nothing for this
+game**; and the ~294 draw calls are out of its scope regardless. Do not repeat the expectation that
+PRD-377 addresses these carriers without lowering that floor below ~1,150 (report-L3 §"Predicted Midway
+generation"). Its PRD is **already marked PARTIAL with the Phase 0–1 boxes ticked** in that lane; see
+`docs/PRDs/assets/PRD-377-auto-lod-is-on-by-default.md` in the engine worktree (the primary engine
+checkout copy still reads NOT STARTED, because the edit is uncommitted in the lane).
+
+### Status of the target
+
+**AC-5 remains UNMET.** What would close it: a frame-time capture on the owner's own unloaded display at
+the owner's window size, reporting p50/p95/p99, worst frame, counts above 16.67/33/100 ms and stalls for
+the full presented frame, with **per-pass GPU** (not the single lagged `gpuMs`) beside it, across the
+briefing/deck/takeoff/cockpit/chase/wide/combat/impact/recovery workloads. With the projection opt-out
+and the ten cuts the game's own CPU work is no longer the dominant term on this harness; the **per-pixel
+GPU** and the **owner's display** are. No source change in this update; documentation only.
 
