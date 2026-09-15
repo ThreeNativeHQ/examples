@@ -32,6 +32,11 @@ const config: IThreeNativeConfig = {
     // win, multi-second engagement freeze, and a darker mirror image). Decline it: no mirror, no
     // scan, the authored scene every frame.
     projection: false,
+    // The render-camera projected-size cull is engine-owned and on by default at 0.5 px. The game
+    // used to hand-roll this at 2 px for aircraft (`MIN_AIRCRAFT_PIXELS`); 0.5 px is more
+    // conservative, so this keeps the measured 2 px line. The engine applies it per render camera
+    // and reports it in `TN_PROJECTION.cull`.
+    minimumProjectedPixels: 2,
   },
   ui: { renderer: "web" },
 };

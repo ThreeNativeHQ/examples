@@ -61,25 +61,22 @@ const FAR_HULL = 15000;
 const FAR_AIRCRAFT = 12000;
 
 /**
- * The projected diameter, in render-camera pixels, below which an aircraft is not drawn.
+ * The projected-diameter aircraft cull is now the engine's.
  *
- * An aircraft the render camera resolves to a couple of pixels contributes a few pixels and still
- * costs whole draw submissions; at 68 aircraft that submission is the frame. Measured on the AC-23
- * crowd fixture (report-R68), a ladder of same-frozen-frame pixel diffs: the fixture drew 37
- * aircraft at 0.7–0.9 px that were 420 of the frame's 652 main draws and 537 k triangles, and the
- * 2 px rung took main draws 652 → 232 while changing 8 of 2,073,600 rendered pixels. The player's
- * own cockpit, chase and wide cameras were byte-identical (0 / 2,073,600 px) at 1, 1.5 and 2 px —
- * every aircraft they resolve is above the line — so the cut is a no-op for gameplay and only stops
- * a camera far from the fight from paying for specks it cannot show. Unlike the player-range gate
- * below, it reads the camera, because the pass that pays and the lens that resolves are both the
- * camera's, exactly as `FAR_HULL` already does for hulls.
+ * It was `MIN_AIRCRAFT_PIXELS = 2`: an aircraft below two projected render-camera pixels was not
+ * drawn. The engine owns that decision now — `renderer.minimumProjectedPixels: 2` in
+ * `threenative.config.ts` keeps the line this game measured, the render camera applies it per camera
+ * and it is reported in `TN_PROJECTION.cull`. What stays here is the two distance caps above and
+ * below, which a projected-size gate cannot express: `FAR_AIRCRAFT` bounds where an aircraft may be
+ * culled at all, and `FAR_HULL` hides a hull the 2 px line would still draw for another hundred
+ * kilometres. `MERGED_AIRFRAME_PIXELS` below is a lower-draw substitution, not a skip, and the
+ * engine's cull does not substitute.
  */
-const MIN_AIRCRAFT_PIXELS = 2;
 
 /**
  * The projected size, in render-camera pixels, below which an aircraft draws its merged stand-in.
  *
- * `MIN_AIRCRAFT_PIXELS` above stops drawing a speck; this one stops paying 22–95 draw submits for an
+ * The engine's cull above stops drawing a speck; this one stops paying 22–95 draw submits for an
  * aircraft whose whole merged silhouette is a few tens of pixels across (see `airframe-lod.ts`).
  * Above the line the full airframe keeps every animated node and every material. The number itself
  * comes from the report-REC ladder: each rung's main draws and same-build pixel diff against a
@@ -774,7 +771,7 @@ export class WorldView {
         if (m.userData.torpedoLoad) (m.userData.torpedoLoad as T.Object3D).visible = a.torpedo > 0;
         updateDamageVisuals(m, a);
       }
-      m.visible = range < FAR_AIRCRAFT && projectedPx >= MIN_AIRCRAFT_PIXELS;
+      m.visible = range < FAR_AIRCRAFT;
     }
     for (const [id, m] of this.meshes) if (id.startsWith("air-") && !live.has(id)) {
       this.scene.remove(m);

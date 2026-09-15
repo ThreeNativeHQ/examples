@@ -18,7 +18,7 @@
     "verify": "pnpm typecheck && pnpm verify:audio"
   },
   "dependencies": {
-      "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.2-consolidated-edb178406367.tgz",
+      "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.2-camcull-dbdb19265b42.tgz",
     "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.3.2-midway-d5f4b4747fc7.tgz",
     "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.3.2-midway-68eb08c22fc6.tgz",
     "react": "19.2.0",
@@ -36,7 +36,7 @@
     "@types/react-dom": "19.2.0",
     "@types/three": "0.185.3",
     "@vitejs/plugin-react": "6.0.5",
-    "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.5-consolidated-f4e591be2988.tgz",
+    "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.5-camcull-5b1fcf631a83.tgz",
     "esbuild": "0.27.0",
     "playwright": "1.62.1",
     "tailwindcss": "4.3.3",
@@ -53,12 +53,12 @@
     },
     "overrides": {
       "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-assets-0.3.2-midway-31630a90db89.tgz",
-    "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.2-consolidated-edb178406367.tgz",
+    "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.2-camcull-dbdb19265b42.tgz",
       "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-physics-0.3.2-midway-d5f4b4747fc7.tgz",
       "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.3.2-consolidated-0bcb4f36a906.tgz",
       "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-runtime-native-0.3.2-midway-4662ac5aa85a.tgz",
       "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-ui-0.3.2-midway-68eb08c22fc6.tgz",
-      "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.5-consolidated-f4e591be2988.tgz"
+      "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/create-threenative-0.2.5-camcull-5b1fcf631a83.tgz"
     }
   }
 }
