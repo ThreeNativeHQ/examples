@@ -277,6 +277,78 @@
       ]
     },
     {
+      "id": "tbd-engine-interior-idle-01",
+      "file": "audio/tbd-engine-interior-idle-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Low steady idle with distinct uneven but healthy exhaust pulses and subdued propeller wash. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "79356edf79cea5fc8efd09768691ce320d7195a97888a268eca741c7f4b94aa7",
+          "outputHash": "5556fdcab8e3dc7a55e659007969a18e69ca3e2e3d329d676b4e8ed5f80115a1",
+          "bytes": 88115
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-interior-cruise-01",
+      "file": "audio/tbd-engine-interior-cruise-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Steady cruising power with a settled mechanical drone and moderate propeller load. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Steady cruising power with a settled mechanical drone and moderate propeller load. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "c61d8c7235e295d6c6f8fa0b210a1f6e5bdad937d3375d1a16202a797374da1d",
+          "outputHash": "b5e9f70137f9989cf3ee71f5f2744d7fc7c3442d6aa5dca2dd45ff6cec440fa6",
+          "bytes": 88824
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-interior-power-01",
+      "file": "audio/tbd-engine-interior-power-01.ogg",
+      "seconds": 10,
+      "loop": true,
+      "identity": "reconstruction",
+      "prompt": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830-64 twin-row radial piston engine driving the propeller of a Douglas TBD-1 Devastator. Sustained high takeoff power with dense exhaust pulses and heavy propeller load, mechanically healthy. Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass. Seamless loop, no fade, no flyby. Engine only.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 10,
+        "prompt_influence": 0.6,
+        "loop": true
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "53ae1f829c54e04f2da03f7e3896f5b2ae7a93c66f8c6a220b7661a6f9ff6910",
+          "outputHash": "ee19a7166a843db933f2c19a7dde708c64784cf189404095f003760416f08094",
+          "bytes": 92182
+        }
+      ]
+    },
+    {
       "id": "wildcat-engine-exterior-idle-01",
       "file": "audio/wildcat-engine-exterior-idle-01.ogg",
       "seconds": 10,
@@ -929,6 +1001,88 @@
       ]
     },
     {
+      "id": "tbd-engine-start",
+      "file": "audio/tbd-engine-start.ogg",
+      "seconds": 8,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator starting, mechanical starter cranking followed by several uneven combustion catches that settle into a low puttering idle, no turbine whine and no dramatic backfire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator starting, mechanical starter cranking followed by several uneven combustion catches that settle into a low puttering idle, no turbine whine and no dramatic backfire. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 8,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "19af836b0b1f3d62472f275e048f9883234991168b1c67b2a060f644bfb40ba4",
+          "outputHash": "355658700ff87016df4b27dacc56d4e19a01dc55829b80d8eb4c828fc312e14f",
+          "bytes": 67505,
+          "conditioned": "trim trailing silence + short end fade, level unchanged"
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "6cc5d1f020a71b1b9c3ac64682b6ebfd8389b80ef49fc8f37d6b5d22df5ab180",
+          "outputHash": "a9d06acd4d1c4e9037fe653b25322592e2fb446d58ac0703e871abb083e98a56",
+          "bytes": 89873,
+          "conditioned": "short end fade, level unchanged"
+        }
+      ]
+    },
+    {
+      "id": "tbd-engine-stop",
+      "file": "audio/tbd-engine-stop.ogg",
+      "seconds": 6,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator shutting down from idle, uneven low exhaust putter and propeller chops spacing out as it slows naturally to rest, no turbine whine, no electronic sweep and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator shutting down from idle, uneven low exhaust putter and propeller chops spacing out as it slows naturally to rest, no turbine whine, no electronic sweep and no explosion. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 6,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "6eb5d6dbb017d12f3341b04154f09e8aa2bc926c372afe67bf05d7207674f1d2",
+          "outputHash": "609ca178bfa3767acc0fd2d32d96e23d7c4af747c51dc4852045335cc5ccbf2a",
+          "bytes": 49960
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "473f4ad8b76bbe4fedb375b2f142df28e090bfa3b3aa2a2a5abc1c8ef57c3d9e",
+          "outputHash": "a2200bdf5ed245705158ef96ea5b2766a231665a1023e4b8df0737ff14a4eb22",
+          "bytes": 49512
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "46d70e3eb34d51733edc607810eb74736981c8f03f3a911869181008a1571e1a",
+          "outputHash": "c4dc4d3b69b3f8cd8cecafef92716141669b604555ad7cc36ead7b4314dcb737",
+          "bytes": 61663,
+          "conditioned": "short end fade, level unchanged"
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "51b2178c81ca364d9f42d47af7c3e8379a4bf29f0351f8f50f355e71320132ee",
+          "outputHash": "0ef51500dc137f6f46f6d5ec3b308c63b7c2e1e17caa343b0699cfc175db45ba",
+          "bytes": 38473,
+          "conditioned": "trim 0.4s leading silence, level unchanged"
+        }
+      ]
+    },
+    {
       "id": "engine-rough",
       "file": "audio/engine-rough.ogg",
       "seconds": 8,
@@ -950,6 +1104,31 @@
           "sourceHash": "228d1992e48f80dfc577dcb2d49adc46e881e4227bc68e61141fc1652fda8bc0",
           "outputHash": "c62c014008a22a8a1965d2494eab5d81f35d3f8c8647bc9d7f15ae88c8b58282",
           "bytes": 86444
+        }
+      ]
+    },
+    {
+      "id": "engine-seize",
+      "file": "audio/engine-seize.ogg",
+      "seconds": 5,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "An aircraft radial piston engine destroyed in flight, combustion breaking into violent uneven misfires and metallic knocking, a harsh mechanical seizure and then only the propeller turning in the airflow, no explosion and no music. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "An aircraft radial piston engine destroyed in flight, combustion breaking into violent uneven misfires and metallic knocking, a harsh mechanical seizure and then only the propeller turning in the airflow, no explosion and no music. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 5,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "1feda6616f25fb58187719a95b0228ae959af0356c21a9f2b695242321bdfa6a",
+          "outputHash": "6283c32f6238cbd5f1e0d1faab3f5df6b04a38178e4ae891e811a32b3f5f2d99",
+          "bytes": 60668
         }
       ]
     },
@@ -1300,6 +1479,81 @@
           "sourceHash": "576a4d6b5a6a0920ec8a730615479093ad8a9745b0a79e0adc732454a1f5af21",
           "outputHash": "533154f16f84ab21e9ee9c5ff7bbf4807c349aa67eed494b143fcc95286d4502",
           "bytes": 57884
+        }
+      ]
+    },
+    {
+      "id": "bomb-underwater",
+      "file": "audio/bomb-underwater.ogg",
+      "seconds": 6,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One conventional aerial bomb detonating well below the surface of open seawater, heard from above: a deep muffled thud with the blast crack filtered away by the water, a low pressure whump, then a delayed swelling surge as it reaches the surface, no ringing metal and no splash at the start. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One conventional aerial bomb detonating well below the surface of open seawater, heard from above: a deep muffled thud with the blast crack filtered away by the water, a low pressure whump, then a delayed swelling surge as it reaches the surface, no ringing metal and no splash at the start. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 6,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "25b7c1e91cabafb32a72843d2b0b82c6d430abd8994ab3c3d6e4b4055c5b1805",
+          "outputHash": "202ec2e50f0c453f33aca919fb06addfa9b43f039ef98038032b9f8dc572c65e",
+          "bytes": 55702
+        }
+      ]
+    },
+    {
+      "id": "depth-charge",
+      "file": "audio/depth-charge.ogg",
+      "seconds": 7,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "One naval depth charge detonating deep underwater, heard on the escort above: a heavy dull concussion with almost no high frequency, a long low rumble carried up through the water, then a slow rising surge, no metallic clang and no sonar ping. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "One naval depth charge detonating deep underwater, heard on the escort above: a heavy dull concussion with almost no high frequency, a long low rumble carried up through the water, then a slow rising surge, no metallic clang and no sonar ping. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 7,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "79e7550419f7141d4a69047726d6d7f457c8b7d6c43395dd19afdb7a3f54845c",
+          "outputHash": "2a33b8561a179955e651145e8e985517ab383c5e62be8d5f98a3d92925c960f3",
+          "bytes": 62769
+        }
+      ]
+    },
+    {
+      "id": "water-column-fall",
+      "file": "audio/water-column-fall.ogg",
+      "seconds": 5,
+      "loop": false,
+      "identity": "reconstruction",
+      "conditional": false,
+      "prompt": "A tall column of seawater thrown up by an explosion falling back onto the open sea, broad heavy sheets of falling water and hard irregular splashing that fades into settling foam, no explosive blast at any point and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "request": {
+        "text": "A tall column of seawater thrown up by an explosion falling back onto the open sea, broad heavy sheets of falling water and hard irregular splashing that fades into settling foam, no explosive blast at any point and no voices. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 5,
+        "prompt_influence": 0.6,
+        "loop": false
+      },
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": null,
+          "sourceHash": "1b725e0ea6314ebeb006ab6b3d24f40573de7d595d99806884d0dc1ec6b6ebbf",
+          "outputHash": "a92fac38d0bdd438bf85b5d460fc8fa87a7ea53586a6d75bca73446f0faedf14",
+          "bytes": 57027
         }
       ]
     },
@@ -2874,6 +3128,128 @@
           "sourceHash": "78ec6f7a84fa57ca2b392ee907e127a8149a4766ac6f56adf7923a2cce3bb743",
           "outputHash": "2383f0ff68f94d598b0d03b152e460feec424d9ef929587238cbeabe0aea7184",
           "bytes": 53456
+        }
+      ]
+    },
+    {
+      "id": "R26",
+      "slug": "r26",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. You're hit — smoke coming from your engine. How does she handle?",
+      "substitutions": {},
+      "file": "audio/voice/r26.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "CHo5byWzqFMzEXl8NRX9",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "07d374befd3072741986c310926e9e48cbbb9b1d6a0bfb84442f79a5eaed0726",
+          "outputHash": "b9cbfcd632cc5566dcc2464bf1e0eaa68b50e8fefbe6e80868f633fa19641a8d",
+          "bytes": 55429
+        },
+        {
+          "date": "2026-09-14",
+          "requestId": "uP5xD1VCtmrET0k4JlE4",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "5e1f15f65be2e4b35b5bf4433b9cbeadfea69e916561b5f9304b6087e57e81a5",
+          "outputHash": "809419c7b7e9668b2c70fa9c81eef7b4c2016c1d63b4c3353cb3a415cf8c2495",
+          "bytes": 47446
+        }
+      ]
+    },
+    {
+      "id": "R27",
+      "slug": "r27",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. You're streaming fuel. Get her on a course for home while she still flies.",
+      "substitutions": {},
+      "file": "audio/voice/r27.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "2pc76mlBrPl9cwu0AwMz",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "c276ed88deeb61bcbe2397e4b7f95e641c396f31b7d4d15a65b3a7208fa3e16f",
+          "outputHash": "62a3354fa6d1b7bf55938615520ea4175ffe7a85f3bfddf2eaeb7ae7567f901d",
+          "bytes": 64138
+        }
+      ]
+    },
+    {
+      "id": "R28",
+      "slug": "r28",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three. You're burning! Get out of her!",
+      "substitutions": {},
+      "file": "audio/voice/r28.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "C1eMOcc71DmVe5n76BMR",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "cb02d9e17b242643feda6915838da4d2ae2e9f4226112f152714e95e51dca9be",
+          "outputHash": "67bf2b4b75765adaa9b1f517286fa94180cb64ee21b1ceb6acff0b711b6ce2b3",
+          "bytes": 38566
+        }
+      ]
+    },
+    {
+      "id": "R29",
+      "slug": "r29",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three to Enterprise. Lead is hit hard and losing power. I'm staying with him.",
+      "substitutions": {},
+      "file": "audio/voice/r29.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "zUX9pIkqW6P3dI7ZwbWL",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "648eb96cdbf8ce5112d1fb5fb61f5aa2b158a95f3c69af4b90d6d8888e08225c",
+          "outputHash": "683782ea1a9b3283873faea3acf5547ec378df2a1d7005cf51cfc5ddccc3e141",
+          "bytes": 71150
+        }
+      ]
+    },
+    {
+      "id": "R30",
+      "slug": "r30",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three to Enterprise. Lead is going down. Marking the position.",
+      "substitutions": {},
+      "file": "audio/voice/r30.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "hX3W3Cg1h4kk6tP8wfib",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "837504d076972f2455bbf6fff82ddcd6417f0adc75d1ee17cc965b9c837c0a15",
+          "outputHash": "0949381c26557d8c2a6adc911c38184a154fb090a35baa8f8bb64c4d585d2b6b",
+          "bytes": 60347
+        }
+      ]
+    },
+    {
+      "id": "R31",
+      "slug": "r31",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. You're trailing oil from the engine. Watch your temperature.",
+      "substitutions": {},
+      "file": "audio/voice/r31.ogg",
+      "generations": [
+        {
+          "date": "2026-09-14",
+          "requestId": "wNSGcOgLLLadIMmiRS4g",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "58ae4aa02c76e39976394ce186836f774880296fae7267c8ff4e3d3c458a5a24",
+          "outputHash": "2f7c4da0d7b77ede357c2f0845d6e1d274563c6c02b4f3c07238e29f69077553",
+          "bytes": 52578
         }
       ]
     },

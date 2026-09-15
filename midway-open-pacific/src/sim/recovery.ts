@@ -35,6 +35,11 @@ export function lineUpLimit(s: Any): number {
   return (s?.deckWidth ?? 0) / 2 + FINAL.lateralMargin;
 }
 
+/** Metres the line-up centreline sits to starboard of the ship's origin; 0 when the deck is clear. */
+export function deckOffset(s: Any): number {
+  return s?.deckOffset ?? 0;
+}
+
 /** Where the approach is flown from: on the centreline, astern of the moving deck. */
 export const SETUP = Object.freeze({
   astern: 1600,
@@ -68,7 +73,11 @@ export interface IApproach {
 /** A point on the deck's extended centreline, `along` metres from the ship, in its moving frame. */
 export function centrelinePoint(s: Any, along: number): { x: number; z: number } {
   const f = forward(s.heading);
-  return { x: s.x + f.x * along, z: s.z + f.z * along };
+  const right = deckOffset(s);
+  return {
+    x: s.x + f.x * along + Math.cos(s.heading) * right,
+    z: s.z + f.z * along + Math.sin(s.heading) * right,
+  };
 }
 
 /** The astern setup point in the carrier's frame, so it moves with the ship. */
@@ -102,7 +111,7 @@ export function finalReady(p: Any, s: Any): boolean {
     p.y > deck + FINAL.minClearance &&
     p.y < deck + FINAL.maxClearance &&
     p.speed < FINAL.maxSpeed &&
-    Math.abs(local.right) < lineUpLimit(s) &&
+    Math.abs(local.right - deckOffset(s)) < lineUpLimit(s) &&
     Math.abs(angleDelta(p.heading, s.heading)) < FINAL.heading
   );
 }
@@ -137,7 +146,11 @@ export function approach(p: Any, s: Any): IApproach {
   const arrived = distance2(p, setup) < 300;
   const deck = deckDatum(s);
   const lateral = lineUpLimit(s);
-  const inGroove = local.forward < 0 && range < SETUP.astern && Math.abs(local.right) < lateral * 3;
+  // Corrections are measured from the corridor's own centreline, which is `deckOffset` to starboard
+  // of the ship's origin, so the cues name the side an aircraft actually has to move toward.
+  const offset = deckOffset(s);
+  const right = local.right - offset;
+  const inGroove = local.forward < 0 && range < SETUP.astern && Math.abs(right) < lateral * 3;
   const phase: Phase = ready
     ? "final"
     : range >= SETUP.capture && !inGroove
@@ -155,7 +168,7 @@ export function approach(p: Any, s: Any): IApproach {
     if ((p.speed ?? 0) > FINAL.maxSpeed) cues.push("TOO FAST");
     if (p.y > deck + FINAL.maxClearance) cues.push("HIGH");
     else if (p.y < deck + FINAL.minClearance) cues.push("LOW");
-    if (Math.abs(local.right) >= lateral) cues.push(local.right > 0 ? "RIGHT OF CENTERLINE" : "LEFT OF CENTERLINE");
+    if (Math.abs(right) >= lateral) cues.push(right > 0 ? "RIGHT OF CENTERLINE" : "LEFT OF CENTERLINE");
     if (Math.abs(headingError) >= FINAL.heading) cues.push(headingError > 0 ? "LINE UP LEFT" : "LINE UP RIGHT");
   }
   return {
@@ -177,7 +190,7 @@ export function approach(p: Any, s: Any): IApproach {
     cues,
     range,
     astern: -local.forward,
-    lateral: local.right,
+    lateral: right,
     headingError,
     speed: p.speed ?? 0,
     descent: p.vy ?? 0,

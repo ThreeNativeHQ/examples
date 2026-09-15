@@ -2,11 +2,19 @@
   "name": "rigged-character",
   "target": "web",
   "schemaVersion": 1,
-  "viewport": { "width": 1280, "height": 720 },
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
   "warmupFrames": 120,
   "subject": "character",
   "steps": [
-    { "kind": "wait", "label": "play and switch clips", "waitTicks": 240, "release": true }
+    {
+      "kind": "wait",
+      "label": "play and switch clips",
+      "waitTicks": 900,
+      "release": true
+    }
   ],
   "assert": {
     "diagnostics": {
@@ -23,10 +31,10 @@
         "gte": 18
       },
       {
-        "allowTrivial": "The retargeted walk moves the limb bones; a still pose is the regression this catches.",
         "component": "poseDelta",
         "entity": "character",
-        "gte": 0.05
+        "gte": 0.05,
+        "allowTrivial": "The retargeted walk moves the limb bones; a still pose is the regression this catches."
       },
       {
         "allowTrivial": "AETHER's rigid segment lengths are preserved by construction; any drift is a skinning regression.",
@@ -71,10 +79,10 @@
         "gte": 18
       },
       {
-        "allowTrivial": "Two distinct retargeted clips must actually play in the run.",
         "component": "clipsPlayed",
         "entity": "character",
-        "gte": 2
+        "gte": 2,
+        "changed": true
       },
       {
         "allowTrivial": "The source 14-unit AETHER size is retained unless the sample overrides it.",
@@ -85,7 +93,9 @@
     ],
     "visual": [
       {
-        "frameDiff": { "minChangedPixelRatio": 0.0005 },
+        "frameDiff": {
+          "minChangedPixelRatio": 0.0005
+        },
         "region": {
           "x": 0,
           "y": 0,

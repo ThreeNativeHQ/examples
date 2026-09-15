@@ -291,6 +291,14 @@ const notes = [];
   assert.equal(target.deck, undefined, "an AI target must not carry the ship's deck health");
   assert.ok(target.uncertainty > 0, "an AI target must carry its uncertainty");
 
+  // Metadata regression on copies: selecting an ordered contact also updates what the HUD reads.
+  for (const previous of [null, "previous-contact"]) {
+    const actor = { ...striker(), wing: true, target: previous };
+    const ordered = selectNavalTarget({ ...b, command: "strike", target: enterprise.id }, actor);
+    assert.equal(ordered.id, enterprise.id);
+    assert.equal(actor.target, ordered.id, "ordered target selection updates the aircraft's actual target record");
+  }
+
   // 6 — the task force turns away. The estimate keeps running along the reported course, so the
   //     attack is sent to an empty patch of sea; the error radius says so honestly.
   // Age the one report the Japanese fleet holds, until either it goes stale or the oncoming strike

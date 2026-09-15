@@ -38,18 +38,25 @@ function inRect(
   length: number,
   width: number,
   margin: number,
+  /** Metres the rectangle's centre sits to starboard of the ship's origin, in the ship's own frame. */
+  right = 0,
 ): boolean {
   const l = localPoint(p, s);
-  return Math.abs(l.right) < width / 2 + margin && Math.abs(l.forward) < length / 2 + margin;
+  return Math.abs(l.right - right) < width / 2 + margin && Math.abs(l.forward) < length / 2 + margin;
 }
 
-/** Inside the carrier's launch/recovery corridor. Carriers only; every other hull has none. */
+/**
+ * Inside the carrier's launch/recovery corridor. Carriers only; every other hull has none. The
+ * corridor is centred `deckOffset` metres to starboard of the origin — Kaga's island sits on the
+ * centreline while her clear deck is to starboard — so the rectangle shifts athwartships and
+ * rotates with the heading like every other ship-frame test here; it does not change size.
+ */
 export function onDeck(
   p: { x: number; z: number },
-  s: { x: number; z: number; heading: number; deckWidth: number; deckLength: number },
+  s: { x: number; z: number; heading: number; deckWidth: number; deckLength: number; deckOffset?: number },
   margin = 0,
 ): boolean {
-  return inRect(p, s, s.deckLength, s.deckWidth, margin);
+  return inRect(p, s, s.deckLength, s.deckWidth, margin, s.deckOffset ?? 0);
 }
 
 /**

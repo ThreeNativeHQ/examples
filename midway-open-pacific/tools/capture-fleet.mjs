@@ -100,6 +100,7 @@ try {
         z: +c.position.z.toFixed(2),
         yaw: +c.rotation.y.toFixed(2),
         height: +((c.scale.x || 1) * 1.83).toFixed(3),
+        rig: c.userData.rig || "crew",
         helmet: !!c.getObjectByName("Head")?.children.length,
       })),
     };
@@ -107,8 +108,8 @@ try {
   assert.equal(crew.count, 12, `deck party size: ${JSON.stringify(crew)}`);
   assert.ok(crew.visible, "the deck party is visible at the briefing");
   assert.ok(
-    crew.men.every((m) => m.helmet),
-    "every sailor wears his trade's helmet",
+    crew.men.every((m) => m.helmet || m.rig !== "crew"),
+    "every sailor wears his trade's marking (cap band or trade uniform)",
   );
   assert.ok(
     new Set(crew.men.map((m) => `${m.x},${m.z}`)).size === 12,
@@ -169,7 +170,9 @@ try {
   if (process.env.MIDWAY_CREW_CLOSEUPS === "1") {
     const skinTriangles = await page.evaluate(() => {
       let triangles = 0;
-      window.midway.world.crew.sailors[0].player.root.traverse((node) => {
+      // The party's sailor rig specifically: the director and pilot meshes are smaller assets.
+      const sailor = window.midway.world.crew.sailors.find((s) => s.station.rig === "crew");
+      sailor.player.root.traverse((node) => {
         if (node.isSkinnedMesh) triangles += node.geometry.index.count / 3;
       });
       return triangles;
@@ -216,6 +219,166 @@ try {
     });
     await releaseCamera();
   }
+
+  // Inventory-driven deck park: both teams, correct airframe, bounded aft slots.
+  const STATION = { wildcat: 72, sbd: 88, tbd: 104, zero: 72, val: 88, kate: 104 };
+  const TEAM_TYPES = { us: ["wildcat", "sbd", "tbd"], jp: ["zero", "val", "kate"] };
+  // Every parked type is a real model. The Wildcat stands in as the Douglas SBD and the Val as
+  // the Kate — same-team substitutions, never the procedural silhouette.
+  const MODEL_NAME = { wildcat: /SBD-3/, sbd: /SBD-3/, tbd: /Devastator/, zero: /A6M3/, val: /B5N2/, kate: /B5N2/ };
+  const readPark = () =>
+    page.evaluate(() => {
+      const s = window.midway;
+      return s.battle.ships
+        .filter((x) => x.kind === "carrier")
+        .map((ship) => {
+          const mesh = s.world.meshes.get(ship.id);
+          return {
+            id: ship.id,
+            name: ship.name,
+            team: ship.team,
+            ready: { ...ship.air.ready },
+            parked: (mesh?.userData.parked ?? []).map((p) => {
+              let geometry = null;
+              p.traverse((o) => {
+                if (geometry === null && o.isMesh && o.geometry) geometry = o.geometry.uuid;
+              });
+              return {
+                type: p.userData.simAirframe,
+                imported: !!p.userData.importedAircraft,
+                devastator: !!p.userData.devastator,
+                name: p.name,
+                visible: p.visible,
+                geometry,
+                pos: [+p.position.x.toFixed(3), +p.position.y.toFixed(3), +p.position.z.toFixed(3)],
+              };
+            }),
+          };
+        });
+    });
+  const park = await readPark();
+  assert.equal(park.length, 7, `all seven carriers carry a deck park: ${park.length}`);
+  for (const c of park) {
+    assert.ok(c.parked.length > 0, `${c.name} parks its own airframes`);
+    const types = c.parked.map((p) => p.type);
+    assert.ok(
+      types.every((t) => TEAM_TYPES[c.team].includes(t)),
+      `${c.name} parks only its team's types: ${JSON.stringify(types)}`,
+    );
+    assert.deepEqual(
+      [...types].sort(),
+      TEAM_TYPES[c.team].slice().sort(),
+      `${c.name} parks every airframe it has ready: ${JSON.stringify(c.ready)}`,
+    );
+    const zs = c.parked.map((p) => p.pos[2]);
+    assert.equal(new Set(zs).size, zs.length, `${c.name} parks no two aircraft in one slot: ${JSON.stringify(zs)}`);
+    for (const p of c.parked) {
+      assert.equal(p.pos[0], -1, `${c.name}/${p.type} parks on the measured aft line`);
+      assert.equal(p.pos[2], STATION[p.type], `${c.name}/${p.type} parks in its own station`);
+      // The Devastator is the detailed ported airframe, not a supplied GLB, so it carries
+      // the devastator flag instead of the imported one; both are real models either way.
+      assert.equal(
+        p.imported || p.devastator,
+        true,
+        `${c.name}/${p.type} uses a real model, never the procedural silhouette`,
+      );
+      assert.ok(MODEL_NAME[p.type].test(p.name), `${c.name}/${p.type} is the right model: ${p.name}`);
+    }
+  }
+  console.log("deck park", JSON.stringify(park.map((c) => ({ name: c.name, team: c.team, parked: c.parked.map((p) => p.type) }))));
+
+  const deckView = async (name, find) => {
+    await shot(name, `(${find})(window.midway)`);
+    await releaseCamera();
+  };
+  // Both teams, from abeam-above the aft park, so the parked airframes are the subject.
+  await deckView("fleet-deck-us", `(s) => {
+    const ship = s.battle.ships.find((x) => x.id === s.battle.home.id);
+    const mesh = s.world.meshes.get(ship.id);
+    mesh.updateMatrixWorld(true);
+    const at = mesh.localToWorld(new (s.world.camera.position.constructor)(-1, ship.deckHeight, 88));
+    s.world.camera.position.set(at.x + 30, at.y + 20, at.z + 34);
+    s.world.camera.lookAt(at.x, at.y, at.z);
+    s.world.camera.fov = 44;
+    s.world.camera.up.set(0, 1, 0);
+    s.world.camera.updateProjectionMatrix();
+    s.world.camera.updateMatrixWorld();
+  }`);
+  await deckView("fleet-deck-ijn", `(s) => {
+    const ship = s.battle.ships.find((x) => x.kind === "carrier" && x.team === "jp");
+    const mesh = s.world.meshes.get(ship.id);
+    mesh.updateMatrixWorld(true);
+    const at = mesh.localToWorld(new (s.world.camera.position.constructor)(-1, ship.deckHeight, 88));
+    s.world.camera.position.set(at.x + 30, at.y + 20, at.z + 34);
+    s.world.camera.lookAt(at.x, at.y, at.z);
+    s.world.camera.fov = 44;
+    s.world.camera.up.set(0, 1, 0);
+    s.world.camera.updateProjectionMatrix();
+    s.world.camera.updateMatrixWorld();
+  }`);
+
+  // Ready-line depletion is a fixture: it writes the sim's own ready record and calls the same
+  // `refreshDeck` the launch gate uses, because no public method removes one chosen airframe type
+  // (`wreckAircraft` always takes the fullest line). This is not a natural carrier-cycle proof.
+  const depletion = await page.evaluate(() => {
+    const s = window.midway;
+    const ship = s.battle.ships.find((x) => x.id === s.battle.home.id);
+    const type = "sbd";
+    const before = ship.air.ready[type];
+    ship.air.ready[type] = 0;
+    ship.air.damaged[type] = (ship.air.damaged[type] ?? 0) + before;
+    s.battle.refreshDeck(ship);
+    return { type, before, after: ship.air.ready[type] };
+  });
+  assert.equal(depletion.after, 0, `the fixture empties the ready line: ${JSON.stringify(depletion)}`);
+  await page.waitForTimeout(250);
+  const wrecked = await page.evaluate(() => {
+    const s = window.midway;
+    const mesh = s.world.meshes.get(s.battle.home.id);
+    return (mesh.userData.parked ?? []).map((p) => ({ type: p.userData.simAirframe, visible: p.visible }));
+  });
+  assert.deepEqual(
+    wrecked.filter((p) => !p.visible).map((p) => p.type),
+    [depletion.type],
+    `only the wrecked airframe leaves the park: ${JSON.stringify(wrecked)}`,
+  );
+  assert.ok(wrecked.filter((p) => p.visible).length >= 2, `the other types stay spotted: ${JSON.stringify(wrecked)}`);
+  console.log("deck park depletion", JSON.stringify({ wrecked: depletion.type, after: wrecked }));
+
+  // Restock is a fixture that writes the sim's own ready line back, not a natural service cycle.
+  await page.evaluate((type) => {
+    const s = window.midway;
+    const ship = s.battle.ships.find((x) => x.id === s.battle.home.id);
+    ship.air.ready[type] = ship.air.airframes[type];
+    ship.air.damaged[type] = 0;
+    s.battle.refreshDeck(ship);
+  }, depletion.type);
+  await page.waitForTimeout(250);
+  const restored = await page.evaluate((type) => {
+    const s = window.midway;
+    const mesh = s.world.meshes.get(s.battle.home.id);
+    const p = (mesh.userData.parked ?? []).find((x) => x.userData.simAirframe === type);
+    return { type, visible: p?.visible };
+  }, depletion.type);
+  assert.ok(restored.visible, `a restocked airframe returns to the park: ${JSON.stringify(restored)}`);
+
+  // The real NEW OPERATION restart builds a fresh Battle and must not dispose shared geometry.
+  const homeId = await page.evaluate(() => window.midway.battle.home.id);
+  const beforeRestart = park.flatMap((c) => c.parked.filter((p) => p.imported).map((p) => p.geometry));
+  await page.evaluate(() => document.getElementById("restart-pause").click());
+  await page.waitForTimeout(700);
+  const afterRestart = await readPark();
+  const afterGeom = afterRestart.flatMap((c) => c.parked.filter((p) => p.imported).map((p) => p.geometry));
+  assert.equal(afterGeom.length, beforeRestart.length, "restart keeps the same park instances");
+  assert.deepEqual(afterGeom, beforeRestart, "restart does not destroy or rebuild shared airframe geometry");
+  assert.deepEqual(
+    afterRestart.map((c) => c.parked.length),
+    park.map((c) => c.parked.length),
+    "restart keeps every carrier's park",
+  );
+  const homePark = afterRestart.find((c) => c.id === homeId);
+  assert.ok(homePark && homePark.parked.every((p) => p.visible), "restart restores the home deck park");
+  console.log("deck park restart", JSON.stringify({ carriers: afterRestart.length, shared: afterGeom.length }));
 
   // Fly, then measure the imported-airframe swap on live AI aircraft.
   await page.click("#start-air");
@@ -325,6 +488,8 @@ try {
   assert.deepEqual(errors, []);
   console.log(
     "PASS: twelve distinct deck-crew stations with helmets, out-of-phase clips and detuned rates; " +
+      "inventory-driven deck park on all seven carriers (correct per-team airframes, bounded aft " +
+      "slots, one type leaving/returning at a time, restart keeps shared geometry); " +
       "imported Zero on nearby AI; Japanese bombers off the SBD airframe; imported IJN destroyer " +
       "with two LOD levels; Midway atoll captured; no console or GPU errors",
   );

@@ -87,7 +87,17 @@ const CARRIER_MODELS = {
   kaga: createKaga,
   soryu: createSoryu,
   hiryu: createHiryu,
-  yorktown: createYorktown,
+  // CV-5 is drawn from the same sister-ship hull as CV-6 and CV-8, and for the same reason: all
+  // three were Yorktown class. The imported `carrier.yorktown.glb` is measured correctly — length
+  // within 0.05%, keel on the datum — but it is not a carrier above the deck. Its superstructure is
+  // a 16 m wide block standing symmetrically on the centreline for 80 m of the deck and rising 27 m
+  // above it (measured in Blender: mean X of every above-deck slice within 0.3 m of zero), which is
+  // a battleship arrangement, not an island. It leaves no clear corridor on either side — `clear
+  // 0|0` for 95 m in `tools/measure-decks.mjs` — so an aircraft rolling down that deck flies through
+  // it. `hornet.glb`'s above-deck mass sits at mean X +12 to +15, entirely to starboard, where a
+  // Yorktown-class island belongs. The file stays in the repository and in `docs/asset-provenance.md`
+  // as the measured source it is; it is simply not what CV-5 is drawn from.
+  yorktown: () => supplied(hornet, "USS Yorktown"),
 } as const;
 
 /** One of the seven carriers this game draws. */

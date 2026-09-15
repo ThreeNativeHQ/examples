@@ -42,7 +42,7 @@ const { Battle, SHIP_CLASSES, finalReady, FINAL, lineUpLimit, approach, onDeck, 
 
 // ---- 1 — a pure Battle already knows how big every ship is, and the numbers are the catalog's.
 const b = new Battle();
-assert.equal(b.ships.length, 17, "the fleet is still seventeen hulls");
+assert.equal(b.ships.length, 19, "the fleet is the seventeen original hulls plus the two support cruisers");
 for (const s of b.ships) {
   assert.ok(Number.isFinite(s.hullLength) && s.hullLength > 20, `${s.name}: hull length ${s.hullLength}`);
   assert.ok(Number.isFinite(s.hullBeam) && s.hullBeam > 5, `${s.name}: hull beam ${s.hullBeam}`);
@@ -50,14 +50,20 @@ for (const s of b.ships) {
   assert.equal(s.length, undefined, `${s.name} still carries the ambiguous 'length' field`);
   assert.equal(s.width, undefined, `${s.name} still carries the ambiguous 'width' field`);
 }
-/** Every ship whose geometry comes from a measured GLB, and the class it comes from. */
+/**
+ * Every ship whose geometry comes from an imported, measured GLB, and the class it comes from.
+ * CV-5 is absent: she is drawn from the supplied `hornet.glb`, which is not a catalog import, so
+ * her `hullLength` is the sisters' literal rather than `yorktown`'s measured GLB. See
+ * src/sim/battle.ts.
+ */
 const FROM_CATALOG = {
-  "USS Yorktown": "yorktown",
   Kaga: "kaga",
   Soryu: "soryu",
   Hiryu: "hiryu",
   Tone: "tone",
   Chikuma: "tone",
+  Mogami: "mogami",
+  Mikuma: "mogami",
   Arashi: "kagero",
   Nowaki: "kagero",
   "USS Hammann": "hammann",
@@ -91,11 +97,45 @@ assert.deepEqual(
   [220, 20, 251.58, 32.4],
   "the surveyed 220x20 launch corridor sits inside the 251.58x32.4 hull",
 );
-// The two rectangles disagree about a point over the deck edge, which is the whole reason they are
-// two fields: a bomb must hit there and an aircraft must not land there.
-const edge = { x: enterprise.x + Math.cos(enterprise.heading) * 14, z: enterprise.z + Math.sin(enterprise.heading) * 14 };
-assert.equal(overHull(edge, enterprise), true, "a point 14 m abeam is over the hull");
+// The rectangles disagree about a point over the deck edge, which is the whole reason they are
+// separate fields: a bomb must hit there and an aircraft must not land there.
+const abeam = (s, right, y) => ({
+  x: s.x + Math.cos(s.heading) * right,
+  z: s.z + Math.sin(s.heading) * right,
+  y,
+});
+const edge = abeam(enterprise, 14, enterprise.deckHeight);
+assert.equal(overHull(edge, enterprise), true, "a point 14 m abeam at deck height is over the deck");
 assert.equal(onDeck(edge, enterprise), false, "and is not inside the landing corridor");
+
+// ---- 2b — the damage volume is two boxes, because a flight deck overhangs its hull. Kaga's drawn
+// deck reaches 26 m from the centreline over a 32.5 m waterline beam, so a point 22 m abeam is over
+// the deck and must be hittable, and the same point at sea level is open water and must not be.
+const kagaHull = b.ships.find((s) => s.name === "Kaga");
+assert.ok(kagaHull.deckBeam / 2 > kagaHull.hullBeam / 2 + 3, `Kaga's deck overhangs its hull: ${kagaHull.deckBeam} over ${kagaHull.hullBeam}`);
+const overhang = kagaHull.hullBeam / 2 + 4;
+assert.equal(overHull(abeam(kagaHull, overhang, kagaHull.deckHeight), kagaHull, 3), true, "a bomb on the overhanging deck hits");
+assert.equal(overHull(abeam(kagaHull, overhang, 0), kagaHull, 3), false, "the same track at sea level is a miss alongside");
+assert.equal(overHull(abeam(kagaHull, kagaHull.deckBeam, kagaHull.deckHeight), kagaHull, 3), false, "one deck beam outboard is still a miss");
+// A ship with no flight deck is one box, exactly as it always was.
+for (const s of b.ships) if (s.kind !== "carrier") assert.equal(s.deckBeam, s.hullBeam, `${s.name} has no overhang`);
+
+// ---- 2c — the corridor can be shifted athwartships. Kaga's island is a 20 m block on her centreline,
+// so `onDeck` measures her 18 m corridor from `deckOffset` = 9 m to starboard: the centreline
+// amidships — where the island stands — is not landing deck, while a point 9 m to starboard is. The
+// same two points on a carrier with no offset answer the opposite way, which is what proves the field
+// moves the rectangle rather than widening it. Asserted through the real Battle and onDeck.
+const kagaOffset = b.ships.find((s) => s.name === "Kaga");
+assert.equal(kagaOffset.deckOffset, 9, "Kaga's corridor is shifted 9 m to starboard");
+assert.equal(kagaOffset.deckWidth, 18, "the offset shifts the corridor; it does not widen it");
+for (const s of b.ships.filter((s) => s.kind === "carrier" && s.name !== "Kaga"))
+  assert.equal(s.deckOffset, 0, `${s.name} keeps its corridor on the centreline`);
+const soryuDeck = b.ships.find((s) => s.name === "Soryu");
+assert.ok(soryuDeck.deckWidth / 2 <= 9, "the zero-offset control must be narrower than 9 m to answer oppositely");
+assert.equal(onDeck(abeam(kagaOffset, 0, kagaOffset.deckHeight), kagaOffset), false, "Kaga's island stands on the centreline: not a landable corridor");
+assert.equal(onDeck(abeam(kagaOffset, 9, kagaOffset.deckHeight), kagaOffset), true, "9 m to starboard amidships is Kaga's clear deck");
+assert.equal(onDeck(abeam(soryuDeck, 0, soryuDeck.deckHeight), soryuDeck), true, "a centred deck takes the centreline");
+assert.equal(onDeck(abeam(soryuDeck, 9, soryuDeck.deckHeight), soryuDeck), false, "and 9 m to starboard is off its centreline");
 
 // ---- 3 — per-carrier deck datums, and no single global height.
 const decks = Object.fromEntries(b.ships.filter((s) => s.kind === "carrier").map((s) => [s.name, s.deckHeight]));
@@ -104,20 +144,39 @@ assert.deepEqual(
   {
     "USS Enterprise": 20.06,
     "USS Hornet": 20.06,
-    "USS Yorktown": 20.45,
+    // CV-5 draws her sister's `hornet.glb` hull, so she carries their datum. The imported
+    // `carrier.yorktown.glb` measured 12.54 and is still a correct import; it is simply not what
+    // this ship is drawn from. See src/render/imported-ships.ts for why.
+    "USS Yorktown": 20.06,
     Akagi: 20.06,
-    Kaga: 23.47,
-    Soryu: 20.42,
-    Hiryu: 20.6,
+    Kaga: 15.76,
+    Soryu: 12.89,
+    Hiryu: 12.92,
   },
   "carrier deck datums must be each ship's own measurement",
 );
-assert.equal(new Set(Object.values(decks)).size, 5, "five distinct deck datums, not one");
+// Four, not five: CV-5, CV-6, CV-8 and Akagi share the two supplied hulls and therefore share a
+// datum, which is the point — a datum belongs to the model a ship is drawn from. What this guards
+// is that there is no single global deck height, which was the bug it was written for.
+assert.equal(new Set(Object.values(decks)).size, 4, "four distinct deck datums, not one global height");
+// And every imported datum is that measurement in the world's frame rather than the model's: the
+// deck's own midpoint along the corridor, less the class draught the hull is sunk by in
+// src/render/world.ts. Both tables come from `node tools/measure-decks.mjs`; this is the arithmetic
+// between them, so a draught that changes without the datum moving is caught here. It is the
+// arithmetic for IMPORTED hulls only: CV-5 is drawn from the supplied `hornet.glb`, which bakes its
+// waterline rather than its keel, so she has no measured midpoint to subtract a draught from and is
+// absent here and from FROM_CATALOG above.
+const MEASURED_MIDPOINT = { Kaga: 23.26, Soryu: 20.49, Hiryu: 20.72 };
+for (const [name, midpoint] of Object.entries(MEASURED_MIDPOINT)) {
+  const cls = SHIP_CLASSES[FROM_CATALOG[name]];
+  const expected = +(midpoint - cls.draught).toFixed(2);
+  assert.equal(decks[name], expected, `${name}: deck ${midpoint} m over the keel, less ${cls.draught} m draught`);
+}
 for (const file of ["src/sim/battle.ts", "src/sim/recovery.ts"]) {
   const source = readFileSync(resolve(root, file), "utf8");
   assert.ok(!/\bDECK_HEIGHT\b/.test(source), `${file} still reads the fleet-wide DECK_HEIGHT constant`);
 }
-// A weapon meets the deck it is aimed at: Kaga's hit plane is 3.41 m above Hornet's.
+// A weapon meets the deck it is aimed at: Kaga's hit plane is 4.30 m below Hornet's.
 const bombOverKaga = (y) => {
   const battle = new Battle();
   const ship = battle.ships.find((s) => s.name === "Kaga");
@@ -128,7 +187,7 @@ const bombOverKaga = (y) => {
 };
 const kaga = b.ships.find((s) => s.name === "Kaga");
 assert.equal(bombOverKaga(kaga.deckHeight + 1), true, "a bomb crossing Kaga's own deck plane hits it");
-assert.equal(bombOverKaga(20.06 + 1), false, "and a bomb aimed at Hornet's deck height passes under Kaga's");
+assert.equal(bombOverKaga(20.06 + 1), false, "and a bomb aimed at Hornet's deck height is still above Kaga's");
 
 // ---- 4 — finalReady reads the selected deck's own datum and corridor.
 /** Put the aircraft on the centreline astern of `s`, at absolute altitude `y` and offset `right`. */
@@ -146,30 +205,36 @@ const astern = (battle, s, y, right = 0, range = 400) => {
   return battle.player;
 };
 const hornet = b.ships.find((s) => s.name === "USS Hornet");
-const yorktown = b.ships.find((s) => s.name === "USS Yorktown");
-assert.notEqual(hornet.deckHeight, yorktown.deckHeight, "this case needs two decks at different heights");
+// CV-5 draws the supplied Hornet hull now, so she no longer supplies this case a second deck
+// height. Soryu is an imported hull the game still draws, and its 12.89 m deck is the lower deck
+// the discriminating pair needs.
+const soryu = b.ships.find((s) => s.name === "Soryu");
+assert.notEqual(hornet.deckHeight, soryu.deckHeight, "this case needs two decks at different heights");
 
-// The discriminating band: 24.2 m clears Hornet's deck by 4.14 m and Yorktown's by only 3.75 m, and
-// the gate opens at 3.94 m. A fleet-wide 20.06 m datum would have called both of them ready.
-const band = hornet.deckHeight + FINAL.minClearance + 0.2;
-assert.equal(finalReady(astern(b, hornet, band), hornet), true, "ready over the lower deck");
-assert.equal(finalReady(astern(b, yorktown, band), yorktown), false, "not yet ready over the taller deck");
-assert.ok(band > 20.06 + FINAL.minClearance, "a fixed 20.06 m datum would have passed both — that is the bug");
+// The discriminating band. Soryu's imported hull sits 7.17 m lower in the water than the supplied
+// Hornet's — 12.89 m of flight deck against 20.06 m — so an altitude that clears Soryu's deck by
+// 0.2 m more than the gate needs is 7 m BELOW Hornet's deck. A fleet-wide 20.06 m datum would
+// refuse this legitimate approach to Soryu, which is the same bug from the other side.
+const band = soryu.deckHeight + FINAL.minClearance + 0.2;
+assert.equal(finalReady(astern(b, soryu, band), soryu), true, "ready over the lower deck");
+assert.equal(finalReady(astern(b, hornet, band), hornet), false, "not yet ready over the taller deck");
+assert.ok(band < 20.06 + FINAL.minClearance, "a fixed 20.06 m datum would have refused both — that is the bug");
 assert.equal(
-  finalReady(astern(b, yorktown, yorktown.deckHeight + FINAL.minClearance + 0.2), yorktown),
+  finalReady(astern(b, hornet, hornet.deckHeight + FINAL.minClearance + 0.2), hornet),
   true,
   "the same clearance over its own deck is ready",
 );
 // The cue the HUD prints and the gate the game enforces are the same decision, per deck.
-for (const s of [hornet, yorktown]) {
+for (const s of [soryu, hornet]) {
   const low = approach(astern(b, s, band), s);
   assert.equal(low.ready, finalReady(b.player, s), `${s.name}: the cue and the gate disagree`);
   if (!low.ready) assert.ok(low.cues.includes("LOW"), `${s.name}: a sub-envelope approach must say LOW`);
 }
 // The line-up corridor is the deck's own width plus the LSO's tolerance, so the wider deck accepts
-// a wider lineup — and neither accepts one beyond its own limit.
-assert.ok(lineUpLimit(yorktown) > lineUpLimit(hornet), "a wider deck has a wider lineup limit");
-for (const s of [hornet, yorktown]) {
+// a wider lineup — and neither accepts one beyond its own limit. Hornet's 20 m surveyed corridor
+// against Soryu's narrower 14 m measured deck is the pair that shows a corridor feeding the limit.
+assert.ok(lineUpLimit(hornet) > lineUpLimit(soryu), "a wider deck has a wider lineup limit");
+for (const s of [hornet, soryu]) {
   const inside = lineUpLimit(s) - 1;
   assert.equal(finalReady(astern(b, s, s.deckHeight + 20, inside), s), true, `${s.name}: inside its lineup limit`);
   assert.equal(finalReady(astern(b, s, s.deckHeight + 20, lineUpLimit(s) + 1), s), false, `${s.name}: beyond it`);
@@ -262,14 +327,16 @@ console.log(
   `check-geometry: WorldView wrote nothing back (constructor completed under node: ${constructed}); ${renderFiles.length} render modules assign no geometry field`,
 );
 
-// The renderer's own deck table must still agree with the simulation's, since the two are the same
-// measurement of the same shipped models. This is a text check because the render module cannot be
-// imported outside a browser; src/render/imported-ships.ts belongs to another lane.
+// The renderer used to hold a second copy of this table, and both files carried a comment saying the
+// two had to stay equal. The copy is gone: src/render/imported-ships.ts now names models only, and
+// src/render/world.ts reads the corridor and the datum off the ship record. A text check because the
+// render module cannot be imported outside a browser — so what it asserts is the absence of the copy.
 const rendered = readFileSync(resolve(root, "src/render/imported-ships.ts"), "utf8");
-for (const [name, height] of Object.entries(decks)) {
-  const key = { "USS Enterprise": "enterprise", "USS Hornet": "hornet", "USS Yorktown": "yorktown" }[name] ?? name.toLowerCase();
-  const row = new RegExp(`${key}: (?:deck\\("${key}", ${height}\\)|\\{[^}]*height: ${height}[^}]*\\})`);
-  assert.ok(row.test(rendered), `src/render/imported-ships.ts DECKS.${key} must carry the ${height} m datum the simulation uses`);
-}
+assert.ok(!/\bDECKS\b/.test(rendered), "src/render/imported-ships.ts must not carry a second deck table");
+for (const [name, height] of Object.entries(decks))
+  assert.ok(
+    !new RegExp(`${height}`).test(rendered),
+    `src/render/imported-ships.ts restates ${name}'s ${height} m deck datum; the simulation owns it`,
+  );
 
-console.log(`check-geometry: ${b.ships.length} hulls sized before any render; 5 distinct deck datums; all checks passed`);
+console.log(`check-geometry: ${b.ships.length} hulls sized before any render; 4 distinct deck datums; all checks passed`);

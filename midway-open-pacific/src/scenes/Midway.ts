@@ -32,6 +32,7 @@ export class Midway extends Scene<GameState, undefined> {
   overlay: string | null = null;
   wall = 0;
   ended = false;
+  private crashCam = false;
   started = false;
   keys = new Set<string>();
   mouse = { fire: false, looking: false, lx: 0, ly: 0 };
@@ -64,6 +65,28 @@ export class Midway extends Scene<GameState, undefined> {
     this.ctx = ctx;
     this.battle = new Battle();
     this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer, add: (object) => ctx.add(object) }, this.battle);
+    // The combat particle buffers are repacked for the camera once per actual world draw. The
+    // engine's own beforeRender phase keeps the packing off the particle meshes: an own mesh
+    // onBeforeRender marks the whole scene un-batchable at the full roster.
+    this.cleanups.push(ctx.beforeRender(() => this.world.particles.prepare(this.world.camera.position)));
+    // Midway has one main camera and buffer-only draw hooks. Prepare world transforms once,
+    // then reuse them in shadow and reflection passes (which draw through their own cameras).
+    const scene = ctx.scene;
+    const savedAutoUpdate = scene.matrixWorldAutoUpdate;
+    if (savedAutoUpdate) {
+      const savedOnBeforeRender = scene.onBeforeRender;
+      const hadOwnHook = Object.hasOwn(scene, "onBeforeRender");
+      scene.matrixWorldAutoUpdate = false;
+      scene.onBeforeRender = (...args) => {
+        if (args[2] === ctx.camera) scene.updateMatrixWorld();
+        savedOnBeforeRender.apply(scene, args);
+      };
+      this.cleanups.push(() => {
+        if (hadOwnHook) scene.onBeforeRender = savedOnBeforeRender;
+        else Reflect.deleteProperty(scene, "onBeforeRender");
+        scene.matrixWorldAutoUpdate = savedAutoUpdate;
+      });
+    }
     this.hud = new Hud(this.battle, this.world);
     this.audio = new Soundscape(
       this.audioBuffers,
@@ -83,6 +106,9 @@ export class Midway extends Scene<GameState, undefined> {
   exit(): void {
     this.audio.dispose();
     this.world.crew.dispose();
+    this.world.ripples.dispose();
+    this.world.ocean.dispose();
+    this.world.particles.dispose();
     for (const off of this.cleanups) off();
     this.cleanups = [];
     this.keys.clear();
@@ -159,13 +185,7 @@ export class Midway extends Scene<GameState, undefined> {
     });
     this.onElement($("contact-list"), "click", (e) => {
       const btn = (e.target as HTMLElement).closest("[data-contact]") as HTMLElement | null;
-      if (btn) {
-        this.battle.target = (btn as HTMLElement).dataset.contact as string;
-        this.battle.player.nav = "search";
-        this.hud.lastContacts = "";
-        this.hud.updateContactList();
-        this.hud.drawMap();
-      }
+      if (btn) this.designateTarget(btn.dataset.contact as string);
     });
     this.onElement($("big-map"), "click", (e) => {
       const canvas = e.target as HTMLCanvasElement;
@@ -173,13 +193,7 @@ export class Midway extends Scene<GameState, undefined> {
       const x = ((e as MouseEvent).clientX - rect.left) / rect.width * canvas.width;
       const y = ((e as MouseEvent).clientY - rect.top) / rect.height * canvas.height;
       const nearest = this.hud.mapItems.map((p) => ({ ...p, d: Math.hypot(p.x - x, p.y - y) })).sort((a, b) => a.d - b.d)[0];
-      if (nearest && nearest.d < 55) {
-        this.battle.target = nearest.id;
-        this.battle.player.nav = "search";
-        this.hud.lastContacts = "";
-        this.hud.drawMap();
-        this.hud.updateContactList();
-      }
+      if (nearest && nearest.d < 55) this.designateTarget(nearest.id);
     });
     this.on(window, "keydown", (e) => {
       if ((e.target as HTMLElement).matches("select,input,textarea")) return;
@@ -274,6 +288,7 @@ export class Midway extends Scene<GameState, undefined> {
     this.audio.update(
       {
         cockpit: this.world.cameraMode === 1 && !this.world.followBomb,
+        airframe: p.airframe,
         onDeck: onShip,
         nearPA: nearShip,
         listener: { x: this.camPos.x, y: this.camPos.y, z: this.camPos.z },
@@ -285,6 +300,7 @@ export class Midway extends Scene<GameState, undefined> {
         rpm: p.rpm ?? p.throttle ?? 0,
         throttle: p.throttle ?? 0,
         ias: p.ias ?? p.speed ?? 0,
+        brakes: p.brakes,
       },
       this.paused || b.status !== "playing",
       dt,
@@ -297,6 +313,11 @@ export class Midway extends Scene<GameState, undefined> {
       const mesh = this.world.meshes.get(s.id);
       if (mesh) emitters.push({ id: `fire-${s.id}`, key: "fuelFire", source: mesh, volume: Math.min(0.85, 0.35 + s.fire * 0.35) });
     }
+    // The player's own aircraft burns like any other wreck once it is going down, and the chase
+    // camera is right on top of it — the fire has to be heard there, not only on distant hulls.
+    const ownFire = p.mode === "wreck" ? 0 : Math.max(p.damage?.engine?.fire ?? 0, p.mode === "crashing" ? 0.7 : 0);
+    if (ownFire > 0.12 && this.world.playerMesh)
+      emitters.push({ id: "fire-player", key: "fuelFire", source: this.world.playerMesh, volume: Math.min(0.8, 0.3 + ownFire * 0.5) });
     const island = b.island;
     if (island) {
       const range = Math.sqrt(distance2(island, p));
@@ -329,6 +350,12 @@ export class Midway extends Scene<GameState, undefined> {
       this.nextAlbatross = this.wall + 9 + Math.random() * 12;
       this.audio.event({ cue: "albatross", at: { x: island.x + 150, y: 20, z: island.z + 150 } });
     }
+    // The pilot's own view ends with the aircraft. From the moment it is a wreck the camera watches
+    // it go in from outside, the way the player watches the ones they shoot down.
+    if ((p.mode === "crashing" || p.mode === "wreck") && !this.crashCam) {
+      this.crashCam = true;
+      if (this.world.cameraMode === 1) this.world.setCamera(0);
+    } else if (p.mode !== "crashing" && p.mode !== "wreck" && this.crashCam) this.crashCam = false;
     if ((b.status === "lost" || b.status === "won" || b.status === "debrief") && !this.ended) {
       this.ended = true;
       this.clearInput();
@@ -388,6 +415,7 @@ export class Midway extends Scene<GameState, undefined> {
     }
     this.audio.start();
     this.battle.start(airborne);
+    if (!airborne) this.audio.event({ type: "engineStart", airframe: this.battle.player.airframe });
     this.updateLoadoutUI();
     $("briefing").classList.add("hidden");
     $("flight-ui").classList.remove("hidden");
@@ -420,7 +448,7 @@ export class Midway extends Scene<GameState, undefined> {
     const can = p.mode === "deck" && (p.deckSpeed || 0) < 0.5;
     $("selected-aircraft").textContent = LOADOUTS[p.loadout || "bomb"].name;
     $("aircraft-tag-title").textContent = torpedo ? "DOUGLAS TBD DEVASTATOR" : "DOUGLAS SBD DAUNTLESS";
-    $("aircraft-tag-role").textContent = torpedo ? "TORPEDO BOMBER · PROCEDURAL TBD-INSPIRED MODEL" : "SCOUT BOMBER · BOMBING SQUADRON SIX";
+    $("aircraft-tag-role").textContent = torpedo ? "TORPEDO BOMBER · DOUGLAS TBD-1 DEVASTATOR" : "SCOUT BOMBER · BOMBING SQUADRON SIX";
     $("loadout-note").textContent = torpedo ? "Low, slow, straight run · 1 aerial torpedo · no dive brakes" : "Steep dive attack · perforated dive brakes · lighter wing stores";
     for (const id of ["bomb", "torpedo"]) {
       const el = $("loadout-" + id);
@@ -475,17 +503,25 @@ export class Midway extends Scene<GameState, undefined> {
     this.hud.toast(`RETURN COURSE — ${home.name.toUpperCase()}`);
   }
 
+  private designateTarget(id: string): void {
+    if (!this.battle.designateTarget(id)) {
+      this.hud.toast("CONTACT NOT ELIGIBLE FOR THIS ASSIGNMENT");
+      return;
+    }
+    this.hud.lastContacts = "";
+    this.hud.updateContactList();
+    this.hud.drawMap();
+    this.hud.toast(`DESIGNATED: ${this.battle.contacts.get(id)!.name.toUpperCase()}`);
+  }
+
   private cycleTarget(): void {
-    const cs = [...this.battle.contacts.values()].filter((c) => c.kind === "carrier");
+    const cs = this.battle.targetContacts();
     if (!cs.length) {
-      this.hud.toast("NO KNOWN CARRIER CONTACTS");
+      this.hud.toast("NO ELIGIBLE KNOWN CONTACTS");
       return;
     }
     const index = cs.findIndex((c) => c.id === this.battle.target);
-    const next = cs[(index + 1) % cs.length];
-    this.battle.target = next.id;
-    this.battle.player.nav = "search";
-    this.hud.toast(`DESIGNATED: ${next.name.toUpperCase()}`);
+    this.designateTarget(cs[(index + 1) % cs.length].id);
   }
 
   private command(cmd: string): void {
@@ -514,6 +550,8 @@ export class Midway extends Scene<GameState, undefined> {
     }
     if (this.paused || this.battle.status !== "playing") return;
     const p = this.battle.player;
+    // A wrecked aircraft takes no more orders; the keys go dead until it hits the water.
+    if (p.mode === "crashing" || p.mode === "wreck") return;
     switch (code) {
       case "KeyB":
         this.battle.releaseOrdnance();
@@ -524,6 +562,7 @@ export class Midway extends Scene<GameState, undefined> {
           break;
         }
         p.brakes = !p.brakes;
+        this.audio.event({ type: "flap" });
         this.hud.toast(`DIVE BRAKES ${p.brakes ? "EXTENDED" : "RETRACTED"}`);
         break;
       case "KeyG":
@@ -532,10 +571,17 @@ export class Midway extends Scene<GameState, undefined> {
           break;
         }
         this.battle.toggleGear();
+        this.audio.event({ type: "gear" });
         this.hud.toast(`LANDING GEAR ${p.gear ? "DOWN" : "UP"}`);
         break;
       case "KeyN":
         p.flaps = p.flaps < 0.15 ? 0.33 : p.flaps < 0.7 ? 1 : 0;
+        // The SBD's dive brakes ARE its split flaps: one surface driven by
+        // max(flapPos, brakePos). A flap-up order must release the brakes too, or the
+        // panels (and their drag) stay out against the command and the wing never
+        // comes clean. The TBD has no dive brakes, so it keeps its own state.
+        if (p.flaps === 0 && p.airframe !== "tbd") p.brakes = false;
+        this.audio.event({ type: "flap" });
         this.hud.toast(`FLAPS ${p.flaps === 0 ? "UP" : p.flaps < 0.7 ? "TAKEOFF" : "LANDING"}`);
         break;
       case "KeyU":
@@ -564,6 +610,7 @@ export class Midway extends Scene<GameState, undefined> {
         break;
       case "KeyI":
         p.engineCut = !p.engineCut;
+        this.audio.event({ type: "engine", action: p.engineCut ? "stop" : "start", airframe: p.airframe });
         this.hud.toast(p.engineCut ? "ENGINE FUEL CUTOFF — ENGINE STOPPING / WING FIRES UNAFFECTED" : "ENGINE FUEL VALVE OPEN");
         break;
       case "KeyR":

@@ -58,8 +58,15 @@ function batch(capacity: number, glow: boolean): any {
   const c: any = cos(aShape.w);
   const s: any = sin(aShape.w);
   const rotated: any = vec2(local.x.mul(c).sub(local.y.mul(s)), local.x.mul(s).add(local.y.mul(c)));
-  const mv: any = cameraViewMatrix.mul(vec4(aPosition, 1));
-  material.vertexNode = cameraProjectionMatrix.mul(vec4(mv.xy.add(rotated), mv.z, mv.w));
+  // Foam (kind 6) is a patch ON the sea, so its quad lies in world XZ and keeps its shape from
+  // every angle; a billboard would stand the patch up like a wall when seen from a beam. Both
+  // kinds take the same single transform and differ only in which frame the rotated corner is
+  // added in — world for the patch, view for everything else.
+  const lying: any = step(float(5.5), aExtra.y);
+  const world: any = vec3(rotated.x, float(0), rotated.y).mul(lying);
+  const view: any = rotated.mul(float(1).sub(lying));
+  const mv: any = cameraViewMatrix.mul(vec4(aPosition.add(world), 1));
+  material.vertexNode = cameraProjectionMatrix.mul(vec4(mv.xy.add(view), mv.z, mv.w));
 
   // Per-kind masks: soft smoke, tight glow, hard spark, boxed streak.
   const q = uv().mul(2).sub(1);
@@ -93,8 +100,12 @@ function batch(capacity: number, glow: boolean): any {
   const flame = smoothstep(0.08, 0.4, heat)
     .mul(smoothstep(0, 0.1, height)).mul(smoothstep(1, 0.8, height))
     .mul(smoothstep(1, 0.78, q.x.abs()));
-  const isFlame = step(4.5, kind);
-  const shipMask = mix(smoke, flame, isFlame);
+  // Kind 5 alone is flame: kind 6 sits above it and must not inherit the fire ramp.
+  const isFlame = step(float(4.5), kind).sub(step(float(5.5), kind));
+  const isFoam = step(float(5.5), kind);
+  // Foam is a ragged disc, brightest where the water is still churning.
+  const foam = smoothstep(float(1.0), float(0.25), radial.sub(billow.mul(0.22)).sub(detail.mul(0.1)));
+  const shipMask = mix(mix(smoke, flame, isFlame), foam, isFoam);
   // FIRE_COLOR / FIRE_ALPHA from the engine VFX gallery's render/archivePresets.ts.
   // Reuse the authored fire curves in this game's existing batches, at carrier scale.
   const age = aExtra.z;
@@ -107,7 +118,8 @@ function batch(capacity: number, glow: boolean): any {
   flameFade = mix(flameFade, float(0.92), age.sub(0.18).div(0.52).clamp(0, 1));
   flameFade = mix(flameFade, float(0), age.sub(0.7).div(0.3).clamp(0, 1));
   flameColor = flameColor.mul(mix(0.65, 1.8, smoothstep(0.15, 0.8, heat)));
-  const shipColor = mix(aColor.mul(smokeShade), flameColor, isFlame);
+  const foamColor = aColor.mul(billow.mul(0.22).add(detail.mul(0.1)).add(0.88));
+  const shipColor = mix(mix(aColor.mul(smokeShade), flameColor, isFlame), foamColor, isFoam);
   const isShip = step(3.5, kind);
   material.opacityNode = mix(alpha, shipMask, isShip).mul(aShape.z).mul(mix(1, flameFade, isFlame));
   material.colorNode = mix(aColor.mul(mix(shade, float(1.0), step(0.5, kind))), shipColor, isShip);
@@ -152,26 +164,28 @@ export class CombatParticles {
       this.emit(this.glow, e, { life: 0.045, size: size * 0.7, kind: 1, color: [1.5, 0.85, 0.32], alpha: 0.65, drag: 0 });
       return;
     }
-    const smokeCount = hit ? 2 : flak ? 23 : water ? 12 : 34;
+    if (water) {
+      return;
+    }
+    const smokeCount = hit ? 2 : flak ? 23 : 34;
     for (let i = 0; i < smokeCount; i += 1) {
       const angle = this.random() * 6.28;
-      const up = water ? this.random() * 18 + 12 : this.random() * 9 + 2;
-      const radial = (flak ? 4 : water ? 9 : 11) * size;
-      this.emit(this.smoke, { x: e.x + this.spread(size * 2), y: water ? 0.6 : e.y + this.spread(size * 2), z: e.z + this.spread(size * 2) }, {
+      const radial = (flak ? 4 : 11) * size;
+      this.emit(this.smoke, { x: e.x + this.spread(size * 2), y: e.y + this.spread(size * 2), z: e.z + this.spread(size * 2) }, {
         vx: Math.cos(angle) * radial * this.random(),
-        vy: up * size,
+        vy: (this.random() * 9 + 2) * size,
         vz: Math.sin(angle) * radial * this.random(),
-        drag: flak ? 1.4 : water ? 0.24 : 0.7,
-        gravity: water ? 9.81 : 0,
-        buoyancy: water ? 0 : 0.38,
-        life: hit ? 0.5 : flak ? 6 + this.random() * 5 : water ? 2 + this.random() * 2 : 8 + this.random() * 7,
-        size: (flak ? 2.7 : water ? 2 : 3) * size,
-        growth: (flak ? 2.2 : water ? 2.6 : 3.8) * size,
-        alpha: flak ? 0.52 : water ? 0.46 : 0.52,
-        color: water ? [0.53, 0.68, 0.72] : flak ? [0.026, 0.031, 0.033] : [0.065, 0.067, 0.063],
+        drag: flak ? 1.4 : 0.7,
+        gravity: 0,
+        buoyancy: 0.38,
+        life: hit ? 0.5 : flak ? 6 + this.random() * 5 : 8 + this.random() * 7,
+        size: (flak ? 2.7 : 3) * size,
+        growth: (flak ? 2.2 : 3.8) * size,
+        alpha: flak ? 0.52 : 0.52,
+        color: flak ? [0.026, 0.031, 0.033] : [0.065, 0.067, 0.063],
       });
     }
-    if (!water) {
+    {
       for (let i = 0; i < (hit ? 8 : flak ? 14 : 40); i += 1) {
         const angle = this.random() * 6.28;
         const v = (hit ? 9 : flak ? 28 : 45) * size;
@@ -194,9 +208,6 @@ export class CombatParticles {
       if (!hit && !flak)
         for (let i = 0; i < 10; i += 1)
           this.emit(this.smoke, e, { vx: this.spread(45 * size), vy: (12 + this.random() * 25) * size, vz: this.spread(45 * size), life: 4, drag: 0.1, gravity: 9.81, size: 0.5 * size, aspect: 2, kind: 3, color: [0.04, 0.045, 0.045], alpha: 1, spin: this.spread(9) });
-    } else {
-      for (let i = 0; i < 22; i += 1)
-        this.emit(this.smoke, { x: e.x, y: 0.4, z: e.z }, { vx: this.spread(16) * size, vy: (10 + this.random() * 18) * size, vz: this.spread(16) * size, life: 1.7 + this.random(), gravity: 9.81, drag: 0.17, size: 0.2 * size, aspect: 3.8, growth: 0.22, kind: 2, color: [0.75, 0.85, 0.87], alpha: 0.8 });
     }
   }
 
@@ -241,9 +252,23 @@ export class CombatParticles {
           this.continuous(a.id + zone + "smoke", pos, (35 + fire * 20) * detail, dt, (p) => this.emit(this.smoke, p, { ...vel, vx: vel.vx + this.spread(2), vy: vel.vy + 1 + fire, vz: vel.vz + this.spread(2), drag: 0.62, buoyancy: 0.28, life: 7 + this.random() * 4, size: 0.5 + fire * 0.9, growth: 2 + fire * 2, alpha: 0.47, color: [0.04, 0.038, 0.035] }));
           this.continuous(a.id + zone + "fire", pos, 38 * detail, dt, (p) => this.emit(this.glow, p, { vx: (a.vx || 0) * 0.35, vy: (a.vy || 0) * 0.35 + 1, vz: (a.vz || 0) * 0.35, life: 0.1 + this.random() * 0.1, size: 0.8 + fire * 1.5, aspect: 1.2, kind: 1, color: [0.95, 0.22, 0.025], alpha: 0.55, drag: 0.4, growth: 1 }));
         }
+        // A hurt engine smokes before it burns: a radial with holed cylinders trails grey-blue
+        // exhaust smoke, thinner and paler than a fire's near-black column. Without this the
+        // wingman's "smoke coming from your engine" was a call about nothing.
+        if (zone === "engine" && d.integrity < 0.8 && d.fire <= 0.02) {
+          const hurt = Math.min(1, (0.8 - d.integrity) / 0.7);
+          // Rate is set against the aircraft's own speed, not by eye: at ninety metres a second a
+          // trail needs a puff every metre or it reads as a string of separate blobs.
+          this.continuous(a.id + "enginesmoke", pos, (70 + hurt * 90) * detail, dt, (p) => this.emit(this.smoke, p, { ...vel, vx: vel.vx + this.spread(1.1), vy: vel.vy + 0.4 + hurt, vz: vel.vz + this.spread(1.1), drag: 0.7, buoyancy: 0.22, life: 3.6 + hurt * 2.4, size: 0.62 + hurt * 0.7, growth: 2.2 + hurt * 1.8, alpha: 0.3 + hurt * 0.16, color: [0.09, 0.09, 0.088] }));
+        }
         if (d.leak > 0.05) {
           const oil = zone === "engine";
-          this.continuous(a.id + zone + "leak", pos, (oil ? 13 : 28) * detail, dt, (p) => this.emit(this.smoke, p, { ...vel, vy: vel.vy - (oil ? 1 : 3), drag: 0.9, gravity: oil ? 1 : 2, life: oil ? 3.8 : 1.7, size: oil ? 0.55 : 0.17, growth: oil ? 1.25 : 0.7, aspect: oil ? 1 : 1.8, alpha: oil ? 0.24 : 0.2, color: oil ? [0.2, 0.24, 0.29] : [0.62, 0.69, 0.68] }));
+          // Fuel from a holed tank atomises into the slipstream: a pale vapour streamer off the
+          // wing that hangs for a couple of seconds, not the near-invisible drip this used to be.
+          // Oil stays heavy and dark, and falls away instead of trailing.
+          const leak = Math.min(1, d.leak);
+          const rate = oil ? 13 : 60 + leak * 120;
+          this.continuous(a.id + zone + "leak", pos, rate * detail, dt, (p) => this.emit(this.smoke, p, { ...vel, vx: vel.vx + (oil ? 0 : this.spread(0.7)), vy: vel.vy - (oil ? 1 : 0.6), vz: vel.vz + (oil ? 0 : this.spread(0.7)), drag: oil ? 0.9 : 0.72, gravity: oil ? 1 : 0.35, life: oil ? 3.8 : 2.4, size: oil ? 0.55 : 0.3 + leak * 0.34, growth: oil ? 1.25 : 2.4, aspect: oil ? 1 : 1.35, alpha: oil ? 0.24 : 0.15 + leak * 0.11, color: oil ? [0.2, 0.24, 0.29] : [0.78, 0.82, 0.84] }));
         }
       }
     }
@@ -257,13 +282,26 @@ export class CombatParticles {
       for (let j = 0; j < origins.length; j += 1) {
         const pos = aircraftWorld({ ...s, y: s.y || 0, pitch: 0, roll: 0 }, origins[j]);
         const f = Math.min(s.fire, 1.4);
-        this.continuous(s.id + j + "smoke", pos, 4 * detail, dt, (p) => {
-          const grey = 0.085 + this.random() * 0.045;
+        // Burning oil is near black where it leaves the ship and only greys out as it thins,
+        // so the colour is picked from the source end of that range and the shader's own
+        // height and noise shading carry it lighter up the column.
+        this.continuous(s.id + j + "smoke", pos, 5 * detail, dt, (p) => {
+          const grey = 0.028 + this.random() * 0.03;
           this.emit(this.smoke, { x: p.x + this.spread(6), y: p.y + 5, z: p.z + this.spread(6) }, {
             vx: this.spread(5), vy: 10 + f * 5 + this.random() * 4, vz: this.spread(5),
             drag: 0.16, buoyancy: 0.32, life: 18 + this.random() * 6,
             size: 7 + f * 4, growth: 2.8 + this.random() * 1.8, aspect: 0.85 + this.random() * 0.4,
-            kind: 4, alpha: 0.38, color: [grey * 0.88, grey * 0.95, grey], spin: this.spread(0.16),
+            kind: 4, alpha: 0.55, color: [grey * 0.92, grey * 0.97, grey], spin: this.spread(0.16),
+          });
+        });
+        // Steam off flooded and hosed compartments: white, faster up, gone sooner. It stands
+        // beside the oil column rather than mixing with it, which is what the photographs show.
+        this.continuous(s.id + j + "steam", pos, 1.6 * detail, dt, (p) => {
+          this.emit(this.smoke, { x: p.x + this.spread(16), y: p.y + 2, z: p.z + this.spread(16) }, {
+            vx: this.spread(4), vy: 13 + this.random() * 6, vz: this.spread(4),
+            drag: 0.22, buoyancy: 0.5, life: 9 + this.random() * 4,
+            size: 6 + this.random() * 4, growth: 3.6 + this.random() * 2, aspect: 0.9,
+            kind: 4, alpha: 0.3, color: [0.62, 0.66, 0.68], spin: this.spread(0.14),
           });
         });
         this.continuous(s.id + j + "flame", pos, 16 * detail, dt, (p) => {
@@ -279,6 +317,14 @@ export class CombatParticles {
       }
     }
     for (const [key, e] of this.emitters) if (b.time - e.time > 2) this.emitters.delete(key);
+  }
+
+  /**
+   * Repack both draw buffers for the camera about to be drawn. The engine calls this once per actual
+   * world draw through `ctx.beforeRender`, so the simulation runs at fixed step while the buffers
+   * follow the draw. An own mesh `onBeforeRender` would disable whole-scene batching; this does not.
+   */
+  prepare(camera: T.Vector3): void {
     this.writeBatch(this.smoke, this.smokeBatch, camera, true);
     this.writeBatch(this.glow, this.glowBatch, camera, false);
   }

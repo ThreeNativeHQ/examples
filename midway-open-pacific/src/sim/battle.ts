@@ -1,10 +1,11 @@
 /** Pure deterministic game state. Rendering, audio and browser APIs stay outside this module. */
 import { updateGunnery, updateEvasion } from "./gunnery.js";
-import { chooseCarrierMission, rearGunner, strikeContact, updateTacticalAircraft } from "./tactics.js";
+import { chooseCarrierMission, DESTROYED_MODIFIERS, rearGunner, strikeContact, updateTacticalAircraft } from "./tactics.js";
 import {
   aircraftHit,
   aircraftWorld,
   applyAircraftHit,
+  classCapacity,
   damageSummary,
   initDamage,
   stepDamage,
@@ -13,22 +14,55 @@ import {
   ZONE_POSITIONS,
   type DamageZone,
 } from "./damage.js";
-import { applyLoadout, torpedoEnvelope, updateStores, type ILoadout, LOADOUTS } from "./armament.js";
+import {
+  ASSIST_FACTOR,
+  assistBenefit,
+  assistCost,
+  canAssist,
+  detach,
+  stepRescue,
+  DEFAULT_RESCUE_LIMITS,
+  type Survivors,
+} from "./rescue.js";
+import {
+  actualRunDepth,
+  applyLoadout,
+  torpedoEnvelope,
+  torpedoVariant,
+  torpedoVariantForAirframe,
+  updateStores,
+  type ILoadout,
+  LOADOUTS,
+} from "./armament.js";
+import { screenIntercept, stepRun } from "./torpedo-run.js";
 import {
   ASSIGNMENTS,
+  concludeOperation,
   confirmPending,
   hitQualifies,
   isShort,
   newSortie,
+  operationOutcome,
   outcomeText,
+  pendingOpportunities,
   recordObjectiveHit,
   stamp,
+  targetEligible,
   type Assignment,
+  type IOperationOutcome,
+  type IOperationWorld,
   type IResult,
   type ISortie,
   type IStamp,
   type Outcome,
 } from "./sortie.js";
+import {
+  offerBriefing,
+  retaskOnUnavailable,
+  validateSelection,
+  type BriefingOption,
+  type IBriefingWorld,
+} from "./briefing.js";
 import {
   approach,
   APPROACH_SPEED,
@@ -36,18 +70,31 @@ import {
   finalReady,
   GLIDE,
   GROOVE_FLARE,
-  GROOVE_LEAD,
   recoveryDeck,
   reserveEstimate,
   routeLength,
   type IApproach,
   type IReserve,
 } from "./recovery.js";
+import {
+  assignSector,
+  canLaunchScout,
+  pickupWindow,
+  reconnaissanceCapacity as scoutReconnaissance,
+  stepScout,
+  PICKUP_MAX_SHIP_SPEED,
+  SCOUT_FULL_FUEL,
+  SCOUT_RESERVE,
+  type ScoutAircraft,
+  type ScoutLimits,
+  type SearchSector,
+} from "./scouting.js";
 import { SPEAKERS, SPEECH, radioShipName, type ISpeechRequest } from "./radio-script.js";
 import {
   applyLaunch,
   applyRecovery,
   canLaunch,
+  canRecover,
   stepService,
   suspendReason,
   totalAircraft,
@@ -60,6 +107,7 @@ import {
   classify,
   estimatePosition,
   isDelivered,
+  isStale,
   makeContact,
   mergeContact,
   STALE_SECONDS,
@@ -68,6 +116,22 @@ import {
   type Team,
 } from "./intel.js";
 import { shipClass } from "./catalog.js";
+import {
+  baseAviationLost,
+  damageFacility,
+  japaneseFollowUp,
+  observedCapability,
+  radarWarning,
+  radioDelivery,
+  repairPlan,
+  spreadFire,
+  stepFacility,
+  type Facility,
+  type FacilityKind,
+  type FacilityRates,
+  type FollowUp,
+  type ObservedSnapshot,
+} from "./facilities.js";
 import {
   AircraftFlight,
   airDensity,
@@ -92,6 +156,49 @@ import {
   rng,
   wrap,
 } from "./math.js";
+import {
+  avoidanceHeading,
+  chooseTask,
+  clearOfHazard,
+  courseAuthority,
+  rejoinCourse,
+  rescueWindow,
+  stationTarget,
+  type FormationStation,
+  steerToStation,
+  type ICourseShip,
+  type IHazard,
+  type ISteerLimits,
+} from "./naval.js";
+import {
+  coverageLost,
+  groupCourse,
+  reformAfter,
+  type Group,
+} from "./formation.js";
+import {
+  applyFire,
+  batteryDrain,
+  canFire,
+  chargeDamage,
+  interceptCourse,
+  maxSpeed,
+  stepCharge,
+  stepDepth,
+  SURFACED_MAX,
+  subY,
+  type DepthCharge,
+  type SubMode,
+  type SubState,
+} from "./submarine.js";
+import {
+  ASW_SALVO,
+  stepHunt,
+  type AswContact,
+  type AswLimits,
+  type AswState,
+  type AttackSolution,
+} from "./asw.js";
 
 type Any = any;
 
@@ -103,6 +210,89 @@ export const RECOVERY_DECK = 0.25;
 export const DECK_FAILED = 0.2;
 /** Impact records kept per ship for persistent damage visuals. */
 export const MAX_IMPACTS = 8;
+
+/** The supplied Midway atoll is an 8 km disc; the fringing reef is its rim, so one circle holds both. */
+const ATOLL_HAZARD_RADIUS = 4000;
+/** A guide samples this far ahead for the atoll when it plans the group's course. */
+const GROUP_LOOKAHEAD = 6000;
+/** Clearance kept from the reef, and the angular step used to search for a clear course. */
+const GROUP_MARGIN = 400;
+const GROUP_STEP = 0.1;
+/** Rudder rates, radians per second: carriers turn slower than escorts, as evasion already assumes. */
+const CARRIER_TURN = 0.02;
+const ESCORT_TURN = 0.045;
+/** Full speed is made once this far off station; the residual station-keeping lag is bounded by it. */
+const STATION_SLOW_RADIUS = 350;
+/** Separation lookahead and minimum passing distance for surface ships. */
+const SURFACE_LOOKAHEAD = 30;
+const MIN_SEPARATION = 900;
+/** A ship arcs back onto its station for this long after an evasion rather than resuming instantly. */
+const REJOIN_SECONDS = 8;
+/** A support group's own route: arrival at its destination and its hold anchor, in metres. */
+const SUPPORT_APPROACH_RADIUS = 1200;
+const SUPPORT_HOLD_RADIUS = 600;
+/** A support guide whose engine falls below this retires along its withdrawal bearing. */
+const SUPPORT_WITHDRAW_ENGINE = 0.75;
+
+/** Escort rescue and alongside thresholds. Any qualifying escort, never a named hull. */
+const RESCUE_RANGE = 6000;
+const RESCUE_MIN_COUNT = 5;
+const RESCUE_ABANDON_SECONDS = 300;
+/** Furthest an escort will leave the screen to work alongside a damaged carrier. */
+const ASSIST_RANGE = 5000;
+/** Closing range at which an escort counts as alongside and its pumps take effect. */
+const ASSIST_DISTANCE = 220;
+/** A running torpedo this close to the carrier is a detected threat that aborts the alongside. */
+const ASSIST_THREAT_RANGE = 2500;
+/** Crew a hull of each class puts in the water, before the seeded draw varies it. */
+const SURVIVOR_CREW: Record<string, number> = { carrier: 420, cruiser: 200, destroyer: 140, sub: 40 };
+
+/** Midway's five facilities, one of each kind, as offsets in metres from the atoll centre. */
+const FACILITY_LAYOUT: Array<{ id: string; kind: FacilityKind; dx: number; dz: number; radius: number }> = [
+  { id: "midway-runway", kind: "airstrip", dx: 0, dz: 0, radius: 900 },
+  { id: "midway-stores", kind: "stores", dx: -1250, dz: 450, radius: 500 },
+  { id: "midway-radar", kind: "radar", dx: 1550, dz: -650, radius: 400 },
+  { id: "midway-radio", kind: "radio", dx: 950, dz: 1000, radius: 350 },
+  { id: "midway-seaplane", kind: "seaplane", dx: -2050, dz: -950, radius: 650 },
+];
+/** Per-second health lost while alight and regained by a crewed repair. */
+const FACILITY_BURN_RATE = 0.05;
+const FACILITY_REPAIR_RATE = 0.02;
+/** One facility's worth of repair work is earned per this many seconds, banked up to the cap. */
+const FACILITY_WORK_PER_SECOND = 1 / 15;
+const FACILITY_WORK_CAP = 3;
+/** A facility with no crew on it this tick still burns: the constant step rates, reused, never built. */
+const NO_REPAIR_RATES: FacilityRates = { repair: 0, burn: FACILITY_BURN_RATE };
+/** Reported capability at or above this still justifies a repeat island strike. */
+const FOLLOW_UP_THRESHOLD = 0.5;
+
+/** Any surface escort, by class, never by name: destroyers and cruisers stand the screen. */
+function isEscort(s: Any): boolean {
+  return s.kind === "destroyer" || s.kind === "cruiser";
+}
+
+/**
+ * A detached support group's own route. Plain state read by the guide's helm: approach the
+ * destination, hold at the anchor, and retire along the bearing once damaged. No carrier steers
+ * this group and nothing branches on a ship's name to decide any of it.
+ */
+interface ISupportRoute {
+  /** The approach waypoint made for while the group is fit. */
+  destination: { x: number; z: number };
+  /** The loiter anchor used once the destination is reached. */
+  hold: { x: number; z: number };
+  /** The course retired along once the group is damaged, radians like `Group.course`. */
+  withdrawBearing: number;
+}
+
+/** A surface group: `formation.Group` plus the coverage its absent escorts have removed. */
+interface ISurfaceGroup extends Group {
+  coverageLost: number;
+  /** Set when an evasion ended and `reformAfter` still has to restore the held stations. */
+  reform: boolean;
+  /** Present on a detached support group; a carrier screen has none. */
+  route?: ISupportRoute;
+}
 
 /**
  * Every ship's geometry, in metres, resolved here so a `Battle` knows how big its world is before
@@ -126,12 +316,14 @@ export const MAX_IMPACTS = 8;
 interface IHull {
   hullLength: number;
   hullBeam: number;
+  /** m; class draught, positive down. A torpedo running deeper than this passes under the hull. */
+  draught: number;
 }
 
 /** Class references and measured GLB extents; the repaired model is `hullBeam` wide when drawn. */
 const hullOf = (classId: string): IHull => {
   const cls = shipClass(classId);
-  return { hullLength: cls.measuredLength, hullBeam: cls.hullBeam };
+  return { hullLength: cls.measuredLength, hullBeam: cls.hullBeam, draught: cls.draught };
 };
 
 /**
@@ -141,15 +333,23 @@ const hullOf = (classId: string): IHull => {
  * them a sister ship's numbers would be the substitution this change exists to remove.
  */
 const HULLS: Readonly<Record<string, IHull>> = Object.freeze({
-  "USS Enterprise": { hullLength: 251.58, hullBeam: 32.4 }, // Yorktown class, as drawn by hornet.glb
-  "USS Hornet": { hullLength: 251.58, hullBeam: 32.4 },
-  "USS Yorktown": hullOf("yorktown"),
-  Akagi: { hullLength: 260.67, hullBeam: 31.3 }, // supplied akagi.glb
+  "USS Enterprise": { hullLength: 251.58, hullBeam: 32.4, draught: 7.9 }, // Yorktown class, as drawn by hornet.glb
+  "USS Hornet": { hullLength: 251.58, hullBeam: 32.4, draught: 7.9 },
+  // CV-5 is drawn from the supplied `hornet.glb` sister hull, not from the catalog's
+  // `carrier.yorktown.glb`, so her collision hull is the sisters' literal rather than
+  // `hullOf("yorktown")`. The catalog class is still a correct measurement of that import
+  // (246.74 m); it just describes a model this ship is no longer drawn from, and leaving the
+  // 4.6 m gap between the drawn hull and the collision hull would be a gap a bomb can land in.
+  // See the CV-5 note in src/render/imported-ships.ts for why the import was retired.
+  "USS Yorktown": { hullLength: 251.58, hullBeam: 32.4, draught: 7.9 },
+  Akagi: { hullLength: 260.67, hullBeam: 31.3, draught: 7.55 }, // supplied akagi.glb keel depth, src/render/world.ts
   Kaga: hullOf("kaga"),
   Soryu: hullOf("soryu"),
   Hiryu: hullOf("hiryu"),
   Tone: hullOf("tone"),
   Chikuma: hullOf("tone"),
+  Mogami: hullOf("mogami"),
+  Mikuma: hullOf("mogami"),
   Arashi: hullOf("kagero"),
   Nowaki: hullOf("kagero"),
   "USS Hammann": hullOf("hammann"),
@@ -157,11 +357,37 @@ const HULLS: Readonly<Record<string, IHull>> = Object.freeze({
   "USS Nautilus": hullOf("nautilus"),
 });
 
+/** The hull class that carries cruiser scouts. Matched on measured extents, never on a ship name. */
+const SCOUT_HULL = hullOf("tone");
+
+/** Cruiser-scout sortie tuning, passed whole to `scouting.ts`. */
+const SCOUT_LIMITS: ScoutLimits = {
+  burn: 4,
+  outboundFuel: 2400,
+  searchFuel: 1800,
+  reserve: SCOUT_RESERVE,
+  pickupFuel: 300,
+};
+/** Metres a cruiser sends its scout out along a sector bearing. */
+const SCOUT_SECTOR_DEPTH = 16000;
+/** A sector may be re-flown once its last search is this old, in seconds. */
+const SCOUT_STALE_SECONDS = 900;
+/** The search altitude a scout observer is credited with, in metres. */
+const SCOUT_ALTITUDE = 2000;
+/** Metres a scout observer's own search reaches, before the visibility scale. */
+const SCOUT_SEARCH_RANGE = 9000;
+/** No scout leaves before the battle has settled, so the opening contacts stay the lookouts' own. */
+const SCOUT_LAUNCH_DELAY = 12;
+/** The states in which a scout is flying and therefore an observer. */
+const SCOUT_AIRBORNE_STATES: ReadonlySet<string> = new Set(["catapult", "outbound", "searching", "returning"]);
+
 interface IDeck {
   deckLength: number;
   deckWidth: number;
   deckHeight: number;
   deckBeam: number;
+  /** Metres the usable corridor is shifted to starboard of the ship's origin; 0 when the deck is clear on centreline. */
+  deckOffset: number;
 }
 
 /**
@@ -173,8 +399,11 @@ interface IDeck {
  * `node tools/measure-decks.mjs`, which prints every station this table was filled from:
  *
  * - `deckLength` x `deckWidth` is the longest run of deck through amidships with at least 7 m of
- *   deck each side of the centreline, made symmetric about the ship's origin because `onDeck`
- *   measures the corridor from there, and then as wide as the narrowest station it crosses. It is a
+ *   deck each side of the centreline — half a Devastator's span, so a narrower station ends the
+ *   corridor rather than narrowing it — made symmetric about the ship's origin because `onDeck`
+ *   measures the corridor from there, then as wide as the narrowest station it crosses. tools/
+ *   capture-deck.mjs re-measures the same edges in the running game and holds the two surveys to
+ *   AC-2's own 0.1 m, which is the resolution either of them can claim. It is a
  *   measurement of the deck, not of the ship: the class hull length and waterline beam that used to
  *   stand in here gave Kaga a 247.65 x 32.5 m launch rectangle — the whole ship, bow overhang and
  *   island included.
@@ -193,18 +422,26 @@ interface IDeck {
  * copies of a measurement is how they drift.
  */
 const CARRIER_DECKS: Readonly<Record<string, IDeck>> = Object.freeze({
-  "USS Enterprise": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
-  "USS Hornet": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4 },
+  "USS Enterprise": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4, deckOffset: 0 },
+  "USS Hornet": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4, deckOffset: 0 },
   // Akagi's original stern deck slopes down ~1.4 m; the datum is its central deck.
-  Akagi: { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 31.3 },
-  // Measured: deck 20.20..20.68 over the corridor, midpoint 20.44, less 7.9 m draught.
-  "USS Yorktown": { deckLength: 240, deckWidth: 20, deckHeight: 12.54, deckBeam: 32 },
-  // Measured: deck 22.91..23.61, midpoint 23.26, less 7.5 m draught.
-  Kaga: { deckLength: 230, deckWidth: 18, deckHeight: 15.76, deckBeam: 52 },
+  Akagi: { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 31.3, deckOffset: 0 },
+  // CV-5 is drawn from the same `hornet.glb` sister hull as CV-6 and CV-8 — see the note in
+  // src/render/imported-ships.ts — so she carries their deck, not the imported Tripo Yorktown's.
+  "USS Yorktown": { deckLength: 220, deckWidth: 20, deckHeight: 20.06, deckBeam: 32.4, deckOffset: 0 },
+  // Measured: deck 22.91..23.61, midpoint 23.26, less 7.5 m draught. Kaga's Tripo island is a
+  // 20 m wide, 48 m long, 23 m tall block whose inboard face touches the centreline — above
+  // deck+6 m it spans X -20.44..-0.43, Y -39.9..+7.8 — so the clear deck is not centred: amidships
+  // it is clear only ~4 m to port against ~22 m to starboard, and two stations abaft that the port
+  // clearance is 0. The usable rectangle is X -4..+22, ~26 m wide and centred ~+9 m to starboard,
+  // so the 18 m corridor is shifted there rather than widened. (The real ship's island was about
+  // 5 m wide at the deck edge; this reconstruction is wrong but it is what is shipped.)
+  Kaga: { deckLength: 230, deckWidth: 18, deckHeight: 15.76, deckBeam: 52, deckOffset: 9 },
   // Measured: deck 20.30..20.68, midpoint 20.49, less 7.6 m draught.
-  Soryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.89, deckBeam: 34 },
-  // Measured: deck 19.91..21.50, midpoint 20.71, less 7.8 m draught.
-  Hiryu: { deckLength: 210, deckWidth: 18, deckHeight: 12.91, deckBeam: 40 },
+  Soryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.89, deckBeam: 34, deckOffset: 0 },
+  // Measured: deck 19.91..21.54, midpoint 20.72, less 7.8 m draught. The 1.64 m of sheer over the
+  // corridor is the largest of the four, and the reason AC-2's flat 0.1 m bound cannot hold here.
+  Hiryu: { deckLength: 220, deckWidth: 14, deckHeight: 12.92, deckBeam: 40, deckOffset: 0 },
 });
 
 /** The plane a weapon strikes on a ship with no flight deck. What the hit code always assumed. */
@@ -217,10 +454,10 @@ const SUPERSTRUCTURE_TOP = 9;
  */
 export function shipGeometry(name: string, kind: string): IHull & IDeck {
   const sub = kind === "sub";
-  const hull = HULLS[name] ?? { hullLength: sub ? 92 : 112, hullBeam: sub ? 9 : 13 };
+  const hull = HULLS[name] ?? { hullLength: sub ? 92 : 112, hullBeam: sub ? 9 : 13, draught: sub ? 4.6 : 4.5 };
   // No flight deck, so nothing overhangs: the damage volume is one box of the hull's own beam.
   if (kind !== "carrier")
-    return { ...hull, deckLength: 0, deckWidth: 0, deckHeight: SUPERSTRUCTURE_TOP, deckBeam: hull.hullBeam };
+    return { ...hull, deckLength: 0, deckWidth: 0, deckHeight: SUPERSTRUCTURE_TOP, deckBeam: hull.hullBeam, deckOffset: 0 };
   const deck = CARRIER_DECKS[name];
   if (!deck) throw new Error(`no flight deck geometry for carrier: ${name}`);
   return { ...hull, ...deck };
@@ -257,14 +494,50 @@ const OPS_INTERVAL = 1;
 const TRACK_SECONDS = 25;
 
 /**
- * Dawn over the Pacific, 1942: clear but hazy. `intel.canObserve` treats `visibility` as an on/off
- * gate rather than scaling with it, so the haze is applied here as a shortened `rangeLimit` and the
- * flag is passed as well — a later scaling implementation in the module needs no change here.
+ * Dawn over the Pacific, 1942: clear but hazy. `intel.canObserve` now scales the range limit by this
+ * (`range > rangeLimit * visibility`), so every `rangeLimit` below is the observer's own unreduced
+ * limit. Shortening it here as well, which is what this file did while the module treated visibility
+ * as an on/off gate, applied the haze twice and let a lookout see visibility-squared as far.
  */
 const VISIBILITY = 0.85;
 
 /** Metres of water an observer can see a hull through. A boat deeper than this is unobserved. */
 const SIGHT_DEPTH = 20;
+
+/**
+ * A submarine's own numbers: the finite magazine and the rates its depth and bow change at.
+ * `submarine.ts` owns the rules; these are the game's tuning. Tubes and reloads are spent, never
+ * reset, so a boat that has fired them all is out of the fight.
+ */
+const SUB_TUBES = 4;
+const SUB_RELOADS = 2;
+const SUB_RELOAD_SECONDS = 45;
+const SUB_DIVE_RATE = 2;
+const SUB_TURN_RATE = 0.05;
+const SUB_TORPEDO_RANGE = 4800;
+const SUB_FIRE_INTERVAL = 25;
+
+/**
+ * Escort anti-submarine tuning. A hunt runs on the ops cadence: a held contact is studied, an attack
+ * track is flown, a finite salvo goes into the water, and the escort reassesses or rejoins.
+ * `submarine.ts`'s own fuse and falloff decide every hit; these are only the phase timings.
+ */
+const ASW_LIMITS: AswLimits = Object.freeze({
+  investigateSeconds: 12,
+  attackSeconds: 6,
+  holdSeconds: 30,
+  searchSeconds: 120,
+  spreadRate: 8,
+  assumedSpeed: 6,
+});
+/** Three salvoes per U.S. escort: the finite magazine that eventually sends the hunt home. */
+const ASW_CHARGES = ASW_SALVO * 3;
+/** How fast a depth charge sinks to its fuse setting, metres per second. */
+const ASW_SINK_RATE = 5;
+/** A charge's lethal radius, metres: the 3D falloff inside it is `submarine.chargeDamage`. */
+const ASW_LETHAL_RADIUS = 40;
+/** Hull damage a co-located charge does, before the falloff scales it. */
+const ASW_CHARGE_DAMAGE = 90;
 
 /** Seconds between an aircrew's sighting and the fleet holding the report, and a ship's by lamp/TBS. */
 const AIR_REPORT_DELAY = 30;
@@ -280,14 +553,19 @@ const ROLE_AIRFRAMES: Readonly<Record<string, Readonly<Record<string, string>>>>
   fighter: { us: "wildcat", jp: "zero" },
   bomber: { us: "sbd", jp: "val" },
   torpedo: { us: "tbd", jp: "kate" },
+  // A Kate carrying bombs for a shore target, flown level, is the same airframe as the torpedo
+  // Kate but a different store: the role, not the airframe, picks the family.
+  level: { jp: "kate" },
   recon: { us: "sbd", jp: "val" },
 });
 
 /**
  * The ordnance family an airframe re-arms with. `carrier-ops.ts` keeps the same table privately for
  * `stepService`, and does not export it, so the launch side has to name it again; the two must agree.
+ * A Kate flies either a torpedo or a bomb depending on the role the deck armed it for.
  */
-function storeFamilyOf(airframe: string): string {
+function storeFamilyOf(airframe: string, role?: string): string {
+  if (role === "level") return "bomb";
   if (airframe === "tbd" || airframe === "kate") return "torpedo";
   if (airframe === "sbd" || airframe === "val") return "bomb";
   return "ammo";
@@ -371,6 +649,8 @@ export interface IReport extends Contact {
   /** True once a crew has identified the hull; an identification is never unlearned by a vaguer one. */
   identified: boolean;
   source: string;
+  /** The observer's kind when it was an aircraft, so a delivered track can name its source role. */
+  observerKind?: string;
   reported: boolean;
 }
 
@@ -379,17 +659,52 @@ export type { ILoadout };
 
 export class Battle {
   random: () => number;
+  /** A second seeded stream for scout draws, so cruiser sorties never perturb the battle's own. */
+  scoutRandom: () => number;
   seed: number;
   serial = 0;
   time = 0;
   status = "briefing";
   ships: Any[] = [];
+  /** Surface groups and their stations, built once when the fleet is created. */
+  surfaceGroups: ISurfaceGroup[] = [];
   aircraft: Any[] = [];
   bullets: Any[] = [];
   bombs: Any[] = [];
   torpedoes: Any[] = [];
   airTorpedoes: Any[] = [];
+  /** Boatloads in the water from sunk hulls; a recovered group leaves once emptied. */
+  survivors: Survivors[] = [];
+  /** The atoll's individually hittable facilities: one of each kind, built by `setupFleet`. */
+  facilities: Facility[] = [];
+  /** Banked repair work, in facility-slots, capped at `FACILITY_WORK_CAP`. */
+  facilityWork = 0;
+  /** What the Japanese last *reported* about Midway, by facility id. Never the live health. */
+  observedFacilities: ObservedSnapshot = {};
+  /** Facility reports still in transit: each applies to `observedFacilities` at `at`. */
+  facilityReports: Array<{ at: number; snapshot: ObservedSnapshot }> = [];
+  /**
+   * A delivered report the staff have not yet answered. A follow-up is a decision taken *on* a
+   * report, so exactly one strike can be ordered per report that arrives — a standing intention
+   * instead would hold every Japanese deck on the island for the whole battle and the carriers
+   * would never be answered, which is the opposite of the dilemma this models.
+   */
+  followUpPending = false;
+  /** Whether the Japanese staff still think Midway is worth striking again, and why. */
+  get followUp(): FollowUp {
+    return japaneseFollowUp(observedCapability(this.facilities, this.observedFacilities), FOLLOW_UP_THRESHOLD);
+  }
+  /** True while a repeat strike on the atoll is the standing Japanese intention. */
+  get islandStrike(): boolean {
+    return this.facilities.length > 0 && this.followUp.worthwhile;
+  }
   effects: Any[] = [];
+  /** Reused per step so the hot path never allocates a fresh list: surface hulls, the per-ship
+   *  separation list and the repair slots. Cleared before each use, never read across a step. */
+  private surfaceScratch: Any[] = [];
+  private avoidScratch: Any[] = [];
+  private planesScratch: Any[] = [];
+  private chosenScratch = new Set<string>();
   /** What the player's own crew knows: their sightings, and the reports the fleet has passed them. */
   contacts = new Map<string, IReport>();
   /** Transmitted and not yet delivered. Killing the observer cannot recall what it already sent. */
@@ -435,6 +750,7 @@ export class Battle {
 
   constructor(seed = 19420604) {
     this.random = rng(seed);
+    this.scoutRandom = rng(seed + 0x9e3779b9);
     this.seed = seed;
     this.setupFleet();
     const home = this.ships[0];
@@ -500,6 +816,85 @@ export class Battle {
     return true;
   }
 
+  /**
+   * The plain battle records the briefing, the one validator and the Open Pacific end conditions
+   * read. Contacts are the crew's own beliefs, never a hull's live position, and nothing here
+   * reaches into a ship for identity that was not first delivered to the fleet.
+   */
+  briefingWorld(): IBriefingWorld {
+    return {
+      ships: this.ships,
+      aircraft: this.aircraft,
+      contacts: [...this.contacts.values()],
+      survivors: this.survivors,
+      facilities: this.facilities,
+    };
+  }
+
+  /** The same world, named for the Open Pacific end conditions that also read the fleet's beliefs. */
+  operationWorld(): IOperationWorld {
+    return this.briefingWorld();
+  }
+
+  /**
+   * The assignment categories the world can actually offer, through the one briefing contract, so
+   * surface strike and fleet support reach the player with their real feasibility and their reasons
+   * rather than a hard-coded list.
+   */
+  briefingOptions(): BriefingOption[] {
+    return offerBriefing(this.briefingWorld(), this.time);
+  }
+
+  /** The one `{kind,id}` option for a designation, read off the hull record, never stored twice. */
+  private designationOption(id: string, assignment: Assignment): BriefingOption | null {
+    const ship = this.byId(id);
+    if (!ship) return null;
+    return {
+      kind: assignment,
+      targetKind: ship.kind as BriefingOption["targetKind"],
+      targetId: id,
+      label: ship.name,
+      detail: "",
+      feasible: true,
+      reason: "",
+    };
+  }
+
+  /** Any enemy hull this assignment could still be pointed at; a submerged boat may surface again. */
+  private eligibleHullRemains(assignment: Assignment): boolean {
+    return this.ships.some((x: Any) => targetEligible(assignment, { ...x, surfaced: true }));
+  }
+
+  /**
+   * Known eligible contacts; recon and Open Pacific retain carrier navigation targets. Only a hull
+   * this crew has actually identified is offered — a classified but unnamed report establishes no
+   * target — and the one validator then answers whether the sighting is still current.
+   */
+  targetContacts(): IReport[] {
+    const assignment: Assignment = this.sortie.assignment === "surface" ? "surface" : "strike";
+    const world = this.briefingWorld();
+    const out: IReport[] = [];
+    for (const contact of this.contacts.values()) {
+      // A lost track is still a transmitted belief: usable, but ranked and drawn as uncertain.
+      const ship = this.byId(contact.id);
+      if (!ship || contact.kind !== ship.kind) continue;
+      const option = this.designationOption(contact.id, assignment);
+      if (option && validateSelection(option, world, this.time).ok) out.push(contact);
+    }
+    return out;
+  }
+
+  designateTarget(id: string, navigate = true): boolean {
+    if (!this.targetContacts().some((c) => c.id === id)) return false;
+    const assignment: Assignment = this.sortie.assignment === "surface" ? "surface" : "strike";
+    const option = this.designationOption(id, assignment);
+    if (!option || !validateSelection(option, this.briefingWorld(), this.time).ok) return false;
+    this.target = id;
+    if (navigate) this.player.nav = "search";
+    this.updateSortie();
+    return true;
+  }
+
   selectLoadout(id: string): boolean {
     const p = this.player;
     if (!["briefing", "playing"].includes(this.status) || p.mode !== "deck" || (p.deckSpeed || 0) >= 0.5 || !["bomb", "torpedo"].includes(id)) {
@@ -546,7 +941,11 @@ export class Battle {
     const add = (name: string, team: string, kind: string, x: number, z: number, heading = 0) => {
       const cv = kind === "carrier";
       const sub = kind === "sub";
-      const s = {
+      const geometry = shipGeometry(name, kind);
+      // A scout-carrying cruiser is found by its hull class (the Tone's measured extents), not its name.
+      const scoutCruiser =
+        kind === "cruiser" && geometry.hullLength === SCOUT_HULL.hullLength && geometry.hullBeam === SCOUT_HULL.hullBeam;
+      const s: Any = {
         id: this.id("ship"),
         name,
         team,
@@ -555,10 +954,10 @@ export class Battle {
         y: 0,
         z,
         heading,
-        speed: sub ? 4 : cv ? 8 : 10,
-        baseSpeed: sub ? 4 : cv ? 8 : 10,
+        speed: sub ? SURFACED_MAX : cv ? 8 : 10,
+        baseSpeed: sub ? SURFACED_MAX : cv ? 8 : 10,
         // Geometry, resolved before any renderer exists.
-        ...shipGeometry(name, kind),
+        ...geometry,
         hp: cv ? 340 : sub ? 90 : 145,
         maxHp: cv ? 340 : sub ? 90 : 145,
         deck: 1,
@@ -567,6 +966,10 @@ export class Battle {
         fire: 0,
         /** Flooding, as a fraction of the heavy-list threshold the deck gate reads. */
         list: 0,
+        /** Scout-carrying cruisers only: 0..1 aviation capability and their finite floatplanes. */
+        aviation: scoutCruiser ? 1 : 0,
+        scouts: null as ScoutAircraft[] | null,
+        sectors: null as SearchSector[] | null,
         /**
          * Conserved air inventory and the one straight-deck schedule, resolved here so a `Battle`
          * knows what its decks can fly before any renderer exists. Carriers only.
@@ -577,6 +980,8 @@ export class Battle {
         mission: null as Any,
         /** Why the last launch was refused, for the HUD. Null when the deck can work. */
         launchBlocked: null as string | null,
+        /** Why the last recovery was refused, for the HUD. Null when the deck can take an aircraft. */
+        recoverBlocked: null as string | null,
         /** Airframes that will never come home, and airframes a failed repair wrote off. */
         lostAircraft: 0,
         writtenOff: 0,
@@ -588,9 +993,35 @@ export class Battle {
         sunk: false,
         sink: 0,
         surfaced: true,
+        /** The boat's own depth, battery and finite tubes. Null for every surface hull. */
+        sub: sub
+          ? ({
+              depth: 0,
+              depthRate: 0,
+              mode: "surfaced",
+              battery: 1,
+              tubes: SUB_TUBES,
+              reloads: SUB_RELOADS,
+              reloadUntil: 0,
+              lastLook: 0,
+            } as SubState)
+          : null,
         baseX: x,
         baseZ: z,
       };
+      if (scoutCruiser) this.equipScoutCruiser(s);
+      // A U.S. escort hunts submarines; it is the only hull that carries depth charges, so no other
+      // ship gets a hunt state. Identified by class through the one `isEscort`, never by name.
+      if (s.team === "us" && isEscort(s))
+        s.hunt = {
+          phase: "searching",
+          charges: ASW_CHARGES,
+          phaseTime: 0,
+          salvoes: 0,
+          solution: null,
+          search: null,
+          lastContact: null,
+        } as AswState;
       this.ships.push(s);
       return s;
     };
@@ -611,13 +1042,37 @@ export class Battle {
     add("Nowaki", "jp", "destroyer", -7350, -7800, 2.85);
     add("I-168", "jp", "sub", -2100, 3000, 0.05);
     add("USS Nautilus", "us", "sub", -8000, -6400, 1.65);
+    // The Mogami-class supporting cruisers (PRD AC-15). They sail in their own detached group on the
+    // approach/hold/withdraw route built in `setupSupportGroup`, west of the atoll and between the
+    // two carrier forces, so a later recon or anti-shipping sortie has a real target there that is
+    // neither a carrier nor behind the player. Marked here; `setupSurfaceGroups` reads the mark.
+    const mogami: Any = add("Mogami", "jp", "cruiser", -9300, 0, 1.75);
+    const mikuma: Any = add("Mikuma", "jp", "cruiser", -9650, -600, 1.75);
+    mogami.support = true;
+    mikuma.support = true;
+    this.facilities = FACILITY_LAYOUT.map((f) => ({
+      id: f.id,
+      kind: f.kind,
+      x: this.island.x + f.dx,
+      z: this.island.z + f.dz,
+      radius: f.radius,
+      health: 1,
+      burning: false,
+      repairProgress: 0,
+      repairBlocked: null,
+    }));
+    for (const f of this.facilities) this.observedFacilities[f.id] = f.health;
+    this.setupSurfaceGroups();
   }
 
   start(airborne = false): void {
     if (this.status !== "briefing") return;
     this.status = "playing";
     this.voiceFlags = {};
-    for (const s of this.ships.filter((s) => s.kind === "carrier")) this.launch(s, "fighter");
+    // The player's own deck holds its aircraft until the player is off it: a wingman that launches
+    // while Scout Two is still chocked does not have his wing. `updateCarrier` opens this gate on
+    // liftoff. Every other carrier launches as before.
+    for (const s of this.ships.filter((s) => s.kind === "carrier" && s.id !== this.player.home)) this.launch(s, "fighter");
     if (airborne) {
       this.player.mode = "spectator";
       for (let i = 0; i < 900; i += 1) this.step(1 / 30, {});
@@ -639,11 +1094,11 @@ export class Battle {
       this.events = [];
       this.sortie.startTime = this.time;
       this.say("SCOUT CONTROL", "Search the northwest sector. No confirmed carrier positions. Scan the horizon; use R to report sightings.");
+      this.say("SCOUT THREE", "Two, we have your wing. Orders on your command.");
     } else {
       this.sortie.startTime = this.time;
       this.say("ENTERPRISE TOWER", "Scout Two, cleared for launch. Hold W. Chocks release with power. Keep straight; ease the stick back (Down) through 90 knots. Lift, not the bow, gets you flying.");
     }
-    this.say("SCOUT THREE", "Two, we have your wing. Orders on your command.");
   }
 
   say(from: string, text: string, priority = false): void {
@@ -705,6 +1160,35 @@ export class Battle {
       flags.r13 = true;
       this.voice("R13", { valid: () => (this.player.damage?.engine?.integrity ?? 1) < 0.75 });
     }
+    // The wingman is the only crew who can see the player's aircraft from outside. He reports what
+    // is visible from his position — smoke, streaming fuel, flame, a dying engine — in the order a
+    // section leader would want to hear it, one call at a time and never twice for the same state.
+    const dmg = p.damage;
+    if (dmg && p.mode === "flight" && this.time > (flags.wingDamageNext ?? 0) && this.wingmanNear()) {
+      let fire = 0;
+      for (const zone of DAMAGE_ZONES) fire = Math.max(fire, dmg[zone].fire);
+      // Every call names something the wingman can actually see on the aircraft: the flame, the
+      // smoke a damaged engine trails, the fuel streaming from a holed tank, the oil from the
+      // engine. Each threshold is the one the renderer draws that effect at.
+      const fuelLeak = Math.max(dmg.leftWing.leak, dmg.rightWing.leak, dmg.fuselage.leak);
+      const crippled = p.engineCut === true || dmg.engine.integrity < 0.25;
+      const call = !flags.r28 && fire > 0.12
+        ? "R28"
+        : !flags.r29 && crippled
+          ? "R29"
+          : !flags.r27 && fuelLeak > 0.12
+            ? "R27"
+            : !flags.r31 && dmg.engine.leak > 0.2
+              ? "R31"
+              : !flags.r26 && dmg.engine.integrity < 0.75
+                ? "R26"
+                : null;
+      if (call) {
+        flags[call.toLowerCase()] = true;
+        flags.wingDamageNext = this.time + 11;
+        this.voice(call, { valid: () => this.player.mode === "flight" && this.wingmanNear() });
+      }
+    }
     if (!flags.r14 && p.fuel < 22) {
       flags.r14 = true;
       this.voice("R14", { valid: () => this.player.fuel < 30 });
@@ -744,7 +1228,18 @@ export class Battle {
     }
   }
 
-  fx(type: string, p: Any, size = 1): void {
+  /**
+   * A squadron aircraft close enough to see the player's and still flying. Without one, nobody is
+   * on that wing to make the call, and the radio stays quiet rather than voicing an empty sky.
+   */
+  wingmanNear(range = 3200): boolean {
+    const p = this.player;
+    return this.aircraft.some(
+      (a: Any) => a.wing === true && a.team === "us" && a.hp > 0 && a.mode === "flight" && a.tactic !== "ditching" && distance3(a, p) < range,
+    );
+  }
+
+  fx(type: string, p: Any, size = 1, underwater = false): void {
     this.effects.push({
       id: this.id("fx"),
       type,
@@ -752,6 +1247,10 @@ export class Battle {
       y: p.y ?? 0,
       z: p.z,
       size,
+      underwater,
+      waterKind: p.waterKind,
+      waterDepth: p.waterDepth,
+      waterDirection: p.waterDirection,
       age: 0,
       life: type === "muzzle" ? 0.18 : type === "splash" ? 5 : type === "flak" ? 8 : type === "hit" ? 1.5 : 9,
     });
@@ -868,7 +1367,7 @@ export class Battle {
         : a.tactic === "rtb" || a.tactic === "landing" || a.tactic === "ditching"
           ? "returning"
           : attacking && designated && a.target === designated
-            ? "attacking the designated carrier"
+            ? "attacking the designated target"
             : attacking
               ? "attacking other shipping"
               : a.tactic === "intercept" || a.tactic === "evade" || a.tactic === "extend"
@@ -888,7 +1387,7 @@ export class Battle {
     this.command = cmd;
     const texts: Record<string, string> = {
       cover: "Stay on my wing. Cover the Dauntless.",
-      strike: "Attack the designated carrier. Break by sections.",
+      strike: "Attack the designated ship. Break by sections.",
       engage: "Clear those fighters off our tails.",
       rtb: "All aircraft, return to your carriers.",
     };
@@ -936,7 +1435,7 @@ export class Battle {
     this.refreshDeck(s);
     const airframe = ROLE_AIRFRAMES[role]?.[s.team];
     if (!airframe) return null;
-    const store = storeFamilyOf(airframe);
+    const store = storeFamilyOf(airframe, role);
     const check = canLaunch(s.air, s.deckState, airframe, store, this.time, this.activeAircraft, ACTIVE_CAP);
     if (!check.ok || s.air.fuel < FUEL_PER_LAUNCH) {
       s.launchBlocked = check.ok ? "no aviation fuel" : check.reason;
@@ -948,7 +1447,8 @@ export class Battle {
     s.air.fuel -= FUEL_PER_LAUNCH;
     s.deckState = applied.deck;
     this.refreshDeck(s);
-    const kind = role;
+    // A level role is the bomber kind flown by the level-bomber airframe.
+    const kind = role === "level" ? "bomber" : role;
     s.launchCount += 1;
     const f = forward(s.heading);
     const a: Any = {
@@ -1030,15 +1530,22 @@ export class Battle {
   }
 
   /**
-   * Take one aircraft back aboard, or refuse because the deck is not free. `carrier-ops` has a
-   * `canLaunch` but no `canRecover`, so the occupancy and suspension test for the recovery side lives
-   * here; `navigateHome` holds the aircraft in the pattern until it passes. A recovered aircraft is
-   * counted again immediately but is *not* ready and carries no store: it waits for the crew.
+   * Take one aircraft back aboard, or refuse because the deck is not free. `carrier-ops.canRecover`
+   * is the single gate, exactly as `canLaunch` is on the launch side, so the occupancy, mode and
+   * suspension test lives in one place and every refusal carries the same readable reason the launch
+   * side records. `navigateHome` holds the aircraft in the pattern until it passes. A recovered
+   * aircraft is counted again immediately but is *not* ready and carries no store: it waits for the
+   * crew.
    */
   recoverAircraft(s: Any, a: Any): boolean {
     if (!s?.air || !s.deckState) return true;
     this.refreshDeck(s);
-    if (s.deckState.suspended || s.deckState.occupiedUntil > this.time) return false;
+    const check = canRecover(s.air, s.deckState, a.airframe, this.time);
+    if (!check.ok) {
+      s.recoverBlocked = check.reason;
+      return false;
+    }
+    s.recoverBlocked = null;
     const damaged = a.hp < (a.maxHp || 100) * 0.5 || (a.damage?.engine?.integrity ?? 1) < 0.6;
     const applied = applyRecovery(s.air, s.deckState, a.airframe, this.time, TIMES, damaged);
     s.air = applied.air;
@@ -1077,6 +1584,7 @@ export class Battle {
       stores[pick] -= 1;
     }
     s.air.fuel = Math.max(0, s.air.fuel - fuel);
+    if (rounds > 0) this.event("explosion", { distance: distance3(this.player, s), at: { x: s.x, y: s.deckHeight ?? 15, z: s.z }, outcome: "secondary" });
   }
 
   /** One airframe that will never come home, charged to the deck that launched it. */
@@ -1108,16 +1616,37 @@ export class Battle {
       const ready: Record<string, number> = {};
       for (const role in ROLE_AIRFRAMES) {
         const airframe = ROLE_AIRFRAMES[role][s.team];
-        const store = storeFamilyOf(airframe);
+        if (!airframe) {
+          ready[role] = 0;
+          continue;
+        }
+        const store = storeFamilyOf(airframe, role);
         ready[role] = (s.air.stores[store] ?? 0) > 0 ? (s.air.ready[airframe] ?? 0) : 0;
       }
       s.mission = chooseCarrierMission(this, s, ready, COMMIT_SECONDS);
+      // The Nagumo decision: with no ship contact to answer, a Japanese deck arms for the island
+      // again — but only while the *reported* capability still says the base is working. A shore
+      // target is a level-bombing job, so the deck arms Kates with bombs rather than Vals.
+      if (s.team === "jp" && !s.mission.target && this.followUpPending && this.islandStrike) {
+        this.followUpPending = false;
+        s.mission = {
+          ...s.mission,
+          kind: "island-strike",
+          want: { ...s.mission.want, level: Math.min(ready.level, 3), fighter: Math.min(ready.fighter, (s.mission.want.fighter ?? 0) + 2) },
+        };
+      }
     }
     const want: Record<string, number> = s.mission?.want ?? {};
     let role: string | null = null;
     let shortest = 0;
     for (const key in want) {
-      const flying = this.aircraft.filter((a: Any) => a.hp > 0 && a.home === s.id && a.kind === key).length;
+      let flying = 0;
+      for (const a of this.aircraft) {
+        if (a.hp <= 0 || a.home !== s.id) continue;
+        // The level role shares the Kate airframe with the torpedo role, so it counts the same hull
+        // flying in its bomber configuration rather than an "level" kind no aircraft ever has.
+        if (key === "level" ? a.airframe === "kate" && a.kind === "bomber" : a.kind === key) flying += 1;
+      }
       const deficit = want[key] - flying;
       if (deficit > shortest) {
         shortest = deficit;
@@ -1125,8 +1654,104 @@ export class Battle {
       }
     }
     // Nothing wanted is not a blocked deck: the reason the HUD reads must not outlive its attempt.
-    if (role) this.launch(s, role);
+    // The player's own deck holds every launch while the player is still chocked on it — a wingman
+    // rolling while the player stands on deck has no one to join. A spectator or airborne player
+    // is not on the deck, so the deck operates normally. Recovery and service are unaffected.
+    const onPlayerDeck = this.player.mode === "deck" || this.player.mode === "service";
+    const held = s.id === this.player.home && onPlayerDeck;
+    if (role && !held) this.launch(s, role);
     else s.launchBlocked = null;
+  }
+
+  /** One finite scout and its search sectors, built for a hull that carries them. */
+  equipScoutCruiser(s: Any): void {
+    s.scouts = [
+      {
+        id: `${s.id}-scout`,
+        homeShipId: s.id,
+        state: "aboard",
+        sectorId: null,
+        fuel: SCOUT_FULL_FUEL,
+        launchedAt: null,
+        recoveredAt: null,
+      },
+    ];
+    s.sectors = [-0.6, 0.4].map((offset, i) => {
+      const from = s.heading + offset;
+      return {
+        id: `${s.id}-sector-${i}`,
+        origin: { x: s.x, z: s.z },
+        fromBearing: from,
+        toBearing: from + Math.PI / 2,
+        depth: SCOUT_SECTOR_DEPTH,
+        lastSearchedAt: null,
+      };
+    });
+  }
+
+  /** The `scouting.ts` view of a hull: its capability, with anything under half damaged grounding it. */
+  scoutView(s: Any): { id: string; sunk: boolean; speed: number; aviation: number; aviationDamage: boolean } {
+    const aviation = clamp(s.aviation ?? 0, 0, 1);
+    return { id: s.id, sunk: !!s.sunk, speed: s.speed ?? 0, aviation, aviationDamage: aviation < 0.5 };
+  }
+
+  /**
+   * The group's remaining search endurance, summed by `scouting.ts`. A lost scout or a damaged
+   * aviation fitting lowers it; no delivered report is stored here, so none can be erased by it.
+   */
+  reconnaissanceCapacity(team = "jp"): number {
+    let total = 0;
+    for (const s of this.ships) if (s.scouts && s.team === team) total += scoutReconnaissance(s.scouts);
+    return total;
+  }
+
+  /** Where an airborne scout's report comes from: its assigned sector, advanced along the centre bearing. */
+  scoutPosition(scout: ScoutAircraft, s: Any): { x: number; z: number } {
+    const sector = (s.sectors as SearchSector[] | null)?.find((x) => x.id === scout.sectorId);
+    if (!sector) return { x: s.x, z: s.z };
+    const mid = (sector.fromBearing + sector.toBearing) / 2;
+    const reach = sector.depth * (scout.state === "searching" ? 0.75 : 0.4);
+    return { x: sector.origin.x + Math.sin(mid) * reach, z: sector.origin.z - Math.cos(mid) * reach };
+  }
+
+  /**
+   * One fixed step of the cruiser-scout sortie: burn fuel, launch a rested scout at the stalest
+   * sector, and take one back alongside when the ship is slow enough. The scout files no contact
+   * here — `observersFor` hands it to the ordinary observation sweep, so its sighting is a normal
+   * delivered report and nothing else can reach into the other side's knowledge.
+   */
+  updateScouts(dt: number): void {
+    for (const s of this.ships) {
+      if (!s.scouts || s.team !== "jp" || s.sunk) continue;
+      for (const scout of s.scouts as ScoutAircraft[]) {
+        const wasLost = scout.state === "lost";
+        Object.assign(scout, stepScout(scout, dt, SCOUT_LIMITS, this.scoutRandom()));
+        // A scout that runs dry has transmitted its last report; the tracks it filed become lost
+        // beliefs the fleet dead-reckons, never reports it can recall.
+        if (!wasLost && scout.state === "lost") this.loseObserver(`air-scout-${scout.id}`);
+        if (scout.state === "alongside") {
+          // `stepScout` reaches the water at the pickup fuel; `pickupWindow` answers whether the
+          // ship is slow enough, keying on the return leg that state has just left.
+          if (pickupWindow({ ...scout, state: "returning" }, this.scoutView(s)).ok) {
+            scout.state = "aboard";
+            scout.recoveredAt = this.time;
+            scout.fuel = SCOUT_FULL_FUEL;
+            scout.sectorId = null;
+          }
+          continue;
+        }
+        if (scout.state !== "aboard" || this.time < SCOUT_LAUNCH_DELAY) continue;
+        // No reconnaissance left in the group is no sortie worth launching.
+        if (this.reconnaissanceCapacity("jp") <= 0) continue;
+        const sector = assignSector(s.sectors as SearchSector[], this.time, SCOUT_STALE_SECONDS);
+        if (!sector) continue;
+        if (!canLaunchScout(this.scoutView(s), scout, this.time).ok) continue;
+        scout.state = "catapult";
+        scout.sectorId = sector.id;
+        scout.launchedAt = this.time;
+        sector.lastSearchedAt = this.time;
+      }
+    }
   }
 
   /** Every observer of one side that could see anything at all, with its own height and reach. */
@@ -1153,6 +1778,21 @@ export class Battle {
           range: 6000 * VISIBILITY,
           delay: SHIP_REPORT_DELAY,
         });
+    for (const s of this.ships)
+      if (s.scouts && s.team === team && !s.sunk)
+        for (const scout of s.scouts as ScoutAircraft[]) {
+          if (!SCOUT_AIRBORNE_STATES.has(scout.state)) continue;
+          const at = this.scoutPosition(scout, s);
+          out.push({
+            id: `air-scout-${scout.id}`,
+            x: at.x,
+            z: at.z,
+            altitude: SCOUT_ALTITUDE,
+            range: SCOUT_SEARCH_RANGE * VISIBILITY,
+            delay: AIR_REPORT_DELAY,
+            scout: true,
+          });
+        }
     return out;
   }
 
@@ -1173,7 +1813,8 @@ export class Battle {
         const held = this.teamIntel[team].get(target.id);
         const last = Math.max(held?.observedAt ?? -Infinity, this.filed[team].get(target.id) ?? -Infinity);
         if (this.time - last < TRACK_SECONDS) continue;
-        const targetAltitude = target.kind === "sub" ? (target.surfaced ? 2 : -40) : target.deckHeight;
+        // The boat's own depth, through the one conversion: a periscope is seen, a deep hull is not.
+        const targetAltitude = target.sub ? subY(target.sub) : target.deckHeight;
         for (const o of observers) {
           if (
             !canObserve({
@@ -1194,13 +1835,39 @@ export class Battle {
     }
   }
 
+  /**
+   * What the Japanese can see of the atoll, filed as a report rather than read off the island. A
+   * facility no observer could pick out is simply absent from the snapshot, so its last report
+   * survives untouched — the decision this feeds must be allowed to run on stale knowledge, which
+   * is the whole of the Nagumo problem. The delay is the fastest observer's, because one aircraft
+   * already on its way home does not wait for a slower lookout.
+   */
+  observeFacilities(): void {
+    if (!this.facilities.length) return;
+    const snapshot: ObservedSnapshot = {};
+    let delay = Infinity;
+    for (const o of this.observersFor("jp")) {
+      for (const f of this.facilities) {
+        if (f.id in snapshot) continue;
+        if (!canObserve({ observer: o, target: f, observerAltitude: o.altitude, targetAltitude: 0,
+                          rangeLimit: o.range, visibility: VISIBILITY, sightDepth: SIGHT_DEPTH })) continue;
+        snapshot[f.id] = f.health;
+        delay = Math.min(delay, o.delay);
+      }
+    }
+    if (!Object.keys(snapshot).length) return;
+    this.facilityReports.push({ at: this.time + delay, snapshot });
+  }
+
   /** Classify what was seen by the range it was seen at, date it, and put it on the air. */
   fileReport(team: string, observer: Any, target: Any): void {
     const range = distance2(observer, target);
     const truth = classOf(target);
-    const { classification, confidence } = classify({ truth, range, random: this.random() });
+    const { classification, confidence } = classify({ truth, range, random: observer.scout === true ? this.scoutRandom() : this.random() });
     const identified = classification === truth;
     this.filed[team].set(target.id, this.time);
+    // A damaged Midway radio only slows the U.S. side's traffic; it is the delay's sole modifier.
+    const delay = observer.delay * (team === "us" && this.facilities.length ? radioDelivery(this.facilities) : 1);
     this.reports.push({
       ...makeContact({
         id: target.id,
@@ -1208,7 +1875,7 @@ export class Battle {
         observerId: observer.id,
         targetId: target.id,
         observedAt: this.time,
-        delay: observer.delay,
+        delay,
         x: target.x,
         z: target.z,
         heading: target.heading,
@@ -1222,6 +1889,7 @@ export class Battle {
       time: this.time,
       identified,
       source: observer.id.startsWith("air") ? "aircraft report" : "fleet lookout",
+      observerKind: this.aircraft.find((a: Any) => a.id === observer.id)?.kind,
       reported: true,
     });
   }
@@ -1232,6 +1900,13 @@ export class Battle {
    * reports on the same hull wins. An identification once made is never lost to a vaguer sighting.
    */
   deliverReports(): void {
+    for (let i = this.facilityReports.length - 1; i >= 0; i -= 1) {
+      const r = this.facilityReports[i];
+      if (r.at > this.time) continue;
+      Object.assign(this.observedFacilities, r.snapshot);
+      this.facilityReports.splice(i, 1);
+      this.followUpPending = true;
+    }
     if (!this.reports.length) return;
     const waiting: IReport[] = [];
     for (const r of this.reports) {
@@ -1242,13 +1917,41 @@ export class Battle {
       const store = this.teamIntel[r.team];
       const prev = store.get(r.id);
       const won = prev ? (mergeContact(prev, r) as IReport) : r;
-      store.set(r.id, this.keepIdentity(prev, won));
+      const kept = this.keepIdentity(prev, won);
+      store.set(r.id, kept);
       if (r.team === "us") {
         const shown = this.contacts.get(r.id);
         if (!shown || shown.time < won.time) this.contacts.set(r.id, this.keepIdentity(shown, won));
+        // The two duties the fleet's own reconnaissance picture earns at the moment a report
+        // reaches it: a boat's contact passed on, and a reconnaissance aircraft's contact arriving
+        // under friendly fighter cover. Both report an observation; neither steers anything.
+        if (kept.classification === "submarine") this.event("support", { duty: "sub-report" });
+        else if (
+          kept.observerKind === "recon" &&
+          this.aircraft.some(
+            (a: Any) => a.team === "us" && a.kind === "fighter" && a.hp > 0 && a.mode !== "launch" && a.mode !== "crashing",
+          )
+        )
+          this.event("support", { duty: "scout-cover" });
       }
     }
     this.reports = waiting;
+    this.designateKnownCarrier();
+  }
+
+  /**
+   * An observer that can no longer correct the tracks it filed. Every report it put on the air —
+   * delivered or still in transmission — becomes a lost contact: the fleet keeps the sighting and
+   * must dead-reckon it, with uncertainty growing three times as fast, because nobody is correcting
+   * it. Nothing is withdrawn, so a report already transmitted outlives the observer that sent it.
+   */
+  loseObserver(observerId: string): void {
+    if (!observerId) return;
+    for (const team of ["us", "jp"]) {
+      for (const c of this.teamIntel[team].values()) if (c.observerId === observerId) c.lost = true;
+    }
+    for (const c of this.contacts.values()) if (c.observerId === observerId) c.lost = true;
+    for (const r of this.reports) if (r.observerId === observerId) r.lost = true;
   }
 
   /** A newer, vaguer report improves the position but cannot un-identify a hull already named. */
@@ -1303,30 +2006,59 @@ export class Battle {
   }
 
   /**
-   * Keep the designated target honest: follow what the player designated while it is a known live
-   * enemy carrier, say so when it is lost, and never silently reveal an unknown replacement.
+   * Reconcile known targets without silently choosing a replacement after a loss. A dead or gone
+   * designation is answered by the one retask contract: it is cleared, and the crew is told to
+   * retask when any legal hull remains or that none does — never handed a different target.
    */
   updateSortie(): void {
     const s = this.sortie;
     confirmPending(s, (id: string) => this.contacts.get(id));
-    if (s.assignment !== "strike") return;
-    const live = (id: string | null) => {
-      if (!id || !this.contacts.has(id)) return null;
-      const ship = this.ships.find((x: Any) => x.id === id);
-      return ship && !ship.sunk && ship.kind === "carrier" && ship.team === "jp" ? ship : null;
-    };
-    if (live(this.target)) s.target = this.target;
-    else if (s.target && !live(s.target)) {
-      const lost = this.ships.find((x: Any) => x.id === s.target);
+    if (s.assignment !== "strike" && s.assignment !== "surface") return;
+    const contacts = this.targetContacts();
+    const live = (id: string | null) => contacts.some((c) => c.id === id);
+    if (live(this.target)) {
+      s.target = this.target;
+    } else if (s.target && !live(s.target)) {
+      const option = this.designationOption(s.target, s.assignment);
+      const verdict = option ? retaskOnUnavailable(option, this.briefingWorld(), this.time) : { result: "unavailable" as const };
+      if (this.target === s.target) this.target = null;
       s.target = null;
-      if (s.objective === "pending")
-        this.say("STRIKE CONTROL", `${lost?.name ?? "Your target"} is out of the fight. Designate another carrier with TAB.`, true);
+      if (s.objective === "pending") {
+        if (this.eligibleHullRemains(s.assignment)) {
+          this.say(
+            "STRIKE CONTROL",
+            verdict.result === "retask"
+              ? "Your target is no longer eligible. Designate another contact with TAB."
+              : "Your target is gone. Designate another contact with TAB.",
+            true,
+          );
+        } else {
+          s.objective = "unavailable";
+          this.say("STRIKE CONTROL", "No eligible enemy ship remains. Return to the task force and report.", true);
+        }
+      }
     }
     if (s.objective !== "pending") return;
-    if (!s.target && !this.ships.some((x: Any) => x.team === "jp" && x.kind === "carrier" && !x.sunk)) {
+    this.designateKnownCarrier();
+    // A submerged boat can surface again; its dive must not permanently end Surface Strike.
+    if (!s.target && !this.eligibleHullRemains(s.assignment)) {
       s.objective = "unavailable";
-      this.say("STRIKE CONTROL", "No enemy carrier remains. Return to the task force and report.", true);
+      this.say("STRIKE CONTROL", "No eligible enemy ship remains. Return to the task force and report.", true);
     }
+  }
+
+  /**
+   * A carrier strike is pointed at the first delivered, fresh contact the crew has classified as a
+   * carrier. The trigger is the held sighting — a belief with a classification — never the hull's
+   * true identity or position, so a carrier nobody has reported is never designated.
+   */
+  designateKnownCarrier(): void {
+    const s = this.sortie;
+    if (s.assignment !== "strike" || s.target || s.objective !== "pending") return;
+    const sighting = this.targetContacts().find(
+      (c) => c.kind === "carrier" && !isStale(c, this.time, STALE_SECONDS),
+    );
+    if (sighting) this.designateTarget(sighting.id, false);
   }
 
   /** Freeze what actually came home, before the deck crew resets fuel, damage and stores. */
@@ -1408,9 +2140,9 @@ export class Battle {
     }
   }
 
-  /** The weapon identity a firing aircraft emits: player .50, Zero cannon/MG, other Japanese rifle. */
+  /** The weapon identity a firing aircraft emits: SBD .50 pair, TBD single cowl .30, Zero cannon/MG, other Japanese rifle. */
   gunFamily(a: Any): string {
-    if (a === this.player) return "gun50";
+    if (a === this.player) return a.airframe === "tbd" ? "gun30" : "gun50";
     if (a.airframe === "zero") {
       a.cannonToggle = !a.cannonToggle;
       return a.cannonToggle ? "cannon20" : "gun77";
@@ -1510,10 +2242,13 @@ export class Battle {
     if (a.killCredited) return;
     a.killCredited = true;
     if (a === this.player) {
-      this.lose("Aircraft lost to battle damage.");
+      this.crashPlayer("Aircraft lost to battle damage.");
       return;
     }
     this.recordLoss(a);
+    // Whatever this aircraft was the eyes for is now somebody else's guess; the reports it already
+    // transmitted stay in the fleet's hands, dead-reckoned, rather than being erased with it.
+    this.loseObserver(a.id);
     a.hp = 0;
     a.mode = "crashing";
     a.crashAge = 0;
@@ -1584,7 +2319,7 @@ export class Battle {
       this.wreckAircraft(s, Math.ceil(amount / 40));
       this.burnStores(s, Math.ceil(amount / 60), amount * 0.15);
       s.engine = Math.max(0.12, s.engine - amount / 600);
-      this.fx("explosion", point, weapon === "bomb" ? 3.2 : 1);
+      if (!nearMiss) this.fx("explosion", point, 3.2);
       this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: s.kind === "carrier" ? "deck" : "steel", outcome: "hit" });
       if (byPlayer && nearMiss) {
         this.stats.nearMisses += 1;
@@ -1610,7 +2345,10 @@ export class Battle {
       // Flooding. Three hits put the deck past the heavy-list threshold; counter-flooding brings it
       // back slowly, which reopens limited operations without repairing the hull or the stores.
       s.list = clamp((s.list ?? 0) + 0.14, 0, 0.7);
-      this.fx("explosion", point, 2.8);
+      const local = localPoint(point, s), side = Math.sign(local.right) || 1;
+      const right = side * (s.hullBeam * .5 + 2.5), c = Math.cos(s.heading), sn = Math.sin(s.heading);
+      this.fx("splash", {x:s.x + sn * local.forward + c * right, z:s.z - c * local.forward + sn * right,
+        y:-3, waterKind:"torpedo", waterDepth:3, waterDirection:{x:c*side,z:sn*side}}, 3.6, true);
       this.event("explosion", { distance: distance3(this.player, point), at: { x: point.x, y: point.y, z: point.z }, material: "steel", outcome: "torpedo" });
     } else {
       s.aa = Math.max(0.1, s.aa - 0.005);
@@ -1618,6 +2356,10 @@ export class Battle {
       if (this.random() < 0.03) this.wreckAircraft(s, 1);
       this.fx("hit", point, 0.5);
     }
+    // A direct hit on a scout cruiser's handling area erodes its future reconnaissance. It grounds
+    // later launches; every report already on the air or delivered is untouched.
+    if (hostile && s.scouts && amount > 0 && !nearMiss && (weapon === "bomb" || weapon === "torpedo"))
+      s.aviation = clamp((s.aviation ?? 1) - amount / 300, 0, 1);
     // A friendly observer sees an enemy carrier burning; a friendly ship reports its own fire.
     if (s.team === "jp" && s.kind === "carrier" && s.fire > 0.5 && !s.burnReported) {
       s.burnReported = true;
@@ -1638,7 +2380,29 @@ export class Battle {
     if (s.sunk) return;
     s.sunk = true;
     s.speed = 0;
+    // A sinking hull's lookouts stop correcting their tracks, exactly as a dead aircrew does.
+    this.loseObserver(s.id);
+    // A sunk scout cruiser loses its floatplanes; reports already delivered are not its to recall,
+    // they simply become lost tracks nobody is left to correct.
+    if (s.scouts)
+      for (const scout of s.scouts as ScoutAircraft[]) {
+        if (scout.state !== "lost") this.loseObserver(`air-scout-${scout.id}`);
+        scout.state = "lost";
+        scout.fuel = 0;
+      }
+    // The crew is in the water where the hull went down. The seeded draw varies the count; a later
+    // rescue genuinely saves fewer because exposure decays the group every step it waits.
+    const crew = SURVIVOR_CREW[s.kind] ?? 100;
+    this.survivors.push({
+      id: this.id("survivors"),
+      x: s.x,
+      z: s.z,
+      since: this.time,
+      fromShipId: s.id,
+      count: Math.max(10, Math.round(crew * (0.6 + this.random() * 0.4))),
+    });
     this.fx("explosion", s, 5);
+    this.event("collapse", { distance: distance3(this.player, s), at: { x: s.x, y: 0, z: s.z } });
     this.say("BATTLE CONTROL", `${s.name} is going down.`, true);
     if (s.team === "us") this.voice("R15", { ship: radioShipName(s.name), identity: s.id });
     const credit = s.lastHostileHit;
@@ -1667,12 +2431,136 @@ export class Battle {
     if (s.impacts.length > MAX_IMPACTS) s.impacts.shift();
   }
 
-  lose(reason: string): void {
+  /** The nearest facility whose footprint contains a weapon impact, or null over open water. */
+  facilityAt(p: Any): Facility | null {
+    let best: Facility | null = null;
+    let bestD = Infinity;
+    for (const f of this.facilities) {
+      const d = Math.hypot(p.x - f.x, p.z - f.z);
+      if (d <= f.radius && d < bestD) {
+        bestD = d;
+        best = f;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * One weapon's damage on the facility it actually landed on. `amount` is a 0..1 fraction of a whole
+   * structure, and the one seeded draw is the roll `damageFacility` needs to decide ignition.
+   */
+  hitFacility(f: Facility, amount: number, p: Any): void {
+    const dealt = clamp(amount, 0, 1);
+    const next = damageFacility(f, dealt, this.random());
+    for (let i = 0; i < this.facilities.length; i += 1) {
+      if (this.facilities[i].id === f.id) {
+        this.facilities[i] = next;
+        break;
+      }
+    }
+    this.event("facility", { kind: next.kind, damage: dealt });
+    this.fx("explosion", p, 1.6);
+  }
+
+  /**
+   * Fire, repair and the finite work budget. A single seeded draw gates `spreadFire` for the whole
+   * tick; `repairPlan` decides which damaged facilities a crew can reach, and only those receive the
+   * repair rate, so the atoll cannot rebuild itself for free. Unspent slots bank up to the cap.
+   */
+  updateFacilities(dt: number): void {
+    if (!this.facilities.length) return;
+    const rates: FacilityRates = { repair: FACILITY_REPAIR_RATE, burn: FACILITY_BURN_RATE };
+    this.facilities = spreadFire(this.facilities, dt, rates, this.random());
+    this.facilityWork = Math.min(FACILITY_WORK_CAP, this.facilityWork + FACILITY_WORK_PER_SECOND * dt);
+    const chosen = this.chosenScratch;
+    chosen.clear();
+    for (const o of repairPlan(this.facilities, this.facilityWork, this.time)) chosen.add(o.id);
+    this.facilityWork -= chosen.size;
+    for (let i = 0; i < this.facilities.length; i += 1) {
+      const f = this.facilities[i];
+      this.facilities[i] = stepFacility(f, dt, chosen.has(f.id) ? rates : NO_REPAIR_RATES);
+    }
+  }
+
+  /** Midway's air arm is lost only when both the airstrip and the seaplane route are gone. */
+  get baseAviationLost(): boolean {
+    return this.facilities.length > 0 && baseAviationLost(this.facilities);
+  }
+
+  /**
+   * A destroyed player aircraft goes down the way every other one does: dead stick, no lift and no
+   * control authority, trailing its engine fire, until it meets the sea. The debrief is the report
+   * of a crash that already happened, so it waits for the impact rather than interrupting it.
+   */
+  crashPlayer(reason: string): void {
+    const p = this.player;
+    if (this.status !== "playing" || p.mode === "crashing") return;
+    if (p.mode !== "flight") {
+      this.lose(reason);
+      return;
+    }
+    p.mode = "crashing";
+    p.crashAge = 0;
+    p.hp = 0;
+    p.throttle = 0;
+    p.autopilot = false;
+    p.landingAssist = null;
+    p.engineCut = true;
+    this.crashReason = reason;
+    if (p.damage) p.damage.engine.fire = Math.max(0.7, p.damage.engine.fire);
+    this.fx("explosion", p, 1.4);
+    // The engine dies first and the airframe cracks with it; the crash cue itself belongs to the
+    // sea, seconds later. Everything between is the slipstream, the windmilling prop and the fire.
+    this.event("engineSeize", { cue: "engineSeize", distance: 0, at: { x: p.x, y: p.y, z: p.z } });
+    this.event("damage");
+    this.event("notice", { text: "AIRCRAFT LOST — GOING DOWN" });
+    this.say("REAR GUNNER", "She's finished! We're going in — brace!", true);
+    if (this.wingmanNear()) this.voice("R30");
+  }
+
+  crashReason = "";
+
+  /** The fall itself: the engine integrates it, and the impact ends the sortie. */
+  private updateCrash(dt: number): void {
+    const p = this.player;
+    p.crashAge = (p.crashAge || 0) + dt;
+    // A steady aileron keeps the wreck turning as it falls rather than gliding straight down.
+    p.aileron = 1;
+    this.playerFlight.step(dt, { autopilot: true, pitch: -0.35, rudder: 0, turn: 0 }, DESTROYED_MODIFIERS);
+    if (p.y > 0.6 && p.crashAge < 30) return;
+    // In the water. The sortie is over, but the report waits for the splash to be seen: the
+    // simulation keeps running through the settle so the impact animates instead of freezing
+    // under the debrief.
+    p.y = 0;
+    p.mode = "wreck";
+    p.crashSettle = 0;
+    p.vx = 0;
+    p.vy = 0;
+    p.vz = 0;
+    p.speed = 0;
+    this.fx("splash", { ...p, y: 0 }, 3);
+    this.fx("explosion", { ...p, y: 1 }, 1.6);
+    this.event("explosion", { distance: 0, at: { x: p.x, y: 0, z: p.z }, material: "air" });
+    this.event("splash", { distance: 0, at: { x: p.x, y: 0, z: p.z }, fragments: true });
+  }
+
+  /** `blast` is the loss's own explosion; a crash that already hit the sea has sounded its own. */
+  /** The seconds between the splash and the after-action report. */
+  private updateWreck(dt: number): void {
+    const p = this.player;
+    p.crashSettle = (p.crashSettle || 0) + dt;
+    p.y = 0;
+    if (p.crashSettle >= 2.2) this.lose(this.crashReason || "Aircraft lost.", false);
+  }
+
+  lose(reason: string, blast = true): void {
     if (this.status !== "playing") return;
     if (isShort(this.sortie) && !this.sortie.result) this.sortie.result = this.snapshotResult("lost", this.home);
+    else if (this.sortie.assignment === "operation" && !this.sortie.result)
+      concludeOperation(this.sortie, { state: "defeat", reason }, this.time);
     this.status = "lost";
     this.reason = reason;
-    this.event("explosion");
+    if (blast) this.event("explosion");
     this.fx("explosion", this.player, 2.5);
   }
 
@@ -1689,8 +2577,16 @@ export class Battle {
     }
     this.time += dt;
     for (const fx of this.effects) fx.age += dt;
-    this.effects = this.effects.filter((f) => f.age < f.life);
+    let kept = 0;
+    for (let i = 0; i < this.effects.length; i += 1) {
+      const f = this.effects[i];
+      if (f.age < f.life) this.effects[kept++] = f;
+    }
+    this.effects.length = kept;
+    this.updateRescue(dt);
     this.updateShips(dt);
+    this.updateFacilities(dt);
+    this.updateScouts(dt);
     this.updatePlayer(dt, input);
     this.observeFuel();
     this.updateRecovery();
@@ -1710,8 +2606,11 @@ export class Battle {
     if (this.opsTick <= 0) {
       this.opsTick = OPS_INTERVAL;
       this.observeFleet();
+      this.observeFacilities();
       this.deliverReports();
+      this.updateHunts();
       for (const s of this.ships) if (s.kind === "carrier" && !s.sunk && s.air) this.updateCarrier(s);
+      this.updateOperation();
     }
     if (this.time > 7 && !this.reconLaunched) {
       this.reconLaunched = true;
@@ -1723,11 +2622,23 @@ export class Battle {
     }
     if (this.time > 130 && !this.threatNotice) {
       this.threatNotice = true;
-      const near = this.aircraft.some((a) => a.team === "jp" && a.kind !== "fighter" && distance2(a, this.home) < 7000);
+      // Air warning is the radar's one job: its mean health sets how far a raid is picked up. It never
+      // names a ship or reports deck health, and one dead set of several only shortens the reach.
+      const warning = this.facilities.length ? radarWarning(this.facilities) : 1;
+      const reach = 7000 * warning;
+      const near =
+        warning > 0 &&
+        this.aircraft.some((a) => a.team === "jp" && a.kind !== "fighter" && distance2(a, this.home) < reach * reach);
       if (near) this.say("ENTERPRISE RADAR", "Inbound strike aircraft. Fighters, intercept before they reach the carriers.", true);
     }
-    if (this.ships.filter((s) => s.kind === "carrier" && s.team === "us").every((s) => s.sunk)) this.lose("The U.S. carrier force has been lost.");
-    if (this.operationalEnemyCarriers.length === 0 && !this.strikeComplete) {
+    let usCarriersAfloat = false;
+    let enemyDecksOperational = false;
+    for (const s of this.ships) {
+      if (s.kind === "carrier" && s.team === "us" && !s.sunk) usCarriersAfloat = true;
+      if (s.team === "jp" && s.kind === "carrier" && !s.sunk && s.deck >= LAUNCH_DECK) enemyDecksOperational = true;
+    }
+    if (!usCarriersAfloat) this.lose("The U.S. carrier force has been lost.");
+    if (!enemyDecksOperational && !this.strikeComplete) {
       this.strikeComplete = true;
       this.say("ENTERPRISE", "All four enemy flight decks are neutralized. Return and recover to complete the operation.", true);
     }
@@ -1736,6 +2647,10 @@ export class Battle {
   strikeComplete = false;
 
   updateShips(dt: number): void {
+    const surface = this.surfaceScratch;
+    surface.length = 0;
+    for (const s of this.ships) if (!s.sunk && s.kind !== "sub") surface.push(s);
+    const hazards = [{ x: this.island.x, z: this.island.z, radius: ATOLL_HAZARD_RADIUS }];
     for (const s of this.ships) {
       if (s.sunk) {
         s.sink = Math.min(1, s.sink + dt * 0.012);
@@ -1743,7 +2658,23 @@ export class Battle {
         continue;
       }
       updateEvasion(this, s, dt);
-      s.speed = s.baseSpeed * (0.35 + 0.65 * s.engine);
+      // A submarine's own state caps it: swift on the surface, slow and battery-hungry under it.
+      s.speed =
+        s.kind === "sub" && s.sub
+          ? Math.min(s.baseSpeed * (0.35 + 0.65 * s.engine), maxSpeed(s.sub))
+          : s.baseSpeed * (0.35 + 0.65 * s.engine);
+      // A submarine runs its own attack logic and is never station-kept; every surface hull hands
+      // its helm to the group, where station keeping, course authority and evasion all resolve.
+      if (s.kind !== "sub") this.steerSurface(s, dt, surface, hazards);
+      // Scout handling slows the cruiser into the water-pickup envelope unless it is evading, when
+      // survival outranks recovery and the floatplane waits on the water. This follows the helm so
+      // the group's own station-keeping speed cannot overwrite it.
+      if (
+        s.scouts &&
+        (s.evadeUntil || 0) <= this.time &&
+        (s.scouts as ScoutAircraft[]).some((sc) => sc.state === "alongside")
+      )
+        s.speed = Math.min(s.speed, PICKUP_MAX_SHIP_SPEED);
       const f = forward(s.heading);
       s.x += f.x * s.speed * dt;
       s.z += f.z * s.speed * dt;
@@ -1760,19 +2691,44 @@ export class Battle {
         this.refreshDeck(s);
       }
       if (s.kind === "sub") {
-        s.surfaced = Math.sin(this.time / 70 + s.baseX) > 0.1;
-        s.torpTimer -= dt;
-        // A boat attacks what it has been told about, through the same delivered contacts every other
-        // attacker uses. With no report it has nothing to steer at, and a stale one puts the spread
-        // where the ship was going rather than where it is.
+        const state: SubState = s.sub;
+        // A boat attacks what it has been told about, through the same delivered contacts every
+        // other attacker uses. No ship name and no live hull are read: with no report it has nothing
+        // to steer at, and a stale one puts the aim where the ship was going, not where it is.
         const contact = strikeContact(this, s);
+        const fire = canFire(state, this.time);
+        // Pick a depth, then earn it. `stepDepth` converges on the wanted mode and `mode` flips only
+        // when the hull is within a metre of it. Nothing surfaces a boat on a timer.
+        const wanted: SubMode = !contact
+          ? "surfaced"
+          : fire.ok || fire.reason === "too deep"
+            ? "periscope"
+            : "deep";
+        Object.assign(state, stepDepth(state, wanted, dt, SUB_DIVE_RATE));
+        // A reload is finite and its clock belongs to the boat: when it runs out the tubes are ready
+        // again, but only while a spare load remains. `applyFire` spends the reload and starts the
+        // clock; clearing it once served stops a stale clock from re-arming the tubes for free.
+        if (state.tubes <= 0 && state.reloadUntil > 0 && this.time >= state.reloadUntil) {
+          if (state.reloads > 0) state.tubes = SUB_TUBES;
+          state.reloadUntil = 0;
+        }
+        state.battery = Math.max(0, state.battery - batteryDrain(state, s.speed, dt));
+        // Only a deep boat is unobserved; a periscope still breaks the surface.
+        s.surfaced = state.depth < SIGHT_DEPTH;
+        // The one and only depth-to-y conversion.
+        s.y = subY(state);
         if (contact) {
           const e = estimatePosition(contact, this.time);
-          s.heading = wrap(s.heading + clamp(angleDelta(bearing(s, e), s.heading), -0.06 * dt, 0.06 * dt));
-          if (s.torpTimer <= 0 && distance2(s, e) < 4800) {
-            const aim = bearing(s, e);
-            for (const off of [-0.025, 0, 0.025]) this.spawnTorpedo(s, aim + off);
-            s.torpTimer = 78;
+          const range = distance2(s, e);
+          const course = interceptCourse(s.x, s.z, s.speed, e.x, e.z, contact.heading, contact.speed);
+          const aim = course ? course.heading : bearing(s, e);
+          s.heading = wrap(s.heading + clamp(angleDelta(aim, s.heading), -SUB_TURN_RATE * dt, SUB_TURN_RATE * dt));
+          s.torpTimer -= dt;
+          const shot = canFire(state, this.time);
+          if (s.torpTimer <= 0 && shot.ok && range < SUB_TORPEDO_RANGE) {
+            this.spawnTorpedo(s, aim);
+            Object.assign(state, applyFire(state, this.time, SUB_RELOAD_SECONDS));
+            s.torpTimer = SUB_FIRE_INTERVAL;
             if (s.team === "jp" && distance2(s, this.player) < 3000) this.say("LOOKOUT", "Torpedo wakes! Submarine attack near the task force!", true);
           }
         }
@@ -1780,11 +2736,588 @@ export class Battle {
       }
       updateGunnery(this, s, dt);
     }
+    // A group re-forms after an evasion ends, and the coverage it has lost is exactly its absent
+    // escorts' stations — the number a removed escort now costs.
+    for (const group of this.surfaceGroups) {
+      if (group.reform) {
+        this.reformGroup(group);
+        group.reform = false;
+      }
+      const absent = group.memberIds.filter((id) => {
+        const m = this.byId(id);
+        return !m || m.sunk || (m.evadeUntil || 0) > this.time || !!m.assist;
+      });
+      group.coverageLost = coverageLost(group, absent);
+    }
+  }
+
+  /**
+   * Survivors, rescue and the alongside, all through `rescue.ts`. Exposure and pickup run every
+   * step, so a group left in the water loses people before it is reached; the alongside is gated by
+   * `canAssist`, its pumps are `assistBenefit` and its cost is `assistCost`. No hull is named: an
+   * escort is any destroyer or cruiser and a carrier is any damaged friendly one.
+   */
+  updateRescue(dt: number): void {
+    const now = this.time;
+    for (const s of this.ships) {
+      if (s.sunk) continue;
+      if (s.assist) {
+        const carrier = this.byId(s.assist.carrierId);
+        if (!carrier || carrier.sunk) {
+          this.recordAssistAbort(s, detach(s.assist, "carrier lost", now));
+          continue;
+        }
+        const check = canAssist(this.escortView(s), this.carrierView(carrier), this.threatsNear(carrier));
+        if (!check.ok) {
+          // A detected torpedo threat is the abort that must be recorded, reason and time.
+          this.recordAssistAbort(s, detach(s.assist, check.reason, now));
+          continue;
+        }
+        if (distance2(s, carrier) <= ASSIST_DISTANCE) {
+          s.assist = { ...s.assist, phase: "alongside" };
+          // Assisting gives up the screen station: the ship is tied to the carrier's flank.
+          s.station = null;
+          s.stationSlot = null;
+          const cost = assistCost(this.escortView(s));
+          s.manoeuvrable = cost.manoeuvrable;
+          s.screenCoverageLost = cost.screenCoverageLost;
+          const benefit = assistBenefit(this.carrierView(carrier), this.escortView(s), dt);
+          carrier.list = Math.max(0, (carrier.list ?? 0) - benefit.floodingDelta);
+          if ((carrier.fire ?? 0) > 0) carrier.fire = Math.max(0, carrier.fire - benefit.fireDelta);
+          s.assistBenefit = benefit;
+        } else {
+          s.assist = { ...s.assist, phase: "approaching" };
+        }
+        continue;
+      }
+      if (s.rescue) {
+        const step = stepRescue(
+          s.rescue,
+          { x: s.x, z: s.z, speed: s.speed },
+          this.survivors,
+          dt,
+          DEFAULT_RESCUE_LIMITS,
+        );
+        s.rescue = step.state;
+        this.survivors = step.survivors;
+        if (s.rescue.phase === "done" || s.rescue.phase === "aborted") {
+          s.recovered = (s.recovered ?? 0) + s.rescue.recovered;
+          // People are actually aboard: the one occurrence the rescue-cover duty names. An aborted
+          // run or a group lost before the ship reached it brings nobody home and emits nothing.
+          if (s.rescue.phase === "done" && s.rescue.recovered > 0) this.event("support", { duty: "rescue-cover" });
+          this.endTask(s);
+        }
+        continue;
+      }
+      // An escort takes a new job only when its screen station is its sole duty.
+      if (!isEscort(s) || !s.task || s.task.task !== "station") continue;
+      const carrier = this.assistCandidate(s);
+      if (carrier) {
+        s.assist = { carrierId: carrier.id, phase: "approaching", startedAt: now };
+        s.task = { task: "assist", targetId: carrier.id, startedAt: now, reason: "alongside damaged carrier" };
+        continue;
+      }
+      const window = rescueWindow(this.survivors, now, {
+        fromX: s.x,
+        fromZ: s.z,
+        range: RESCUE_RANGE,
+        minCount: RESCUE_MIN_COUNT,
+        abandonAfter: RESCUE_ABANDON_SECONDS,
+      });
+      if (!window) continue;
+      // One escort per group, so the exposure decay is not applied several times over per step.
+      if (this.ships.some((o: Any) => o.rescue && o.rescue.targetId === window.targetId)) continue;
+      // The nearest eligible escort takes the boatload, not whichever hull happens to sit first in
+      // the fleet array. Array order let a carrier's own screen escort leave station for survivors a
+      // nearer escort — the survivors' own group in particular — could reach just as well.
+      const boat = this.survivors.find((g: Any) => g.id === window.targetId);
+      if (boat) {
+        const mine = Math.hypot(boat.x - s.x, boat.z - s.z);
+        const nearer = this.ships.some(
+          (o: Any) =>
+            o !== s &&
+            !o.sunk &&
+            isEscort(o) &&
+            !o.rescue &&
+            !o.assist &&
+            o.task?.task === "station" &&
+            Math.hypot(boat.x - o.x, boat.z - o.z) < mine - 1e-6,
+        );
+        if (nearer) continue;
+      }
+      s.rescue = { targetId: window.targetId, phase: "approaching", startedAt: now, recovered: 0 };
+      s.task = { task: "rescue", targetId: window.targetId, startedAt: now, reason: "survivors in the water" };
+    }
+    // A group recovered down to nothing is no longer in the water.
+    let kept = 0;
+    for (let i = 0; i < this.survivors.length; i += 1) {
+      const g = this.survivors[i];
+      if (g.count > 0.5) this.survivors[kept++] = g;
+    }
+    this.survivors.length = kept;
+  }
+
+  /**
+   * The anti-submarine hunt, one ops tick at a time. Each U.S. escort advances its own `hunt`
+   * against the submarine contact its fleet actually holds — a delivered report, never a live hull —
+   * through `asw.stepHunt`, which is pure. When a pass puts a salvo in the water the escort resolves
+   * it: `submarine.ts`'s own fuse and falloff decide whether a charge is close enough and fuzed deep
+   * enough to damage the boat, so a too-deep or too-distant contact survives the miss. The escort
+   * never reads the boat's true depth or position to decide to attack, and draws no random of its own.
+   */
+  updateHunts(): void {
+    for (const s of this.ships) {
+      const hunt: AswState | null = s.hunt;
+      if (!hunt || s.sunk || s.team !== "us" || !isEscort(s)) continue;
+      const report = this.huntedContact(s);
+      const contact: AswContact = report
+        ? this.aswContact(s, report)
+        : { bearing: 0, bearingUncertainty: 1, range: null, depth: 0, held: false, lastHeld: hunt.phaseTime + 1 };
+      const next = stepHunt(hunt, contact, { x: s.x, z: s.z, heading: s.heading, speed: s.speed }, OPS_INTERVAL, ASW_LIMITS);
+      s.hunt = next;
+      const dropped = next.salvoes - hunt.salvoes;
+      if (dropped > 0 && report && next.solution) {
+        this.resolveSalvo(report, next.solution);
+        this.event("hunt", { phase: next.phase, salvoes: dropped });
+      }
+    }
+  }
+
+  /**
+   * The freshest submarine contact the escort's own fleet holds, nearest to the escort. Only a
+   * delivered report is read: with no held belief there is nothing to hunt, however close the boat
+   * truly is. A stale track is not a contact.
+   */
+  huntedContact(s: Any): IReport | null {
+    let best: IReport | null = null;
+    let bestD = Infinity;
+    for (const c of this.teamIntel.us.values()) {
+      if (c.kind !== "sub" && c.classification !== "submarine") continue;
+      if (isStale(c, this.time, STALE_SECONDS)) continue;
+      const d = distance2(s, estimatePosition(c, this.time));
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * The escort's belief about the boat, built only from the delivered report. Its dead-reckoned
+   * estimate gives the bearing and the range, and the track's age is how long it has gone
+   * unrefreshed. `depth` is the escort's own estimate — a report carries none — so the fuse ladder
+   * follows a belief, never the boat's true depth.
+   */
+  aswContact(s: Any, c: IReport): AswContact {
+    const estimate = estimatePosition(c, this.time);
+    const range = distance2(s, estimate);
+    const age = this.time - c.observedAt;
+    return {
+      bearing: bearing(s, estimate),
+      bearingUncertainty: clamp(estimate.radius / Math.max(range, 1), 0.05, 1.2),
+      range,
+      depth: 0,
+      held: !isStale(c, this.time, STALE_SECONDS),
+      lastHeld: age,
+    };
+  }
+
+  /**
+   * Resolve one dropped salvo against the boat through `submarine.ts`'s charge arithmetic. Each drop
+   * point sinks to the fuse's preset and detonates; the 3D falloff to the boat's real position
+   * decides the damage, so a charge that is too shallow, too far, or fuzed for another depth does
+   * nothing at all. Damage goes through `damageShip`; nothing invents a hit beyond the falloff.
+   */
+  resolveSalvo(c: IReport, solution: AttackSolution): void {
+    const boat = this.byId(c.id);
+    if (!boat || boat.sunk || !boat.sub) return;
+    const targetY = subY(boat.sub);
+    let total = 0;
+    for (const point of solution.dropPoints) {
+      let charge: DepthCharge = {
+        x: point.x,
+        y: 0,
+        z: point.z,
+        presetDepth: solution.presetDepth,
+        sinkRate: ASW_SINK_RATE,
+        armed: false,
+      };
+      while (!charge.armed) charge = stepCharge(charge, 0.1);
+      const damage = chargeDamage(charge, boat.x, targetY, boat.z, ASW_LETHAL_RADIUS);
+      if (damage > 0) total += damage;
+    }
+    if (total > 0) this.damageShip(boat, total * ASW_CHARGE_DAMAGE, { x: boat.x, y: targetY, z: boat.z }, "depth-charge", "us");
+  }
+
+  /** The rescue module's view of an escort: its screen contribution is the whole station. */
+  escortView(s: Any): Any {
+    return { id: s.id, neededElsewhere: false, assistFactor: ASSIST_FACTOR, screenCoverage: 1 };
+  }
+
+  /**
+   * The rescue module's damage view of a hull. `Battle` tracks a ship as hp plus the live `list`
+   * and `fire` severities and its class capacity, not a `damage.ts` zone record, so the flooding
+   * rate the alongside offsets is the hull's own list and its fire rate its own fire.
+   */
+  carrierView(s: Any): Any {
+    return {
+      id: s.id,
+      sunk: !!s.sunk,
+      damage: {
+        hull: clamp(1 - s.hp / (s.maxHp || s.hp || 1), 0, 1),
+        propulsion: 0,
+        fire: Math.max(0, s.fire ?? 0),
+        aviation: 0,
+        weapons: 0,
+        flooding: Math.max(0, s.list ?? 0),
+        fireRate: Math.max(0, s.fire ?? 0),
+        capacity: classCapacity(s.kind),
+      },
+    };
+  }
+
+  /** A running hostile torpedo near the carrier: the one detected threat that aborts an alongside. */
+  threatsNear(carrier: Any): Any[] {
+    const out: Any[] = [];
+    for (const t of this.torpedoes) {
+      if (t.team !== carrier.team && distance2(t, carrier) <= ASSIST_THREAT_RANGE)
+        out.push({ kind: "torpedo", team: t.team, x: t.x, z: t.z });
+    }
+    return out;
+  }
+
+  /** The nearest damaged friendly carrier in reach that no other escort is already working. */
+  assistCandidate(escort: Any): Any {
+    let best: Any = null;
+    let nearest = ASSIST_RANGE;
+    for (const c of this.ships) {
+      if (c.kind !== "carrier" || c.team !== escort.team || c.sunk) continue;
+      if (this.ships.some((o: Any) => o !== escort && o.assist && o.assist.carrierId === c.id)) continue;
+      const d = distance2(escort, c);
+      if (d >= nearest) continue;
+      if (!canAssist(this.escortView(escort), this.carrierView(c), this.threatsNear(c)).ok) continue;
+      best = c;
+      nearest = d;
+    }
+    return best;
+  }
+
+  /** Drop a finished rescue/assist and send the escort back to reform on the screen. */
+  endTask(s: Any): void {
+    s.rescue = null;
+    s.assist = null;
+    s.task = null;
+    this.rejoinScreen(s);
+  }
+
+  /** Record why an alongside ended, then send the escort back to the screen. */
+  recordAssistAbort(s: Any, left: Any): void {
+    s.assistAbort = left;
+    if (left.reason === "torpedo threat detected") {
+      this.say("BATTLE CONTROL", `${s.name} breaks off alongside — torpedo threat.`, true);
+    }
+    s.assist = null;
+    s.task = null;
+    this.rejoinScreen(s);
+  }
+
+  rejoinScreen(s: Any): void {
+    const group = this.surfaceGroups.find((gr) => gr.id === s.groupId);
+    if (group) group.reform = true;
+  }
+
+  /**
+   * One surface ship's helm for this frame. The guide holds the group's course, routed clear of the
+   * atoll and reef by `formation.groupCourse`; every other hull steers onto its station in the
+   * guide's moving frame with `naval.steerToStation`, and a ship whose evasion has just ended arcs
+   * back with `naval.rejoinCourse` rather than snapping. `naval.courseAuthority` decides who owns
+   * the course, so no ship overwrites another's. Applies heading and speed; `updateShips` moves.
+   */
+  steerSurface(s: Any, dt: number, surface: Any[], hazards: IHazard[]): void {
+    const now = this.time;
+    s.task ??= { task: "station", targetId: null, startedAt: now, reason: "station keeping" };
+    // Survival outranks station keeping, so a torpedo evasion is expressed as a withdraw task and
+    // skips the helm below. It is an emergency, not a commitment: it ends with the evasion, so the
+    // ship rejoins at once instead of running on through `COMMIT_SECONDS`.
+    const survival = (s.evadeUntil || 0) > now;
+    if (!survival && s.task.task === "withdraw") s.task = null;
+    const chosen = chooseTask(
+      { task: s.task },
+      { survival, taskFeasible: true, opportunity: null, stationFeasible: true },
+      now,
+    );
+    const detaching = chosen?.task === "withdraw";
+    if (chosen) {
+      s.task = {
+        task: chosen.task,
+        targetId: chosen.targetId,
+        startedAt: s.task && s.task.task === chosen.task ? s.task.startedAt : now,
+        reason: chosen.reason,
+      };
+    }
+    if (s.wasEvading && !detaching) {
+      s.rejoinUntil = now + REJOIN_SECONDS;
+      const g = this.surfaceGroups.find((gr) => gr.id === s.groupId);
+      if (g) g.reform = true;
+    }
+    s.wasEvading = detaching;
+    if (detaching) return; // `updateEvasion` already owns the heading and the base speed stands.
+
+    const group = this.surfaceGroups.find((gr) => gr.id === s.groupId);
+    const base = s.baseSpeed * (0.35 + 0.65 * s.engine);
+    const limits: ISteerLimits = {
+      maxSpeed: base || 1,
+      turnRate: s.kind === "carrier" ? CARRIER_TURN : ESCORT_TURN,
+      slowRadius: STATION_SLOW_RADIUS,
+    };
+    let heading = s.heading;
+    let speed = base;
+
+    const rescueGroup = s.rescue ? this.survivors.find((g: Any) => g.id === s.rescue.targetId) : null;
+    const assistCarrier = s.assist ? this.byId(s.assist.carrierId) : null;
+    if (rescueGroup) {
+      // Bear down on the boatload; `steerToStation` bleeds speed off inside its slow radius, which
+      // is what lets `stepRescue` recover people once the ship is close and slow.
+      const steer = steerToStation(s, { x: rescueGroup.x, z: rescueGroup.z }, dt, limits);
+      heading = steer.heading;
+      speed = steer.speed;
+      s.cruiseHeading = heading;
+    } else if (assistCarrier && !assistCarrier.sunk) {
+      const station: FormationStation = {
+        shipId: s.id,
+        groupId: s.groupId,
+        offsetX: (assistCarrier.hullBeam ?? 30) / 2 + 40,
+        offsetZ: 0,
+      };
+      const alongside = stationTarget(assistCarrier.x, assistCarrier.z, assistCarrier.heading, station);
+      const steer = steerToStation(s, alongside, dt, limits);
+      heading = steer.heading;
+      speed = steer.speed;
+      s.cruiseHeading = heading;
+    } else if (s.guide) {
+      if (group) {
+        const planned = groupCourse(
+          group,
+          { kind: "transit", course: this.supportCourse(group, s), speed: base, guideX: s.x, guideZ: s.z },
+          hazards,
+          { maxSpeed: base || 1, lookahead: GROUP_LOOKAHEAD, margin: GROUP_MARGIN, step: GROUP_STEP },
+        );
+        let course = planned.course;
+        const authorityId = courseAuthority(
+          { id: s.id, groupId: s.groupId, guide: true, evading: false },
+          this.courseRecords(group, s.id),
+        );
+        if (authorityId) {
+          const holder = this.byId(authorityId);
+          if (holder && !holder.sunk) course = wrap(holder.heading);
+        }
+        group.course = course;
+        group.speed = base;
+        s.cruiseHeading = course;
+        const ahead = { x: s.x + Math.sin(course) * GROUP_LOOKAHEAD, z: s.z - Math.cos(course) * GROUP_LOOKAHEAD };
+        const steer = steerToStation(s, ahead, dt, { ...limits, slowRadius: GROUP_LOOKAHEAD * 0.5 });
+        heading = steer.heading;
+        speed = steer.speed;
+      }
+    } else if (s.station && group) {
+      const guide = this.byId(group.guideId);
+      if (guide && !guide.sunk) {
+        let world = stationTarget(guide.x, guide.z, guide.heading, s.station as FormationStation);
+        // Never station-keep into the reef: a station inside a hazard falls back to the ship's own
+        // track until the group has routed clear.
+        if (!clearOfHazard(world.x, world.z, hazards, 0)) {
+          world = { x: s.x + Math.sin(s.heading) * 1000, z: s.z - Math.cos(s.heading) * 1000 };
+        }
+        const steer =
+          s.rejoinUntil > now
+            ? rejoinCourse(s, { x: world.x, z: world.z, dt }, limits)
+            : steerToStation(s, world, dt, limits);
+        heading = steer.heading;
+        speed = steer.speed;
+        s.cruiseHeading = heading;
+      }
+    }
+
+    const others = this.avoidScratch;
+    others.length = 0;
+    for (const o of surface) if (o !== s) others.push(o);
+    const avoid = avoidanceHeading(s, others, SURFACE_LOOKAHEAD, MIN_SEPARATION);
+    if (avoid !== null) {
+      const turn = limits.turnRate * dt;
+      heading = wrap(heading + clamp(angleDelta(avoid, heading), -turn, turn));
+    }
+    s.heading = heading;
+    s.speed = speed;
+  }
+
+  /** The course identities a group's authority is resolved against: living members only. */
+  courseRecords(group: ISurfaceGroup, excludeId: string): ICourseShip[] {
+    const out: ICourseShip[] = [];
+    for (const id of group.memberIds) {
+      if (id === excludeId) continue;
+      const m = this.byId(id);
+      if (!m || m.sunk) continue;
+      out.push({ id: m.id, groupId: group.id, guide: !!m.guide, evading: (m.evadeUntil || 0) > this.time });
+    }
+    return out;
+  }
+
+  /** Put every member back on the station it held, through `formation.reformAfter`. */
+  reformGroup(group: ISurfaceGroup): void {
+    const disrupted = group.memberIds.map((id) => {
+      const m = this.byId(id);
+      return { id, slot: (m?.stationSlot as string | null) ?? null };
+    });
+    for (const a of reformAfter(group, disrupted, this.time)) {
+      const m = this.byId(a.shipId);
+      if (!m) continue;
+      m.station = { shipId: a.shipId, groupId: group.id, offsetX: a.offsetX, offsetZ: a.offsetZ };
+      m.stationSlot = a.slot;
+    }
+  }
+
+  /** A ship by id; the group records name their members, so this is the one lookup. */
+  byId(id: string): Any {
+    return this.ships.find((s: Any) => s.id === id);
+  }
+
+  /**
+   * The course a group's guide should steer. A normal screen holds its committed `cruiseHeading`;
+   * a detached support group instead advances its own route — toward its destination, then its hold
+   * anchor, and along its withdrawal bearing once its engine is damaged — with no carrier input.
+   */
+  supportCourse(group: ISurfaceGroup, guide: Any): number {
+    const route = group.route;
+    if (!route) return wrap(guide.cruiseHeading ?? guide.heading);
+    // Any damaged member turns the whole group for home: the sisters retire together, taking their
+    // hurt ship with them rather than leaving one to press on alone.
+    const damaged = [group.guideId, ...group.memberIds].some((id) => {
+      const m = this.byId(id);
+      return m && !m.sunk && m.engine < SUPPORT_WITHDRAW_ENGINE;
+    });
+    if (damaged) return wrap(route.withdrawBearing);
+    const toDestination = Math.hypot(guide.x - route.destination.x, guide.z - route.destination.z);
+    if (toDestination > SUPPORT_APPROACH_RADIUS)
+      return Math.atan2(route.destination.x - guide.x, -(route.destination.z - guide.z));
+    const toHold = Math.hypot(guide.x - route.hold.x, guide.z - route.hold.z);
+    if (toHold > SUPPORT_HOLD_RADIUS) return Math.atan2(route.hold.x - guide.x, -(route.hold.z - guide.z));
+    return wrap(guide.heading);
+  }
+
+  /**
+   * Form each team's surface escorts into carrier groups. The guide is the nearest carrier, decided
+   * by position rather than name; the stations come from `formation.reformAfter`, so the offsets are
+   * the module's tables, not a second copy. Pure data: nothing here moves a ship.
+   */
+  setupSurfaceGroups(): void {
+    const surface = this.ships.filter((s: Any) => s.kind !== "sub");
+    const carriers = surface.filter((s: Any) => s.kind === "carrier");
+    this.surfaceGroups = carriers.map((guide: Any): ISurfaceGroup => ({
+      id: `group-${guide.id}`,
+      guideId: guide.id,
+      memberIds: [],
+      formationId: "screen",
+      course: wrap(guide.heading),
+      speed: guide.baseSpeed,
+      coverageLost: 0,
+      reform: false,
+    }));
+    for (const s of surface) {
+      s.wasEvading = false;
+      s.rejoinUntil = 0;
+      s.task = { task: "station", targetId: null, startedAt: 0, reason: "station keeping" };
+      // A marked support hull is left out of every carrier screen and picked up by
+      // `setupSupportGroup` below; every other surface ship is assigned exactly as before.
+      if (s.support) {
+        s.groupId = null;
+        s.guide = false;
+        s.station = null;
+        s.stationSlot = null;
+        continue;
+      }
+      let best: ISurfaceGroup | null = null;
+      let nearest = Infinity;
+      for (const g of this.surfaceGroups) {
+        const guide = this.byId(g.guideId);
+        if (!guide || guide.team !== s.team) continue;
+        const d = distance2(s, guide);
+        if (d < nearest) {
+          nearest = d;
+          best = g;
+        }
+      }
+      if (best && best.guideId !== s.id) {
+        best.memberIds.push(s.id);
+        s.groupId = best.id;
+        s.guide = false;
+      } else {
+        s.groupId = best?.id ?? null;
+        s.guide = true;
+        s.station = null;
+        s.stationSlot = null;
+      }
+    }
+    // Build the detached support group before the shared station pass, so its members receive
+    // stations through the same `reformAfter` table as every screen.
+    this.setupSupportGroup(surface.filter((s: Any) => s.support));
+    for (const group of this.surfaceGroups) {
+      const assigned = reformAfter(group, group.memberIds.map((id) => ({ id, slot: null })), 0);
+      for (const a of assigned) {
+        const s = this.byId(a.shipId);
+        if (!s) continue;
+        s.station = { shipId: a.shipId, groupId: group.id, offsetX: a.offsetX, offsetZ: a.offsetZ };
+        s.stationSlot = a.slot;
+      }
+    }
+  }
+
+  /**
+   * One detached support group: its own guide and route, outside every carrier screen. The route is
+   * plain data read by the guide's helm in `supportCourse`, so the group advances itself and a
+   * carrier never steers it.
+   */
+  setupSupportGroup(ships: Any[]): void {
+    if (!ships.length) return;
+    const guide = ships[0];
+    const group: ISurfaceGroup = {
+      id: `group-${guide.id}`,
+      guideId: guide.id,
+      memberIds: [],
+      formationId: "line-ahead",
+      course: wrap(guide.heading),
+      speed: guide.baseSpeed,
+      coverageLost: 0,
+      reform: false,
+      route: {
+        // Approach a standoff west of the atoll, hold there, and retire west if damaged. Its own
+        // sector, between the two carrier forces and clear of the reef.
+        destination: { x: -6200, z: 500 },
+        hold: { x: -5600, z: 700 },
+        withdrawBearing: -Math.PI / 2,
+      },
+    };
+    guide.groupId = group.id;
+    guide.guide = true;
+    for (const s of ships.slice(1)) {
+      s.groupId = group.id;
+      s.guide = false;
+      group.memberIds.push(s.id);
+    }
+    this.surfaceGroups.push(group);
   }
 
   updatePlayer(dt: number, input: Any): void {
     const p = this.player;
     if (p.mode === "spectator") return;
+    if (p.mode === "crashing") {
+      this.updateCrash(dt);
+      return;
+    }
+    if (p.mode === "wreck") {
+      this.updateWreck(dt);
+      return;
+    }
     if (p.mode === "flight") {
       stepDamage(p, dt);
       if (p.hp <= 0) {
@@ -1808,7 +3341,10 @@ export class Battle {
       const f = forward(h.heading);
       p.x = h.x + f.x * -105;
       p.z = h.z + f.z * -105;
-      p.y = 22;
+      // Hold the aircraft on the deck it actually recovered onto: a fleet-wide height floated a
+      // diversion to the lower Yorktown deck 7.8 m above it, exactly the class of error AC-6 exists
+      // to catch. The arrestment uses this same clearance.
+      p.y = h.deckHeight + gearClearance(p);
       p.speed = 0;
       setAttitude(p, h.heading, 0.22, 0);
       if (p.serviceTime <= 0) {
@@ -1862,9 +3398,16 @@ export class Battle {
         this.playerFlight.reset();
         this.stats.sorties += 1;
         this.say("DECK CREW", `${supplies.length ? `Repairs complete. ${supplies.join(" ")}` : "Refueled, repaired and rearmed."} Takeoff flaps set. Advance power when ready.`, supplies.length > 0);
-        if (this.strikeComplete) {
-          this.status = "won";
-          this.reason = "Enemy carrier aviation neutralized. You brought your crew home.";
+        if (this.sortie.assignment === "operation" && !this.sortie.result) {
+          // Open Pacific ends on its own conditions, not on one neutralized deck: full success needs
+          // the threats resolved and the fleet able to fly, and the conclusion is frozen once.
+          const outcome = operationOutcome(this.operationWorld(), this.time);
+          if (outcome.state === "success") {
+            this.reason = outcomeText(concludeOperation(this.sortie, outcome, this.time));
+            this.status = "won";
+          } else if (outcome.state === "running") {
+            this.say("BATTLE CONTROL", `Open Pacific continues: ${outcome.reason}.`, true);
+          }
         }
       }
       return;
@@ -1917,8 +3460,11 @@ export class Battle {
         p.launchAssist = p.assist ? 9 : 0;
         p.autoGearPending = !p.gearManual;
         p.gearClimbTime = 0;
-        if (departure === "liftoff") this.say("ENTERPRISE TOWER", "Positive climb, Scout Two. Gear retracts after a safe climb; G overrides it. N cycles flap settings. Build speed before turning.");
-        else this.say("SCOUT THREE", "Off the deck. Watch your airspeed — do not haul back on the stick.", true);
+        if (departure === "liftoff") {
+          this.say("ENTERPRISE TOWER", "Positive climb, Scout Two. Gear retracts after a safe climb; G overrides it. N cycles flap settings. Build speed before turning.");
+          // Scout Three was held on deck until this moment; he rolls and joins as the player climbs.
+          this.say("SCOUT THREE", "Two, we have your wing. Orders on your command.");
+        } else this.say("SCOUT THREE", "Off the deck. Watch your airspeed — do not haul back on the stick.", true);
       }
       return;
     }
@@ -1939,7 +3485,8 @@ export class Battle {
       this.event("notice", { text: "COURSE HOLD DISENGAGED — YOU HAVE CONTROL" });
     }
     if (p.autopilot) {
-      let nav = this.navigationPoint;
+      const nav = this.navigationPoint;
+      let finalBank: number | undefined;
       let desiredAlt = p.nav === "home" ? (nav.y ?? 350) : 1800;
       if (p.landingAssist) {
         const s = this.ships.find((s: Any) => s.id === p.landingAssist);
@@ -1952,28 +3499,37 @@ export class Battle {
           this.voice("R22");
         } else {
           const loc = localPoint(p, s);
-          const f = forward(s.heading);
-          // Chase a point on the centreline ahead of the aircraft. A fixed waypoint is either
-          // passed — and the assist banks hard away at deck height — or so far off that a
-          // thirty-metre lineup error produces no correction at all. The lead therefore closes with
-          // the deck: held at 400 m all the way in, the groove arrived 16 m off the centreline,
-          // which is abeam a 20 m deck rather than on it.
-          const lead = loc.forward + clamp(-loc.forward * 0.5, 60, GROOVE_LEAD);
-          nav = { x: s.x + f.x * lead, z: s.z + f.z * lead };
+          // Brake lateral motion before reaching the centreline. Chasing a shrinking lookahead
+          // point oscillated across the narrow deck even while the HUD still promised a final.
+          const lateralSpeed = p.vx * Math.cos(s.heading) + p.vz * Math.sin(s.heading);
+          finalBank = clamp((-loc.right * 0.1 - lateralSpeed) * 0.1, -0.3, 0.3);
           // The glide path aims at the deck and keeps descending through it, because an assist that
           // levels at deck height never touches: it floats the length of the ship and off the bow.
           const touch = s.deckHeight + gearClearance(p) - 3;
           desiredAlt = touch + Math.max(0, -loc.forward - GROOVE_FLARE) * GLIDE;
-          p.gear = true;
-          p.flaps = 1;
-          p.brakes = false;
+          // The assist configures the aircraft like the pilot would: gear, full flaps, brakes in —
+          // and each actuator movement sounds, on its travel edge only, like the manual keys do.
+          if (!p.gear) {
+            p.gear = true;
+            this.event("gear");
+          }
+          if (p.flaps !== 1) {
+            p.flaps = 1;
+            this.event("flap");
+          }
+          if (p.brakes) {
+            p.brakes = false;
+            this.event("flap");
+          }
           p.throttle = clamp(0.59 + (50 - (p.ias || p.speed)) * 0.027, 0.12, 0.98);
-          if (loc.forward > 100 && p.y > s.deckHeight + 6) {
+          if (loc.forward > s.deckLength / 2 - 10) {
             // A bolter goes round again on the same guidance. Handing back an unattended aircraft
-            // at full power and no autopilot is how a missed wire became a ditching.
+            // or keeping a low miss on final descent both turn a missed wire into a ditching.
             p.landingAssist = null;
             p.nav = "home";
             p.throttle = 1;
+            finalBank = undefined;
+            desiredAlt = this.approach().altitude;
             this.say("LSO", "Bolter! Full power; climb out and circle for another approach.", true);
           }
         }
@@ -1985,10 +3541,19 @@ export class Battle {
         // mushes the aircraft into the sea on the way back round.
         const state = this.approach();
         if (state.phase === "groove" || state.phase === "final") {
-          p.gear = true;
+          if (!p.gear) {
+            p.gear = true;
+            this.event("gear");
+          }
           p.autoGearPending = false;
-          p.flaps = 1;
-          p.brakes = false;
+          if (p.flaps !== 1) {
+            p.flaps = 1;
+            this.event("flap");
+          }
+          if (p.brakes) {
+            p.brakes = false;
+            this.event("flap");
+          }
           p.throttle = clamp(0.55 + (APPROACH_SPEED - (p.ias || p.speed)) * 0.025, 0.15, 0.95);
         } else {
           p.brakes = false;
@@ -1998,7 +3563,7 @@ export class Battle {
         if ((p.stall ?? 0) > 0.25 || (p.ias ?? p.speed) < 42) p.throttle = 1;
       }
       if (p.autopilot) {
-        const desiredBank = clamp(angleDelta(bearing(p, nav), p.heading) * 0.9, -0.62, 0.62);
+        const desiredBank = finalBank ?? clamp(angleDelta(bearing(p, nav), p.heading) * 0.9, -0.62, 0.62);
         const currentBank = -p.roll;
         controls.turn = clamp((desiredBank - currentBank) * 2.5 - p.rollRate * 0.7, -1, 1);
         // The return leg tracks a glide path rather than a cruise altitude, so it needs to close a
@@ -2028,6 +3593,7 @@ export class Battle {
       if (p.gearClimbTime >= 1) {
         p.gear = false;
         p.autoGearPending = false;
+        this.event("gear");
         this.event("notice", { text: "POSITIVE CLIMB — GEAR RETRACTING · G FOR MANUAL CONTROL" });
       }
     }
@@ -2046,7 +3612,7 @@ export class Battle {
     if (p.speed > 177 || Math.abs(p.gforce) > 7.5) {
       p.hp = Math.max(0, p.hp - dt * (Math.max(0, p.speed - 177) * 0.2 + Math.max(0, Math.abs(p.gforce) - 7.5) * 2));
       if (p.hp <= 0) {
-        this.lose("Structural failure. Reduce airspeed and use gentler control inputs.");
+        this.crashPlayer("Structural failure. Reduce airspeed and use gentler control inputs.");
         return;
       }
     }
@@ -2100,7 +3666,9 @@ export class Battle {
       landingAssist: null,
       throttle: 0,
     });
-    this.event("land");
+    // Wheels thump onto the planks first, then the hook grabs a wire: two cues, in order.
+    this.event("land", { wire: false });
+    this.event("land", { wire: true });
     this.say("LANDING SIGNAL OFFICER", "Wire caught. Power idle. Hold straight through arrestment.", true);
   }
 
@@ -2126,7 +3694,36 @@ export class Battle {
       this.say("LANDING SIGNAL OFFICER", "Aboard and safe. That is the sortie.", true);
       return;
     }
+    if (this.sortie.assignment === "operation" && !this.sortie.result) {
+      // Recovering is the crew's explicit choice to end Open Pacific; the pure end conditions decide
+      // whether that choice is a win, and one conclusion freezes exactly one record.
+      const outcome = operationOutcome(this.operationWorld(), this.time);
+      if (outcome.state === "success") {
+        this.reason = outcomeText(concludeOperation(this.sortie, outcome, this.time));
+      }
+    }
     this.say("DECK CREW", "Welcome aboard. Fuel, ammunition and repairs are under way.", true);
+  }
+
+  /**
+   * Open Pacific's own clock. Evaluated on the coarse operational cadence: the pure end condition
+   * says whether the operation has been won or lost, and it only concludes as a win when nothing is
+   * still pending to salvage or pursue, because ending the operation stays the crew's choice.
+   * `concludeOperation` freezes exactly one result record, so a second tick can never rewrite it.
+   */
+  updateOperation(): void {
+    if (this.sortie.assignment !== "operation" || this.sortie.result) return;
+    const outcome = operationOutcome(this.operationWorld(), this.time);
+    if (outcome.state === "running") return;
+    if (outcome.state === "defeat") {
+      this.lose(outcome.reason);
+      return;
+    }
+    if (pendingOpportunities(this.operationWorld(), this.time).length) return;
+    if (!["service", "deck", "arrest"].includes(this.player.mode)) return;
+    this.reason = outcomeText(concludeOperation(this.sortie, outcome, this.time));
+    this.status = "won";
+    this.event("operation", { state: outcome.state });
   }
 
   assistRecovery(): boolean {
@@ -2137,7 +3734,10 @@ export class Battle {
       p.landingAssist = s.id;
       p.autopilot = true;
       p.nav = "home";
-      p.flaps = 1;
+      if (p.flaps !== 1) {
+        p.flaps = 1;
+        this.event("flap");
+      }
       this.say("LSO", "Final approach assist engaged. Stay ready to take over. Any stick input cancels.");
       this.voice("R21", { identity: s.id });
       return true;
@@ -2182,33 +3782,51 @@ export class Battle {
     return true;
   }
 
+  /**
+   * Put a torpedo in the water. Every running figure — speed, range, running depth and arming
+   * distance — comes from the launcher's own variant in ./armament.ts: an aircraft by its airframe
+   * (a TBD carries a Mark 13, a Kate a Type 91), a boat by its side (a US submarine a Mark 14, IJN
+   * torpedoes a Type 95). The release stamp in `a.stamp` is copied through untouched, as is the
+   * `owner`, so `./sortie.ts` credit can neither be granted nor revoked later.
+   */
   spawnTorpedo(a: Any, heading: number, options: Any = {}): Any {
+    const variant =
+      a.kind === "sub"
+        ? torpedoVariant(a.team === "jp" ? "type95" : "mk14")
+        : torpedoVariantForAirframe(a.airframe) ?? torpedoVariant(a.team === "jp" ? "type91" : "mk13");
+    const setting = variant.settings[0];
+    const runDepth = actualRunDepth(variant.id, options.depth ?? variant.runDepth.min);
     const f = forward(heading);
-    const air = options.aerial || false;
-    const speed = air ? (a.team === "jp" ? 21 : 17.25) : 24;
-    const t = {
+    const t: Any = {
       id: this.id("torpedo"),
+      variantId: variant.id,
       x: a.x,
-      y: -1.6,
+      y: -runDepth,
       z: a.z,
       heading,
-      vx: f.x * speed,
-      vz: f.z * speed,
-      speed,
+      runDepth,
+      vx: f.x * setting.speed,
+      vz: f.z * setting.speed,
+      speed: setting.speed,
+      range: setting.range,
       team: a.team,
       owner: a.owner || a.id,
       stamp: a.stamp ?? null,
       age: 0,
-      ttl: air ? 240 : 200,
-      run: 0,
-      armedDistance: options.armedDistance ?? (air ? 180 : 90),
+      ttl: options.aerial ? 240 : 200,
+      distanceRun: 0,
+      armedAt: null,
+      armedDistance: variant.armingDistance,
     };
     this.torpedoes.push(t);
     return t;
   }
 
   updateWeapons(dt: number): void {
-    const planes = [...this.aircraft, ...(this.player.mode === "flight" ? [this.player] : [])];
+    const planes = this.planesScratch;
+    planes.length = 0;
+    for (const a of this.aircraft) planes.push(a);
+    if (this.player.mode === "flight") planes.push(this.player);
     for (const b of this.bullets) {
       const prev = { x: b.x, y: b.y, z: b.z };
       b.x += b.vx * dt;
@@ -2240,6 +3858,9 @@ export class Battle {
         this.damagePlane(nearest.a, b.damage ?? (b.owner === "player" ? 8 : 5), b.owner, nearest.zone, nearest.point, true);
         b.ttl = 0;
       }
+      if (!nearest && this.player.mode === "flight" && b.owner !== "player" && distance3(this.player, b) < 22) {
+        this.event("bulletNear", { at: { x: b.x, y: b.y, z: b.z } });
+      }
       if (!nearest && Math.min(prev.y, b.y) < 30) {
         for (const s of this.ships) {
           if (s.sunk || s.id === b.owner) continue;
@@ -2251,6 +3872,7 @@ export class Battle {
           }
           if (at.y > 0 && at.y <= top + 0.2 && overHull(at, s, 1)) {
             this.damageShip(s, 0.7, at, "strafe", b.team, { owner: b.owner });
+            this.event("damage", { distance: distance3(this.player, at), at: { x: at.x, y: at.y, z: at.z }, material: "steel" });
             b.ttl = 0;
             break;
           }
@@ -2258,10 +3880,21 @@ export class Battle {
       }
       if (b.y <= 0) {
         if (this.random() < 0.4) this.fx("splash", b, 0.18);
+        if (distance3(this.player, b) < 180) this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: 0, z: b.z }, fragments: true });
         b.ttl = 0;
       }
     }
-    this.bullets = this.bullets.filter((b) => b.ttl > 0).slice(-850);
+    let liveBullets = 0;
+    for (let i = 0; i < this.bullets.length; i += 1) {
+      const b = this.bullets[i];
+      if (b.ttl > 0) this.bullets[liveBullets++] = b;
+    }
+    if (liveBullets > 850) {
+      const drop = liveBullets - 850;
+      for (let i = drop; i < liveBullets; i += 1) this.bullets[i - drop] = this.bullets[i];
+      liveBullets = 850;
+    }
+    this.bullets.length = liveBullets;
     for (const b of this.bombs) {
       const prev = { x: b.x, y: b.y, z: b.z };
       b.age += dt;
@@ -2289,19 +3922,33 @@ export class Battle {
         this.damageShip(hit, b.damage || 155, point, "bomb", b.team, { owner: b.owner, stamp: b.stamp });
         b.dead = true;
       } else if (b.y <= 0) {
-        this.fx("splash", b, 3.5);
-        this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: b.y, z: b.z } });
-        for (const s of this.ships) {
-          const l = localPoint(b, s);
-          const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.hullBeam / 2), Math.max(0, Math.abs(l.forward) - s.hullLength / 2));
-          if (d < 55 && !s.sunk)
-            this.damageShip(s, (b.damage || 155) * 0.4 * (1 - d / 55), b, "bomb", b.team, { owner: b.owner, nearMiss: true, stamp: b.stamp });
+        // A bomb that lands on the atoll hits the one facility it fell on — the radar's hit never
+        // touches the runway. Midway is American, so only a hostile weapon does any damage.
+        const facility = b.team === "jp" ? this.facilityAt(b) : null;
+        if (facility) {
+          this.hitFacility(facility, (b.damage || 155) / 155, b);
+        } else {
+          // A heavy bomb that misses the hull is fused to burst under the surface, not on it. The
+          // sea is what the crew hears and sees: a deep concussion first, the column a moment later.
+          this.fx("splash", b, 3.5, true);
+          this.event("splash", { distance: distance3(this.player, b), at: { x: b.x, y: b.y, z: b.z }, material: "underwater" });
+          for (const s of this.ships) {
+            const l = localPoint(b, s);
+            const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.hullBeam / 2), Math.max(0, Math.abs(l.forward) - s.hullLength / 2));
+            if (d < 55 && !s.sunk)
+              this.damageShip(s, (b.damage || 155) * 0.4 * (1 - d / 55), b, "bomb", b.team, { owner: b.owner, nearMiss: true, stamp: b.stamp });
+          }
         }
         b.dead = true;
       }
       if (b.age > 80) b.dead = true;
     }
-    this.bombs = this.bombs.filter((b) => !b.dead);
+    let liveBombs = 0;
+    for (let i = 0; i < this.bombs.length; i += 1) {
+      const b = this.bombs[i];
+      if (!b.dead) this.bombs[liveBombs++] = b;
+    }
+    this.bombs.length = liveBombs;
     for (const t of this.airTorpedoes) {
       const prev = { x: t.x, y: t.y, z: t.z };
       t.age += dt;
@@ -2324,6 +3971,7 @@ export class Battle {
         const u = clamp(prev.y / (prev.y - t.y || 1), 0, 1);
         const entry = { ...t, x: lerp(prev.x, t.x, u), z: lerp(prev.z, t.z, u) };
         this.fx("splash", entry, 0.8);
+        this.event("splash", { distance: distance3(this.player, entry), at: { x: entry.x, y: 0, z: entry.z }, outcome: "torpedoEntry" });
         if (t.safe) {
           this.spawnTorpedo(entry, Math.atan2(t.vx, -t.vz), { aerial: true });
           if (t.owner === "player") this.event("notice", { text: "TORPEDO RUNNING — STRAIGHT COURSE / ARMING" });
@@ -2332,52 +3980,48 @@ export class Battle {
       }
       if (t.age > 35) t.dead = true;
     }
-    this.airTorpedoes = this.airTorpedoes.filter((t) => !t.dead);
+    let liveAirTorpedoes = 0;
+    for (let i = 0; i < this.airTorpedoes.length; i += 1) {
+      const t = this.airTorpedoes[i];
+      if (!t.dead) this.airTorpedoes[liveAirTorpedoes++] = t;
+    }
+    this.airTorpedoes.length = liveAirTorpedoes;
     for (const t of this.torpedoes) {
-      const prev = { ...t };
-      t.x += t.vx * dt;
-      t.z += t.vz * dt;
+      const prev = { x: t.x, z: t.z };
+      // ./torpedo-run.ts advances the run: straight at the variant's speed, armed at its arming
+      // distance, stopped at its range. Depth is the weapon's own; keep it in step with `y` before
+      // the hit test so a run set deeper than a hull draws passes under it.
+      Object.assign(t, stepRun(t, dt));
+      t.runDepth = -t.y;
       t.age += dt;
       t.ttl -= dt;
-      t.run += Math.hypot(t.vx, t.vz) * dt;
-      for (const s of this.ships) {
-        if (s.sunk) continue;
-        const b = localPoint(t, s);
-        const a = localPoint(prev, s);
-        let lo = 0;
-        let hi = 1;
-        for (const [key, extent] of [["right", s.hullBeam / 2 + 1], ["forward", s.hullLength / 2]] as [string, number][]) {
-          const d = (b as Any)[key] - (a as Any)[key];
-          if (Math.abs(d) < 1e-9) {
-            if (Math.abs((a as Any)[key]) > extent) {
-              lo = 2;
-              break;
-            }
-          } else {
-            let u = (-extent - (a as Any)[key]) / d;
-            let v = (extent - (a as Any)[key]) / d;
-            if (u > v) [u, v] = [v, u];
-            lo = Math.max(lo, u);
-            hi = Math.min(hi, v);
-          }
-        }
-        if (lo <= hi && lo <= 1 && hi >= 0) {
-          const impact = { x: lerp(prev.x, t.x, Math.max(0, lo)), y: 2, z: lerp(prev.z, t.z, Math.max(0, lo)) };
-          if (t.run >= t.armedDistance) this.damageShip(s, 145, impact, "torpedo", t.team, { owner: t.owner, stamp: t.stamp });
-          else this.fx("splash", impact, 0.7);
-          t.ttl = 0;
-          break;
-        }
-      }
+      // One depth-aware screening test for the whole step: a shallow escort is passed under by a
+      // deeper-running weapon, which then carries on to the first hull it can actually reach.
+      const hitId = screenIntercept(t, prev, this.ships, null, dt);
+      if (!hitId) continue;
+      const s = this.ships.find((ship: Any) => ship.id === hitId);
+      if (!s) continue;
+      const impact = { x: t.x, y: 2, z: t.z };
+      if (t.armedAt !== null)
+        this.damageShip(s, 145, impact, "torpedo", t.team, { owner: t.owner, stamp: t.stamp });
+      else this.fx("splash", impact, 0.7);
+      t.ttl = 0;
     }
-    this.torpedoes = this.torpedoes.filter((t) => t.ttl > 0);
+    let liveTorpedoes = 0;
+    for (let i = 0; i < this.torpedoes.length; i += 1) {
+      const t = this.torpedoes[i];
+      if (t.ttl > 0) this.torpedoes[liveTorpedoes++] = t;
+    }
+    this.torpedoes.length = liveTorpedoes;
   }
 
   /**
-   * The player's own eyes, and a scout close enough over a hull to identify it. Detection by radius
-   * that copied a live ship's name, course and exact deck health into both sides' knowledge is gone:
-   * every other observer files a dated, range-classified, delayed report in `observeFleet`, and the
-   * AI reads nothing else.
+   * The player's own eyes, a scout close enough over a hull to identify it, and a strike crew with its
+   * target in sight. Detection by radius that copied a live ship's name, course and exact deck health
+   * into both sides' knowledge is gone: every other observer files a dated, range-classified, delayed
+   * report in `observeFleet`, and the AI reads nothing else. A crew looking straight at the hull it is
+   * attacking still holds that sighting itself, though — it does not wait on the fleet's radio net —
+   * so the observation is recorded at once and a hit the crew watched land can be confirmed.
    */
   updateIntel(): void {
     const p = this.player;
@@ -2391,6 +4035,8 @@ export class Battle {
         const was = this.contacts.has(s.id);
         this.recordContact(s, "PBY reconnaissance");
         if (!was && s.kind === "carrier") this.say("CATALINA FIVE", `Carrier contact northwest. ${s.name} sighted. Position entered on your intelligence map.`, true);
+      } else if (this.aircraft.some((a) => a.team === "us" && a.wing && a.hp > 0 && a.target === s.id && distance2(a, s) < 4300)) {
+        this.recordContact(s, "aircraft visual");
       }
     }
   }

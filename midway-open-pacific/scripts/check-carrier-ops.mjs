@@ -181,7 +181,11 @@ carrier.air.airframes = { ...carrier.air.ready };
 carrier.air.stores.torpedo = 2;
 battle.start();
 battle.player.mode = "spectator";
-const fighter = battle.aircraft.find((a) => a.home === carrier.id);
+// The home deck no longer launches on `start()`: its aircraft wait on deck while the player is
+// chocked there, so this test requests the second aircraft through the same `launch` the cycle
+// uses rather than assuming the automatic launch still happened.
+const fighter = battle.launch(carrier, "fighter");
+assert.ok(fighter, "the home deck puts up a fighter to recover as the second aircraft");
 const advanceTo = (time) => { while (battle.time < time) battle.step(1 / 30, {}); };
 advanceTo(7);
 const torpedoPlane = battle.launch(carrier, "torpedo");

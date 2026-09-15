@@ -3,38 +3,63 @@ import * as T from "three";
 import { shipClass } from "../sim/catalog.js";
 import { attitudeAxes } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
-import { ellipsoid, mat, wakeTexture, makeAircraft, makeShip } from "./assets.js";
-import { type CarrierModelId, createCarrier, createIjnCarrier, shipModelFor } from "./imported-ships.js";
-import { createAirframe, createDouglas, animateDouglas, disposeDouglas, spinPropeller } from "./imported-aircraft.js";
+import { addFloats, ellipsoid, mat, wakeTexture } from "./assets.js";
+import { type CarrierModelId, createCarrier, createIjnCarrier, createMitchell, shipModelFor } from "./imported-ships.js";
+import { createAirframe, createDouglas, animateDouglas, animateImportedAirframe, disposeAirframe, spinPropeller } from "./imported-aircraft.js";
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
-import { animateDauntless, makeDauntless } from "./dauntless.js";
+import { animateDevastator, disposeDevastator } from "./devastator.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScars } from "./model-damage.js";
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
-import { createOcean } from "./ocean.js";
+import { createOcean, REFLECTED_LAYER } from "./ocean.js";
 import { CombatParticles } from "./particles.js";
+import { createRipples } from "./ripples.js";
+import { shipMotion } from "./ship-motion.js";
 
 /**
- * The imported airframe for an AI aircraft, where the game has one.
- *
- * Only two of the battle's types have a real model: the Douglas the player flies, and the Zero
- * supplied with the project. Everything else — Wildcat, Devastator, Val, Kate, Catalina — has no
- * source asset available, so it stays procedural at every range rather than wearing another
- * type's silhouette and claiming to be itself.
+ * The real airframe drawn for an AI aircraft. Every battle type maps to a shipped model — no
+ * procedural stand-ins anywhere in the scene. Where the project has no source asset for the exact
+ * type, the closest same-team carrier aircraft stands in rather than a grey silhouette: the
+ * Wildcat parks and flies as the Douglas SBD (US single-engine naval), the Val as the Nakajima
+ * Kate (Japanese bomber), and the TBD flies its detailed ported Devastator. Scouts are
+ * float-fitted Kates, the catapult type the cruisers actually carried.
  */
-function importedAircraftFor(a: { team: string; kind: string }): (() => T.Group) | undefined {
+function douglas(): T.Group {
+  const model = createDouglas();
+  model.userData.douglas = true;
+  return model;
+}
+
+function importedAircraftFor(a: { team: string; kind: string }): () => T.Group {
   if (a.team === "jp" && a.kind === "fighter") return createZero;
-  if (a.team === "us" && a.kind === "bomber")
-    return () => {
-      const douglas = createDouglas();
-      douglas.userData.douglas = true;
-      return douglas;
-    };
-  return undefined;
+  if (a.team === "us" && a.kind === "bomber") return douglas;
+  if (a.team === "us" && a.kind === "fighter") return douglas;
+  if (a.kind === "torpedo") return a.team === "jp" ? () => createAirframe("b5n2", "ai") : () => createAirframe("tbd1", "ai");
+  if (a.team === "jp" && a.kind === "bomber") return () => createAirframe("b5n2", "ai");
+  if (a.kind === "recon") return a.team === "jp" ? () => createAirframe("b5n2", "ai") : douglas;
+  return a.team === "jp" ? createZero : douglas;
 }
 
 /** Reused so the per-frame camera orbit allocates nothing. */
 const WORLD_UP = new T.Vector3(0, 1, 0);
+
+/**
+ * Idle a parked aircraft's propeller. Every parked airframe is a real model now: the Devastator
+ * through its own animator, the rest through the `propeller` pivot they all publish.
+ */
+function spinParked(m: T.Group, dt: number): void {
+  if (m.userData.devastator) {
+    animateDevastator(m, { rpm: 0.12 }, dt);
+    return;
+  }
+  if (m.userData.douglas) {
+    animateDouglas(m, { rpm: 0.12 }, dt);
+    return;
+  }
+  if (m.userData.propeller) {
+    spinPropeller(m, 0.12, dt);
+  }
+}
 
 /**
  * The model each carrier is drawn with, and the catalog class that model was measured as. Its hull,
@@ -53,7 +78,10 @@ const CARRIER_MODEL: Readonly<Record<string, { id: CarrierModelId; classId?: str
   "USS Enterprise": { id: "enterprise" },
   "USS Hornet": { id: "hornet" },
   Akagi: { id: "akagi" },
-  "USS Yorktown": { id: "yorktown", classId: "yorktown" },
+  // No `classId`, deliberately: CV-5 is drawn from the supplied `hornet.glb` like her two sisters,
+  // and that model bakes its waterline at y = 0 rather than its keel, so sinking it by a class
+  // draught would put her 7.9 m under.
+  "USS Yorktown": { id: "yorktown" },
   Kaga: { id: "kaga", classId: "kaga" },
   Soryu: { id: "soryu", classId: "soryu" },
   Hiryu: { id: "hiryu", classId: "hiryu" },
@@ -67,46 +95,118 @@ const draughtOf = (classId: string | undefined): number => (classId ? shipClass(
  * procedural silhouette at close range. Carriers are absent because the branch below already
  * resolves their own models, which reach the same catalog hulls through `createCarrier` and
  * `createIjnCarrier` — and only a carrier has a deck park and a `DECKS` corridor to key off.
- *
- * Northampton, Phelps and Balch are absent on purpose: no class and no model was supplied for
- * either ship, and lending one a sister's hull would draw a ship this battle does not contain.
- *
+ * Every other ship in the battle names its class below; anything new falls back to a same-team
+ * hull of its kind through `FALLBACK_HULL_BY_KIND` rather than drawing a procedural silhouette.
  * Arashi and Nowaki were Kagero class and `src/sim/catalog.ts` sizes them as Kagero, so they take
  * that hull rather than the Shiratsuyu-class Samidare the view used to draw for any IJN
  * destroyer: the Samidare measures 111 m against the 118.5 m the simulation gives these two, so
  * the substitution also drew a hull 7.5 m shorter than its own collision volume.
+ *
+ * Northampton, Phelps and Balch have no supplied model, so they borrow same-team hulls rather
+ * than drawing procedural silhouettes: the heavy cruiser takes the Tone hull, the two destroyers
+ * the Hammann hull. A borrowed real hull at the wrong masthead beats a grey box at the right one.
  */
 const HULL_CLASS_BY_NAME: Readonly<Record<string, string>> = {
   Tone: "tone",
   Chikuma: "tone", // Tone class; the two sisters were near-identical at Midway
+  Mogami: "mogami",
+  Mikuma: "mogami", // Mogami class; the derived hull is the only one that flies it
   Arashi: "kagero",
   Nowaki: "kagero",
   "USS Hammann": "hammann",
+  "USS Phelps": "hammann", // Sims-class destroyer; no model supplied, same-team stand-in
+  "USS Balch": "hammann", // Porter-class destroyer; no model supplied, same-team stand-in
+  "USS Northampton": "tone", // Northampton-class heavy cruiser; no model supplied, cruiser stand-in
   "I-168": "i168",
   "USS Nautilus": "nautilus",
 };
 
 /**
- * Metres at which each imported hull hands back to the procedural silhouette.
- *
- * The two numbers already here are the carriers at 1200 m and the IJN destroyer at 2600 m, and
- * that ordering is a triangle bill rather than a size one: a carrier carries up to 200k triangles
- * (Yorktown, src/sim/catalog.ts) and there are seven of them in the battle, a destroyer 23k.
- *
- * - `cruiser` 2200 m: 201.6 m of hull, within 20% of a carrier's length, so the silhouette stays
- *   worth drawing a long way out — but ~48k triangles against Yorktown's 200k, so two of them cost
- *   a quarter of one carrier and can be carried well past the carriers' 1200 m.
- * - `destroyer` 2600 m: the same 106-118 m hull and the same ~23k triangles as the IJN destroyer
- *   this view already held to 2600 m, so the number is inherited rather than invented.
- * - `sub` 1300 m: a destroyer's triangle count, but 13.5-15 m of masthead above the sea against a
- *   destroyer's 28 m. Half the visible silhouette reaches a destroyer's switch-point apparent size
- *   at half its range, and a surfaced boat is mostly conning tower — there is no superstructure
- *   left to resolve further out.
+ * Same-team hull a ship borrows when it names no class above. This is what keeps a ship the
+ * roster adds tomorrow from ever drawing a procedural silhouette: a borrowed real hull of its
+ * own kind and team, never a grey box.
  */
-const HULL_LOD_RANGE: Readonly<Record<string, number>> = {
-  cruiser: 2200,
-  destroyer: 2600,
-  sub: 1300,
+const FALLBACK_HULL_BY_KIND: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  us: { cruiser: "tone", destroyer: "hammann", sub: "nautilus" },
+  jp: { cruiser: "tone", destroyer: "kagero", sub: "i168" },
+};
+
+/**
+ * Put one object and everything under it in the water's reflection.
+ *
+ * `enable` adds the layer rather than replacing layer 0, so the main camera still draws these
+ * exactly as before; the only camera that narrows is the mirrored pass's. What is marked is the
+ * hulls and the atoll — the shapes a player reads in the water. Aircraft, the deck party, tracers,
+ * spray and the parked deck load are deliberately left out: in the mirror they are a few pixels
+ * each, and the second draw of sixty-eight of them is what put AC-23's frame over budget.
+ *
+ * A ship's deck crew is added to its mesh later and inherits nothing, because layers are per
+ * object and this runs once at build time — which is the intent, not an oversight.
+ */
+function markReflected(root: T.Object3D): void {
+  root.traverse((o) => o.layers.enable(REFLECTED_LAYER));
+}
+
+/** Scratch for one scout's seat on its ship, refilled per scout. */
+const SCOUT_SEAT = new T.Vector3();
+/** Where a flying scout is drawn. `SCOUT_ALTITUDE` in the simulation is its observation height. */
+const SCOUT_DRAW_ALTITUDE = 2000;
+
+/**
+ * The parked deck load, by the simulation's own airframe name.
+ *
+ * The park is a bounded sample of the same `s.air.ready` inventory the launch gate spends, not a
+ * second air count: one instance per airframe a ship actually carries. Every type is a real model
+ * — the Wildcat stands in as the Douglas SBD and the Val as the Kate, the same substitutions the
+ * AI flight path uses. The id is explicit so no team/kind guess can park a B-25 or an enemy type
+ * on a deck.
+ */
+const PARK_FACTORY: Readonly<Record<string, () => T.Group>> = {
+  wildcat: () => createAirframe("sbd3", "ai"),
+  sbd: () => createAirframe("sbd3", "ai"),
+  tbd: () => createAirframe("tbd1", "ai"),
+  zero: () => createAirframe("a6m3", "ai"),
+  val: () => createAirframe("b5n2", "ai"),
+  kate: () => createAirframe("b5n2", "ai"),
+};
+
+/**
+ * How far a parked airframe's origin stands above its wheel contact, in metres.
+ *
+ * The Kate's wheels land on y = 0 out of the import contract, so its root is the contact datum.
+ * The others hang their gear below the origin: the Douglas main wheels reach -1.84 m
+ * (`createDauntlessGear`: leg -0.3, wheel -1.19, radius 0.35), the Zero's reach -1.87 m
+ * (`createZero`: wheel -1.55, radius 0.32), and the ported Devastator's rest on the same 1.82 m
+ * datum the flight model's `gearClearance` assumes. A station adds this back so every type rests
+ * on the same deck plane instead of sinking its undercarriage into it.
+ */
+const PARK_GROUND: Readonly<Record<string, number>> = {
+  wildcat: 1.84,
+  sbd: 1.84,
+  tbd: 1.82,
+  zero: 1.87,
+  val: 0,
+  kate: 0,
+};
+
+/**
+ * One aft parking station per airframe, in ship-local metres.
+ *
+ * The park is spotted aft of the launch spot because the deck is narrow abeam and no aircraft is
+ * drawn folded; a machine parked beside the launch lane hangs a wingtip over the sea. The three
+ * stations are the row the old TBD park used, measured against the tightest deck edge
+ * (`tools/capture-deck.mjs` finds port -10.6 m abreast z = 100): the widest parked airframe is the
+ * Kate at 15.5 m, whose port tip at x = -1 reaches -8.75 m, 1.85 m inside the edge. Each airframe
+ * has its own station so two types can never share a slot, and a carrier carries only its own
+ * team's three, so the three slots are always distinct and 16 m apart in z.
+ */
+const PARK_STATION: Readonly<Record<string, number>> = {
+  wildcat: 72,
+  sbd: 88,
+  tbd: 104,
+  zero: 72,
+  val: 88,
+  kate: 104,
 };
 
 export interface IWorldHost {
@@ -120,6 +220,8 @@ export class WorldView {
   battle: any;
   host: IWorldHost;
   meshes = new Map<string, T.Object3D>();
+  /** One drawn floatplane per cruiser scout, by the scout's own id. */
+  scouts = new Map<string, T.Group>();
   fxMeshes = new Map<string, T.Object3D>();
   bombMeshes = new Map<string, T.Object3D>();
   torpMeshes = new Map<string, T.Object3D>();
@@ -139,10 +241,16 @@ export class WorldView {
   sea!: T.Mesh;
   crew!: DeckCrew;
   playerMesh!: T.Group;
+  /** Fixed eye point for the crash settle, chosen once at the moment of impact. */
+  private wreckEye: T.Vector3 | null = null;
   tracers!: T.LineSegments;
   tracerPositions = new Float32Array(1000 * 6);
   tracerColors = new Float32Array(1000 * 6);
   particles!: CombatParticles;
+  ripples!: ReturnType<typeof createRipples>;
+  private sky!: T.Texture;
+  private surfaceFog!: T.FogExp2;
+  private underwater = false;
   lookYaw = 0;
   lookPitch = 0;
   lookActive = false;
@@ -164,7 +272,8 @@ export class WorldView {
     this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = T.PCFShadowMap;
-    this.scene.fog = new T.FogExp2(new T.Color(0x8fa9b4).convertLinearToSRGB(), 0.000028);
+    this.surfaceFog = new T.FogExp2(new T.Color(0x8fa9b4).convertLinearToSRGB(), 0.000028);
+    this.scene.fog = this.surfaceFog;
     // The reference used r140 legacy light units (PI brighter) and linear hex colours.
     const hemi = new T.HemisphereLight(0xb5cedd, 0x243745, 0.9);
     this.scene.add(hemi);
@@ -180,6 +289,8 @@ export class WorldView {
     this.sunDir = SUN_DIRECTION.clone();
     this.wakeTex = wakeTexture();
     this.makeSky();
+    this.ripples = createRipples();
+    this.scene.add(this.ripples.effects.group);
     this.makeOcean();
     this.makeWorld();
     this.makeTracers();
@@ -188,6 +299,7 @@ export class WorldView {
 
   makeSky(): void {
     const sky = dawnEnvironment();
+    this.sky = sky;
     this.scene.background = sky;
     this.scene.environment = sky;
     this.scene.backgroundRotation.copy(SKY_ROTATION);
@@ -197,7 +309,7 @@ export class WorldView {
   }
 
   makeOcean(): void {
-    this.ocean = createOcean();
+    this.ocean = createOcean({ rippleHeight: this.ripples.heightNode, rippleNormal: this.ripples.normalNode, rippleFoam: this.ripples.foamNode, rippleFlow: this.ripples.flowNode });
     this.sea = this.ocean.mesh;
     this.scene.add(this.sea);
   }
@@ -205,30 +317,20 @@ export class WorldView {
   makeWorld(): void {
     const b = this.battle;
     for (const s of b.ships) {
-      let mesh: T.Group = makeShip(s);
-      const classId = HULL_CLASS_BY_NAME[s.name];
+      let mesh: T.Group;
+      const classId = HULL_CLASS_BY_NAME[s.name] ?? FALLBACK_HULL_BY_KIND[s.team as string]?.[s.kind as string];
       if (classId) {
-        // The ship's own imported hull near the player, the procedural silhouette beyond it.
-        const far = HULL_LOD_RANGE[s.kind];
-        if (far === undefined)
-          throw new Error(`no imported-hull LOD range for a ${s.kind}: ${s.name}`);
         const detailed = shipModelFor(classId);
         // The class creators name their lead ship; this is the sister actually being built.
         detailed.name = s.name;
         // Float it at its own waterline. The import contract lands the keel on y = 0, so an
         // imported hull drawn at the ship's own y shows its whole underwater body above the sea —
-        // a destroyer standing on the water with its full anti-fouling band in daylight. The
-        // procedural hull at the far level uses the other convention: `makeShip` in assets.ts puts
-        // the WATERLINE on y = 0, lifts the hull band to y = 8 and models no submerged body at
-        // all. So only the imported level moves, by its own class draught, and the two levels then
-        // float on the same line. A submerged boat needs nothing further here: the wrapper already
-        // drops to y = -7 and ocean.ts skips a dived boat's wake slot.
+        // a destroyer standing on the water with its full anti-fouling band in daylight. A
+        // submerged boat needs nothing further here: the wrapper already drops to y = -7 and
+        // ocean.ts skips a dived boat's wake slot.
         detailed.position.y = -shipClass(classId).draught;
-        const lod = new T.LOD();
-        lod.addLevel(detailed, 0);
-        lod.addLevel(mesh, far);
         mesh = new T.Group();
-        mesh.add(lod);
+        mesh.add(detailed);
         mesh.userData.importedShip = true;
       } else if (s.kind === "carrier") {
         const model = CARRIER_MODEL[s.name];
@@ -242,45 +344,55 @@ export class WorldView {
         // and `sink` is the only place the two frames meet.
         const sink = draughtOf(model?.classId);
         detailed.position.y = -sink;
-        const lod = new T.LOD();
-        lod.addLevel(detailed, 0);
-        lod.addLevel(mesh, 1200);
         mesh = new T.Group();
-        mesh.add(lod);
+        mesh.add(detailed);
         mesh.userData.importedShip = true;
         mesh.userData.parked = [];
-        // The park is Devastators. VT-6, VT-8 and VT-3 flew TBD-1s off these three decks on the
-        // morning of 4 June; the B-25s that used to stand on Hornet had been flown off her for
-        // Tokyo two months earlier and never came back aboard, so they were scenery, not a strike
-        // type. `ai` is the reduced-detail build of the same airframe, 11,640 triangles against
-        // the hero's 38,800 (tools/inspect-glb.mjs), which is what it exists for.
-        //
-        // The park is spotted aft, behind the launch spot, because it has to be: the deck is 32 m
-        // across at its widest and none of these aircraft is drawn with its wings folded, so a
-        // machine parked abeam the launch lane hangs a wingtip over the sea. The clearance is
-        // against the surveyed edges, not the nominal 32 m. tools/capture-deck.mjs raycasts the
-        // deck at z = 55 / 78 / 100 and finds port -12.8 / -12.8 / -10.6 and starboard
-        // +12.8 / +12.6 / +12.6, so the park's three stations are governed by the narrowest of
-        // them, the -10.6 m port edge abreast z = 100:
-        //
-        //   TBD-1 span 15.24 m (public/assets/aircraft.tbd-devastator.ai.glb, tools/inspect-glb.mjs)
-        //   half-span 7.62 m against the SBD's 6.33 m, so the old x = -4.5 station would put this
-        //   wing at -12.12 m, over the edge at both of the two aft stations, and is abandoned.
-        //   At x = -1: port tip -8.62 m, 1.98 m clear of the tightest edge; starboard tip
-        //   +6.62 m, 5.98 m clear. Measured back off the built scene, not only computed here.
-        //
-        // The import lands the TBD's wheels on y = 0, so a station is the deck datum with nothing
-        // added. The +1.82 m and the 0.22 rad nose-up were corrections for the gear-up Douglas
-        // source, and only Enterprise applied them — which left Yorktown's park sunk 1.82 m into
-        // its own flight deck. `sink` is added back because the park is a child of the hull, which
-        // has just been lowered by it: `deckHeight` is in the world's frame, this is not.
-        for (let i = 0; i < (s.team === "us" ? (model?.id === "enterprise" ? 2 : 3) : 0); i++) {
-          const plane = createAirframe("tbd1", "ai");
-          plane.position.set(-1, s.deckHeight + sink, 72 + i * 16);
+        mesh.userData.decor = [];
+        // The park draws this ship's own ready inventory, one airframe per type it carries. A type
+        // that leaves the ready line — launched, wrecked, written off — hides its own parked
+        // aircraft and nothing else; the surviving types stay spotted. `ai` is the reduced build
+        // where the airframe has one. `sink` is added back because the park is a child of the hull,
+        // which has just been lowered by it, while `deckHeight` is in the world's frame.
+        for (const type in PARK_STATION) {
+          if ((s.air?.ready?.[type] ?? 0) <= 0) continue;
+          const plane = PARK_FACTORY[type]();
+          plane.userData.simAirframe = type;
+          plane.position.set(-1, s.deckHeight + sink + PARK_GROUND[type], PARK_STATION[type]);
           detailed.add(plane);
           mesh.userData.parked.push(plane);
         }
+        // A decorative B-25 on US decks, spotted aft of the park. Dressing only: no simAirframe,
+        // never in `parked`, engines off. Ahistorical for June 1942 (Doolittle sailed in April).
+        if (s.team === "us") {
+          const mitchell = createMitchell();
+          mitchell.position.set(-1, s.deckHeight + sink, 120);
+          mitchell.userData.decorative = true;
+          detailed.add(mitchell);
+          mesh.userData.decor.push(mitchell);
+        }
+      } else {
+        throw new Error(`no model for ship: ${s.name} (${s.team} ${s.kind})`);
       }
+      // A cruiser that carries scouts gets one drawn floatplane per scout. The simulation has flown
+      // these since the AC-11 wiring went in — launched from the catapult, searched a sector, filed
+      // a report, come back alongside — and none of it was visible, because nothing in this folder
+      // drew a scout at all. A capture of Tone showed her catapult empty while her scout sat aboard.
+      // The scout is a float-fitted Kate, the catapult type these cruisers carried — a real model
+      // with floats, never the procedural recon silhouette.
+      if (s.scouts?.length) {
+        for (const scout of s.scouts) {
+          const plane = addFloats(createAirframe("b5n2", "ai"));
+          plane.scale.setScalar(0.86);
+          markReflected(plane);
+          this.scene.add(plane);
+          this.scouts.set(scout.id, plane);
+        }
+      }
+      markReflected(mesh);
+      // Parked aircraft are hull children, but the water reflection excludes the deck load.
+      for (const planes of [mesh.userData.parked ?? [], mesh.userData.decor ?? []] as T.Object3D[][])
+        for (const plane of planes) plane.traverse((o) => o.layers.disable(REFLECTED_LAYER));
       this.scene.add(mesh);
       this.meshes.set(s.id, mesh);
 
@@ -289,6 +401,7 @@ export class WorldView {
     this.meshes.get(b.player.home)?.add(this.crew.group);
     const island = createMidwayAtoll();
     island.position.set(b.island.x, 0, b.island.z);
+    markReflected(island);
     this.scene.add(island);
     this.setAirframe();
   }
@@ -298,10 +411,14 @@ export class WorldView {
     if (this.playerMesh?.userData.airframe === type) return;
     if (this.playerMesh) {
       this.playerMesh.removeFromParent();
-      if (this.playerMesh.userData.importedAircraft) disposeDouglas(this.playerMesh);
-      else this.disposeModel(this.playerMesh);
+      if (this.playerMesh.userData.devastator) disposeDevastator(this.playerMesh);
+      else if (this.playerMesh.userData.importedAircraft) disposeAirframe(this.playerMesh);
+      this.disposeModel(this.playerMesh);
     }
-    this.playerMesh = type === "sbd" ? createDouglas(true) : makeDauntless(true);
+    // The player's Devastator is the imported TBD-1, driven by its own shipped clips; the SBD
+    // keeps the Douglas constructor, and the procedural Dauntless is gone from the player's seat.
+    this.playerMesh =
+      type === "sbd" ? createDouglas(true) : createAirframe("tbd1", "hero", true);
     this.playerMesh.userData.airframe = type;
     addDamageVisuals(this.playerMesh);
     this.scene.add(this.playerMesh);
@@ -338,6 +455,7 @@ export class WorldView {
     this.followBomb = false;
     this.lookYaw = this.lookPitch = 0;
     this.particles.reset();
+    this.ripples.reset();
     for (const [id, m] of this.meshes) if (id.startsWith("air-")) {
       this.scene.remove(m);
       this.disposeModel(m);
@@ -362,34 +480,61 @@ export class WorldView {
     for (const s of b.ships) {
       const m = this.meshes.get(s.id);
       if (!m) continue;
-      m.position.set(s.x, s.kind === "sub" && !s.surfaced ? -7 : s.y, s.z);
-      m.rotation.set(Math.sin(time * 0.3 + s.baseZ) * 0.004, -s.heading, s.sunk ? s.sink * 0.35 : Math.sin(time * 0.22 + s.baseX) * 0.004 + (1 - s.hp / s.maxHp) * 0.035);
+      // Depth already became y through `subY` in the simulation; the renderer never converts it.
+      const moving = s.kind !== "sub" || s.surfaced;
+      const motion = moving ? shipMotion(s, time, this.ripples.heightAt) : {x:0,y:0,z:0,pitch:0,roll:0};
+      m.position.set(s.x + motion.x, s.y + motion.y, s.z + motion.z);
+      m.rotation.set(motion.pitch, -s.heading, s.sunk ? s.sink * .35 : motion.roll + (s.list ?? 0), "YXZ");
       m.visible = s.sink < 0.95;
+      // The scouts this hull carries, each drawn where its own state puts it. Aboard and alongside
+      // are on the ship and ride her motion; the airborne states are over the sector the simulation
+      // is searching, at the same `SCOUT_ALTITUDE` the observation sweep files reports from. A lost
+      // scout is not drawn, because it is not there.
+      if (s.scouts?.length) this.placeScouts(s, m as T.Object3D);
       const d = distance2(s, p);
+      // The park is a visual LOD: it is worth drawing while the camera is close, wherever the
+      // player is, exactly as the hull's own LOD range is read from the camera. A carrier a
+      // player never approaches keeps its park out of the draw.
+      const camD = distance2(s, this.camera.position);
       updateShipScars(m, s, d, this.quality);
-      for (const [i, a] of ((m.userData.parked ?? []) as T.Object3D[]).entries()) {
-        a.visible = d < 1900 && i < Math.ceil(s.reserve / 2);
+      for (const a of (m.userData.parked ?? []) as T.Group[]) {
+        const type = a.userData.simAirframe as string;
+        // The park is the ready line: an airframe with none ready is below in the hangar, so its
+        // parked instance hides and the other types stay spotted.
+        a.visible = camD < 1900 && (s.air?.ready?.[type] ?? 0) > 0;
         // Turning over on the spot, waiting for the flag. One airframe, one animator.
-        spinPropeller(a as T.Group, 0.12, dt);
+        spinParked(a, dt);
       }
+      // Decorative deck dressing follows the same visual LOD with no inventory tie.
+      for (const d of (m.userData.decor ?? []) as T.Group[]) d.visible = camD < 1900;
       if (m.userData.elevator) (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
 
     }
     // The deck party works the launch spot, so it is anchored where the aircraft was standing and
-    // does not taxi away with it once the deck run starts.
-    const onDeck = p.mode === "deck" || p.mode === "service" || p.mode === "arrest";
+    // does not taxi away with it once the deck run starts. The party stays visible for the whole
+    // deck run — stood clear at the deck edge, not under the aircraft — and only leaves with the
+    // briefing's default once the aircraft is airborne. `deckSpeed`, not `speed`, is the deck run's
+    // own speed — `speed` carries the ship's way too, so it was never below 2 and the anchor never
+    // left the briefing's default.
+    const onDeck = p.mode === "service" || p.mode === "arrest" || p.mode === "deck" || p.mode === "launch";
     this.crew.group.visible = onDeck || briefing;
+    // Throttle advancing counts as starting, not just rolling: at full power against the brakes the
+    // slipstream is already lethal, so the men are at the edge before the chocks are pulled.
+    const rolling =
+      !briefing &&
+      (p.mode === "launch" ||
+        (p.mode === "deck" && ((p.deckSpeed ?? 0) > 0.4 || (p.throttle ?? 0) > 0.3)));
     if (this.crew.group.visible) {
       const home = b.home;
       if (briefing) this.crewAnchor = 15;
-      else if (home && (p.mode !== "deck" || (p.speed ?? 0) < 2))
+      else if (home && (p.mode !== "deck" || (p.deckSpeed ?? 0) < 2))
         this.crewAnchor = -localPoint(p, home).forward;
       // The party stands on whichever deck the player is actually on, at that carrier's own datum:
       // a diversion to Yorktown otherwise left the crew on Enterprise, 0.39 m too low.
       const deck = home ? this.meshes.get(home.id) : undefined;
       if (deck && this.crew.group.parent !== deck) deck.add(this.crew.group);
       this.crew.group.position.set(0, home?.deckHeight ?? 0, this.crewAnchor);
-      this.crew.update(dt);
+      this.crew.update(dt, rolling ? 1 : 0);
     }
     const live = new Set<string>();
     let detailed = 0;
@@ -413,13 +558,17 @@ export class WorldView {
       m.position.set(a.x, a.y, a.z);
       m.rotation.set(a.pitch, -a.heading, a.roll, "YXZ");
       const gearDown = (a.mode === "launch" && a.age < 4) || (a.mode === "rtb" && a.y < 80);
-      if (m.userData.douglas) {
+      if (m.userData.devastator) {
+        animateDevastator(m, { rpm: a.engineCut ? 0.1 : 0.82, gearPos: gearDown ? 1 : 0, torpedo: a.torpedo ?? 0 }, dt);
+      } else if (m.userData.douglas) {
         // The imported Douglas drives its propeller, gear and control surfaces through its own
         // clips rather than the generic prop/gear handles.
         animateDouglas(m, { rpm: a.engineCut ? 0.1 : 0.82, gearPos: gearDown ? 1 : 0 }, dt);
       } else {
-        (m.userData.prop as T.Object3D).rotation.z += dt * (a.engineCut ? 8 : 55);
-        (m.userData.gear as T.Object3D).visible = gearDown;
+        const prop = m.userData.prop as T.Object3D | undefined;
+        if (prop) prop.rotation.z += dt * (a.engineCut ? 8 : 55);
+        const gear = m.userData.gear as T.Object3D | undefined;
+        if (gear) gear.visible = gearDown;
       }
       const load = m.userData.load as T.Object3D | undefined;
       if (load) load.visible = a.bombs > 0;
@@ -448,12 +597,31 @@ export class WorldView {
       if (p.attitude) this.playerMesh.quaternion.set(p.attitude.x, p.attitude.y, p.attitude.z, p.attitude.w);
       else this.playerMesh.rotation.set(p.pitch, -p.heading, p.roll, "YXZ");
     }
-    if (this.playerMesh.userData.importedAircraft) animateDouglas(this.playerMesh, p, dt);
-    else animateDauntless(this.playerMesh, p, dt);
+    if (this.playerMesh.userData.devastator) animateDevastator(this.playerMesh, p, dt);
+    else if (this.playerMesh.userData.animatedAirframe) animateImportedAirframe(this.playerMesh, p, dt);
+    else animateDouglas(this.playerMesh, p, dt);
     updateDamageVisuals(this.playerMesh, p);
-    this.playerMesh.visible = b.status !== "lost";
+    // The wreck is under the splash from the moment it hits: the airframe goes with the impact,
+    // not two seconds later when the report opens.
+    this.playerMesh.visible = b.status !== "lost" && p.mode !== "wreck";
     this.updateProjectiles();
     this.updateCamera(dt, briefing, time);
+    // The eye below the surface is in a different medium: the dawn sky behind a submerged hull
+    // reads as a hole punched through the sea. Tint the background and thicken the fog while the
+    // camera is under, and restore the surface medium on the way up.
+    const submerged = this.camera.position.y < 0;
+    if (submerged !== this.underwater) {
+      this.underwater = submerged;
+      if (submerged) {
+        const water = new T.Color(0x0b2f38).convertLinearToSRGB();
+        this.scene.background = water;
+        this.scene.fog = new T.FogExp2(water, 0.032);
+      } else {
+        this.scene.background = this.sky;
+        this.scene.fog = this.surfaceFog;
+      }
+    }
+    this.ripples.update(b, this.camera.position, dt);
     this.particles.update(b, this.camera.position);
     this.ocean.update(this.camera.position, time, b.ships);
     this.sun.position.copy(this.sunDir).multiplyScalar(500).add(this.playerMesh.getWorldPosition(this.tmp));
@@ -467,6 +635,27 @@ export class WorldView {
     const u = axes.u;
     const ownBomb = [...this.battle.bombs, ...this.battle.airTorpedoes, ...this.battle.torpedoes].filter((a: any) => a.owner === "player").at(-1);
     let cockpit = false;
+    // The wreck is in the water and the camera is not: it stops at the surface, backs off and
+    // watches the splash from outside it rather than descending into its own plume.
+    if (p.mode === "wreck") {
+      if (!this.wreckEye) {
+        const dx = this.camera.position.x - p.x;
+        const dz = this.camera.position.z - p.z;
+        const len = Math.hypot(dx, dz) || 1;
+        this.wreckEye = new T.Vector3(p.x + (dx / len) * 85, 46, p.z + (dz / len) * 85);
+      }
+      this.targetCamera.copy(this.wreckEye);
+      this.look.set(p.x, 3, p.z);
+      this.camera.fov = 58;
+      this.camera.position.lerp(this.targetCamera, 1 - Math.exp(-dt * 2.6));
+      this.camera.up.set(0, 1, 0);
+      this.camera.near = 0.35;
+      this.camera.lookAt(this.look);
+      this.camera.updateProjectionMatrix();
+      this.camera.updateMatrixWorld();
+      return;
+    }
+    this.wreckEye = null;
     if (briefing) {
       const focus = this.playerMesh.getWorldPosition(this.tmp);
       this.targetCamera.set(focus.x + 17 + Math.sin(time * 0.055) * 2, focus.y + 6.5, focus.z + 21);
@@ -478,9 +667,12 @@ export class WorldView {
       this.camera.fov = 65;
     } else if (this.cameraMode === 1) {
       cockpit = true;
-      this.playerMesh.updateMatrixWorld(true);
       if (this.playerMesh.userData.cockpit) this.targetCamera.copy(this.playerMesh.userData.cockpit);
       else this.targetCamera.set(0, 1.235, -0.57);
+      // `localToWorld` calls `updateWorldMatrix(true, false)`: it refreshes this object's ancestor
+      // chain and its own world matrix, which is all the eye point needs. The recursive
+      // `updateMatrixWorld(true)` that used to precede it additionally walked every instrument,
+      // fastener and control in the cockpit — several hundred transforms — to place one point.
       this.playerMesh.localToWorld(this.targetCamera);
       if (!this.lookActive) {
         this.lookYaw *= Math.exp(-dt * 7);
@@ -500,9 +692,19 @@ export class WorldView {
       );
       this.camera.fov = 70;
     } else {
-      const distance = this.cameraMode === 2 ? 58 : 18;
+      // A stationary aircraft on its deck sits ahead of the aft deck park, so a centreline chase
+      // camera lands inside that parked row and its near wing/body fills the frame. While the
+      // aircraft is *parked* on deck the view is taken abeam (port, clear of the island) and
+      // above. The moment the deck run starts the aft park is behind the camera, so the takeoff
+      // roll uses the regular chase, exactly as it does once airborne; only a stopped deck,
+      // an arrestment and a service stay abeam.
+      const onDeck =
+        !briefing &&
+        (p.mode === "arrest" || p.mode === "service" || (p.mode === "deck" && (p.deckSpeed ?? 0) < 2));
+      const wide = this.cameraMode === 2;
+      const distance = onDeck ? (wide ? 26 : 13) : wide ? 58 : 18;
       const sign = this.rear ? 1 : -1;
-      const up = this.cameraMode === 2 ? 12 : 4.2;
+      const up = onDeck ? (wide ? 9 : 5.5) : wide ? 12 : 4.2;
       if (!this.lookActive) {
         this.lookYaw *= Math.exp(-dt * 7);
         this.lookPitch *= Math.exp(-dt * 7);
@@ -511,16 +713,17 @@ export class WorldView {
       // a head. Without this the chase views simply ignored right-drag, which the controls claimed
       // to support; the look target slides onto the aircraft as the orbit opens so the framing
       // stays on the machine rather than on empty sky ahead of it.
-      this.orbit.set(f.x * distance * sign, f.y * distance * sign + up, f.z * distance * sign);
+      if (onDeck) this.orbit.set(-axes.r.x * distance, up, -axes.r.z * distance);
+      else this.orbit.set(f.x * distance * sign, f.y * distance * sign + up, f.z * distance * sign);
       this.orbit.applyAxisAngle(WORLD_UP, -this.lookYaw);
       this.orbitAxis.set(this.orbit.z, 0, -this.orbit.x);
       if (this.orbitAxis.lengthSq() > 1e-6)
         this.orbit.applyAxisAngle(this.orbitAxis.normalize(), -this.lookPitch);
       this.targetCamera.set(p.x + this.orbit.x, p.y + this.orbit.y, p.z + this.orbit.z);
       const framing = 1 - Math.min(1, (Math.abs(this.lookYaw) + Math.abs(this.lookPitch)) * 2.2);
-      const lead = (this.rear ? -35 : 40) * framing;
-      this.look.set(p.x + f.x * lead, p.y + f.y * lead + 1.5, p.z + f.z * lead);
-      this.camera.fov = this.cameraMode === 2 ? 60 : 56;
+      const lead = onDeck ? framing * 3 : (this.rear ? -35 : 40) * framing;
+      this.look.set(p.x + f.x * lead, p.y + f.y * lead + (onDeck ? 1.2 : 1.5), p.z + f.z * lead);
+      this.camera.fov = wide ? 60 : 56;
     }
     if (this.playerMesh.userData.crew) this.playerMesh.userData.crew[0].visible = !cockpit;
     // The detailed interior and the supplied canopy shell are alternatives: show the interior in
@@ -609,28 +812,28 @@ export class WorldView {
   }
 
   /**
-   * Which AI aircraft get their imported airframe instead of the procedural one.
+   * Which AI aircraft hold the detail loan instead of keeping the mesh they have.
    *
-   * Detail is a loan, not a property: it is granted inside `near`, kept until the aircraft falls
-   * past `far` so a machine weaving around that boundary does not rebuild every frame, and capped
-   * so a whole strike arriving together cannot put sixty full airframes in the scene at once.
+   * Every type maps to a real model, so both levels build the same airframe — the loan no longer
+   * chooses between a model and a silhouette. The flag is still granted up close, kept until the
+   * aircraft falls past `far` so a machine weaving around that boundary does not rebuild every
+   * frame, and capped so a whole strike arriving together cannot put sixty fresh builds in the
+   * scene at once; the rebuild path is what exercises the disposal dispatch.
    */
   private wantsDetail(a: any, range: number, had: boolean, granted: number): boolean {
-    if (!importedAircraftFor(a)) return false;
+    void a;
     if (had) return range < 1500;
     return range < 1100 && granted < 10;
   }
 
   private buildAircraft(a: any, detail: boolean): T.Group {
-    const imported = detail ? importedAircraftFor(a) : undefined;
-    const m = imported ? imported() : makeAircraft(a.team, a.kind, false);
-    if (!imported) {
-      // The procedural airframe is modelled a little under size; the imported ones are metre-true.
-      m.scale.multiplyScalar(1.15);
-    }
-    m.userData.detailed = !!imported;
+    const m = importedAircraftFor(a)();
+    // The loan marker, not the model: both levels draw the same real airframe.
+    m.userData.detailed = detail;
+    // What sim airframe this mesh draws, so captures and the identity read never guess from names.
+    m.userData.airframe = a.airframe;
     addDamageVisuals(m);
-    if (a.kind === "torpedo") {
+    if (a.kind === "torpedo" && !m.userData.torpedoLoad) {
       const load = m.userData.load as T.Object3D | undefined;
       if (load) load.visible = false;
       const torpedo = makeTorpedoModel();
@@ -642,9 +845,47 @@ export class WorldView {
     return m;
   }
 
+  /**
+   * Draw this hull's scouts where the simulation has them.
+   *
+   * The states come straight from `src/sim/scouting.ts` and nothing is inferred: "aboard" and
+   * "alongside" sit on the ship, the four airborne states fly, and "lost" is not drawn. An airborne
+   * scout is placed at `Battle.scoutPosition` — the same sector midpoint its reports are filed
+   * from — so what a player sees and what the other side's intelligence says came from one place.
+   * Heading follows the track out and back, which is the only cue that tells outbound from
+   * returning at this range.
+   */
+  private placeScouts(ship: any, hull: T.Object3D): void {
+    for (const scout of ship.scouts as Array<{ id: string; state: string }>) {
+      const plane = this.scouts.get(scout.id);
+      if (!plane) continue;
+      if (scout.state === "lost") {
+        plane.visible = false;
+        continue;
+      }
+      plane.visible = true;
+      if (scout.state === "aboard" || scout.state === "alongside") {
+        // On the quarterdeck, in the hull's own frame, so she carries it through pitch and roll.
+        // Alongside is in the water off the quarter, waiting on the crane.
+        const aboard = scout.state === "aboard";
+        SCOUT_SEAT.set(aboard ? 0 : ship.hullBeam * 0.62, aboard ? (ship.deckHeight ?? 9) + 0.6 : 0.6, ship.hullLength * 0.3);
+        hull.localToWorld(SCOUT_SEAT);
+        plane.position.copy(SCOUT_SEAT);
+        plane.rotation.set(0, -ship.heading, 0);
+        continue;
+      }
+      const at = this.battle.scoutPosition(scout, ship);
+      plane.position.set(at.x, SCOUT_DRAW_ALTITUDE, at.z);
+      // Facing along the leg it is flying: out from the ship, or back towards her.
+      const towards = scout.state === "returning" ? { x: ship.x - at.x, z: ship.z - at.z } : { x: at.x - ship.x, z: at.z - ship.z };
+      plane.rotation.set(0, -Math.atan2(towards.x, -towards.z), 0);
+    }
+  }
+
   /** Give up one aircraft's mesh without touching geometry another instance still shares. */
   private releaseAircraft(m: T.Object3D): void {
-    if (m.userData.douglas) disposeDouglas(m as T.Group);
+    if (m.userData.devastator) disposeDevastator(m as T.Group);
+    else if (m.userData.douglas || m.userData.importedAircraft) disposeAirframe(m as T.Group);
     this.disposeModel(m);
   }
 
@@ -668,7 +909,9 @@ export class WorldView {
     const torpedo = group.userData.torpedoLoad as T.Object3D | undefined;
     torpedo?.traverse((o) => (o as T.Mesh).geometry?.dispose());
     (group.userData.cockpitRig as { dispose?: () => void } | undefined)?.dispose?.();
-    if (group.userData.detailed || group.userData.importedAircraft || group.userData.importedShip)
+    // The Devastator's own parts are given back by `disposeDevastator` in `releaseAircraft`
+    // before this runs; traversing them here would dispose geometry twice.
+    if (group.userData.detailed || group.userData.importedAircraft || group.userData.importedShip || group.userData.devastator)
       return;
     group.traverse((o) => {
       if (o.userData.importedAircraft || o.userData.importedShip) return;

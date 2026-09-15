@@ -25,6 +25,140 @@ export function updateEvasion(b: Any, s: Any, dt: number): void {
   );
 }
 
+// ---------------------------------------------------------------------------------------------
+// Mounts, arcs and coastal fire control
+// ---------------------------------------------------------------------------------------------
+
+/** A mount's role decides what it may track at all. AA is the only class that engages aircraft. */
+export type MountClass = "main" | "aa";
+
+export interface Traverse {
+  /** Arc centre relative to platform forward, radians. 0 is dead ahead, PI dead astern. */
+  center: number;
+  /** Half-width of the arc, radians. Outside it the mount physically cannot train. */
+  half: number;
+}
+
+export interface Elevation {
+  /** Radians; negative is depressed below the horizon. */
+  min: number;
+  max: number;
+}
+
+export interface GunneryTarget {
+  x: number;
+  y: number;
+  z: number;
+  /** Present iff the entity is an aircraft; no ship carries an airframe. */
+  airframe?: string;
+  kind?: string;
+}
+
+/** A gun position on a hull: where it is, how it trains, and how far it reaches. */
+export interface ShipMount {
+  id: string;
+  class: MountClass;
+  /** Metres along the hull's forward axis from the ship datum. */
+  forward: number;
+  /** Metres to starboard of the centreline. */
+  right: number;
+  /** Metres above the waterline. */
+  height: number;
+  traverse: Traverse;
+  elevation: Elevation;
+  minRange: number;
+  maxRange: number;
+}
+
+/** A fixed shore position. Same arc/range envelope as a ship mount, but no moving platform. */
+export interface CoastalBattery {
+  id: string;
+  class: MountClass;
+  x: number;
+  z: number;
+  heading: number;
+  /** Metres above the waterline; the gun sits on land, the target does not. */
+  height: number;
+  traverse: Traverse;
+  elevation: Elevation;
+  minRange: number;
+  maxRange: number;
+}
+
+interface Platform {
+  x: number;
+  z: number;
+  y?: number;
+  heading: number;
+}
+
+// Ship kinds never appear here; a flown airframe always carries `airframe`. The kind list catches a
+// caller that forgot to set it rather than silently letting a main battery aim at a fighter.
+const AIRCRAFT_KINDS = new Set(["fighter", "bomber", "diveBomber", "torpedoBomber", "scout", "seaplane"]);
+
+function isAircraft(t: GunneryTarget): boolean {
+  return typeof t.airframe === "string" || (typeof t.kind === "string" && AIRCRAFT_KINDS.has(t.kind));
+}
+
+/** The world point a mount fires from: its own place on the hull, never the ship's centre. */
+export function muzzleOrigin(mount: ShipMount, ship: Platform): { x: number; y: number; z: number } {
+  const f = forward(ship.heading);
+  // Starboard is forward rotated +90 degrees: the lateral axis the existing firing code already uses.
+  const rx = Math.cos(ship.heading);
+  const rz = Math.sin(ship.heading);
+  return {
+    x: ship.x + f.x * mount.forward + rx * mount.right,
+    y: (ship.y ?? 0) + mount.height,
+    z: ship.z + f.z * mount.forward + rz * mount.right,
+  };
+}
+
+/**
+ * Why a mount cannot bear, or null when it can. Ship and coastal guns share this one test, so an arc
+ * that holds afloat cannot silently widen ashore, and every refusal is decided in a single place.
+ */
+function refusal(
+  spec: { class: MountClass; traverse: Traverse; elevation: Elevation; minRange: number; maxRange: number },
+  origin: { x: number; y: number; z: number },
+  heading: number,
+  target: GunneryTarget,
+): string | null {
+  // A mount's class is the only thing that grants AA capability. A cosmetic gun count is
+  // presentation: a hull with forty painted barrels must not acquire a director it was never fitted
+  // with, so a main battery refuses an airframe here instead of at each firing site.
+  if (isAircraft(target) && spec.class !== "aa") return "main battery does not track aircraft";
+  const dx = target.x - origin.x;
+  const dy = target.y - origin.y;
+  const dz = target.z - origin.z;
+  const range = Math.hypot(dx, dy, dz);
+  if (range > spec.maxRange) return "out of range";
+  if (range < spec.minRange) return "inside minimum range";
+  const elevation = Math.atan2(dy, Math.hypot(dx, dz));
+  if (elevation > spec.elevation.max) return "above the elevation limit";
+  if (elevation < spec.elevation.min) return "below the elevation limit";
+  const relative = angleDelta(bearing(origin, target), heading);
+  if (Math.abs(angleDelta(relative, spec.traverse.center)) > spec.traverse.half) return "outside the traverse arc";
+  return null;
+}
+
+/** True when a hull mount's arc, elevation, range and class all permit engaging `target`. */
+export function canBear(mount: ShipMount, ship: Platform, target: GunneryTarget): boolean {
+  return refusal(mount, muzzleOrigin(mount, ship), ship.heading, target) === null;
+}
+
+/**
+ * Whether a shore battery can actually reach a ship. A battery fires only at what enters its own arc
+ * and range; it never projects a duel onto a ship somewhere else on the map.
+ */
+export function coastalEngagement(
+  battery: CoastalBattery,
+  ship: Platform,
+): { engaged: boolean; reason: string } {
+  const point: GunneryTarget = { x: ship.x, y: ship.y ?? 0, z: ship.z };
+  const reason = refusal(battery, { x: battery.x, y: battery.height, z: battery.z }, battery.heading, point);
+  return { engaged: reason === null, reason: reason ?? "in arc and range" };
+}
+
 export function updateGunnery(b: Any, s: Any, dt: number): void {
   if (s.sunk || s.kind === "sub" || s.aa < 0.08) return;
   s.aaTimer -= dt;
@@ -118,6 +252,7 @@ export function updateGunnery(b: Any, s: Any, dt: number): void {
         damage: 4,
       });
     b.fx("muzzle", origin, 0.4);
-    b.event("aa", { at: origin, source: s.id, weapon: s.team === "us" ? "aa20" : "aa25", kind: "light" });
+    const usLight = s.kind === "carrier" && b.random() < 0.4 ? "aa11" : "aa20";
+    b.event("aa", { at: origin, source: s.id, weapon: s.team === "us" ? usLight : "aa25", kind: "light" });
   }
 }

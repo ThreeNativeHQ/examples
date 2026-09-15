@@ -196,6 +196,32 @@ fitted to, with **not found** written wherever no source gives one.
 - `bash tools/capture-lock.sh node tools/capture-sortie-runs.mjs` — flies one recon and one carrier
   strike from the airborne start to a recovered debrief with keys only and nothing injected, and
   fails if either takes more than twelve simulated minutes.
+- `bash tools/capture-lock.sh node tools/capture-crash.mjs` — destroys the player's aircraft in the
+  air and captures the fall, the impact and the report, asserting that the debrief never opens above
+  the sea.
+
+## Losing the aircraft
+
+A destroyed player aircraft is not a modal. `Battle.crashPlayer` puts it into `mode: "crashing"` and
+the engine's `FlightModel` integrates the fall under the same `DESTROYED_MODIFIERS` every shot-down
+AI aircraft uses — dead engine, no lift, no control authority — burning all the way down. At the
+surface it becomes `mode: "wreck"`: the airframe is hidden under its own splash, the camera stops at
+the water and backs off to watch it, and only after the settle does `lose()` open the after-action
+report. Three rules hold this together:
+
+- **The simulation keeps stepping through the settle.** The clock stops with `status === "lost"`, so
+  a debrief opened at the moment of impact freezes the splash mid-animation instead of playing it.
+- **The wreck takes no orders.** `Midway.action` returns for `crashing` and `wreck`, and the death
+  cam leaves the cockpit for the chase view, so the player watches the aircraft go in the way they
+  watch the ones they shoot down.
+- **Sound is state, not a stinger.** `engineSeize` fires at the kill; from then on the engine bank
+  is silent, `propWindmill` and the slipstream carry the dive, `fuelFire` is welded to the player's
+  own mesh, and `aircraftCrash` belongs to the sea. Nothing in that chain is scripted per frame.
+
+The wingman reports the damage he can see from his own aircraft — smoke, streaming fuel, flame, a
+dying engine, and finally the dive — as `R26`–`R30` in `src/sim/radio-script.ts`, one call at a time
+behind an eleven-second cooldown and only while `wingmanNear()` finds a squadron aircraft still
+flying alongside. An empty sky says nothing.
 
 ## Verify
 
@@ -224,6 +250,7 @@ bash tools/capture-lock.sh node tools/capture-deck.mjs
 bash tools/capture-lock.sh node tools/capture-fleet.mjs
 bash tools/capture-lock.sh node tools/capture-sortie.mjs
 bash tools/capture-lock.sh node tools/capture-sortie-runs.mjs
+bash tools/capture-lock.sh node tools/capture-crash.mjs
 bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/cli.js \
   --scenario playtests/launch.playtest.json --url http://127.0.0.1:5199 --browser-recipe webgpu --headed --timeout 45000
 ```

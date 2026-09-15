@@ -93,7 +93,7 @@ class RigCharacter {
     const current = this.#player.current;
     if (current === undefined) {
       this.#player.play("ual1/Walk_Loop");
-    } else if (this.#seconds > 1.2 && current !== "ual2/Sword_Regular_Combo") {
+    } else if (this.#seconds > 6 && current !== "ual2/Sword_Regular_Combo") {
       this.#player.play("ual2/Sword_Regular_Combo");
     }
     this.#player.update(dt);
@@ -206,7 +206,7 @@ export class Rig extends Scene<GameState, IPhysicsContext> {
     ctx.entities.add("character", character);
     const height = new Box3().setFromObject(player.root).getSize(new Vector3()).y;
     const camera = ctx.camera as { position: Vector3; lookAt: (target: Vector3) => void };
-    camera.position.set(height * 0.6, height * 0.5, height * 1.7);
+    camera.position.set(height * 0.32, height * 0.55, height * 0.85);
     camera.lookAt(new Vector3(0, height * 0.5, 0));
 
     const statePatch: Partial<GameState> = {};

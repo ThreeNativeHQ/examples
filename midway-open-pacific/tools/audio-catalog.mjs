@@ -68,8 +68,8 @@ export const PERSPECTIVES = {
     "Pilot-seat perspective inside the partially enclosed cockpit, low and mid frequency airframe vibration with softened exhaust detail through the cowling and canopy, no exaggerated bass",
 };
 
-/** The SBD is the hero aircraft: it gets interior states as well as exterior. */
-export const INTERIOR_AIRCRAFT = ["sbd"];
+/** Both flyable Douglas airframes get interior states as well as exterior (PRD: playable => interior). */
+export const INTERIOR_AIRCRAFT = ["sbd", "tbd"];
 
 /**
  * One row per named SFX prompt. `identity` carries the PRD's evidence label:
@@ -90,7 +90,10 @@ export const SFX = [
   { id: "torpedo-release", seconds: 1, loop: false, identity: "reconstruction", prompt: "One heavy aerial torpedo released from an aircraft mounting rack, a short latch snap and weighty metal linkage clunk, no propulsion sound and no explosion." },
   { id: "sbd-engine-start", seconds: 8, loop: false, identity: "reconstruction", prompt: "A plausible 1942 nine-cylinder aircraft radial engine starting, mechanical starter activity followed by several uneven combustion catches that settle into a low idle, no dramatic backfire." },
   { id: "sbd-engine-stop", seconds: 5, loop: false, identity: "reconstruction", prompt: "A nine-cylinder aircraft radial engine shutting down from idle, combustion pulses cease and rotating machinery slows naturally to rest, no explosion." },
+  { id: "tbd-engine-start", seconds: 8, loop: false, identity: "reconstruction", prompt: "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator starting, mechanical starter cranking followed by several uneven combustion catches that settle into a low puttering idle, no turbine whine and no dramatic backfire." },
+  { id: "tbd-engine-stop", seconds: 6, loop: false, identity: "reconstruction", prompt: "One Pratt and Whitney R-1830 radial piston engine on a Douglas TBD-1 Devastator shutting down from idle, uneven low exhaust putter and propeller chops spacing out as it slows naturally to rest, no turbine whine, no electronic sweep and no explosion." },
   { id: "engine-rough", seconds: 8, loop: true, identity: "reconstruction", prompt: "Irregular missed combustion pulses and rough mechanical vibration from a damaged aircraft radial piston engine, sustained uneven running, no explosions and no music." },
+  { id: "engine-seize", seconds: 5, loop: false, identity: "reconstruction", prompt: "An aircraft radial piston engine destroyed in flight, combustion breaking into violent uneven misfires and metallic knocking, a harsh mechanical seizure and then only the propeller turning in the airflow, no explosion and no music." },
   { id: "prop-windmill", seconds: 8, loop: true, identity: "reconstruction", prompt: "An unpowered aircraft propeller turning in steady airflow, soft repetitive mechanical rotation and air swish without any combustion or exhaust." },
   { id: "airframe-hit", seconds: 1, loop: false, identity: "reconstruction", prompt: "A short burst of small hard impacts puncturing thin aluminum aircraft skin near the listener, sharp metal ticks and a brief loose-panel rattle, no large explosion." },
 
@@ -109,6 +112,9 @@ export const SFX = [
   // Explosions and damage
   { id: "bomb-deck", seconds: 6, loop: false, identity: "reconstruction", prompt: "One large conventional aerial bomb striking a wooden flight deck over steel and detonating inside a ship, sharp initial impact then a heavy explosive blast, metal debris and a short uneven decay, no sustained fire." },
   { id: "bomb-water", seconds: 5, loop: false, identity: "reconstruction", prompt: "One conventional aerial bomb exploding in seawater, blunt explosive impact followed by a heavy rising splash and falling sheets of water, outdoors over open ocean." },
+  { id: "bomb-underwater", seconds: 6, loop: false, identity: "reconstruction", prompt: "One conventional aerial bomb detonating well below the surface of open seawater, heard from above: a deep muffled thud with the blast crack filtered away by the water, a low pressure whump, then a delayed swelling surge as it reaches the surface, no ringing metal and no splash at the start." },
+  { id: "depth-charge", seconds: 7, loop: false, identity: "reconstruction", prompt: "One naval depth charge detonating deep underwater, heard on the escort above: a heavy dull concussion with almost no high frequency, a long low rumble carried up through the water, then a slow rising surge, no metallic clang and no sonar ping." },
+  { id: "water-column-fall", seconds: 5, loop: false, identity: "reconstruction", prompt: "A tall column of seawater thrown up by an explosion falling back onto the open sea, broad heavy sheets of falling water and hard irregular splashing that fades into settling foam, no explosive blast at any point and no voices." },
   { id: "torpedo-hit", seconds: 6, loop: false, identity: "reconstruction", prompt: "One torpedo warhead detonating against a steel ship hull below the waterline as heard above water close to the ship, heavy muffled concussion, hull shock and water surge, no sonar ping." },
   { id: "torpedo-entry", seconds: 2, loop: false, identity: "reconstruction", prompt: "One heavy aerial torpedo entering the sea at a shallow angle, a forceful splash and short churning water trail, no explosion and no motor heard through the air." },
   { id: "aircraft-crash", seconds: 5, loop: false, identity: "reconstruction", prompt: "One light metal propeller aircraft striking the sea, hard initial water impact, crumpling thin metal and a broad heavy splash, no automatic fuel explosion." },
@@ -184,6 +190,12 @@ export const SPEECH = [
   { id: "R23", voice: "control", priority: 2, text: "Enterprise to Yorktown aircraft. Recover aboard Enterprise. Join the landing pattern." },
   { id: "R24", voice: "wingman", priority: 3, text: "Scout Three. Forming up on your wing." },
   { id: "R25", voice: "wingman", priority: 2, text: "Scout Three to Enterprise. Pilot in the water. Marking the position." },
+  { id: "R26", voice: "wingman", priority: 2, text: "Scout Three. You're hit — smoke coming from your engine. How does she handle?" },
+  { id: "R27", voice: "wingman", priority: 2, text: "Scout Three. You're streaming fuel. Get her on a course for home while she still flies." },
+  { id: "R28", voice: "wingman", priority: 1, text: "Scout Three. You're burning! Get out of her!" },
+  { id: "R29", voice: "wingman", priority: 1, text: "Scout Three to Enterprise. Lead is hit hard and losing power. I'm staying with him." },
+  { id: "R30", voice: "wingman", priority: 1, text: "Scout Three to Enterprise. Lead is going down. Marking the position." },
+  { id: "R31", voice: "wingman", priority: 2, text: "Scout Three. You're trailing oil from the engine. Watch your temperature." },
   { id: "P01", voice: "pa", priority: 2, text: "General quarters. General quarters. All hands to battle stations." },
   { id: "P02", voice: "pa", priority: 3, text: "Flight quarters. Stand by to launch aircraft. Keep the flight deck clear." },
   { id: "P03", voice: "pa", priority: 1, text: "Enemy aircraft approaching. All exposed personnel take cover." },

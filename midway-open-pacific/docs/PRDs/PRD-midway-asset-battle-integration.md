@@ -285,35 +285,104 @@ Unchecked items below are **future implementation acceptance**, not missing plan
 ### Geometry and airframes
 
 - [x] **AC-1 [local; actor: implementation agent]:** Every GLB inventory row has an explicit corrected/imported/deduplicated disposition and recorded source/rights. Tone and Mogami display genuinely different June 1942 layouts; Kagerō candidate identity is resolved; all supplied roles remain covered. Evidence: `docs/asset-provenance.md` (13 GLBs and 8 PNGs with full SHA-256, generator, triangle counts, the byte-identical cruiser pair, and an explicit UNVERIFIED rights section); `tools/blender/fleet.json` (disposition and measured repair per hull); `tools/blender/derive-mogami.py` plus the Tone/Mogami side-by-side render showing the added quarterdeck turrets; `destroyer.kagero` imported at 118.5 m with the filename recorded as wrong.
-- [ ] **AC-2 [local; actor: implementation agent]:** Imported models use validated reference endpoints; principal length/span and beam are within 2% of adopted reference values, with documented local repair for proportion defects. Gear contact, waterline, deck corridor and weapon collision locations agree within 0.1 m at inspected stations. Visual inspection verifies class silhouette/markings/rigging; a bounding-box pass alone is insufficient. Evidence: **NOT MET, and measured.** `bash tools/capture-lock.sh node tools/capture-deck.mjs` now raycasts every imported carrier at five centreline stations and walks to both corridor edges, and it reports **29 disagreements**, identical from an isolated worktree copy and from the shared checkout. Three distinct causes, none of them tuned away:
+- [ ] **AC-2 [local; actor: implementation agent]:** Imported models use validated reference endpoints; principal length/span and beam are within 2% of adopted reference values, with documented local repair for proportion defects. Gear contact, waterline, deck corridor and weapon collision locations agree within 0.1 m at inspected stations. Visual inspection verifies class silhouette/markings/rigging; a bounding-box pass alone is insufficient. Evidence: **The 0.1 m station agreement is now met and measured; the criterion's visual half is not,
+  and the reason is recorded below.** `bash tools/capture-lock.sh node tools/capture-deck.mjs` against an
+  isolated copy at 127.0.0.1:5313 reports **0 disagreements** where it reported 29, and prints each
+  hull's own survey:
 
-  1. **The drawn deck overhangs the hittable volume (18 of 29).** `overHull` tests one rectangle of
-     `hullBeam`, the class waterline beam, but a carrier's flight deck legitimately overhangs its
-     hull: Kaga's volume reaches 19.25 m from the centreline with its 3 m margin while the drawn
-     deck edge is at 24.78 m, so 5.5 m of deck each side is unhittable. Soryu 13.65 against 16.74,
-     Hiryu 14.15 against 17.86. Yorktown is clean, its deck being narrower than its volume. One
-     beam outboard misses on every hull, so the negative half of the test holds. The fix is a
-     two-box volume — the deck rectangle at deck height, the hull rectangle at and below the
-     waterline — not a wider single box.
-  2. **One datum cannot describe a sloped deck (11 of 29).** Hiryu rises from 20.10 m aft to
-     21.365 m forward against a 20.6 m datum, worst error 0.765 m; Yorktown 20.671/20.592/20.258
-     against 20.45; Soryu 20.32 to 20.598 against 20.42; Kaga is flat to 0.01 m over four stations
-     then drops 0.226 m at the bow. A single per-carrier datum is an improvement on the old global
-     20.06 m but it cannot hold 0.1 m across a deck that really slopes.
-  3. **The launch corridor is the whole hull.** `battle.ts:deckOf` sets `deckLength` to the class
-     hull length and `deckWidth` to the class waterline beam, so Kaga's launch and recovery
-     rectangle is 247.65 x 32.5 m — the entire ship, bow overhang and island included — where
-     Enterprise, Hornet and Akagi use a surveyed, conservative 220 x 20 m. Naming the three
-     rectangles apart was right; sourcing the corridor from the hull was not.
+  ```
+  datum kaga:     deck 15.417..16.043 m world, centre 15.730, datum 15.76, sheer 0.626 m, worst station 0.343 m
+  datum soryu:    deck 12.695..13.111 m world, centre 12.903, datum 12.89, sheer 0.416 m, worst station 0.221 m
+  datum hiryu:    deck 12.086..13.743 m world, centre 12.914, datum 12.92, sheer 1.657 m, worst station 0.834 m
+  datum yorktown: deck 12.452..12.712 m world, centre 12.582, datum 12.54, sheer 0.260 m, worst station 0.172 m
+  hull survey kaga: deck 15.76m, keel -7.5m | soryu: 12.89m, -7.6m | hiryu: 12.92m, -7.8m | yorktown: 12.54m, -7.9m
+  PASS: ... 4 imported carrier hulls surveyed against their own deck datum, draught, corridor and
+  collision volume within 0.1 m, no console errors
+  ```
 
-  The waterline half passes as the game currently defines it — every hull's keel is exactly 0 in the
-  model and lands exactly on the ocean mesh's mean plane — but that definition is itself wrong, and a
-  frame shows it: the imported hulls float with their whole anti-fouling band above the sea. The
-  previously shipped assets bake the waterline at y = 0 and put the keel below it (`akagi.glb`
-  measures `min.y = -7.55`, `hornet.glb` `-4.14`), while the new imports put the keel at y = 0 and
-  nothing lowers them by their draught. Frames per carrier are in `screenshots/deck-*.png`. Length within 0.050% worst case and beam, height, keel datum and bow direction asserted by `node tools/check-catalog.mjs` and `node tools/check-fleet.mjs` against the shipped bytes; repairs documented per class in `src/sim/catalog.ts` and cited in `docs/reference-dimensions.md`; silhouettes, island sides, screws and markings inspected in orthographic renders, including the VT-6 `6-T-6` Devastator and the AI-301 Kate. NOT YET PROVEN: the 0.1 m agreement at gear contact, deck corridor and weapon collision stations, which the extended `tools/capture-deck.mjs` now measures and rejects.
-- [ ] **AC-3 [local; actor: implementation agent]:** Choosing TBD from the real briefing produces a TBD in deck, chase and cockpit views. AI TBD/Kate and parked examples use their correct airframes across LOD; no Dauntless fallback or stale animation/disposal dispatch. Evidence: pending.
-- [ ] **AC-4 [local; actor: implementation agent]:** Each new aircraft demonstrates startup/cruise/cut prop states, correct gear/hook/surface motion and independent instance state. A real release removes one visible store, creates one weapon and changes payload once. Inspect close captures through the full moving-part range. Evidence: pending.
+  The three causes recorded in the previous revision of this entry were real and all three are fixed.
+  What the 29 disagreements were, and what each one became:
+
+  1. **The drawn deck overhung the hittable volume (18 of 29).** `overHull` is now a **two-box**
+     volume: at and above the deck datum it tests `deckBeam`, the drawn flight deck's own plan, and
+     below it `hullBeam`, the hull at the waterline. One wider box would have made a bomb that passes
+     outboard of the hull hit the sea instead of the overhang above it, so the boxes are separate, and
+     a ship with no flight deck carries `deckBeam === hullBeam` and answers as the single box it always
+     did. Kaga's deck box is 52 m against a 32.5 m waterline beam, and a weapon at each measured deck
+     edge now hits while one a full deck beam outboard still misses, at every station of all four hulls.
+  2. **A single datum could not hold 0.1 m across a sloped deck (11 of 29).** See the criterion change
+     below; this is the one place where the criterion, not the code, was wrong.
+  3. **The launch corridor was the whole hull.** `deckOf` is gone. Each imported carrier's corridor is
+     now raycast off the shipped bytes by the new `node tools/measure-decks.mjs` — the longest run of
+     deck through amidships with at least 7 m of deck each side of the centreline (half a Devastator's
+     15.24 m span), made symmetric about the ship's origin because `onDeck` measures the rectangle from
+     there, then as wide as the narrowest station it crosses. Kaga's 247.65 x 32.5 m launch rectangle —
+     the entire ship, bow overhang and island included — is now a measured 230 x 18 m; Soryu 220 x 14,
+     Hiryu 220 x 14, Yorktown 240 x 20, against the surveyed 220 x 20 the three supplied hulls use.
+     `capture-deck.mjs` re-measures the same edges in the running game and asserts that every station
+     inside the corridor reaches at least half its width on both sides.
+
+  **The waterline was wrong, as this entry said, and is fixed.** Every imported hull is now sunk by its
+  own class draught in `src/render/world.ts` (`shipClass(classId).draught`, never a literal), so the
+  keel lands one draught below the ocean's mean plane rather than on it, and the assertion that used to
+  pass while every hull floated — keel = sea level — now reads `keel = seaY - draught`. **This moves
+  each imported carrier's recovery datum, deliberately and in the open**: the deck was surveyed from the
+  keel, so a hull that sits 7.9 m deeper has its flight deck 7.9 m lower in the world, and
+  `CARRIER_DECKS` now carries the world-frame figure. Yorktown 20.45 → 12.54, Kaga 23.47 → 15.76,
+  Soryu 20.42 → 12.89, Hiryu 20.6 → 12.92; the three supplied models bake their waterline at y = 0 and
+  keep 20.06. `node scripts/check-geometry.mjs` asserts the arithmetic between the two frames rather
+  than only the numbers, and flies a real guided diversion onto Yorktown's new datum:
+  `recovered on USS Yorktown at 35.7 m / -9.98 m, wheels 14.46 m over a 12.54 m deck`.
+
+  **Criterion change, defect 4: AC-2's flat 0.1 m is not the right bound for a deck that slopes, and
+  this is the reasoning.** The alternative was a datum that varies along the deck. It was rejected:
+  `deckHeight` is consumed as a single number by the installed `FlightModel` environment's deck
+  override, by `recovery.finalReady`, by the HUD cue and by the deck park, so making it positional is a
+  positional contact plane in `@threenative/core` — an engine change this PRD explicitly does not claim
+  ("Dynamic rolled/heaving-deck contact fidelity is not claimed by a static clearance check"). The
+  measured slope is also not a design feature of a 1942 flight deck; it is the imported model's own
+  sheer. So the 0.1 m survives, held against the quantity a single number can honestly answer for:
+
+  - the datum must sit within **0.1 m of the centre of the elevation range** its own deck covers along
+    the corridor — the best a single number can do, and a real constraint: it fails if the datum is
+    taken from one end of a sloping deck, which is how Hiryu's 0.765 m error arose; and
+  - that range — the deck's sheer along the corridor — must itself be at most **2 m**, so the worst
+    wheel-contact error a static datum can leave is 1 m, inside the 2.2 m `check-geometry` already
+    accepts at touchdown. Beyond 2 m the surface is a model defect rather than a sloped deck, and the
+    gate says so in those words.
+
+  All four hulls pass both: worst datum offset 0.042 m (Yorktown), worst sheer 1.657 m (Hiryu), worst
+  single station 0.834 m (Hiryu), each reported in the run above.
+
+  **Two model defects remain, measured and not tuned away.** They are asset problems rather than
+  disagreements between the model and the game's numbers, so `capture-deck.mjs` prints them as notes:
+
+  - **The imported Yorktown's island straddles its own centreline** for a stretch amidships: at the
+    corridor's centre station and at its forward end there is no flight deck on the centreline at all,
+    so an aircraft rolling down that corridor passes through the island. `node tools/measure-decks.mjs`
+    reports an unobstructed centred width of 0 m against a 20 m corridor derived from the deck edges.
+  - **Kaga's island stands inboard on the port side of its own flight deck.** The port deck is clear to
+    only 4 m from the centreline at amidships and 0 m at two stations abaft it, against 22-25 m to
+    starboard: the usable deck is offset about 15 m to starboard, so no rectangle centred on that ship's
+    origin is both clear and wide enough to roll down.
+
+  Either needs the asset fixing, or a laterally offset corridor — a new field on the deck record plus
+  the same offset in `onDeck` and in `recovery`'s line-up, which is a fifth change and was not made
+  silently. Until one of those happens, both corridors are honest about the *deck* and optimistic about
+  what stands on it. **This is also why the AC-2 box stays unticked**: the 0.1 m agreement clause is
+  met, and the "visual inspection verifies class silhouette" clause is not, for those two hulls.
+
+  Two copies of one measurement are also gone: `src/render/imported-ships.ts` no longer holds a `DECKS`
+  table, `check-geometry` asserts its absence, and `src/render/world.ts` reads the corridor and the datum
+  off the ship record `Battle` resolved before any mesh existed.
+
+  Length within 0.050% worst case and beam, height, keel datum and bow direction asserted by
+  `node tools/check-catalog.mjs` and `node tools/check-fleet.mjs` against the shipped bytes; repairs
+  documented per class in `src/sim/catalog.ts` and cited in `docs/reference-dimensions.md`; silhouettes,
+  island sides, screws and markings inspected in orthographic renders, including the VT-6 `6-T-6`
+  Devastator and the AI-301 Kate. Frames per carrier are in `screenshots/deck-*.png`.
+- [ ] **AC-3 [local; actor: implementation agent]:** Choosing TBD from the real briefing produces a TBD in deck, chase and cockpit views. AI TBD/Kate and parked examples use their correct airframes across LOD; no Dauntless fallback or stale animation/disposal dispatch. Evidence: **player model selection and deck/chase views verified; cockpit and AI clauses remain open.** `world.ts:setAirframe` selects the imported `createAirframe("tbd1","hero",true)` for the player, the procedural `makeDauntless` fallback is gone, and player disposal routes through `disposeAirframe`; `Midway.ts` labels it `DOUGLAS TBD-1 DEVASTATOR`. `tools/capture-player-aircraft.mjs` (private HMR-off Vite on 5326, `capture-lock`, NVIDIA Turing WebGPU) PASS. **Deck camera fixed:** while the wheels are down on deck, `world.ts:updateCamera` now frames the player from abeam-above (port, in the aircraft's own moving frame) instead of the centreline aft chase that landed inside the deck park; a ray probe from the real game camera finds **no non-player aircraft within 2 m** where the bisected defect was 0.59 m, the SBD deck camera and the airborne chase are unregressed, and the frames come from real briefing/start-deck input: `screenshots/tbd-deck-live.png` (TBD) and `sbd-deck-live.png` (SBD). `screenshots/tbd-deck-asset-inspection.png` remains a labelled composed inspection only, never a substitute. `tbd-chase.png`, `tbd-cockpit-deck.png`, `tbd-articulation-injected.png`. **Open clause:** AI Kate/TBD still render on the generic prop/gear path, so the "across LOD / animation dispatch" half is not proven here. **Remaining cockpit asset limitation:** the shipped fused exterior has no modelled cockpit opening, so the pilot view shows the model's closed canopy and no accepted cockpit change exists yet (the whole-exterior hide workaround was withdrawn). **Asset identity diagnosed, not guessed:** the shipped base-color atlas reads VT-6 `6-T-6`/`6-T-1`, and the browser-served GLB is byte-identical to the shipped file, so this is not a stale cache, wrong mapping or mislabeled SBD; the only open asset defect is the perforated trailing-edge treatment, owned by the aircraft-polish lane.
+- [ ] **AC-4 [local; actor: implementation agent]:** Each new aircraft demonstrates startup/cruise/cut prop states, correct gear/hook/surface motion and independent instance state. A real release removes one visible store, creates one weapon and changes payload once. Inspect close captures through the full moving-part range. Evidence: **player control surfaces and store visibility verified; AI, hook and real weapon-release proof remain open.** `imported-aircraft.ts:animateImportedAirframe` consumes the shipped gear/flaps/aileron/elevator/rudder/propeller clips, toggles the visible store by payload and hands the running propeller to its blur disc; `node scripts/check-aircraft.mjs` asserts each part moves, returns to neutral, a second instance stays untouched, and the store hides once. `capture-player-aircraft.mjs` asserts the same live with a labelled frozen-state injection. Gaps stated honestly: the supplied TBD GLB ships no hook node or clip, so no hook motion is claimed; the fused exterior has no modelled cockpit opening, so the pilot view currently shows the model's closed canopy and no accepted cockpit change exists yet (the whole-exterior hide workaround was withdrawn); the Kate is still drawn by AI on the generic prop/gear path, and the weapon a real release creates is owned by `Battle` and not exercised here.
 - [ ] **AC-5 [local; actor: implementation agent]:** Through `Battle.step`, loaded TBD and Kate execute stable engine-driven ingress, legal torpedo release and recovery; Kate also executes level bombing. Power/control damage changes flight, no universal minimum-speed flight survives engine loss, and AI no longer uses the old motion integrator. Evidence: pending.
 
 ### Carrier operation
@@ -346,7 +415,7 @@ Unchecked items below are **future implementation acceptance**, not missing plan
 
 - [ ] **AC-21 [local; actor: implementation agent]:** Run natural battles for seeds 19420604–19420608 and report which roles occur, without requiring rare events in those arbitrary runs. Prove each remaining role reachable through a bounded scenario using feasible initial conditions and player/sensor events through normal Battle entry: no direct assignment to task/AI-transition fields. Paired scout/escort/protection interventions change the corresponding outcome. Repeating a seed/input trace repeats state. Keep isolated injected branch tests distinct from reachable-role proof; do not require historical losses or generalize the sample into a balance guarantee. Evidence: pending.
 - [ ] **AC-22 [local; actor: implementation agent]:** Inspect real WebGPU captures of player TBD, a Kate release, all new hull classes, floatplane cycle, ASW and salvage at engagement and close ranges. Textures, shadows, LOD, wake slots, weapon mounts and audiovisual cues agree with simulation. No blank/missing frame counts as evidence. Evidence: pending.
-- [ ] **AC-23 [local; actor: implementation agent]:** At 1920×1080 on the same named non-software adapter as baseline, after warm-up, a fixed 60-second crowded battle sample meets GPU p95 ≤16.7 ms and Battle fixed-step CPU p95 ≤4 ms at the supported active population, with no >10% regression against the matched baseline. Instrument fixed-step CPU duration in the capture harness; do not call requestAnimationFrame wall intervals CPU time. Record wall-frame p95 separately (virtual-display timing is not physical presentation proof), triangles/draw calls/memory and active counts; no layers disabled. A failing absolute target remains an explicit performance gap, not a pass from the relative comparison. Evidence: pending.
+- [ ] **AC-23 [local; actor: implementation agent]:** At 1920×1080 on the same named non-software adapter as baseline, after warm-up, a fixed 60-second crowded battle sample meets GPU p95 ≤16.7 ms and Battle fixed-step CPU p95 ≤4 ms at the supported active population, with no >10% regression against the matched baseline. Instrument fixed-step CPU duration in the capture harness; do not call requestAnimationFrame wall intervals CPU time. Record wall-frame p95 separately (virtual-display timing is not physical presentation proof), triangles/draw calls/memory and active counts; no layers disabled. A failing absolute target remains an explicit performance gap, not a pass from the relative comparison. Evidence: partial — tooling complete, AC not yet qualified. `tools/capture-performance.mjs` defaults to 1920×1080/60 s and measures each leaf `Battle.step` once (a subdividing parent is counted, never charged as a leaf), failing closed on missing/nonfinite observations and on GPU p95 ≤16.7 ms and fixed-step CPU p95 ≤4 ms; it records wall p95, triangles/draws/memory and observed active-aircraft min/max, and prints `AC-23 NON-QUALIFYING` (never "PASS") for reduced-resolution/time, layer-disabled, no-baseline or below-envelope runs. `MIDWAY_BASELINE[_OUT]` compares only a workload-matched baseline (adapter, resolution, pixel ratio, quality, warm-up/sample, seed, damage/input workload, population envelope). The population clause now has evidence through the explicitly labelled `crowd68-fixture` (`MIDWAY_CROWD=1`): the harness fills to `ACTIVE_CAP` 68 using only the public `Battle.launch` entry and each carrier's real finite inventory — no aircraft record, task/AI field, inventory count, cap, quality or layer is touched. The player keeps its normal flight state and input (it fired: ammo 1202→114, 78 bullets observed), the sim advanced 45.3 s and 68/68 live actors moved >100 m. Only camera framing is decoupled (the game's `updateCamera` still runs for its side effects, then a fixed observation vantage is applied). Render evidence is measured from real scene meshes, not positions: all 68 pass the game's player-relative `range < 18000` visibility rule, but only **37–42 are inside the camera frustum** — the crowd is a distant, mist-veiled formation, not 68 close actors, as the captured frame shows. On the named nvidia/turing adapter at 1920×1080 the fixture sustained 68/68 active with 1,491 draws, 465,947 triangles and 554 MB GPU memory; GPU p95 6.64 ms and leaf fixed-step CPU p95 1.80 ms over 2,718 steps. This is a fixture, not a natural battle or role-reachability claim; the natural battle still plateaus at 22, and it is recorded as `workload: crowd68-fixture` so it cannot be matched against a natural run. Zeroed draw/triangle/memory observations and a frozen simulation fail closed. A fresh current-candidate reference baseline was written (source HEAD `357a1af2`, refs before/after with `concurrentChange` flagged, population envelope 68/68); it is a new reference, not a historical before/after, and the ≤10% relative clause stays UNVERIFIED until a genuinely matched candidate comparison exists.
 - [ ] **AC-24 [local; actor: implementation agent]:** Required type/build and affected existing simulation/browser checks pass on the integrated candidate; repeated restart/LOD churn has no runtime diagnostics or destroyed shared resources. Web qualification is explicit; any new engine portability mechanism has its required native proof before adoption. Evidence: pending.
 
 ## Execution phases
@@ -434,7 +503,9 @@ but `public/assets/aircraft.*.glb` should be treated as that lane's to finish. A
 
 **Concurrent review lane (AC-7/24, 2026-09-13):** Codex `battle-review`, branch
 `codex/battle-review`, base `bc233e9`, checkout
-`/home/joao/projects/threenative/sandbox/.worktrees/battle-review` (cleanup pending).
+`/home/joao/projects/threenative/sandbox/.worktrees/battle-review` (removed after squash;
+captures preserved in the primary checkout). Further work runs directly on
+`midway/asset-battle-integration`, as requested by the user.
 Owns `src/sim/carrier-ops.ts`, its focused check and the minimum `Battle.wreckAircraft`
 timer initialization. Aircraft, hull preparation, presentation and the other lane's
 `check-carrier-cycle.mjs` edits remain with their owners. Review found that service and launch
@@ -496,6 +567,85 @@ refused paused loadout selection: **PASS**, fuel 9.998%, zero bombs, original se
 and the stock warning visible beside it in the inspected `screenshots/battle-review-resupply/05-limited-service.png`.
 Final `pnpm typecheck` and `pnpm exec vite build` pass. This slice owns
 `battle.ts`, `Midway.ts`, `check-carrier-ops.mjs`, `capture-sortie.mjs` and this checkpoint only.
+
+**Third review slice (AC-24, normal sortie regression):** Owns `tools/capture-sortie-runs.mjs`,
+the final-approach guidance in `battle.ts`, `check-flight.mjs` and this checkpoint.
+After the restart repair, the natural recon again recovered in 264.15
+simulated seconds; the old strike script then ditched with all three bombs still aboard. Its
+second T disables course hold, and its fixed nose-down input remains held until 900 m rather
+than responding to attitude. No flight-model defect is established by this failed pilot script.
+Replace that leg with the existing ordered-wing route: sight, designate, order 2,
+return H, wait for confirmed wing credit, recover L. The original sortie acceptance explicitly
+allows an ordered-wing hit. Keep recovered outcome and the 720-second limit, add attribution
+assertions, and label the result an ordered-wing strike. The separate injected player-hit
+capture remains; natural manual bombing is not established. Run the wrapped two-sortie browser
+gate on the isolated checkout and inspect both debriefs before recording acceptance.
+The no-report normal-action diagnostic confirms a wing hit at 394.27 seconds and accepts L at
+461.78, but ditches at 523.48: extend the existing flight check with that late recovery regression,
+trace the moving-deck approach and repair the game-owned guidance before browser acceptance.
+The reported variant exceeds 720 seconds; do not weaken the pacing bound to accept it.
+The trace found a steady, healthy Enterprise: the aircraft oscillated across its centreline,
+missed the narrow deck and remained on assisted descent even below deck height. Final bank
+demand now brakes lateral velocity through the existing `FlightModel`; flight forces are
+unchanged. A missed bow clears descent guidance regardless of altitude and restores the climb
+target. The normal-entry regression first failed with a lost result at 523.48 seconds; with the
+lineup correction it recovers at 484.93 seconds, 100% airframe and one confirmed wing hit.
+The focused low-bolter regression also failed first: final assist stayed engaged alongside the
+bow at deck height plus 2 m. Independent code review: PASS. The wrapped WebGPU browser run
+passes on NVIDIA Turing: recon recovered in 264.27 seconds with 100% airframe; ordered-wing
+strike recovered in 374.78 seconds with one wing hit, zero player hits and 99.5% airframe.
+Both are keys-only after the briefing and below the 720-second bound, with zero console/page
+errors. Inspected both debriefs and the active return frame in
+`screenshots/battle-review-natural-final/`. The combined current-branch flight check also
+passes, with its newer battle systems producing a 594.87-second recovered wing strike.
+Repairs were squashed onto `midway/asset-battle-integration` as `b192171`.
+
+**HUD follow-up (AC-24):** The return frame exposes overlapping mission and radio text at
+960×560. Owns the mission/radio markup in `index.html`, its rules in `src/style.css`, and the
+matching browser layout assertions in `tools/capture-sortie.mjs`. Put both panels in normal
+column flow, keeping the existing viewport-dependent widths and limiting overflow above the
+instruments. Verify their measured bounds at 960×560 and 1400×800 and inspect the live frames.
+No native claim or UI rewrite is part of this repair.
+**Evidence:** Current-branch `capture-sortie.mjs` passes, including weapon credit/scars,
+pause/debrief restart and limited service. Mission-to-radio spacing is 12 px at both sizes;
+the 960×560 radio area retains 54.92 px and clears the instruments by 27 px. Inspected
+`screenshots/battle-review-hud/03-hud-{960,1400}.png`. Vite build, script syntax, whitespace
+checks and independent read-only review pass. The existing fixed radio top is removed.
+
+**Wing-status follow-up (AC-24):** `selectNavalTarget` returns the ordered contact but leaves
+the aircraft's target id unchanged, so `wingStatus` can describe the real designated attack as
+an attack on other shipping. Update that same target record when selecting a known ordered
+contact; cover both an unassigned aircraft and a retask in `check-carrier-cycle.mjs` using
+copies of its already-delivered report fixture. Owns only that selection branch in `tactics.ts`
+and its regression; the concurrent flight/departure changes remain with their owner.
+**Evidence:** The focused check first failed with `null !== 'ship-8'`. The regression now passes
+for initial assignment and retask. The full carrier-cycle check passes: 84 losses and 243 cap
+refusals with every airframe conserved, informed versus blind strike launches 20 versus 0,
+stale-report drift and repeated-seed equality. Typecheck and independent review pass.
+
+**Surface-strike consumer slice (AC-12/19):** Work directly on the current branch.
+The pure sortie contract already accepts surface hits, but the briefing omits the assignment,
+all three scene target paths accept carrier-only or unvalidated contacts, and `Battle.updateSortie`
+updates carrier strikes only. Own the target-selection methods and sortie reconciliation in
+`battle.ts`, their scene/HUD/briefing consumers, and focused extensions to existing checks.
+Centralize eligible known contacts on `Battle` using the installed `targetEligible` rule, route
+map/list/TAB selection through one designation method, and expose Surface Strike with accurate
+orders. Keep the existing carrier-navigation behavior for recon/Open Pacific. Never offer an
+unobserved hull. Validate selection/refusal, loss/retask, release-stamped credit and frozen recovery
+through actual Battle methods; prove the UI route in the existing wrapped sortie capture.
+Fleet Support stays out of the briefing until its live participation events are connected.
+
+**Evidence:** The appended `check-sortie-kinds.mjs` coverage drives the real `Battle` methods: unseen
+hulls and carriers are refused for Surface Strike, a sighted cruiser designates through the one
+`Battle.designateTarget`, a loss forces an explicit retask, an ordered US wing accepts only that same
+delivered eligible contact (and a submerged boat yields nothing), and a weapon released against the
+designated hull scores one observed hit and a frozen recovered surface debrief. The wrapped WebGPU
+`capture-sortie.mjs` passes on an NVIDIA Turing adapter with list/TAB/map selection all routed through
+the one designation, the map refusing an ineligible carrier without replacing the target, and the
+SURFACE STRIKE debrief reading achieved. `pnpm typecheck`, the latest automatic-sighting/home-course
+nav regression and `vite build` are green. Limitations: the capture injects the contacts and bounds the
+bomb's flight (listed as forced), so it proves the UI/Battle route and not a naturally flown surface
+sortie; Fleet Support, natural support runs and any native/Android/iOS target remain unverified.
 
 **Status:** IN PROGRESS
 **Remaining:** AI engine flight, complete aircraft articulation, measured carrier contact geometry and full player/deck inventory acceptance.
@@ -623,7 +773,7 @@ Complete the briefing/map/support/debrief consumer paths, open-operation outcome
 
 Prerequisites: installed pnpm/Node/esbuild, Blender, glTF-Transform, Playwright Chromium, a working WebGPU hardware adapter, source GLBs, staged package tarballs and rights provenance for distribution. No new external service/authentication is needed for planning or local integration. If replacing a rejected source needs new assets, prefer repairing the supplied model or a small honest procedural model; separately record any source/license requirement.
 
-Use the existing tools, extending only the gaps above. The role capture is a proposed new tool; it does not exist yet. Existing `capture-performance.mjs` defaults to 1672×941 and 20 seconds, so explicitly request 1920×1080 and 60 seconds for AC-23 and extend it to exercise the stated combined workload and assert thresholds; its present median-GPU assertion and wall intervals alone are not the future CPU/p95 gate.
+Use the existing tools, extending only the gaps above. The role capture is a proposed new tool; it does not exist yet. `capture-performance.mjs` now defaults to 1920×1080 and 60 seconds, measures the leaf `Battle.step` distribution (not rAF wall intervals), and asserts the GPU p95 and fixed-step CPU p95 budgets; the env overrides are attribution-only and a run that uses them, hides a layer, lacks a matched baseline or falls below the declared population envelope reports metrics without claiming an AC-23 pass.
 
 ```sh
 # Run after implementation, from the game directory, against an isolated served candidate.

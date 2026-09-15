@@ -58,6 +58,9 @@ export const CUE_FILES: Record<string, string> = {
   tbdEngineExtIdle: "audio/tbd-engine-exterior-idle-01.ogg",
   tbdEngineExtCruise: "audio/tbd-engine-exterior-cruise-01.ogg",
   tbdEngineExtPower: "audio/tbd-engine-exterior-power-01.ogg",
+  tbdEngineIntIdle: "audio/tbd-engine-interior-idle-01.ogg",
+  tbdEngineIntCruise: "audio/tbd-engine-interior-cruise-01.ogg",
+  tbdEngineIntPower: "audio/tbd-engine-interior-power-01.ogg",
   wildcatEngineExtIdle: "audio/wildcat-engine-exterior-idle-01.ogg",
   wildcatEngineExtCruise: "audio/wildcat-engine-exterior-cruise-01.ogg",
   wildcatEngineExtPower: "audio/wildcat-engine-exterior-power-01.ogg",
@@ -76,9 +79,12 @@ export const CUE_FILES: Record<string, string> = {
   airflowExterior: "audio/airflow-exterior.ogg",
   airflowCockpit: "audio/airflow-cockpit.ogg",
   engineRough: "audio/engine-rough.ogg",
+  engineSeize: "audio/engine-seize.ogg",
   propWindmill: "audio/prop-windmill.ogg",
   engineStart: "audio/sbd-engine-start.ogg",
   engineStop: "audio/sbd-engine-stop.ogg",
+  tbdEngineStart: "audio/tbd-engine-start.ogg",
+  tbdEngineStop: "audio/tbd-engine-stop.ogg",
   diveBrake: "audio/sbd-dive-brake.ogg",
   buffet: "audio/airframe-buffet.ogg",
   cockpitRattle: "audio/cockpit-rattle.ogg",
@@ -99,6 +105,9 @@ export const CUE_FILES: Record<string, string> = {
   torpedoRelease: "audio/torpedo-release.ogg",
   bombDeck: "audio/bomb-deck.ogg",
   bombWater: "audio/bomb-water.ogg",
+  bombUnderwater: "audio/bomb-underwater.ogg",
+  depthCharge: "audio/depth-charge.ogg",
+  waterColumnFall: "audio/water-column-fall.ogg",
   torpedoHit: "audio/torpedo-hit.ogg",
   torpedoEntry: "audio/torpedo-entry.ogg",
   aircraftCrash: "audio/aircraft-crash.ogg",
@@ -125,16 +134,23 @@ const SPEECH_FILES: Record<string, string> = Object.fromEntries(
   speechSlugList().map((slug) => [`speech:${slug}`, `audio/voice/${slug}.ogg`]),
 );
 
-/** Engine layers, per perspective and operating state. */
+/** Engine layers, per perspective and operating state. The SBD bank keeps the historic keys. */
 const ENGINE_LAYERS = {
   exterior: ["engineExtIdle", "engineExtCruise", "engineExtPower"],
   interior: ["engineIntIdle", "engineIntCruise", "engineIntPower"],
+} as const;
+/** The TBD bank the player hears when flying the torpedo loadout; AI TBDs reuse the exterior side. */
+const TBD_ENGINE_LAYERS = {
+  exterior: ["tbdEngineExtIdle", "tbdEngineExtCruise", "tbdEngineExtPower"],
+  interior: ["tbdEngineIntIdle", "tbdEngineIntCruise", "tbdEngineIntPower"],
 } as const;
 const STATE_CENTERS = [0.16, 0.5, 0.9];
 
 /** The listener's state this frame. `cockpit` drives the perspective cross-fade. */
 export interface IListenerState {
   cockpit: boolean;
+  /** Player airframe id (`sbd` default); selects the SBD vs TBD engine bank. */
+  airframe?: string;
   onDeck: boolean;
   /** Within shipboard PA range; gates the `pa` channel only. */
   nearPA?: boolean;
@@ -149,6 +165,7 @@ export interface IListenerState {
   rpm: number;
   throttle: number;
   ias: number;
+  brakes?: boolean;
 }
 
 /**
@@ -157,16 +174,21 @@ export interface IListenerState {
  */
 export interface ISoundEvent {
   readonly type?: string;
+  /** Airframe selecting an airframe-specific cue (engine start/stop); defaults to SBD. */
+  readonly airframe?: string;
   /** Explicit cue override; a weapon family key (`gun50`, `aa25`) or asset key. */
   readonly cue?: string;
   readonly weapon?: string;
-  readonly material?: "deck" | "water" | "air" | "steel";
+  readonly material?: "deck" | "water" | "air" | "steel" | "underwater";
   readonly outcome?: string;
   readonly source?: string;
   readonly at?: { x: number; y: number; z: number };
   readonly vel?: { x: number; y: number; z: number };
   readonly distance?: number;
   readonly request?: ISpeechRequest;
+  readonly action?: "start" | "stop" | string;
+  readonly wire?: boolean;
+  readonly fragments?: boolean;
 }
 
 /** A continuous world loop the scene reconciles each frame: ship fire, reef surf at the atoll. */
@@ -195,6 +217,9 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
   torpedoRelease: { volume: 0.55, cooldown: 0.15 },
   bombDeck: { volume: 0.85, cooldown: 0.05 },
   bombWater: { volume: 0.75, cooldown: 0.05 },
+  bombUnderwater: { volume: 0.8, cooldown: 0.05 },
+  depthCharge: { volume: 0.85, cooldown: 0.05 },
+  waterColumnFall: { volume: 0.5, cooldown: 0.05 },
   torpedoHit: { volume: 0.9, cooldown: 0.05 },
   torpedoEntry: { volume: 0.6, cooldown: 0.1 },
   aircraftCrash: { volume: 0.7, cooldown: 0.1 },
@@ -209,6 +234,9 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
   flapTravel: { volume: 0.45, cooldown: 0.5 },
   engineStart: { volume: 0.6, cooldown: 1 },
   engineStop: { volume: 0.6, cooldown: 1 },
+  engineSeize: { volume: 0.8, cooldown: 1 },
+  tbdEngineStart: { volume: 0.6, cooldown: 1 },
+  tbdEngineStop: { volume: 0.6, cooldown: 1 },
   radioKey: { volume: 0.25, cooldown: 0.2 },
   generalAlarm: { volume: 0.8, cooldown: 3 },
   albatross: { volume: 0.5, cooldown: 8 },
@@ -216,6 +244,13 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
 
 /** A simple engineering starting point for acoustic travel time; temperature changes it. */
 const SOUND_SPEED = 343;
+
+/**
+ * Seconds from a subsurface burst to its water column falling back onto the sea. The plume rises
+ * ballistically, so this is a free-fall time, not a mixing choice: a column that tops out around
+ * twelve metres is in the air about this long.
+ */
+const COLUMN_FALL_DELAY = 1.55;
 
 /** Ceiling on simultaneous continuous world emitters; the quietest are culled first. */
 const EMITTER_BUDGET = 12;
@@ -226,6 +261,7 @@ const FALLOFF: Record<string, number> = {
   gun30: 900,
   gun77: 900,
   cannon20: 1400,
+  bulletNear: 250,
   aaHeavy: 9000,
   aa11: 4500,
   aa20: 3200,
@@ -233,6 +269,9 @@ const FALLOFF: Record<string, number> = {
   flakAirburst: 6000,
   bombDeck: 9000,
   bombWater: 6000,
+  bombUnderwater: 11000,
+  depthCharge: 12000,
+  waterColumnFall: 4000,
   torpedoHit: 8000,
   torpedoEntry: 4000,
   aircraftCrash: 5000,
@@ -360,7 +399,7 @@ export class Soundscape {
       if (!buffer) return;
       this.#loops.set(key, this.bus.music(buffer, { loop: true, volume, fade: 0.2 }));
     };
-    for (const key of [...ENGINE_LAYERS.exterior, ...ENGINE_LAYERS.interior]) start(key, 0);
+    for (const key of [...ENGINE_LAYERS.exterior, ...ENGINE_LAYERS.interior, ...TBD_ENGINE_LAYERS.exterior, ...TBD_ENGINE_LAYERS.interior]) start(key, 0);
     start("airflowExterior", 0);
     start("airflowCockpit", 0);
     start("engineRough", 0);
@@ -371,6 +410,8 @@ export class Soundscape {
     start("hullWash", 0);
     start("radioStatic", 0);
     start("oceanWind", 0);
+    start("diveBrake", 0);
+    start("cockpitRattle", 0);
   }
 
   /** Drive every continuous layer's gain and pitch from the listener's real state. */
@@ -395,7 +436,10 @@ export class Soundscape {
     const rpm = p.rpm ?? p.throttle ?? 0;
     const dead = !!p.engineCut;
     const rough = clamp01(p.damage ?? 0);
-    for (const [perspective, keys] of Object.entries(ENGINE_LAYERS)) {
+    // The flyable Douglas bank follows the loadout: SBD by default, TBD on the torpedo loadout.
+    const banks = p.airframe === "tbd" ? TBD_ENGINE_LAYERS : ENGINE_LAYERS;
+    const idleBanks = p.airframe === "tbd" ? ENGINE_LAYERS : TBD_ENGINE_LAYERS;
+    for (const [perspective, keys] of Object.entries(banks) as Array<[string, readonly string[]]>) {
       const side = perspective === "interior" ? inside : 1 - inside;
       keys.forEach((key, i) => {
         const weight = (dead ? 0 : side * stateWeight(rpm, STATE_CENTERS[i] ?? 0.5)) * (1 - rough * 0.7);
@@ -403,6 +447,8 @@ export class Soundscape {
         this.#setRate(key, 0.78 + rpm * 0.5, 0.2);
       });
     }
+    // The parked bank stays silent so switching airframes never doubles the engine.
+    for (const keys of Object.values(idleBanks)) for (const key of keys) this.#setGain(key, 0, 0.18);
     this.#setGain("engineRough", dead ? 0 : rough * 0.8, 0.25);
     this.#setGain("propWindmill", dead && (p.ias ?? 0) > 30 ? 0.7 : 0, 0.25);
     // Buffeting is the honest replacement for a modern stall horn: it rises with stall and load.
@@ -412,12 +458,16 @@ export class Soundscape {
     const wind = Math.min(1, ((p.ias ?? 0) / 150) ** 1.5);
     this.#setGain("airflowCockpit", wind * inside * 0.5, 0.25);
     this.#setGain("airflowExterior", wind * (1 - inside) * 0.4, 0.25);
+    const diveBrake = p.brakes ? Math.min(1, ((p.ias ?? 0) / 130) ** 1.2) * 0.7 : 0;
+    this.#setGain("diveBrake", diveBrake, 0.2);
+    const rattle = inside * Math.min(1, rough * 0.45 + buffet * 0.45 + rpm * 0.15);
+    this.#setGain("cockpitRattle", rattle * 0.35, 0.2);
     const deck = p.onDeck ? Math.min(1, (p.deckSpeed ?? 0) / 40) * (1 - inside * 0.5) : 0;
     this.#setGain("deckRoll", deck * 0.7, 0.2);
     this.#setGain("shipMachinery", p.onDeck ? 0.35 * (1 - inside) : 0, 0.5);
     this.#setGain("hullWash", p.onDeck ? 0.25 * (1 - inside) : 0, 0.5);
     this.#setGain("oceanWind", (1 - inside) * 0.12, 0.6);
-    this.#setGain("radioStatic", 0, 0.4);
+    this.#setGain("radioStatic", this.speaking ? 0.15 : 0, 0.1);
     if (this.#reported === 0 && !this.buffers.size) {
       this.#reported = Date.now();
       console.info("Audio: no packaged cues loaded; running silent and preserving captions.");
@@ -478,21 +528,57 @@ export class Soundscape {
         return e.weapon || undefined;
       case "flak":
         return "flakAirburst";
+      case "bulletNear":
+        return "bulletNear";
+      case "gear":
+        return "gearTravel";
+      case "flap":
+        return "flapTravel";
+      case "wire":
+        return "wireCatch";
+      case "engine": {
+        const tbd = e.airframe === "tbd";
+        return e.action === "stop" ? (tbd ? "tbdEngineStop" : "engineStop") : tbd ? "tbdEngineStart" : "engineStart";
+      }
+      case "engineStart":
+        return e.airframe === "tbd" ? "tbdEngineStart" : "engineStart";
+      case "engineStop":
+        return e.airframe === "tbd" ? "tbdEngineStop" : "engineStop";
+      case "depthCharge":
+        return "depthCharge";
+      case "collapse":
+        return "hullCollapse";
+      case "secondary":
+        return "secondaryBlast";
       case "explosion":
+        if (e.outcome === "secondary") return "secondaryBlast";
+        if (e.outcome === "collapse") return "hullCollapse";
+        if (e.outcome === "depthCharge") return "depthCharge";
+        if (e.material === "underwater") return "bombUnderwater";
         if (e.material === "water") return "bombWater";
         if (e.material === "air") return "aircraftCrash";
         if (e.outcome === "torpedo") return "torpedoHit";
         return "bombDeck";
       case "splash":
-        return "bombWater";
+        if (e.fragments) return "waterFragments";
+        if (e.outcome === "torpedoEntry" || e.weapon === "torpedo") return "torpedoEntry";
+        // A bomb fused to burst below the surface is heard through the water, not through the air:
+        // the crack is filtered off and what arrives is a deep whump well ahead of the plume.
+        return e.material === "underwater" ? "bombUnderwater" : "bombWater";
+      case "torpedoEntry":
+        return "torpedoEntry";
       case "bomb":
         return e.weapon === "torpedo" ? "torpedoRelease" : "bombShackle";
       case "damage":
-        return "airframeHit";
+        return e.material === "steel" ? "steelHit" : "airframeHit";
+      case "hit":
+        return e.material === "steel" ? "steelHit" : "airframeHit";
+      case "steelHit":
+        return "steelHit";
       case "radio":
         return "radioKey";
       case "land":
-        return "deckTouchdown";
+        return e.wire ? "wireCatch" : "deckTouchdown";
       case "alarm":
         return "generalAlarm";
       default:
@@ -537,7 +623,13 @@ export class Soundscape {
       return;
     }
     const at = { x: e.at.x, y: e.at.y, z: e.at.z };
-    this.#pending.push({ cue, at, emitAt: this.bus.listener.context.currentTime, detune: this.#doppler(e, at) });
+    const now = this.bus.listener.context.currentTime;
+    this.#pending.push({ cue, at, emitAt: now, detune: this.#doppler(e, at) });
+    // A subsurface burst is two sounds, not one. The concussion arrives first, through the water;
+    // the column it threw up is still climbing, and only lands a second and a half later. Both are
+    // scheduled on the same queue, so both still carry their own acoustic travel time to the ear.
+    if (e.material === "underwater")
+      this.#pending.push({ cue: "waterColumnFall", at, emitAt: now + COLUMN_FALL_DELAY, detune: 0 });
     if (this.#pending.length > 96) this.#pending.shift();
   }
 

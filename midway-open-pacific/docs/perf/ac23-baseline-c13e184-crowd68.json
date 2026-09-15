@@ -1,0 +1,33 @@
+{
+  "adapter": {
+    "vendor": "nvidia",
+    "architecture": "turing",
+    "device": "",
+    "description": ""
+  },
+  "width": 1920,
+  "height": 1080,
+  "pixelRatio": 1,
+  "quality": "balanced",
+  "warmup": 8,
+  "sample": 60,
+  "seed": 19420604,
+  "damage": false,
+  "input": "turn-right + fire",
+  "requiredAircraft": 68,
+  "hidden": null,
+  "workload": "crowd68-fixture",
+  "source": {
+    "headBefore": "c13e184e6295318fae414f482839d9be0f241232",
+    "headAfter": "c13e184e6295318fae414f482839d9be0f241232",
+    "diffBefore": "26c98e23486c",
+    "diffAfter": "26c98e23486c",
+    "concurrentChange": false
+  },
+  "gpuP95": 10.807264,
+  "cpuP95": 1.5,
+  "population": {
+    "min": 68,
+    "max": 68
+  }
+}
