@@ -87,7 +87,15 @@ export function createOcean({rippleHeight,rippleNormal,rippleFoam,rippleFlow}: {
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
-  const material = new MeshBasicNodeMaterial({ fog: false, transparent: true, depthWrite: true, side: DoubleSide });
+  // The sea keeps `DoubleSide`: the player can put the eye under it (a 12 m torpedo run in wide view
+  // with the chase orbit held down reaches -20 m), and this shader renders a different medium there
+  // (`cameraPosition.y.lessThan(0)` below). `forceSinglePass` draws those two faces in **one** pass
+  // instead of the front/back pair this Three build splits a transparent `DoubleSide` material into
+  // (`three/.../Renderer.js`), so the underside survives at half the submission — measured pixel
+  // identical to the two-pass material above and below the surface, and 2 draws / 114,880 sea
+  // triangles become 1 / 57,440. `side: FrontSide` would halve it too but punches a hole in the sea
+  // from below, which the free-look and the chase orbit can both reach.
+  const material = new MeshBasicNodeMaterial({ fog: false, transparent: true, depthWrite: true, side: DoubleSide, forceSinglePass: true });
   const point = positionGeometry.xz.add(origin);
   const height = Fn(() => {
     const h = float(0).toVar();
