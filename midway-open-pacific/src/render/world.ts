@@ -60,6 +60,22 @@ const FAR_HULL = 15000;
 const FAR_AIRCRAFT = 12000;
 
 /**
+ * The projected diameter, in render-camera pixels, below which an aircraft is not drawn.
+ *
+ * An aircraft the render camera resolves to a couple of pixels contributes a few pixels and still
+ * costs whole draw submissions; at 68 aircraft that submission is the frame. Measured on the AC-23
+ * crowd fixture (report-R68), a ladder of same-frozen-frame pixel diffs: the fixture drew 37
+ * aircraft at 0.7–0.9 px that were 420 of the frame's 652 main draws and 537 k triangles, and the
+ * 2 px rung took main draws 652 → 232 while changing 8 of 2,073,600 rendered pixels. The player's
+ * own cockpit, chase and wide cameras were byte-identical (0 / 2,073,600 px) at 1, 1.5 and 2 px —
+ * every aircraft they resolve is above the line — so the cut is a no-op for gameplay and only stops
+ * a camera far from the fight from paying for specks it cannot show. Unlike the player-range gate
+ * below, it reads the camera, because the pass that pays and the lens that resolves are both the
+ * camera's, exactly as `FAR_HULL` already does for hulls.
+ */
+const MIN_AIRCRAFT_PIXELS = 2;
+
+/**
  * Idle a parked aircraft's propeller. Every parked airframe is a real model now: the Devastator
  * through its own animator, the rest through the `propeller` pivot they all publish.
  */
@@ -635,6 +651,10 @@ export class WorldView {
     }
     const live = new Set<string>();
     let detailed = 0;
+    // Pixels per radian for the render camera: an aircraft's projected diameter is twice its
+    // bounding-sphere radius times this over its distance. Read once, not per aircraft.
+    const focalPx = (this.host.viewport.size.height * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360);
+    const camPos = this.camera.position;
     for (const a of b.aircraft) {
       live.add(a.id);
       const range = distance2(a, p);
@@ -671,7 +691,9 @@ export class WorldView {
       if (load) load.visible = a.bombs > 0;
       if (m.userData.torpedoLoad) (m.userData.torpedoLoad as T.Object3D).visible = a.torpedo > 0;
       updateDamageVisuals(m, a);
-      m.visible = range < FAR_AIRCRAFT;
+      const camD = Math.hypot(a.x - camPos.x, a.y - camPos.y, a.z - camPos.z);
+      const projectedPx = (2 * (m.userData.radius as number) * focalPx) / Math.max(1, camD);
+      m.visible = range < FAR_AIRCRAFT && projectedPx >= MIN_AIRCRAFT_PIXELS;
     }
     for (const [id, m] of this.meshes) if (id.startsWith("air-") && !live.has(id)) {
       this.scene.remove(m);
@@ -941,6 +963,11 @@ export class WorldView {
       m.userData.torpedoLoad = torpedo;
     }
     m.userData.kind = a.kind;
+    // The radius the pixel gate reads, measured once from the built model rather than guessed from
+    // an airframe table: a Zero, a Kate and a Douglas span differently, and a stand-in must not
+    // inherit another type's size.
+    m.updateMatrixWorld(true);
+    m.userData.radius = new T.Box3().setFromObject(m).getBoundingSphere(new T.Sphere()).radius || 6.5;
     this.freezeStatic(m);
     return m;
   }
