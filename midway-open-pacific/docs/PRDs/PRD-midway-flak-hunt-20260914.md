@@ -1,6 +1,6 @@
 # PRD-midway-flak-hunt-20260914 — Trace corruption and combat profiling
 
-**Status:** IN PROGRESS — full-roster audit rejected particle mesh hooks; rolled back, engine frame-preparation seam under investigation
+**Status:** DONE for the confirmed engine defect and the once-per-draw preparation seam. The engine fix and `ctx.beforeRender` were squashed to `origin/develop` (`b1cae8803`, fixes #248) and adopted in the game via the content-hashed `battle-fix-27e4fce23867` tarball; browser proof green, native proof partial (unrelated fixture audio error). The stable 60 FPS target remains UNMET.
 **Complexity:** 5 (MEDIUM); risk override: none. Target expanded by the user to stable 60 FPS throughout gameplay.
 **Owner:** Codex; OpenCode DeepSeek v4.1 Flash handles bounded exploration and probes.
 **Depends on:** Existing capture-performance.mjs and installed engine diagnostics.
@@ -22,9 +22,9 @@ Diagnose the supplied cockpit screenshot's long tracer lines after a multi-secon
 
 - [x] AC-1 [local; actor: agent]: Trace spawn → simulation update → tracer buffers, attempt a controlled stall reproduction, and record whether the screenshot failure reproduced. See stall evidence below; original corruption not reproduced.
 - [x] AC-2 [local; actor: agent]: Measure quiet versus flak-active comparable workloads, with adapter/resolution/population and CPU/GPU observations; save raw local artifacts. Live diagnostic and fixed-population visibility/packing comparisons are saved; timing variance is disclosed.
-- [ ] AC-3 [local; actor: agent]: Rank measured hotspots and smallest root-cause fixes; verify any implemented correction with a focused check and real rendered frame.
-- [ ] AC-4 [local; actor: agent]: Record limitations and exact commands here, preserve unrelated work, and audit the isolated checkout for cleanup.
-- [ ] AC-5 [local; actor: agent]: Verify the 16.7 ms frame target under representative deck, cockpit, battle/flak, water-impact and recovery workloads, including sustained testing; report unmet budgets explicitly. Hidden-display cadence is not proof of real-play presentation FPS.
+- [x] AC-3 [local; actor: agent]: Rank measured hotspots and smallest root-cause fixes; verify any implemented correction with a focused check and real rendered frame. The confirmed root cause is an engine defect: `projection-apply.ts` built every `isLine` proxy as a plain `Line`, so projected `LineSegments`/`LineLoop` became connected strips. Fixed and verified red→green (62 projection tests; 68 focused engine tests), with the rendered tracer asserted `LineSegments` on the crowded-68 and static ABBA browser captures.
+- [x] AC-4 [local; actor: agent]: Record limitations and exact commands here, preserve unrelated work, and audit the isolated checkout for cleanup. Exact commands, exits and limitations are recorded under "Final integration and verification"; other lanes' edits are preserved and both worktrees are retained (see summary).
+- [ ] AC-5 [local; actor: agent]: Verify the 16.7 ms frame target under representative deck, cockpit, battle/flak, water-impact and recovery workloads, including sustained testing; report unmet budgets explicitly. Hidden-display cadence is not proof of real-play presentation FPS. **Remains unmet**: no representative workload holds a 16.7 ms frame budget; see the workload table and captures below.
 
 ## Execution phases
 
@@ -101,3 +101,148 @@ This is why the 22-aircraft result cannot qualify the whole game. Evidence: `/tm
 ### Parked-aircraft reflection correction
 
 The existing reflection marker recursively included the parked/decorative deck load despite its documented exclusion. A frozen ABBA toggle found all 1983 deck-load nodes carrying the reflection layer. Removing only that layer cut exactly 40 draws and 41,046 triangles, with zero changes to main-camera eligibility/visibility or simulation/particle population. CPU/GPU variation exceeded the timing delta; no FPS saving is claimed. The primary/snapshot now exclude those subtrees in three lines using standard Three.js layers. The existing five-view transform check also checks that hulls remain reflected and all deck-load nodes retain the main layer while losing the reflected layer. Evidence: `/tmp/midway-flak-hunt/reflection-compare/`.
+
+### Confirmed engine defect: projected tracer topology
+
+Final visual inspection of `/tmp/midway-flak-hunt/projection-crowd-delivered/audit-current.png` showed long connected tracer lines while CPU buffers still contained 18 independent finite 13.6 m segments. Engine `packages/core/src/projection-apply.ts:166` constructs every `isLine` proxy with `new Line(...)`, including `LineSegments` and `LineLoop`. That changes separate segment pairs into a continuous strip when automatic batching activates. The same defect exists in the installed core (`dist/index.js:4977`). This is an engine correctness bug, separate from the ordinary scheduling optimizations. Preserve the two specialized Three.js line types before the generic Line branch; test the projected scene, then reinstall a content-hashed core tarball.
+
+The 68-aircraft transition increased the pipeline census from 90 to 156 creations. This gives a specific hypothesis for the hitch at activation; it does not prove the timing/cause of the user's original freeze.
+
+Engine isolated checkout: `/home/joao/projects/threenative/threenative-engine/.worktrees/tracer-topology`, branch `fix/tracer-topology`, base `0893707ac7840194efb4d47aef47e0abccc6124a`, same owner. Existing primary resolution-scaler work remains untouched. Capability lookup returned render-advisor and temporal-velocity helpers; all details were read, none replaces preservation of existing Three.js primitive topology.
+
+- [x] Engine phase: projected-LineSegments/LineLoop regression failed on the original code, passes with specialized proxies; all 62 projection tests pass. Full build passes.
+- [x] Engine phase: full required checks (typecheck exit 0; owned lint clean; unit suite owned green), browser proof and hashed-tarball adoption — see "Final integration and verification". Native frame-order counts proven (preparedFrames 7→15, preparationErrors 0); the strict native scenario also flags an unrelated fixture audio error, reported and not waived.
+- [x] Engine phase: upstream confirmed-bug report (issue #248) and final classification: one-line class-preservation defect in the projection proxy.
+
+### Authorized follow-up: once-per-draw preparation
+
+User requested DeepSeek complete a rounded fix on 2026-09-14. Engine owns frame ordering; this mechanism chooses no appearance. Capability search for once-per-present particle buffer preparation returned FrameBudget, Scheduler, createReplayDriver, Scene and GPUReadback; all details inspected, none provides the missing pre-projection phase. The existing five Scene methods and the after-draw Scene.render contract remain intact.
+
+- [x] Add the smallest scene-owned ctx.beforeRender registration, run once immediately before projection/world drawing, clear at scene change/stop; regression checks include multiple fixed updates and cleanup. Landed in `packages/core` (scene.ts + game.ts) with 3 focused RED→GREEN tests plus a budget-attribution test; callback runs inside the render-budget bracket.
+- [x] Document in capability/template contracts, prove browser and native frame order, adopt in Midway without per-mesh hooks. Capability manifest/reference and the shared `threenative-context` SKILL updated; scaffold hashes re-pinned. Midway adopts it in `enter`; game typecheck/build and the particle regression pass.
+- [x] Measure fixed-scene preparation counts and full-roster batching on the installed artifact; retain only when correctness and reduced work are demonstrated. Current packs once per outer draw (prepare:writeBatch = 1:2), legacy packs per fixed update; rendered tracer topology `LineSegments`; populations/draws/triangles match across ABBA.
+
+### Topology verification (2026-09-14)
+
+Projected independent lines now retain `LineSegments` on the actual browser and native renderer. `29-line-segments` passed on both NVIDIA browser WebGPU and Linux native; screenshots visually inspected, pixel mismatch 0, no GPU validation errors. Each bounded runner exits 2 because 92 unselected cases are marked blocked; the selected case passed, native process exit 0. The raw native scene has no startup-readiness gate, so its capture warns after 30 seconds before taking the valid frame; this is not a game-startup proof. Evidence: `/tmp/midway-flak-hunt/topology-{web,desktop}-final/`.
+
+An earlier fixture attempted to draw `LineLoop`, unsupported by Three.js WebGPU; its nominal conformance PASS hid renderer errors. That fixture was rejected. The final visual fixture contains only the supported independent line segments; LineLoop class preservation remains unit-tested without claiming WebGPU rendering support. Confirmed engine issue: https://github.com/ThreeNativeHQ/threenative/issues/248.
+
+### Final integration and verification (2026-09-14)
+
+Engine worktree `fix/tracer-topology` (@ `0893707ac`) shipped as a local content-hashed tarball
+`threenative-core-0.3.2-battle-fix-27e4fce23867.tgz` (sha256 `27e4fce23867b89dba1d62a5ae06f8574bd5789705b131eddc92afd470e97bf4`),
+adopted by replacing only the `@threenative/core` dependency/override in primary and snapshot
+`package.json`; installs exit 0 and the installed `dist` carries `ctx.beforeRender`.
+
+Engine checks (logs in `/tmp/midway-flak-hunt/`): `pnpm typecheck` exits 0 after building core
+(the parent-owned native fixture typechecked against the fresh core `dist`). `pnpm lint` exits 1
+with 22 pre-existing `noExcessiveCognitiveComplexity` errors in unrelated `examples/` and
+`test-support/`; no owned file is listed. Full `pnpm test` (capture-lock wrapped) exits 1 at the
+`package-test` phase because `@threenative/runtime-native`'s native-host tests need a compiled host
+(`cmake --build … mystral`), 18 unrelated failures; the suite therefore stops before `unit`. A
+direct capture-lock `vitest run` exits 1 with 7 failures: 6 are the pre-existing `sailing`
+`AGENTS.md`/`CLAUDE.md` mirror drift and the repo-wide quality-suppression baseline (unrelated),
+and the 1 owned failure (all ten scaffold hashes moved by the new capability/template guidance)
+was fixed by re-pinning `PRD_201_PARENT_SCAFFOLD_HASHES` from the measured `Received` block;
+`scaffold.spec.ts` then passes 61/61.
+
+Game checks (primary): `pnpm typecheck` 0, `pnpm exec vite build` 0,
+`node scripts/check-particle-render.mjs` PASS. Snapshot Vite serves `127.0.0.1:5396`.
+
+Crowded-68 capture (`/tmp/midway-flak-hunt/battle-fix-crowd/`): NVIDIA/Turing, 1920×1080. Both
+current and legacy project and batch. Current `prepare 29 / writeBatch 58` (1:2 per outer draw);
+legacy `prepare 154 / writeBatch 308`. Rendered tracer `topo LineSegments`, `nonFinite 0`,
+`maxLen 13.6 m`, `bullets 18 (flak 18)`, `draws 693`, `tri 4,991,245`.
+
+Static ABBA particle-prep capture (`/tmp/midway-flak-hunt/battle-fix-particles/`): `fill-flak
+37 (flak 37)`, `draws 845`, `tri 4,238,509`; populations held fixed across legs (smoke 713,
+glow 202; aircraft 22). Draw-prep legs `prepare 33/31 → writeBatch 66/62`; legacy legs
+`prepare 170/160 → writeBatch 340/320`. Rendered tracer `LineSegments` throughout. No FPS claim
+from host drift.
+
+Native fixture (`/tmp/midway-flak-hunt/preparation-desktop/`): `pnpm --filter
+threenative-native-smoke build` exit 0; the desktop scenario proves the seam counts —
+`preparedFrames` 7→15 and `preparationErrors` 0 — but the strict run reports `pass:false` for two
+unrelated reasons: `preparedFrames` is flagged trivial (already 7 before the scenario, no
+`allowTrivial`) and one console/runtime diagnostic from the fixture's deliberate
+`decodeAudioData(new ArrayBuffer(0))` probe (`audio_bindings.cpp:505` writes stderr). Reported,
+not waived.
+
+Stable 60 FPS remains UNMET: no representative workload holds the 16.7 ms frame budget. Full
+detail, artifact hashes and unresolved items: `/tmp/midway-flak-hunt/finish-result.md`.
+
+### Squash integration to develop (2026-09-14)
+
+The confirmed engine fix and the `ctx.beforeRender` seam are now in a single commit on
+`origin/develop`: `b1cae8803 fix(core): keep line primitive topology and add a per-world-draw seam`
+(fixes #248; net +31 production LoC in `packages/core/src`). It was rebased onto fresh
+`origin/develop` `6be7173dc` and pushed fast-forward; `origin/develop` equals the candidate. The
+copied resolution-scaler inputs were excluded from the squash and preserved in `stash@{0}`;
+candidate diff `origin/develop..HEAD` is the 20 owned fix/doc/test/conformance files. Focused
+checks on the candidate: `renderProjection` + `game` + `game-frame-budget-surface` specs 113/113
+pass, the scaffold stability test passes against re-pinned hashes, and `pnpm typecheck` exits 0.
+The remote reported bypassed rules ("Changes must be made through a pull request" and required
+check `ci-required`) — entered under the user's explicit authorization to squash directly to
+`develop`, with no force push. Stable 60 FPS remains UNMET.
+
+## Next developer: execute this loop until stable 60 FPS
+
+**Target:** keep each presented frame within 16.67 ms at 1920×1080, DPR 1 on the user's NVIDIA WebGPU machine, through briefing/deck, takeoff, cockpit/chase/wide views, close combat/flak, impacts/fires, the full 68-aircraft roster and recovery. Do not call this finished from average FPS, a short frozen scene or a GPU-only PASS. Record p50/p95/p99, worst frame, counts above 16.67/33/100 ms, and stalls; sustain each live workload for at least 5 minutes after startup. Record cold first-use transitions separately so warmup cannot hide combat hitches. A finite run cannot guarantee every possible frame; report its actual coverage and exceptions.
+
+### 1. Establish an honest baseline before editing
+
+- Use an isolated checkout under the owning repository and install the game's current content-hashed core tarball. Preserve concurrent changes. Every browser/native launch goes through this game's `tools/capture-lock.sh`; use headed WebGPU on its private Xvfb, never visible desktop or `xvfb-run`. Confirm NVIDIA/Turing, viewport, drawing-buffer size and render scale. Record other GPU load; a private-display run is not proof of the user's display cadence.
+- Reuse `tools/capture-battle-profile.mjs` for real fighting and `tools/capture-flak-hunt.mjs` for controlled comparisons. Known current examples: `MIDWAY_PROJECTION_CROWD=1` and `MIDWAY_COMPARE_PARTICLE_PREP=1`. Set `MIDWAY_URL` to the isolated server; use `MIDWAY_BATTLE_OUT` for the live-battle tool and `MIDWAY_OUT` for the flak tool. Set `MIDWAY_WIDTH=1920 MIDWAY_HEIGHT=1080`. For live timing use `MIDWAY_CPU_PROFILE=0`; use `1` for a separate diagnostic profile. Sample with the CPU profiler off, then take a separate diagnostic CPU profile.
+- Capture the engine's `TN_FRAME_BUDGET` markers alongside GPU timestamp results. The custom probe's `frameCpu` sums wrapped scene updates, particle preparation and renderer calls; it is **not the entire engine frame** and can omit projection reconciliation, overlay and other work. Do not optimize by moving work outside the timer. Do not add CPU and GPU times as though they execute serially.
+- Current installed core is `battle-fix-27e4fce23867`. Final crowd evidence: `/tmp/midway-flak-hunt/battle-fix-crowd/probe.json`; 68 aircraft, 99 batches, 693 draws, ~4.99M triangles, measured wrapped CPU p95 22.4 ms and GPU p95 12.20 ms. Static flak preparation uses one prepare/two buffer writes per draw, versus about five prepares/ten writes previously. Timings drifted between runs, so the reduced work is proven; a universal FPS gain is not.
+
+### 2. First optimization: remove measured CPU render work
+
+**Start here.** Live simulation was cheap relative to rendering in the measured battle. Inspect `packages/core/src/game.ts` around the world-render block, `projection-apply.ts`, and Three's `_projectObject`, `updateMatrixWorld`, uniform updates and `writeBuffer` callers identified by the CPU profile. Measure separately: game update, `ctx.beforeRender`, projection reconciliation/sync, main draw, reflection/shadows, overlay and presentation wait.
+
+Choose the largest measured CPU contributor, then remove one repeated operation. Candidates are unchanged projected transforms being recopied/uploaded, repeated hierarchy traversal across render passes, and per-object uniform/buffer submission. Use existing dirty/version information where it is sufficient; do not create a new scheduler, ECS or generic cache without evidence. Static, moving, reparented and visibility-changing objects must remain correct. Skinned crew, articulated aircraft, LOD, shadows and reflections must keep their current transforms.
+
+Keep the shipped fixes: particle simulation stays in fixed updates, packing stays in `ctx.beforeRender`, and the game prepares world transforms once for its known passes. **Never restore particle mesh `onBeforeRender` hooks:** they previously disabled projection for the whole full-roster scene. Never move `Scene.render` earlier; its existing consumers require after-draw timing. Keep preparation inside the frame-budget render interval.
+
+### 3. Second optimization: stop submitting offscreen instances
+
+Inspect `packages/core/src/projection-apply.ts`, especially instanced-batch construction and `#syncBatched`; inspect `projection-plan.ts` around `predictDraws`. The current instanced lane sets `frustumCulled = false` and submits all allocated instances. Its admission heuristic prices draw counts, not triangles. Earlier measurements rose from ~2.39M to ~5.26M submitted triangles when batching engaged. That is a concrete cost mechanism, not proof that disabling batching is faster.
+
+**First falsifier:** freeze the same crowd; compare a view containing it with empty sky, recording submitted instance/triangle counts for each pass. Establish how much offscreen geometry the instanced lane still sends. Preserve the source objects' own `frustumCulled` setting.
+
+If confirmed material, prototype culling/compaction using the **camera for each render pass**, then measure total CPU and GPU cost. Main-camera-only visibility must not remove objects needed by a reflection or shadow camera. Do not route everything through `BatchedMesh`, disable batching globally, or enable a union bounding sphere and declare individual culling solved. Keep the candidate only if measured frame cost improves with correct multi-camera rendering; otherwise retain the baseline and record why. A more selective batching heuristic is another candidate, but it must price visible geometry and CPU cost rather than draw count alone.
+
+### 4. Third optimization: remove first-use combat hitches
+
+The full-roster transition created 66 additional GPU pipelines in an earlier capture (90→156). This is a **hypothesis** for the freeze; the original freeze cause is not yet proved. Correlate a real long frame with pipeline creation/compilation, asset decode/upload and resource creation before changing code. GC occupied only 0.1–0.6% of the sampled windows and is not the leading supported explanation.
+
+If pipeline compilation is responsible, warm the actual projected material/pass variants through the engine's existing startup/warmup mechanism. Cover flak, damage/fire, shadows and reflection variants. Do not compile every conceivable combination or merely shift an unbounded pause to startup. If a new variant must appear during play, measure a bounded preparation path and keep the old valid rendering until it is ready. Re-test a cold launch through first combat and first batching activation; a warmed second run cannot close this item.
+
+### 5. Repeat with strict keep/revert decisions
+
+For every candidate: write down the hotspot, proposed cause and expected reduced work; run the smallest regression that can disprove it; implement only that change; compare A/B/B/A with identical scene/camera/population and profiler settings. Record full-frame CPU, GPU, draws, triangles, preparation/upload counts and image correctness. Inspect screenshots. Keep a change only with repeatable savings and no visual/gameplay regression. After two failed attempts at the same cause, stop editing, name the doubtful assumption and take a new diagnostic measurement.
+
+Run `node scripts/check-particle-render.mjs` and the frame-transform probe after scheduling changes. Keep the projected LineSegments/LineLoop unit regression and supported-LineSegments browser/native conformance: the original screenshot was an engine proxy changing independent segments into a continuous Line. A finite CPU tracer buffer alone does not prove correct rendering; inspect the actual rendered proxy. LineLoop itself is unsupported by Three.js WebGPU, so do not use it as a WebGPU visual fixture.
+
+Engine changes belong in `packages/`, with focused unit and runtime proof, then a newly hashed tarball installed in the game. Never patch `node_modules`. Finish with game typecheck/build and the live coverage above; report failed/unrun checks honestly. Existing broad-repo failures and the native fixture's deliberate audio-error probe are documented above and are not permission to disable diagnostics. Once CPU is below budget, optimize GPU cost if still necessary. Do not first lower resolution, reduce the aircraft cap, remove flak, remove shadows or replace hero geometry: these change the target instead of demonstrating the requested performance. Game-authored LOD/reflection decisions remain possible only with explicit visual comparison and measured need.
+
+**First baseline (about 60 seconds once the server is ready):** reuse the retained isolated game only after confirming its previous owner is inactive and it has the current engine package. Port 5396 is the server used for this report.
+
+```sh
+cd /home/joao/projects/threenative/sandbox/.worktrees/flak-hunt/midway-open-pacific
+MIDWAY_URL=http://127.0.0.1:5396 \
+MIDWAY_BATTLE_OUT="/tmp/midway-60fps-$(date +%s)" \
+MIDWAY_CPU_PROFILE=0 MIDWAY_SAMPLE_MS=30000 MIDWAY_WARM_MS=8000 \
+MIDWAY_BATTLE_ALTITUDE=350 MIDWAY_BATTLE_STANDOFF=1500 \
+MIDWAY_WIDTH=1920 MIDWAY_HEIGHT=1080 CAPTURE_SCREEN=1920x1080x24 \
+bash tools/capture-lock.sh node tools/capture-battle-profile.mjs
+```
+
+If that server is stopped, start `pnpm exec vite --host 127.0.0.1 --port 5396 --strictPort` in the same game directory first. Repeat the diagnostic run with a fresh output directory and `MIDWAY_CPU_PROFILE=1`. Work on step 2's largest measured CPU contributor first. Keep this PRD as the single running record; do not restart the investigation from scratch.
+
+### Final handoff status
+
+Engine fix is one commit on `develop`: `b1cae880310c424b6f905a298a5c20aa62ad713a`; the primary engine checkout was fast-forwarded to it. GitHub accepted the authorized direct push using the account's bypass for pull-request and `ci-required` rules; full CI was not established. Rebased focused checks passed 113/113 plus scaffold checks and typecheck. The game remains on content-hashed core `battle-fix-27e4fce23867`, whose runtime changes are identical to the integrated patch. The game fix and this report are consolidated on `midway/asset-battle-integration`.
+
+Both final game frames were inspected: separate tracer segments, retained flak and intact cockpit. Stable 60 FPS remains open for the next developer; follow the ordered loop above. The test worktrees remain at `/home/joao/projects/threenative/threenative-engine/.worktrees/tracer-topology` (2.4 GB) and `/home/joao/projects/threenative/sandbox/.worktrees/flak-hunt` (game portion 1.4 GB). They hold the verified source/capture environment and preserved inputs; destructive cleanup is not authorized. The engine input stash `10448c69101eecb1f5142f068ba349be2bc75e2b` is retained; its scaler inputs are already present in develop.

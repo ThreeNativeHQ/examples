@@ -65,6 +65,10 @@ export class Midway extends Scene<GameState, undefined> {
     this.ctx = ctx;
     this.battle = new Battle();
     this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer, add: (object) => ctx.add(object) }, this.battle);
+    // The combat particle buffers are repacked for the camera once per actual world draw. The
+    // engine's own beforeRender phase keeps the packing off the particle meshes: an own mesh
+    // onBeforeRender marks the whole scene un-batchable at the full roster.
+    this.cleanups.push(ctx.beforeRender(() => this.world.particles.prepare(this.world.camera.position)));
     // Midway has one main camera and buffer-only draw hooks. Prepare world transforms once,
     // then reuse them in shadow and reflection passes (which draw through their own cameras).
     const scene = ctx.scene;

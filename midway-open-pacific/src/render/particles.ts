@@ -317,6 +317,14 @@ export class CombatParticles {
       }
     }
     for (const [key, e] of this.emitters) if (b.time - e.time > 2) this.emitters.delete(key);
+  }
+
+  /**
+   * Repack both draw buffers for the camera about to be drawn. The engine calls this once per actual
+   * world draw through `ctx.beforeRender`, so the simulation runs at fixed step while the buffers
+   * follow the draw. An own mesh `onBeforeRender` would disable whole-scene batching; this does not.
+   */
+  prepare(camera: T.Vector3): void {
     this.writeBatch(this.smoke, this.smokeBatch, camera, true);
     this.writeBatch(this.glow, this.glowBatch, camera, false);
   }

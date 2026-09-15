@@ -145,6 +145,7 @@ try {
       gpu: {},
       censusBefore: {},
       __auditFrame: 0,
+      mainDrawScene: null,
       fixture: { label: "synthetic-flak-bursts", injections: 0, syntheticBullets: 0, fxBursts: 0, hidden: false },
     };
     window.__probe = P;
@@ -227,8 +228,10 @@ try {
     P.installProjectionAudit = () => {
       const scene = w.scene;
       const p = w.particles;
+      const hasPrepare = typeof p.prepare === "function";
       const original = {
         update: p.update,
+        prepare: p.prepare,
         smokeHook: p.smokeBatch.mesh.onBeforeRender,
         glowHook: p.glowBatch.mesh.onBeforeRender,
         smokeOwn: Object.hasOwn(p.smokeBatch.mesh, "onBeforeRender"),
@@ -237,9 +240,11 @@ try {
         rootOwn: Object.hasOwn(scene, "onBeforeRender"),
         autoUpdate: scene.matrixWorldAutoUpdate,
       };
-      P.deferredPacking = original.smokeOwn && original.glowOwn;
+      P.preparationSeam = hasPrepare ? "prepare" : original.smokeOwn && original.glowOwn ? "meshhooks" : "none";
+      P.deferredPacking = hasPrepare || (original.smokeOwn && original.glowOwn);
       P.__auditRestore = () => {
         p.update = original.update;
+        if (hasPrepare) p.prepare = original.prepare;
         const meshes = [
           [p.smokeBatch.mesh, original.smokeOwn, original.smokeHook],
           [p.glowBatch.mesh, original.glowOwn, original.glowHook],
@@ -262,12 +267,22 @@ try {
         delete p.glowBatch.mesh.onBeforeRender;
         delete scene.onBeforeRender;
         scene.matrixWorldAutoUpdate = true;
-        p.update = function (b2, camera) {
-          original.update.call(this, b2, camera);
-          // Only the discarded draw-hook candidate needs packing restored here.
-          if (original.smokeOwn) this.writeBatch(this.smoke, this.smokeBatch, camera, true);
-          if (original.glowOwn) this.writeBatch(this.glow, this.glowBatch, camera, false);
-        };
+        if (hasPrepare) {
+          // The engine's beforeRender calls p.prepare; silence that seam and pack off the fixed
+          // update instead, exactly the preparation the draw-hook rollback removed.
+          p.prepare = () => {};
+          p.update = function (b2, camera) {
+            original.update.call(this, b2, camera);
+            original.prepare.call(this, camera);
+          };
+        } else {
+          p.update = function (b2, camera) {
+            original.update.call(this, b2, camera);
+            // Only the discarded draw-hook candidate needs packing restored here.
+            if (original.smokeOwn) this.writeBatch(this.smoke, this.smokeBatch, camera, true);
+            if (original.glowOwn) this.writeBatch(this.glow, this.glowBatch, camera, false);
+          };
+        }
         return "legacy";
       };
     };
@@ -279,15 +294,17 @@ try {
         depth += 1;
         const outer = depth === 1;
         const t0 = outer ? performance.now() : 0;
+        if (name === "sceneUpdate") P.sceneUpdateDepth = (P.sceneUpdateDepth ?? 0) + 1;
         try {
           return original.apply(this, args);
         } finally {
           depth -= 1;
+          if (name === "sceneUpdate") P.sceneUpdateDepth -= 1;
           const rec = P.series[P.phase];
           if (outer && rec && rec[name]) {
             const elapsed = performance.now() - t0;
             rec[name].push(+elapsed.toFixed(3));
-            if (name === "sceneUpdate") P.pendingScene += elapsed;
+            if (name === "sceneUpdate" || (name === "particlesPrepare" && !P.sceneUpdateDepth)) P.pendingScene += elapsed;
             if (name === "render") {
               rec.frameCpu.push(+(P.pendingScene + elapsed).toFixed(3));
               P.pendingScene = 0;
@@ -381,7 +398,7 @@ try {
     P.start = (name) => {
       P.phase = name;
       P.pendingScene = 0;
-      P.series[name] = { frameCpu: [], sceneUpdate: [], worldUpdate: [], render: [], battleStep: [], updateProjectiles: [], particlesUpdate: [], sceneMatrix: [], keptUpdate: [] };
+      P.series[name] = { frameCpu: [], sceneUpdate: [], worldUpdate: [], render: [], battleStep: [], updateProjectiles: [], particlesUpdate: [], particlesPrepare: [], writeBatch: [], sceneMatrix: [], keptUpdate: [] };
       P.ring[name] = [];
       P.longTasks[name] = [];
       P.gpu[name] = [];
@@ -465,6 +482,36 @@ try {
       };
     };
 
+    // The rendered-proxy topology, not the CPU segment buffer. The tracer source is a LineSegments
+    // (one vertex pair per projectile); the engine's projection may swap in a proxy that shares its
+    // geometry. A plain Line proxy connects pair N to pair N+1 into one continuous polyline — the
+    // reported "enormous thin tracer lines" — while the CPU buffer stays perfectly finite. So this
+    // reads the scene the renderer was actually handed on the main draw and reports what it holds.
+    P.renderedTopology = () => {
+      const source = w.tracers;
+      const scene = P.mainDrawScene;
+      const out = { captured: !!scene, sourceIsLineSegments: !!source?.isLineSegments, found: false, type: null, isLineSegments: false, isLine: false, geometryShared: false };
+      if (!scene || !source) return out;
+      let found = null;
+      const visit = (node) => {
+        if (!node || found) return;
+        if (node.geometry && node.geometry === source.geometry) {
+          found = node;
+          return;
+        }
+        for (const child of node.children || []) visit(child);
+      };
+      visit(scene);
+      if (!found) return out;
+      out.found = true;
+      out.type = found.type ?? null;
+      out.isLineSegments = !!found.isLineSegments;
+      out.isLine = !!found.isLine;
+      out.geometryShared = found.geometry === source.geometry;
+      out.drawRange = { start: found.geometry.drawRange.start, count: found.geometry.drawRange.count };
+      return out;
+    };
+
     // Diagnostic prototype for MIDWAY_MATRIX_COMPARE: one root world update per presented frame.
     // Installed BEFORE the render timer below so the timer is outermost and the KEPT update's cost
     // is inside it. Gated on enabled and on the scene still wanting auto-update; the saved flag is
@@ -472,6 +519,8 @@ try {
     P.matrixOnce = false;
     const engineRender = r.render;
     r.render = function (scene, camera) {
+      // The scene the renderer is actually handed on the main draw, projection and all.
+      if (scene && (camera === w.camera || camera === s.ctx?.camera)) P.mainDrawScene = scene;
       if (!P.matrixOnce || !scene || scene.matrixWorldAutoUpdate !== true) return engineRender.call(this, scene, camera);
       const saved = scene.matrixWorldAutoUpdate;
       const t0 = performance.now();
@@ -494,6 +543,8 @@ try {
       wrap(r, "render", "render"),
       wrap(w, "updateProjectiles", "updateProjectiles"),
       wrap(w.particles, "update", "particlesUpdate"),
+      typeof w.particles.prepare === "function" ? wrap(w.particles, "prepare", "particlesPrepare") : () => {},
+      wrap(w.particles, "writeBatch", "writeBatch"),
       wrap(b, "step", "battleStep"),
     ];
 
@@ -561,7 +612,7 @@ try {
     if (profileOut) await writeFile(join(OUT, `${name}.cpuprofile`), JSON.stringify(profileOut.profile ?? profileOut));
     const snap = await page.evaluate((p) => {
       const P = window.__probe;
-      const out = { series: P.series[p], ring: P.ring[p], longTasks: P.longTasks[p], gpu: P.gpu[p], render: P.renderSnapshot(), tracer: P.tracerSnapshot(), census: P.censusSummary(P.census()), censusBefore: P.censusBefore[p] ?? null };
+      const out = { series: P.series[p], ring: P.ring[p], longTasks: P.longTasks[p], gpu: P.gpu[p], render: P.renderSnapshot(), tracer: P.tracerSnapshot(), rendered: P.renderedTopology(), census: P.censusSummary(P.census()), censusBefore: P.censusBefore[p] ?? null };
       if (P.__fixtureUndo) {
         P.__fixtureUndo();
         P.__fixtureUndo = null;
@@ -579,14 +630,20 @@ try {
       longTasks: snap.longTasks,
       render: snap.render,
       tracer: snap.tracer,
+      rendered: snap.rendered,
       census: snap.census,
       censusBefore: snap.censusBefore,
     };
     metrics.ringWorst = snap.ring.length ? snap.ring.filter(Number.isFinite).reduce((m, x) => Math.max(m, x), 0) : null;
     report.phases[name] = metrics;
+    // The tracer proxy must keep its segment topology. A drawing of it as a plain Line is the
+    // reported tracer defect and fails here even though the CPU buffer looked finite.
+    assert.ok(snap.rendered.found, "main draw must contain the tracer source or its projected proxy");
+    assert.ok(snap.rendered.isLineSegments, `projected tracer proxy must stay LineSegments, got ${snap.rendered.type}`);
     await page.screenshot({ path: join(OUT, `${name}.png`) });
+    const topo = snap.rendered.found ? (snap.rendered.isLineSegments ? "LineSegments" : snap.rendered.type) : "not-projected";
     console.log(
-      `${name.padEnd(20)} frame CPU p95 ${fmt(metrics.cpu.frameCpu)} | render p95 ${fmt(metrics.cpu.render)} | worldUpdate p95 ${fmt(metrics.cpu.worldUpdate)} | projectiles p95 ${fmt(metrics.cpu.updateProjectiles)} | particles p95 ${fmt(metrics.cpu.particlesUpdate)} | step p95 ${fmt(metrics.cpu.battleStep)} | gpu p95 ${fmt(metrics.gpu)} ms | draws ${snap.render.draws} tri ${snap.render.triangles} | bullets ${snap.tracer.bullets} (flak ${snap.tracer.flakBullets}) | tracer maxLen ${snap.tracer.maxSegmentLength} nonFinite ${snap.tracer.nonFiniteSegments} | ring worst ${metrics.ringWorst}`,
+      `${name.padEnd(20)} frame CPU p95 ${fmt(metrics.cpu.frameCpu)} | render p95 ${fmt(metrics.cpu.render)} | worldUpdate p95 ${fmt(metrics.cpu.worldUpdate)} | projectiles p95 ${fmt(metrics.cpu.updateProjectiles)} | particles p95 ${fmt(metrics.cpu.particlesUpdate)} | prepare ${metrics.cpu.particlesPrepare?.samples ?? 0} (${fmt(metrics.cpu.particlesPrepare)}) writeBatch ${metrics.cpu.writeBatch?.samples ?? 0} | step p95 ${fmt(metrics.cpu.battleStep)} | gpu p95 ${fmt(metrics.gpu)} ms | draws ${snap.render.draws} tri ${snap.render.triangles} | bullets ${snap.tracer.bullets} (flak ${snap.tracer.flakBullets}) | tracer maxLen ${snap.tracer.maxSegmentLength} nonFinite ${snap.tracer.nonFiniteSegments} topo ${topo} | ring worst ${metrics.ringWorst}`,
     );
     return metrics;
   };
@@ -601,10 +658,10 @@ try {
   if (process.env.MIDWAY_PROJECTION_AUDIT || process.env.MIDWAY_PROJECTION_CROWD) {
     // Baseline batching eligibility: identical frozen fixture, two packing modes, each held for
     // enough OUTER rendered frames for the engine's decline rescan (60) plus margin. The current
-    // mode preserves the installed packing path; the legacy mode deletes every own
-    // hook and restores matrixWorldAutoUpdate=true, so the scan can classify the authored scene
-    // without the renderHook block. The scene mirror never copies a root onBeforeRender (core
-    // index.js:5971), so packing must stay off the root either way.
+    // mode preserves the installed packing path; the legacy mode silences the particle preparation
+    // seam (or deletes the discarded own hooks) and restores matrixWorldAutoUpdate=true, so the
+    // scan can classify the authored scene without the renderHook block. The scene mirror never
+    // copies a root onBeforeRender (core index.js:5971), so packing must stay off the root anyway.
     //
     // MIDWAY_PROJECTION_CROWD=1 uses the full supported roster: the exact capture-performance.mjs
     // MIDWAY_CROWD fixture fills to ACTIVE_CAP through Battle.launch only, BEFORE the freeze. No
@@ -683,20 +740,27 @@ try {
     await page.evaluate(() => window.__probe.setPackingMode("current"));
     report.projectionAudit = {
       crowd: CROWD,
+      preparationSeam: await page.evaluate(() => window.__probe.preparationSeam),
       currentDeferredPacking: await page.evaluate(() => window.__probe.deferredPacking),
       framesPerMode: AUDIT_FRAMES,
       declineRescanFrames: 60,
       modes: ["audit-current", "audit-legacy"],
-      note: "legacy deletes particle mesh and scene-root own hooks and restores matrixWorldAutoUpdate=true",
+      note: "legacy silences the particle prepare seam (or deletes the discarded mesh hooks) and the scene-root own hook, and restores matrixWorldAutoUpdate=true",
     };
     const projMarkers = report.markers.filter((m) => m.text.startsWith("TN_RENDER_PROJECTION"));
-    console.log(`projection audit: crowd=${CROWD} ${projMarkers.length} TN_RENDER_PROJECTION marker(s); latest ${projMarkers.at(-1)?.text ?? "none"}`);
+    console.log(`projection audit: crowd=${CROWD} seam=${report.projectionAudit.preparationSeam} ${projMarkers.length} TN_RENDER_PROJECTION marker(s); latest ${projMarkers.at(-1)?.text ?? "none"}`);
     const legacyMarker = legacyPhase.projectionMarker.text ? JSON.parse(legacyPhase.projectionMarker.text.replace("TN_RENDER_PROJECTION:", "")) : null;
     const currentMarker = currentPhase.projectionMarker.text ? JSON.parse(currentPhase.projectionMarker.text.replace("TN_RENDER_PROJECTION:", "")) : null;
     report.projectionAudit.regressed = currentMarker?.projecting === false && legacyMarker?.projecting === true;
     if (report.projectionAudit.regressed)
       console.log("PROJECTION REGRESSION: current path declines batching while the legacy path projects.");
     else console.log(`projection retained: current=${currentMarker?.projecting} legacy=${legacyMarker?.projecting}`);
+    // The old regression audit's meaning, made fail-closed: where the legacy baseline (no own
+    // hooks, per-fixed-update packing) lets the engine project, the shipped current path must too.
+    assert.ok(
+      !(legacyMarker?.projecting === true && currentMarker?.projecting === false),
+      "current packing must keep batching enabled where the legacy baseline projects",
+    );
     const warmMarkers = report.markers.filter((m) => m.text.startsWith("TN_STARTUP"));
     console.log(`startup markers: ${warmMarkers.map((m) => m.text.slice(0, 160)).join(" | ") || "none"}`);
   } else if (process.env.MIDWAY_MATRIX_COMPARE) {
@@ -739,18 +803,16 @@ try {
     });
     if (process.env.MIDWAY_COMPARE_PARTICLE_PREP) await page.evaluate(() => {
       const w = window.midway.world, p = w.particles;
-      if (!Object.hasOwn(p.smokeBatch.mesh, "onBeforeRender") || !Object.hasOwn(p.glowBatch.mesh, "onBeforeRender"))
-        throw new Error("Particle-preparation comparison requires the discarded draw-hook candidate; the current source restores fixed-update packing.");
+      if (typeof p.prepare !== "function")
+        throw new Error("Particle-preparation comparison requires the preparation seam (p.prepare) or the discarded draw-hook candidate.");
       const update = p.update;
-      const smoke = p.smokeBatch.mesh.onBeforeRender, glow = p.glowBatch.mesh.onBeforeRender;
+      const prepare = p.prepare;
       window.__setLegacyPrep = (legacy) => {
         p.update = legacy ? function (...args) {
           update.apply(this, args);
-          this.writeBatch(this.smoke, this.smokeBatch, args[1], true);
-          this.writeBatch(this.glow, this.glowBatch, args[1], false);
+          prepare.apply(this, [args[1]]);
         } : update;
-        p.smokeBatch.mesh.onBeforeRender = legacy ? () => {} : smoke;
-        p.glowBatch.mesh.onBeforeRender = legacy ? () => {} : glow;
+        p.prepare = legacy ? () => {} : prepare;
       };
     });
     const modes = process.env.MIDWAY_COMPARE_PARTICLE_PREP
