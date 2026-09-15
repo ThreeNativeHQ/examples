@@ -15,6 +15,17 @@ const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.fl
 const heading = (h: number) => String(Math.round((h * 180) / Math.PI) % 360).padStart(3, "0");
 const escapeHTML = (s: string) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 
+interface IFpsStats {
+  fps: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  max: number;
+  over: number;
+  samples: number;
+  percent: number;
+}
+
 export function viewCameraLabel(mode: number): string {
   return ["C / COCKPIT", "C / WIDE VIEW", "C / CHASE"][mode];
 }
@@ -33,6 +44,17 @@ export class Hud {
   tick = 0;
   mapItems: any[] = [];
   dpr = 1;
+  /** F4 frame-time overlay: off by default, so the hidden path is a single branch in `draw`. */
+  fpsOn = false;
+  fpsStats: IFpsStats | null = null;
+  private fpsWindow = new Float32Array(240);
+  private fpsScratch = new Float32Array(240);
+  private fpsCount = 0;
+  private fpsHead = 0;
+  private fpsLastTs = 0;
+  private fpsRaf = 0;
+  private fpsTick = 0;
+  private fpsLines: string[] = [];
 
   constructor(battle: any, view: any) {
     this.b = battle;
@@ -235,8 +257,92 @@ export class Hud {
   /** One canvas paint of the latest state, once per presented frame. */
   draw(): void {
     this.ctx.clearRect(0, 0, innerWidth, innerHeight);
+    if (this.fpsOn) this.drawFps();
     if (this.b.status === "briefing") return;
     this.drawFlight();
+  }
+
+  /** F4 toggles the overlay. While hidden it starts no rAF loop and draws nothing. */
+  toggleFps(): void {
+    this.fpsOn = !this.fpsOn;
+    if (this.fpsOn) {
+      this.fpsCount = 0;
+      this.fpsHead = 0;
+      this.fpsLastTs = 0;
+      this.fpsTick = 0;
+      this.fpsLines = [];
+      if (!this.fpsRaf) this.fpsRaf = requestAnimationFrame(this.sampleFps);
+    } else if (this.fpsRaf) {
+      cancelAnimationFrame(this.fpsRaf);
+      this.fpsRaf = 0;
+    }
+  }
+
+  /** One rAF per presented frame while shown: the interval between frames, never the update cost. */
+  private sampleFps = (ts: number): void => {
+    if (!this.fpsOn) return;
+    if (this.fpsLastTs) {
+      const dt = ts - this.fpsLastTs;
+      if (dt > 0 && dt < 2000) {
+        this.fpsWindow[this.fpsHead] = dt;
+        this.fpsHead = (this.fpsHead + 1) % this.fpsWindow.length;
+        if (this.fpsCount < this.fpsWindow.length) this.fpsCount += 1;
+        this.fpsTick += 1;
+        if (this.fpsTick >= 15 || this.fpsCount < 2) this.summarizeFps();
+      }
+    }
+    this.fpsLastTs = ts;
+    this.fpsRaf = requestAnimationFrame(this.sampleFps);
+  };
+
+  /** Percentiles over the ring, recomputed in place every 15 frames: no per-frame allocation. */
+  private summarizeFps(): void {
+    const n = this.fpsCount;
+    if (n < 2) return;
+    this.fpsTick = 0;
+    const len = this.fpsWindow.length;
+    const s = this.fpsScratch.subarray(0, n);
+    for (let i = 0; i < n; i += 1) s[i] = this.fpsWindow[(this.fpsHead - n + i + len) % len];
+    s.sort();
+    const q = (p: number) => s[Math.min(n - 1, Math.max(0, Math.round(p * (n - 1))))];
+    let mean = 0;
+    let over = 0;
+    for (let i = 0; i < n; i += 1) {
+      mean += s[i];
+      if (s[i] > 16.67) over += 1;
+    }
+    mean /= n;
+    const percent = (over / n) * 100;
+    this.fpsStats = { fps: 1000 / mean, p50: q(0.5), p95: q(0.95), p99: q(0.99), max: s[n - 1], over, samples: n, percent };
+    this.fpsLines = [
+      "FRAME TIME · rAF",
+      `FPS ${(1000 / mean).toFixed(0)}`,
+      `p50 ${q(0.5).toFixed(1)}  p95 ${q(0.95).toFixed(1)}  p99 ${q(0.99).toFixed(1)} ms`,
+      `worst ${s[n - 1].toFixed(1)} ms`,
+      `>16.7ms ${over}/${n}  ${percent.toFixed(0)}%`,
+    ];
+  }
+
+  /** Top-right, clear of the gunsight (centre) and the instrument bank (bottom-left). */
+  private drawFps(): void {
+    const lines = this.fpsLines;
+    if (!lines.length) return;
+    const c = this.ctx;
+    const w = 196;
+    const h = 12 + lines.length * 13;
+    const x = innerWidth - w - 28;
+    const y = 96;
+    c.save();
+    c.textAlign = "left";
+    c.font = "10px ui-monospace,monospace";
+    c.fillStyle = "rgba(5,16,22,.78)";
+    c.fillRect(x, y, w, h);
+    c.strokeStyle = "rgba(228,194,133,.55)";
+    c.lineWidth = 1;
+    c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    c.fillStyle = "#e8d6ae";
+    for (let i = 0; i < lines.length; i += 1) c.fillText(lines[i], x + 8, y + 14 + i * 13);
+    c.restore();
   }
 
   drawFlight(): void {

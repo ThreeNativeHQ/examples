@@ -544,6 +544,10 @@ export class Midway extends Scene<GameState, undefined> {
       this.showOverlay("command-overlay");
       return;
     }
+    if (code === "F4") {
+      this.hud.toggleFps();
+      return;
+    }
     if (this.overlay === "command-overlay" && /^Digit[1-4]$/.test(code)) {
       this.command(["cover", "strike", "engage", "rtb"][Number(code.slice(-1)) - 1]);
       return;
