@@ -100,6 +100,14 @@ export class Midway extends Scene<GameState, undefined> {
       this.started = true;
       $("loading").classList.add("hidden");
       if (this.battle.status === "briefing") $("briefing").classList.remove("hidden");
+      // Compile the unseen views now, while the briefing is up and the player is reading it —
+      // never on the way to the briefing. Precompiling these subtrees is genuinely expensive
+      // (measured in tens of seconds on this scene, whether through the engine's whole-scene
+      // `warmUpScene` or a targeted `compileAsync`), so putting it in front of the loading gate
+      // trades a one-second stall for a minute of launch. Unawaited on purpose: the briefing is
+      // idle time, the compile yields, and a player who presses on before it finishes is no worse
+      // off than they were without it.
+      void this.world.warmUpViews();
     });
   }
 
@@ -490,6 +498,9 @@ export class Midway extends Scene<GameState, undefined> {
       return;
     }
     this.world.setAirframe();
+    // A different airframe is a different cockpit, and the new one has never been drawn. Warm it
+    // here on the deck, where the compile is invisible, instead of in the first cockpit frame aloft.
+    void this.world.warmUpViews();
     this.updateLoadoutUI();
   }
 

@@ -545,6 +545,58 @@ export class WorldView {
     this.snap = true;
   }
 
+  /**
+   * Compile the views the player has not looked at yet, while the loading layer is still up.
+   *
+   * The cockpit interior is built at load and then kept `visible = false` until the player chooses
+   * the cockpit, so WebGPU had never been asked to build a pipeline for any of its materials. It
+   * built all of them inside the first cockpit frame: a measured **~1000 ms stall**, once per view
+   * per session. Switching back was always cheap, which is how a one-time compile tells itself
+   * apart from work the switch is doing.
+   *
+   * This compiles the player's own view subtrees and nothing else. The engine's `warmUpScene` is
+   * the wrong tool here and was measured to be: it compiles the whole scene, which on this scene
+   * added **13 s to the launch** to save 250 ms of stall, and raised a WebGPU validation error
+   * besides. It is built for a native launch that must pay that cost once for everything; Midway
+   * needs three views warmed, not 2,205 meshes. `compileAsync`'s three-argument form is the
+   * targeted equivalent — the subtree compiles against the real scene, so it takes the scene's
+   * lights and its cache keys match the ones `render` will look up.
+   *
+   * Both the object walk and the light gather skip invisible nodes, so each root is revealed for
+   * its own compile and put back immediately. Revealing the whole scene instead also drags in the
+   * reflector's depth target and fails bind-group validation.
+   */
+  async warmUpViews(): Promise<void> {
+    const renderer = this.renderer as unknown as {
+      compileAsync?: (object: T.Object3D, camera: T.Camera, scene: T.Object3D) => Promise<void>;
+    };
+    if (typeof renderer.compileAsync !== "function") return;
+    const data = this.playerMesh?.userData as
+      | { cockpitInterior?: T.Object3D; cockpitShell?: T.Object3D[]; crew?: T.Object3D[] }
+      | undefined;
+    if (!data) return;
+    const roots = [data.cockpitInterior, ...(data.cockpitShell ?? []), ...(data.crew ?? [])].filter(
+      (root): root is T.Object3D => root !== undefined,
+    );
+    for (const root of roots) {
+      const hidden: T.Object3D[] = [];
+      root.traverse((object) => {
+        if (!object.visible) {
+          hidden.push(object);
+          object.visible = true;
+        }
+      });
+      try {
+        await renderer.compileAsync(root, this.camera, this.scene);
+      } catch {
+        // A view that will not precompile still draws; it just pays the stall it would have paid
+        // anyway. Never let warming a camera angle stop the game starting.
+      } finally {
+        for (const object of hidden) object.visible = false;
+      }
+    }
+  }
+
   setCamera(mode: number): void {
     this.cameraMode = mode;
     this.snap = true;
