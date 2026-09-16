@@ -89,7 +89,7 @@ import {
   type ScoutLimits,
   type SearchSector,
 } from "./scouting.js";
-import { SPEAKERS, SPEECH, radioShipName, type ISpeechRequest } from "./radio-script.js";
+import { SPEAKERS, SPEECH, SPEECH_DIRECTIONS, radioShipName, type ISpeechRequest } from "./radio-script.js";
 import {
   applyLaunch,
   applyRecovery,
@@ -1242,6 +1242,83 @@ export class Battle {
       flags.r11 = true;
       this.voice("R11");
     }
+    // The rest of the script: the scout's sighting calls, the target run-in, the lost track, the
+    // diversion and the deck announcement. Same edge/one-shot machinery as above, no new state.
+    const compass = (h: number) => SPEECH_DIRECTIONS[Math.round(wrap(h) / (Math.PI / 4)) % 8];
+    const hostileFighter = (range: number) =>
+      this.aircraft.some((a: Any) => a.team === "jp" && a.kind === "fighter" && a.hp > 0 && a.mode === "flight" && distance3(a, p) < range);
+    if (!flags.r01 && p.mode === "flight" && this.aircraft.some((a: Any) => a.team === "jp" && a.hp > 0 && a.mode === "flight" && distance3(a, p) < 4000)) {
+      flags.r01 = true;
+      this.voice("R01", {
+        valid: () => this.aircraft.some((a: Any) => a.team === "jp" && a.hp > 0 && a.mode === "flight" && distance3(a, this.player) < 4500),
+      });
+    }
+    const intruder = enterprise
+      ? this.aircraft.find((a: Any) => a.team === "jp" && a.hp > 0 && a.mode === "flight" && distance3(a, enterprise) < 8000)
+      : null;
+    if (!flags.r02 && intruder) {
+      flags.r02 = true;
+      const id = intruder.id;
+      this.voice("R02", {
+        direction: compass(bearing(enterprise, intruder)),
+        valid: () => this.aircraft.some((a: Any) => a.id === id && a.hp > 0 && a.mode === "flight" && distance3(a, enterprise) < 9000),
+      });
+    }
+    if (!flags.r03 && p.mode === "flight" && this.aircraft.some((a: Any) => a.team === "jp" && a.airframe === "zero" && a.hp > 0 && a.mode === "flight" && distance3(a, p) < 3000)) {
+      flags.r03 = true;
+      this.voice("R03", {
+        valid: () => this.aircraft.some((a: Any) => a.team === "jp" && a.airframe === "zero" && a.hp > 0 && a.mode === "flight" && distance3(a, this.player) < 3500),
+      });
+    }
+    if (!flags.r05 && flags.r04id) {
+      flags.r05 = true;
+      const contacted = this.byId(flags.r04id);
+      if (contacted) this.voice("R05", { direction: compass(contacted.heading), valid: () => { const q = this.byId(flags.r04id); return !!q && !q.sunk; } });
+    }
+    edge("r09", this.wingmanNear() && hostileFighter(3000), "R09", () => this.wingmanNear() && hostileFighter(3500));
+    const designated = this.sortie.target ? this.byId(this.sortie.target) : null;
+    if (!flags.r16 && designated && !designated.sunk && this.wingmanNear() && distance3(p, designated) < 4000) {
+      flags.r16 = true;
+      this.voice("R16", {
+        identity: designated.id,
+        valid: () => { const q = this.sortie.target ? this.byId(this.sortie.target) : null; return !!q && this.wingmanNear() && distance3(this.player, q) < 4500; },
+      });
+    }
+    const r04Lost = () => {
+      const q = flags.r04id ? this.byId(flags.r04id) : null;
+      const spot = clamp(2900 + this.player.y * 1.8, 2900, 6200);
+      return this.player.mode === "flight" && (!q || q.sunk || distance2(q, this.player) >= spot);
+    };
+    if (flags.r04id) edge("r20", r04Lost(), "R20", r04Lost);
+    const altDeck = this.recoveryCarrier;
+    const home = this.home;
+    edge(
+      "r23",
+      !!home && !!altDeck && altDeck.id !== home.id && (home.sunk || home.deck <= RECOVERY_DECK),
+      "R23",
+      () => { const h = this.home; const a = this.recoveryCarrier; return !!h && !!a && a.id !== h.id && (h.sunk || h.deck <= RECOVERY_DECK); },
+    );
+    edge("r24", p.mode === "flight" && this.wingmanNear(), "R24", () => this.player.mode === "flight" && this.wingmanNear());
+    if (!flags.p02 && (p.mode === "deck" || p.mode === "launch")) {
+      flags.p02 = true;
+      this.voice("P02", { valid: () => this.player.mode === "deck" || this.player.mode === "launch" });
+    }
+    const deckThreat = () =>
+      this.aircraft.some((a: Any) => a.team === "jp" && a.hp > 0 && a.mode === "flight" && this.ships.some((s: Any) => s.team === "us" && s.kind === "carrier" && !s.sunk && distance3(a, s) < 2500));
+    edge("p03", deckThreat(), "P03", deckThreat);
+    const torpedoInbound = () =>
+      this.torpedoes.some((t: Any) => {
+        if (t.team !== "jp") return false;
+        const f = forward(t.heading);
+        return this.ships.some((s: Any) => {
+          if (s.team !== "us" || s.sunk) return false;
+          const dx = s.x - t.x;
+          const dz = s.z - t.z;
+          const d = Math.hypot(dx, dz);
+          return d < 6000 && (dx * f.x + dz * f.z) / (d || 1) > 0.8;
+        });
+      });
+    edge("p05", torpedoInbound(), "P05", torpedoInbound);
   }
 
   /**
@@ -2227,6 +2304,7 @@ export class Battle {
     if (!prev && source === "visual" && s.kind === "carrier") {
       this.say("REAR GUNNER", `Carrier off the nose! ${s.name}, bearing ${String(Math.round((bearing(this.player, s) * 180) / Math.PI) % 360).padStart(3, "0")}. Press R to send the contact.`, true);
       this.voice("R04", { identity: s.id });
+      this.voiceFlags.r04id = s.id;
       if (!this.target) this.target = s.id;
     }
   }
@@ -2269,6 +2347,10 @@ export class Battle {
     this.fx("explosion", a, 1.15);
     this.event("explosion", { distance: distance3(this.player, a), at: { x: a.x, y: a.y, z: a.z }, material: "air" });
     if (a.damage) a.damage.engine.fire = Math.max(0.55, a.damage.engine.fire);
+    // A friendly airframe going into the sea nearby: the wingman marks the pilot's position. The
+    // speech queue's own dedup bounds one kill from turning into a chorus.
+    if (a.team === "us" && this.player.mode === "flight" && a.mode !== "launch" && this.wingmanNear() && distance3(a, this.player) < 5000)
+      this.voice("R25");
     if (owner === "player" && a.team === "jp") {
       this.score += 150;
       this.stats.kills += 1;
@@ -3428,6 +3510,11 @@ export class Battle {
       p.speed = 0;
       setAttitude(p, h.heading, 0.22, 0);
       if (p.serviceTime <= 0) {
+        // Re-arming on deck starts another sortie, so the calls that belong to one sortie re-arm
+        // with it: the deck announcement before this launch, the sighting calls for the aircraft
+        // this trip meets, and the run-in on the target. The contact report (R04/R05) stands —
+        // the fleet was told once and does not need telling again.
+        for (const k of ["r01", "r02", "r03", "r16", "p02"]) this.voiceFlags[k] = false;
         Object.assign(p, {
           hp: 100,
           rearTimer: 0,

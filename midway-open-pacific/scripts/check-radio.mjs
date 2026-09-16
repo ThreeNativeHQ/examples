@@ -6,8 +6,9 @@
  *
  * Uses the esbuild vite already installs. Run: node scripts/check-radio.mjs
  */
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import assert from "node:assert/strict";
 import { build } from "esbuild";
 
@@ -21,7 +22,7 @@ const built = await build({
   write: false,
   logLevel: "silent",
 });
-const { Battle, resolveSpeech, radioShipName } = await import(`data:text/javascript,${encodeURIComponent(built.outputFiles[0].text)}`);
+const { Battle, resolveSpeech, radioShipName, SPEECH } = await import(`data:text/javascript,${encodeURIComponent(built.outputFiles[0].text)}`);
 
 const speechIds = (b) => b.events.filter((e) => e.type === "speech").map((e) => e.request.id);
 const freshBattle = () => {
@@ -125,4 +126,21 @@ const zero = (over) => ({ id: "z1", kind: "fighter", airframe: "zero", team: "jp
   assert.equal(ev.request.ship, "Hornet", `R15 carried the wrong ship name: ${ev.request.ship}`);
 }
 
-console.log("check-radio: 7 checks passed");
+// 8 — every id in the table has a producer outside the frozen script. A cue with no `voice("ID")`
+// and no quoted "ID" anywhere in src/ is a line nobody can ever hear: fail and name every one.
+{
+  const files = [];
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (p.endsWith(".ts") && !p.endsWith("radio-script.ts")) files.push(p);
+    }
+  };
+  walk(resolve(root, "src"));
+  const source = files.map((f) => readFileSync(f, "utf8")).join("\n");
+  const unwired = Object.keys(SPEECH).filter((id) => !source.includes(`"${id}"`));
+  assert.equal(unwired.length, 0, `unwired speech ids (no voice caller in src/): ${unwired.join(", ")}`);
+}
+
+console.log("check-radio: 8 checks passed");
