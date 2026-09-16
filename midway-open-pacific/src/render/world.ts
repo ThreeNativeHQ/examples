@@ -968,12 +968,19 @@ export class WorldView {
 
   updateProjectiles(): void {
     const b = this.battle;
-    // Camera basis for the head cross: each round's streak foreshortens to nothing end-on, so
-    // the cross carries the round in the views the player actually fires from.
+    // Camera basis for the head cross: each round's streak is a 1 px line along its own velocity,
+    // which has no screen footprint at all when the round flies straight away from the eye — the
+    // player's own wing guns from the cockpit. So each round also carries a camera-facing cross.
+    // Its arm grows with range instead of being a fixed world length: 0.7 m at 400 m is 1 px, which
+    // is why a fixed 0.7 m cross is invisible from the pilot's seat. A few pixels here is a
+    // near-constant angular size at the muzzle and at the target, and the converging markers are
+    // what make the pilot's own fire readable.
     const me = this.camera.matrixWorld.elements;
     const rx = me[0], ry = me[1], rz = me[2];
     const ux = me[4], uy = me[5], uz = me[6];
-    const arm = 0.7;
+    const ex = me[12], ey = me[13], ez = me[14];
+    const focalPx = (this.host.viewport.size.height * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360);
+    const headHalfPx = 5;
     let i = 0;
     for (const a of b.bullets) {
       if (i >= 1000) break;
@@ -985,6 +992,7 @@ export class WorldView {
       // The head is the same round seen end-on against bright sky, where the pale streak colour
       // washes out: saturate it so it keeps an orange edge ACES cannot clip to white.
       const head = a.team === "us" ? [1, 0.52, 0.12] : [1, 0.3, 0.08];
+      const arm = Math.min((Math.hypot(a.x - ex, a.y - ey, a.z - ez) * headHalfPx) / focalPx, 40);
       this.tracerPositions.set(
         [a.x - rx * arm, a.y - ry * arm, a.z - rz * arm, a.x + rx * arm, a.y + ry * arm, a.z + rz * arm,
           a.x - ux * arm, a.y - uy * arm, a.z - uz * arm, a.x + ux * arm, a.y + uy * arm, a.z + uz * arm],
