@@ -11,6 +11,7 @@ const game = defineGame<GameState>({
   display: config.display,
   plugins: [playtest()],
   render: config.renderer,
+  input: { aim: { pointerRelative: true, captureOnClick: false } },
   scenes: { midway: Midway },
   start: "midway",
   step: 1 / 60,

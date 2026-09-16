@@ -11,7 +11,7 @@ import { build } from "esbuild";
 
 const { outputFiles } = await build({
   stdin: {
-    contents: 'export { Battle } from "./src/sim/battle.ts"; export { totalAircraft, canLaunch } from "./src/sim/carrier-ops.ts";',
+    contents: 'export { Battle } from "./src/sim/battle.ts"; export { rearRoundsFor } from "./src/sim/armament.ts"; export { totalAircraft, canLaunch } from "./src/sim/carrier-ops.ts";',
     loader: "ts",
     resolveDir: process.cwd(),
   },
@@ -21,7 +21,7 @@ const { outputFiles } = await build({
   write: false,
   logLevel: "silent",
 });
-const { Battle } = await import(`data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString("base64")}`);
+const { Battle, rearRoundsFor } = await import(`data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString("base64")}`);
 
 /** Mirrors `FUEL_PER_LAUNCH` in src/sim/battle.ts (one launch consumes one fuel load). */
 const FUEL_LOAD = 1;
@@ -101,7 +101,9 @@ function freezeDecks(b) {
   assert.equal(fleetOrdnance(b), ordnanceBefore - 1, "the replacement must spend exactly one ordnance store");
   assert.equal(ammoStores(b), ammoBefore - 1, "a fresh airframe draws exactly one gun load");
   assert.equal(b.player.ammo, 1400, "the new airframe draws a full gun load, not the downed plane's rounds");
-  assert.equal(b.player.rearAmmo, 240);
+  // The rear capacity now comes from the gun table (SBD 1200), not a 240 constant, so the fresh
+  // airframe draws its own full rear load and never inherits the downed plane's 40 rounds.
+  assert.equal(b.player.rearAmmo, rearRoundsFor(b.player.airframe), "the replacement draws the airframe's full rear capacity");
   assert.equal(b.player.fuel, 100, "the replacement draws one full tank");
   assert.equal(b.battleStatus().airLosses, lostBefore + 1, "the player's loss rides in allied losses once");
 

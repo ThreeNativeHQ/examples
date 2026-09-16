@@ -38,6 +38,11 @@ export const LOADOUTS: Record<string, ILoadout> = Object.freeze({
 export function applyLoadout(p: Any, id: string): boolean {
   const load = LOADOUTS[id];
   if (!load) return false;
+  // A different airframe is a different aircraft and brings its own rear-gun capacity (the SBD's
+  // 1200, the TBD's 600). Applying the same loadout — a deck rearm — leaves every ammunition
+  // counter alone, so the carrier's finite stores stay the only refill and a rearm cannot top up
+  // the rear gun for free.
+  const airframeChanged = p.airframe !== load.airframe;
   Object.assign(p, {
     loadout: id,
     airframe: load.airframe,
@@ -45,6 +50,10 @@ export function applyLoadout(p: Any, id: string): boolean {
     bombs: load.bombs,
     torpedo: load.torpedo,
   });
+  if (airframeChanged) {
+    p.rearAmmo = rearRoundsFor(load.airframe);
+    initRearState(p);
+  }
   if (id === "torpedo") {
     p.brakes = false;
     p.brakePos = 0;
@@ -478,6 +487,74 @@ export const GUN_BATTERIES: Readonly<Record<string, GunBattery>> = Object.freeze
       "NOT YET IN docs/reference-dimensions.md — see the SBD note. These are the standard published A6M3 Model 32 mounts, and the two families match the cannon20/gun77 alternation the game already emits. Needs a cited §19.",
   },
 });
+
+/**
+ * Rounds carried by an airframe's rear (defensive) mounts, all mounts together. Zero when the
+ * airframe has no rear mount, so a single-seat fighter keeps an empty rear station. Unknown
+ * airframes return zero: only the table is a source of truth.
+ */
+export function rearRoundsFor(airframeId: string): number {
+  const battery = GUN_BATTERIES[airframeId];
+  if (!battery) return 0;
+  let rounds = 0;
+  for (const mount of battery.mounts) if (mount.facing === "rear") rounds += mount.rounds;
+  return rounds;
+}
+
+/**
+ * Rounds the gun can hold at once. The supplied rear-cockpit controller's two 120-round belts —
+ * a gameplay approximation of the belt feed, not a verified historical capacity (see the PRD).
+ */
+export const REAR_BELT_LOADED = 240;
+/** Seconds a belt change takes, from the same supplied controller; artistic, not a specification. */
+export const REAR_RELOAD_SECONDS = 3.6;
+
+/**
+ * A fresh gun: the total pool in `rearAmmo`, one combined belt loaded, no belt change running.
+ * `rearAmmo` is and stays the whole sortie's reserve; reloading only moves rounds from the reserve
+ * into the gun, so the total never changes and no round is ever created.
+ */
+export function initRearState(a: Any): void {
+  a.rearLoaded = Math.min(REAR_BELT_LOADED, a.rearAmmo ?? 0);
+  a.rearReloadUntil = 0;
+}
+
+/** True while a belt change is in progress at the given shared sim time. */
+export function rearReloading(a: Any, now: number): boolean {
+  return (a.rearReloadUntil ?? 0) > now;
+}
+
+/** Spend one round from both the gun and the sortie total. */
+export function spendRearRound(a: Any): void {
+  a.rearAmmo = Math.max(0, (a.rearAmmo ?? 0) - 1);
+  a.rearLoaded = Math.max(0, (a.rearLoaded ?? 0) - 1);
+}
+
+/**
+ * Begin a belt change. A full belt is a no-op, and one with nothing in reserve is refused, so an
+ * exhausted sortie total can never be reloaded back into existence. Returns whether one started.
+ */
+export function startRearReload(a: Any, now: number): boolean {
+  if (rearReloading(a, now)) return false;
+  if ((a.rearLoaded ?? 0) >= REAR_BELT_LOADED) return false;
+  if ((a.rearAmmo ?? 0) - (a.rearLoaded ?? 0) <= 0) return false;
+  a.rearReloadUntil = now + REAR_RELOAD_SECONDS;
+  return true;
+}
+
+/** Complete a belt change whose time has come, filling from the same total. Returns whether it did. */
+export function advanceRearReload(a: Any, now: number): boolean {
+  const until = a.rearReloadUntil ?? 0;
+  if (until <= 0 || now < until) return false;
+  a.rearReloadUntil = 0;
+  a.rearLoaded = Math.min(REAR_BELT_LOADED, a.rearAmmo ?? 0);
+  return true;
+}
+
+/** Whether the gun can produce a round right now (belt loaded, reserve behind it, no belt change). */
+export function rearCanFire(a: Any, now: number): boolean {
+  return (a.rearLoaded ?? 0) > 0 && (a.rearAmmo ?? 0) > 0 && !rearReloading(a, now);
+}
 
 export class UnknownAirframeGunsError extends Error {
   constructor(id: string) {

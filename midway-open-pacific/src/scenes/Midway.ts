@@ -35,7 +35,9 @@ export class Midway extends Scene<GameState, undefined> {
   private crashCam = false;
   started = false;
   keys = new Set<string>();
-  mouse = { fire: false, looking: false, lx: 0, ly: 0 };
+  mouse = { fire: false, looking: false, lockClick: false, lx: 0, ly: 0 };
+  /** Set only from the engine's real lock state; it is the latch that turns an Esc unlock into a pause. */
+  private wasCaptured = false;
   /** Briefing selection, kept on the scene so it survives a restart into a fresh Battle. */
   assignment: Assignment = "strike";
   private audioBuffers: ReadonlyMap<string, AudioBuffer> = new Map();
@@ -112,6 +114,7 @@ export class Midway extends Scene<GameState, undefined> {
   }
 
   exit(): void {
+    this.ctx.input.releaseMouse();
     this.audio.dispose();
     this.world.crew.dispose();
     this.world.ripples.dispose();
@@ -143,12 +146,13 @@ export class Midway extends Scene<GameState, undefined> {
       "start-air": () => this.begin(true),
       "brief-help": () => this.showOverlay("pause-overlay"),
       "btn-camera": () => this.action("KeyC"),
+      "btn-gunner": () => this.action("KeyY"),
       "btn-pause": () => this.showOverlay("pause-overlay"),
       "btn-map": () => this.showOverlay("map-overlay"),
-      "close-pause": () => this.hideOverlays(),
-      "close-map": () => this.hideOverlays(),
-      "close-command": () => this.hideOverlays(),
-      resume: () => this.hideOverlays(),
+      "close-pause": () => this.resume(),
+      "close-map": () => this.resume(),
+      "close-command": () => this.resume(),
+      resume: () => this.resume(),
       "restart-deck": () => this.begin(false, true),
       "restart-air": () => this.begin(true, true),
       "restart-pause": () => this.restartToBriefing(),
@@ -228,6 +232,12 @@ export class Midway extends Scene<GameState, undefined> {
     });
     this.on(window, "pointerdown", (e) => {
       if ((e.target as HTMLElement).closest("button,select,.dialog") || this.battle.status !== "playing" || this.paused) return;
+      // On the gun, the first click only takes the pointer lock; that press never fires.
+      if (this.battle.player.gunner && !this.ctx.input.raw.pointer.captured) {
+        this.mouse.lockClick = true;
+        this.ctx.input.captureMouse();
+        return;
+      }
       if (e.button === 2) {
         this.mouse.looking = true;
         this.mouse.lx = e.clientX;
@@ -235,12 +245,16 @@ export class Midway extends Scene<GameState, undefined> {
         this.world.lookActive = true;
         return;
       }
-      if (e.button !== 0 || this.mouse.looking) return;
+      // Left click always fires, including while the right button is held to aim or free-look.
+      if (e.button !== 0) return;
       this.audio.start();
       this.mouse.fire = true;
     });
     this.on(window, "pointerup", (e) => {
-      if (e.button === 0) this.mouse.fire = false;
+      // Recompute from the buttons still down: releasing the aim button while the trigger is
+      // held must not stop the fire, and releasing the trigger must stop it.
+      this.mouse.fire = (e.buttons & 1) === 1;
+      if (e.button === 0) this.mouse.lockClick = false;
       if (e.button === 2) {
         this.mouse.looking = false;
         this.world.lookActive = false;
@@ -248,7 +262,19 @@ export class Midway extends Scene<GameState, undefined> {
     });
     this.on(window, "pointermove", (e) => {
       if (this.paused) return;
+      // A second button pressed while one is already down arrives as a pointermove, not a
+      // pointerdown, so the held trigger is read from the button mask on every move. Both the
+      // pilot's guns and the rear station then fire on a held left click whichever button aims.
+      this.mouse.fire = (e.buttons & 1) === 1;
+      // On the gun the aim comes only from the locked pointer's relative motion, read once per
+      // tick in update(); a held click fires only after the lock is real, so the click that takes
+      // the lock never shoots and an unlocked cursor never nudges the barrels.
+      if (this.battle.player.gunner) {
+        if (!this.ctx.input.raw.pointer.captured || this.mouse.lockClick) this.mouse.fire = false;
+        return;
+      }
       if (this.mouse.looking) {
+        // Right-drag free-looks from the cockpit; the pilot's view is otherwise unchanged.
         this.world.lookYaw = clamp((this.world.lookYaw || 0) + (e.clientX - this.mouse.lx) * 0.005, -2.7, 2.7);
         this.world.lookPitch = clamp((this.world.lookPitch || 0) - (e.clientY - this.mouse.ly) * 0.004, -0.8, 0.95);
         this.mouse.lx = e.clientX;
@@ -263,22 +289,59 @@ export class Midway extends Scene<GameState, undefined> {
   update(_ctx: ICtx<GameState, undefined>, dt: number): void {
     this.wall += dt;
     const b = this.battle;
+    // A lock granted late — after a pause, a menu, an exit or a seat change — must never outlive
+    // the state that asked for it, even if the latch never saw it taken. Read the engine's real
+    // capture state, not the request, and this runs paused too so the cursor cannot stay hidden.
+    if ((!b.player.gunner || this.paused) && this.ctx.input.raw.pointer.captured) {
+      this.wasCaptured = false;
+      this.ctx.input.releaseMouse();
+    }
+    // Losing a lock we actually held is an Esc: the browser drops it with no keydown, and the
+    // cursor comes back. Detect it before the controls are computed so the tick that lost the
+    // lock opens the menu instead of spending one last round on a held trigger.
+    if (
+      b.player.gunner === true &&
+      !this.paused &&
+      this.wasCaptured &&
+      !this.ctx.input.raw.pointer.captured
+    ) {
+      this.wasCaptured = false;
+      this.showOverlay("pause-overlay");
+    }
     const inFlight = b.status === "playing" && !this.paused;
     if (inFlight) {
-      let turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
+      const turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
       // Inverted pitch, as a flight-sim stick: pulling back (Down) raises the nose. The mouse
       // never commands pitch or roll — it fires the guns and, held right, moves the view.
       const pitch = (this.keys.has("ArrowDown") ? 1 : 0) - (this.keys.has("ArrowUp") ? 1 : 0);
-      const input = {
-        turn,
-        pitch,
-        rudder: (this.keys.has("KeyE") ? 1 : 0) - (this.keys.has("KeyZ") ? 1 : 0),
-        wheelBrake: this.keys.has("KeyK"),
-        throttleUp: this.keys.has("KeyW"),
-        throttleDown: this.keys.has("KeyS"),
-        fire: this.keys.has("Space") || this.mouse.fire,
-      };
-      this.world.rear = this.keys.has("KeyV");
+      // Manning the gun, the same keys aim the rear station instead of the aircraft: the AI pilot
+      // already holds the course, so a stray stick input must not disengage it. The gunner looks
+      // aft, where the camera's screen-right is the aircraft's port (−X), so the keys are mapped
+      // to the view rather than the aircraft's +X: D / ArrowRight raises the aim to the gunner's
+      // right, A / ArrowLeft to the left.
+      const gunner = b.player.gunner === true;
+      const input = gunner
+        ? {
+            aimYaw: (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0) - (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0),
+            aimPitch: (this.keys.has("ArrowUp") || this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("ArrowDown") || this.keys.has("KeyS") ? 1 : 0),
+            fire: this.keys.has("Space") || this.mouse.fire,
+          }
+        : {
+            turn,
+            pitch,
+            rudder: (this.keys.has("KeyE") ? 1 : 0) - (this.keys.has("KeyZ") ? 1 : 0),
+            wheelBrake: this.keys.has("KeyK"),
+            throttleUp: this.keys.has("KeyW"),
+            throttleDown: this.keys.has("KeyS"),
+            fire: this.keys.has("Space") || this.mouse.fire,
+          };
+      if (gunner) this.aimFromPointer();
+      // A battle-side exit from the station (crash, seat gone) must not leave the cursor locked.
+      else if (this.wasCaptured) {
+        this.wasCaptured = false;
+        this.ctx.input.releaseMouse();
+      }
+      this.world.rear = !gunner && this.keys.has("KeyV");
       // Shift is a simulation control only: it runs extra fixed steps, and never touches
       // thrust, the camera, animation rates or audio. `canAccelerate()` gates it to level
       // flight above 120 m, undamaged, with no enemy aircraft within 2400 m or ship within
@@ -367,19 +430,40 @@ export class Midway extends Scene<GameState, undefined> {
     // it go in from outside, the way the player watches the ones they shoot down.
     if ((p.mode === "crashing" || p.mode === "wreck" || p.mode === "downed") && !this.crashCam) {
       this.crashCam = true;
+      this.wasCaptured = false;
+      this.ctx.input.releaseMouse();
       if (this.world.cameraMode === 1) this.world.setCamera(0);
     } else if (p.mode !== "crashing" && p.mode !== "wreck" && p.mode !== "downed" && this.crashCam) this.crashCam = false;
     if ((b.status === "lost" || b.status === "won" || b.status === "debrief") && !this.ended) {
       this.ended = true;
+      this.wasCaptured = false;
+      this.ctx.input.releaseMouse();
       this.clearInput();
       this.hud.debrief();
     }
+  }
+
+  /** Aim from the lock only; the lock's own loss is handled before the controls, in update(). */
+  private aimFromPointer(): void {
+    const pointer = this.ctx.input.raw.pointer;
+    if (!pointer.captured) return;
+    if (!this.wasCaptured) {
+      // The first tick that sees the lock can still carry the cursor movement that took it — the
+      // HUD button click walks the pointer across the screen — or the browser's warp into the
+      // lock. Applying that one sample would snap the barrels to a clamp on entry, so drop it;
+      // the engine's per-tick relative reset clears it, and the next real motion aims normally.
+      this.wasCaptured = true;
+      return;
+    }
+    const d = this.ctx.input.vector("aim");
+    if (d.x !== 0 || d.y !== 0) this.battle.aimRear(-d.x * 0.004, -d.y * 0.004);
   }
 
   private clearInput(): void {
     this.keys.clear();
     this.mouse.fire = false;
     this.mouse.looking = false;
+    this.mouse.lockClick = false;
     this.world.lookActive = false;
   }
 
@@ -389,7 +473,16 @@ export class Midway extends Scene<GameState, undefined> {
     this.overlay = null;
     this.hud.mapOpen = false;
     this.paused = false;
+    // Opening or closing a menu always drops the lock; only resume() re-takes it, from a click.
+    this.wasCaptured = false;
+    this.ctx.input.releaseMouse();
     this.clearInput();
+  }
+
+  /** The pause/map/command buttons resume play; the click is the gesture that re-takes the lock. */
+  private resume(): void {
+    this.hideOverlays();
+    if (this.battle.player.gunner) this.ctx.input.captureMouse();
   }
 
   private showOverlay(id: string): void {
@@ -508,8 +601,39 @@ export class Midway extends Scene<GameState, undefined> {
   }
 
   private setCamera(mode: number): void {
+    // Authority boundary: the gunner station is first-person only, so no route may change the view.
+    if (this.battle.player.gunner) {
+      this.hud.toast("CAMERA LOCKED — REAR GUNNER · Y FOR THE PILOT SEAT");
+      return;
+    }
     this.world.setCamera(mode);
     this.hud.toast(["CHASE CAMERA", "PILOT COCKPIT — HOLD RIGHT MOUSE TO LOOK", "WIDE CHASE CAMERA", "OVERHEAD ATTACK CAMERA — LOOKING DOWN ON YOUR AIRCRAFT"][mode]);
+  }
+
+  /** Y and the HUD button: swap the pilot and the rear gunner, or say why the seat is unavailable. */
+  private toggleGunner(): void {
+    const b = this.battle;
+    if (b.player.gunner) {
+      b.setGunner(false);
+      this.wasCaptured = false;
+      this.ctx.input.releaseMouse();
+      this.hud.toast("PILOT — YOU HAVE CONTROL");
+      return;
+    }
+    if (!b.setGunner(true)) {
+      this.hud.toast("REAR GUN NEEDS AN SBD OR TBD IN FLIGHT");
+      return;
+    }
+    this.audio.start();
+    // The Y keydown and the HUD button are both user gestures. The request is asynchronous: the
+    // lock is only trusted once raw.pointer.captured reports it, and a refusal leaves the cursor
+    // free to click the canvas and try again.
+    this.ctx.input.captureMouse();
+    // The controls live in the persistent lower-centre hint; this transient line only says who has
+    // the stick, so the two rows never repeat each other.
+    this.hud.toast(
+      b.player.rearAmmo > 0 ? "AI PILOT HAS THE STICK" : "REAR GUN EMPTY — INSPECT STATION · Y PILOT",
+    );
   }
 
   private goHome(): void {
@@ -590,7 +714,22 @@ export class Midway extends Scene<GameState, undefined> {
       if (code === "Enter") this.takeAnotherAircraft();
       return;
     }
+    // The rear-gun station owns the view: camera and view orders are refused at the route, not
+    // merely reset a frame later.
+    if (p.gunner && ["KeyC", "F1", "F2", "F3", "KeyJ", "KeyV"].includes(code)) {
+      this.hud.toast("CAMERA LOCKED — REAR GUNNER · Y FOR THE PILOT SEAT");
+      return;
+    }
+    // The AI pilot owns the aircraft while the player is on the gun; these orders would either
+    // disengage it or drop the bombs from the wrong seat.
+    if (p.gunner && ["KeyT", "KeyL", "KeyB", "KeyF", "KeyG", "KeyN", "KeyI", "KeyU", "BracketLeft", "BracketRight"].includes(code)) {
+      this.hud.toast("AI PILOT HAS CONTROL — Y TO RETURN TO THE PILOT SEAT");
+      return;
+    }
     switch (code) {
+      case "KeyY":
+        this.toggleGunner();
+        break;
       case "KeyB":
         this.battle.releaseOrdnance();
         break;
@@ -656,7 +795,9 @@ export class Midway extends Scene<GameState, undefined> {
         this.hud.toast(p.engineCut ? "ENGINE FUEL CUTOFF — ENGINE STOPPING / WING FIRES UNAFFECTED" : "ENGINE FUEL VALVE OPEN");
         break;
       case "KeyR":
-        this.battle.report();
+        // In the rear station R is the belt change; in the pilot's seat it still sends the report.
+        if (p.gunner) this.battle.reloadRear();
+        else this.battle.report();
         break;
       case "KeyT":
         p.autopilot = !p.autopilot;

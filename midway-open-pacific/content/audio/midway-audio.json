@@ -1210,15 +1210,15 @@
     {
       "id": "gun-30",
       "file": "audio/gun-30.ogg",
-      "seconds": 2,
+      "seconds": 1,
       "loop": false,
-      "identity": "documented",
+      "identity": "reconstruction",
       "conditional": false,
-      "prompt": "One short burst from a flexible aircraft-mounted thirty-caliber Browning machine gun, lighter fast mechanical chatter, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+      "prompt": "A single round fired from an aircraft-mounted thirty-caliber Browning machine gun, extremely close and dry, one hard metallic report and a short crisp mechanical action clatter immediately decaying to near silence, rifle-caliber snap not a heavy cannon boom, no echo, no wind, no aircraft engine, no shell impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack a",
       "request": {
-        "text": "One short burst from a flexible aircraft-mounted thirty-caliber Browning machine gun, lighter fast mechanical chatter, outdoors, no shell impacts. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
+        "text": "A single round fired from an aircraft-mounted thirty-caliber Browning machine gun, extremely close and dry, one hard metallic report and a short crisp mechanical action clatter immediately decaying to near silence, rifle-caliber snap not a heavy cannon boom, no echo, no wind, no aircraft engine, no shell impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack a",
         "model_id": "eleven_text_to_sound_v2",
-        "duration_seconds": 2,
+        "duration_seconds": 1,
         "prompt_influence": 0.6,
         "loop": false
       },
@@ -1229,6 +1229,18 @@
           "sourceHash": "5918beb09cda194b43c53ae60fdbf90510233c07dab1f4f6b856266746af7b84",
           "outputHash": "76d55986ed082f730a5951ce0771f4c74db5ec2d2d132eebc83307f685309a90",
           "bytes": 25171
+        },
+        {
+          "date": "2026-09-16",
+          "requestId": null,
+          "sourceHash": "61ef27979b93f5ef5ed5d167770e4ebe725b22e9da6560926541ab808d9be0ea",
+          "outputHash": "6008f85ff51bbc91b93ac55012e315c1528577c6d37b6201a36b6e5e234009b4",
+          "bytes": 6356,
+          "reconstruction": "ElevenLabs eleven_text_to_sound_v2, 1 s request, prompt_influence 0.6, mp3_44100_128. Post-processed to a mono one-shot: decoded to f32, 40 Hz high-pass/DC, trimmed to 0.180 s, 1 ms guard fade-in, 50 ms fade-out to true zero, -6.0 dB before libvorbis q6. Decoded true peak -3.9 dBFS, DC 0.00019, 0 samples >= 0.999. Generated approximation, not an authenticated recording.",
+          "durationSeconds": 0.18,
+          "channels": 1,
+          "sampleRate": 44100,
+          "audition": "not auditioned by ear (this environment has no audio input); objective file inspection only"
         }
       ]
     },

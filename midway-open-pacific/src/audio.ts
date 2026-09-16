@@ -246,6 +246,16 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
 const SOUND_SPEED = 343;
 
 /**
+ * The player's own weapon cue: it sounds at the listener's own ear, not at a world point, so it
+ * is neither panned nor distance-attenuated, and it has its own cooldown lane so a distant AI
+ * gunner firing the same weapon family can never claim the slot ahead of the player's shot. The
+ * value is the flat mix gain; only the player's own trigger uses it.
+ */
+const OWN_SHOT: Record<string, number> = {
+  gun30: 0.8,
+};
+
+/**
  * Seconds from a subsurface burst to its water column falling back onto the sea. The plume rises
  * ballistically, so this is a free-fall time, not a mixing choice: a column that tops out around
  * twelve metres is in the air about this long.
@@ -487,15 +497,16 @@ export class Soundscape {
   }
 
   /** One-shot cue with the family's cooldown and distance falloff; missing buffers stay quiet. */
-  #play(key: string, attenuation = 1): boolean {
+  #play(key: string, attenuation = 1, lane = "", ownVolume?: number): boolean {
     if (this.#disposed || this.#muted || this.#paused) return false;
     const buffer = this.buffers.get(key);
     const tune = ONE_SHOT[key];
     if (!buffer || !tune || attenuation <= 0.01) return false;
     const now = this.bus.listener.context.currentTime;
-    if (now - (this.#lastAt.get(key) ?? -Infinity) < tune.cooldown) return true;
-    this.#lastAt.set(key, now);
-    this.bus.play(buffer, { volume: tune.volume * attenuation, fade: tune.fade ? 0.05 : undefined });
+    const clock = lane + key;
+    if (now - (this.#lastAt.get(clock) ?? -Infinity) < tune.cooldown) return true;
+    this.#lastAt.set(clock, now);
+    this.bus.play(buffer, { volume: (ownVolume ?? tune.volume) * attenuation, fade: tune.fade ? 0.05 : undefined });
     return true;
   }
 
@@ -619,7 +630,8 @@ export class Soundscape {
     if (!cue) return;
     if (!e.at) {
       const d = typeof e.distance === "number" ? e.distance : 0;
-      this.#play(cue, Math.max(0, 1 - d / (FALLOFF[cue] ?? 1)));
+      const own = OWN_SHOT[cue];
+      this.#play(cue, Math.max(0, 1 - d / (FALLOFF[cue] ?? 1)), own === undefined ? "" : "own:", own);
       return;
     }
     const at = { x: e.at.x, y: e.at.y, z: e.at.z };

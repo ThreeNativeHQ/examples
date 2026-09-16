@@ -63,6 +63,10 @@ function buildLod(full: T.Object3D): AirframeLod | null {
   full.traverse((node) => {
     if (!(node as T.Mesh).isMesh) return;
     const mesh = node as T.Mesh;
+    // A skinned mesh's vertices are its bind pose, not what the mixer draws: merging a seated crew
+    // figure would bake a standing T-pose into the distant stand-in. The posed figure stays on the
+    // full-detail path, which the caller hides when it shows the merge.
+    if ((mesh as T.SkinnedMesh).isSkinnedMesh === true) return;
     const geometry = mesh.geometry as T.BufferGeometry | undefined;
     if (!geometry?.getAttribute("position")) return;
     if (Array.isArray(mesh.material)) return;
