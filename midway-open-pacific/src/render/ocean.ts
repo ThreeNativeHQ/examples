@@ -15,12 +15,16 @@ import { MeshBasicNodeMaterial, type Node } from "three/webgpu";
  */
 export const REFLECTED_LAYER = 1;
 
-export const OCEAN_BANDS = [[.54,.035,.014,.56],[.28,-.057,.041,.83],[.12,.13,.09,1.25],[.055,-.27,.18,1.74]];
+// Four bands in two near-parallel pairs 122 deg apart each carried ~a fifth of the slope variance,
+// so the normal was a regular crossed lattice the sun path renders as fixed cells. They now fan from
+// one dominant wind swell (22 deg, 59% of slope) out to a weaker 120 deg cross swell and two small
+// ripples at 60/165 deg, each with its own phase: no near-parallel pair, no aligned crests.
+export const OCEAN_BANDS = [[.60,.035,.014,.56,.9],[.17,-.035,.061,.83,2.3],[.07,.079,.137,1.25,4.2],[.03,-.313,.084,1.74,5.5]];
 const SEA = .65;
 /** Past this many metres the sea is sky and haze, not a mirror, so the viewport reads stop paying. */
 const FAR_RANGE = 8000;
-const swell = new WaveField({waves:OCEAN_BANDS.map(([a,kx,kz,w])=>({direction:{x:kx,z:kz},
-  wavelength:2*Math.PI/Math.hypot(kx,kz),amplitude:a*SEA,speed:w,detail:true}))});
+const swell = new WaveField({waves:OCEAN_BANDS.map(([a,kx,kz,w,phase])=>({direction:{x:kx,z:kz},
+  wavelength:2*Math.PI/Math.hypot(kx,kz),amplitude:a*SEA,speed:w,phase,detail:true}))});
 // The CPU asks for this height thousands of times a frame — every whitewater parcel, every hull
 // query, every float — and throws the normal away every time. `heightAt` is the engine's scalar
 // query: the same arithmetic in the same order as `sample`, with no jacobian, no slope, and no
