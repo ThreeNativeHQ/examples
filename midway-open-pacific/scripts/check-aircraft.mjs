@@ -71,6 +71,12 @@ assert.ok(
   pilotSource.animations.some((clip) => clip.name === "sit"),
   "the pilot rig ships the seated clip the rear gunner plays",
 );
+// The approved twin rear gun, shared by both airframes' rear stations.
+const gunSource = await stripGlb("../public/assets/weapon.rear-gun.glb");
+const gunTriangles = gunSource.scene
+  .getObjectByProperty("isMesh", true)
+  ?.geometry.index.count / 3;
+assert.equal(gunTriangles, 4764, "the shipped rear gun keeps every supplied triangle");
 await mkdir("node_modules/.cache", { recursive: true });
 const temporary = await mkdtemp(resolve("node_modules/.cache/aircraft-check-"));
 try {
@@ -98,11 +104,22 @@ try {
   const lodPath = resolve(temporary, "airframe-lod.mjs");
   await writeFile(lodPath, lodOutput.outputFiles[0].text);
   const { airframeLod } = await import(pathToFileURL(lodPath).href);
+  const mountOutput = await build({
+    entryPoints: ["src/sim/gun-mount.ts"],
+    bundle: true,
+    packages: "external",
+    platform: "node",
+    format: "esm",
+    write: false,
+  });
+  const mountPath = resolve(temporary, "gun-mount.mjs");
+  await writeFile(mountPath, mountOutput.outputFiles[0].text);
+  const { REAR_GUN_MOUNTS } = await import(pathToFileURL(mountPath).href);
   const testTexture = new Texture();
   const sourceMesh = loaded.scene.getObjectByName("defaultMaterial_node_18");
   sourceMesh.material.map = testTexture;
   await loadImportedAircraft({
-    assets: { model: async (url) => (/tbd-devastator/.test(String(url)) ? tbdSource : /carrier-aircraft-pilot/.test(String(url)) ? pilotSource : loaded) },
+    assets: { model: async (url) => (/tbd-devastator/.test(String(url)) ? tbdSource : /carrier-aircraft-pilot/.test(String(url)) ? pilotSource : /rear-gun/.test(String(url)) ? gunSource : loaded) },
     renderer: { raw: { getMaxAnisotropy: () => 8 } },
   });
   assert.equal(
@@ -127,7 +144,7 @@ try {
   assert.ok(pilot && gunner, "the Douglas carries both cockpit stations");
   assert.deepEqual(airplane.userData.crew, [pilot], "the forward pilot is the cockpit-view crew hook");
   assert.equal(airplane.userData.pilotRig.current, "sit", "the forward pilot holds the seated clip");
-  assert.equal(airplane.userData.gunnerRig.current, "sit", "the gunner holds the seated clip");
+  assert.equal(airplane.userData.gunnerRig.current, "gunner-grip", "the gunner holds the baked grip clip");
   // The published gunner is the man's own rig, NOT the whole station: a first-person station hides
   // him without taking his seat, the fittings or the gun with him.
   assert.equal(
@@ -143,6 +160,39 @@ try {
     !airplane.userData.gunner.getObjectByName(gunPivot.name),
     "the gun pivot is separate from the rig the station hides",
   );
+  // The gun itself: the shipped asset is parented under the pivot, keeps its triangles, and the
+  // built pivot is exactly the shared measurement the sim fires from.
+  const gunMesh = gunPivot.getObjectByProperty("isMesh", true);
+  assert.ok(gunMesh, "the approved gun model hangs under the pivot");
+  assert.equal(
+    gunMesh.geometry.index.count / 3,
+    4764,
+    "the drawn gun keeps every supplied triangle",
+  );
+  // Orientation is the export contract: the hinge is the origin, the muzzles run aft (+Z) and the
+  // receiver sits forward (-Z) toward the gunner. A 180-degree mistake would put the barrels in the
+  // man's face, which this catches without a browser.
+  gunMesh.geometry.computeBoundingBox();
+  assert.ok(
+    gunMesh.geometry.boundingBox.max.z > 0.4 && gunMesh.geometry.boundingBox.min.z < -0.4,
+    `the gun barrels point aft from its hinge: ${JSON.stringify(gunMesh.geometry.boundingBox)}`,
+  );
+  airplane.updateMatrixWorld(true);
+  const pivotWorld = gunPivot.getWorldPosition(new Vector3());
+  const mount = REAR_GUN_MOUNTS.sbd;
+  assert.ok(
+    Math.hypot(pivotWorld.x - mount.pivot[0], pivotWorld.y - mount.pivot[1], pivotWorld.z - mount.pivot[2]) <
+      1e-6,
+    `the drawn SBD gun pivot equals the fired mount: ${pivotWorld.toArray()}`,
+  );
+  // The baked grip is a real hold: both hands land on the receiver at the hinge, so the man is not
+  // still resting them on his thighs (the pose the previous lane flagged).
+  for (const [side, bone] of [["left", "hand_l"], ["right", "hand_r"]]) {
+    const hand = airplane.userData.gunnerRig.root.getObjectByName(bone);
+    assert.ok(hand, `the gunner rig has its ${side} hand`);
+    const d = hand.getWorldPosition(new Vector3()).distanceTo(pivotWorld);
+    assert.ok(d < 0.6, `the ${side} hand holds the gun receiver: ${d.toFixed(3)} m from the hinge`);
+  }
   airplane.userData.gunner.visible = false;
   assert.equal(gunFittings.visible, true, "hiding the gunner leaves the seat and fittings");
   assert.equal(gunPivot.visible, true, "hiding the gunner leaves the gun");
@@ -362,13 +412,21 @@ try {
   assert.ok(tbdPilot && tbdGunner, "every TBD seats a visible two-man crew");
   assert.deepEqual(tbd.userData.crew, [tbdPilot], "the TBD forward pilot is the cockpit-view crew hook");
   assert.equal(tbd.userData.pilotRig.current, "sit", "the TBD pilot holds the seated clip");
-  assert.equal(tbd.userData.gunnerRig.current, "sit", "the TBD gunner holds the seated clip");
+  assert.equal(tbd.userData.gunnerRig.current, "gunner-grip", "the TBD gunner holds the baked grip clip");
   assert.ok(tbd.userData.gunnerEye instanceof Vector3, "the TBD gunner eye is a published Vector3");
   assert.ok(
     tbd.userData.gunnerEye.z > tbd.userData.pilotEye.z + 2.5,
     `the TBD gunner sits on the rearmost seat, not the middle one: ${tbd.userData.gunnerEye.z.toFixed(3)}`,
   );
   assert.ok(tbd.userData.rearGun?.isObject3D, "the TBD rear gun pivot is published");
+  tbd.updateMatrixWorld(true);
+  const tbdPivot = tbd.userData.rearGun.getWorldPosition(new Vector3());
+  const tbdMount = REAR_GUN_MOUNTS.tbd;
+  assert.ok(
+    Math.hypot(tbdPivot.x - tbdMount.pivot[0], tbdPivot.y - tbdMount.pivot[1], tbdPivot.z - tbdMount.pivot[2]) <
+      1e-6,
+    `the drawn TBD gun pivot equals the fired mount: ${tbdPivot.toArray()}`,
+  );
   for (const [label, station] of [["pilot", tbdPilot], ["gunner", tbdGunner]]) {
     let skinned = 0;
     station.traverse((node) => {

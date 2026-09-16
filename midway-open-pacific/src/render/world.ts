@@ -755,6 +755,13 @@ export class WorldView {
       if (m.userData.detailed) detailed += 1;
       m.position.set(a.x, a.y, a.z);
       m.rotation.set(a.pitch, -a.heading, a.roll, "YXZ");
+      // A visible AI gun rides the angle it last fired at, so the drawn barrel points where its
+      // rounds went instead of resetting to the rest position every frame.
+      const aiGun = m.userData.rearGun as T.Object3D | undefined;
+      if (aiGun) {
+        if (typeof a.rearYaw === "number") aiGun.rotation.set(-(a.rearPitch ?? 0), a.rearYaw, 0, "YXZ");
+        else aiGun.rotation.set(0, 0, 0);
+      }
       const camD = Math.hypot(a.x - camPos.x, a.y - camPos.y, a.z - camPos.z);
       const projectedPx = (2 * (m.userData.radius as number) * focalPx) / Math.max(1, camD);
       // Below the merged line the airframe is one draw: hide the full content — model, gear, stores
@@ -976,6 +983,10 @@ export class WorldView {
       if (gunnerView) {
         const e = this.battle.rearGunPivotEuler();
         rearGun.rotation.set(e.x, e.y, e.z, "YXZ");
+      } else if (typeof p.rearYaw === "number") {
+        // The AI gunner works the same gun while the pilot flies: show the angle it last fired at,
+        // so the drawn barrel points where the rounds went instead of snapping back to rest.
+        rearGun.rotation.set(-(p.rearPitch ?? 0), p.rearYaw, 0, "YXZ");
       } else rearGun.rotation.set(0, 0, 0);
     }
     // The detailed interior and the supplied canopy shell are alternatives: show the interior in

@@ -178,7 +178,12 @@ tick(cadence, 0.2);
 cadence.step(1 / 60, { fire: true });
 assert.equal(cadence.player.rearAmmo, 238, 'a one-tick tap fires after the cooldown expired while released');
 
-// 10. The muzzle rides the airframe's real attitude and a real round damages a target dead astern.
+// 10. The muzzle is one of the approved gun's own mouths, on the hinge the renderer draws, riding
+// the airframe's real attitude; the two barrels alternate without doubling the ammunition, and a
+// real round damages a target dead astern.
+const mountOutput = await build({ entryPoints: ['src/sim/gun-mount.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
+const { REAR_GUN_MOUNTS } = await import(`data:text/javascript;base64,${Buffer.from(mountOutput.outputFiles[0].text).toString('base64')}`);
+const mount = REAR_GUN_MOUNTS.sbd;
 const rear = airborne();
 rear.player.rearAmmo = 240;
 rear.player.ammo = 1400;
@@ -186,22 +191,60 @@ tick(rear, 1.5, { turn: 1 });
 assert.ok(Math.abs(rear.player.roll) > 0.3, 'the firing aircraft is actually banked');
 rear.setGunner(true);
 rear.step(1 / 60, { fire: true });
-const round = rear.bullets.find((b) => b.owner === 'player');
-assert.ok(round, 'a banked rear gunner still fires');
+const first = rear.bullets.find((b) => b.owner === 'player');
+assert.ok(first, 'a banked rear gunner still fires');
 const q = rear.player.attitude;
 const ua = { x: 2 * (q.x * q.y - q.z * q.w), y: 1 - 2 * (q.x * q.x + q.z * q.z), z: 2 * (q.y * q.z + q.x * q.w) };
 const fa = { x: -2 * (q.x * q.z + q.y * q.w), y: -2 * (q.y * q.z - q.x * q.w), z: -(1 - 2 * (q.x * q.x + q.y * q.y)) };
-const expected = { x: rear.player.x + ua.x - fa.x * 0.8, y: rear.player.y + ua.y - fa.y * 0.8, z: rear.player.z + ua.z - fa.z * 0.8 };
-const ox = round.x - round.vx / 60;
-const oy = round.y - round.vy / 60;
-const oz = round.z - round.vz / 60;
-assert.ok(Math.hypot(ox - expected.x, oy - expected.y, oz - expected.z) < 1e-9, 'the muzzle is the local gun transformed by real attitude');
-const n = Math.hypot(round.vx, round.vy, round.vz);
-const behind = enemyAt(round.x + (round.vx / n) * 50, round.y + (round.vy / n) * 50, round.z + (round.vz / n) * 50);
+const ra = { x: 1 - 2 * (q.y * q.y + q.z * q.z), y: 2 * (q.x * q.y + q.z * q.w), z: 2 * (q.x * q.z - q.y * q.w) };
+const localMuzzle = (barrel) => {
+  const m = mount.mouths[barrel];
+  return { x: mount.pivot[0] + m[0], y: mount.pivot[1] + m[1], z: mount.pivot[2] + m[2] };
+};
+const worldOf = (p) => ({
+  x: rear.player.x + ra.x * p.x + ua.x * p.y - fa.x * p.z,
+  y: rear.player.y + ra.y * p.x + ua.y * p.y - fa.y * p.z,
+  z: rear.player.z + ra.z * p.x + ua.z * p.y - fa.z * p.z,
+});
+const expected = worldOf(localMuzzle(1));
+const ox = first.x - first.vx / 60;
+const oy = first.y - first.vy / 60;
+const oz = first.z - first.vz / 60;
+assert.ok(Math.hypot(ox - expected.x, oy - expected.y, oz - expected.z) < 0.05, 'the muzzle is the approved upper mouth on the drawn hinge, under real attitude');
+assert.equal(rear.player.rearBarrel, 1, 'the first round leaves one barrel');
+// The next round, after the cadence, leaves the other mouth and spends exactly one more round.
+for (let i = 0; i < 8; i += 1) rear.step(1 / 60, { fire: false });
+rear.step(1 / 60, { fire: true });
+const second = rear.bullets.filter((b) => b.owner === 'player')[1];
+assert.ok(second, 'a second round fires');
+assert.equal(rear.player.rearBarrel, 0, 'the barrels alternate');
+const secondExpected = worldOf(localMuzzle(0));
+const sx = second.x - second.vx / 60;
+const sy = second.y - second.vy / 60;
+const sz = second.z - second.vz / 60;
+assert.ok(Math.hypot(sx - secondExpected.x, sy - secondExpected.y, sz - secondExpected.z) < 0.05, 'the second round leaves the matching other mouth');
+assert.equal(rear.player.rearAmmo, 238, 'two rounds cost exactly two rear rounds, never four');
+const n = Math.hypot(first.vx, first.vy, first.vz);
+const behind = enemyAt(first.x + (first.vx / n) * 50, first.y + (first.vy / n) * 50, first.z + (first.vz / n) * 50);
 rear.aircraft.push(behind);
 const hp = behind.hp;
 for (let i = 0; i < 40 && behind.hp >= hp; i += 1) rear.step(1 / 60, {});
 assert.ok(behind.hp < hp, 'a real rear-gun round damaged the target, not just the ammo counter');
+
+// 10b. A round that would cross the aircraft's own fin is refused, so the gun never fires through
+// its own tail; levelling the aircraft clears the same shot.
+const guarded = airborne();
+guarded.setGunner(true);
+guarded.player.gunnerYaw = 0;
+guarded.player.gunnerPitch = 0.25;
+guarded.player.rearTimer = 0;
+guarded.player.rearAmmo = 240;
+guarded.step(1 / 60, { fire: true });
+assert.equal(guarded.player.rearAmmo, 240, 'a shot into the fin is refused');
+guarded.player.gunnerPitch = -0.1;
+guarded.player.rearTimer = 0;
+guarded.step(1 / 60, { fire: true });
+assert.equal(guarded.player.rearAmmo, 239, 'a level shot clear of the fin fires');
 
 // 11. The visual pivot's Euler mapping agrees with the sim aim, so the sight and barrel cannot drift.
 const pivot = airborne();

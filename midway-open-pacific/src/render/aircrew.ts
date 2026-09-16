@@ -10,15 +10,62 @@ import { SkeletalMesh3D } from "@threenative/core";
 import * as T from "three";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { box, mat, rod } from "./assets.js";
+import { REAR_GUN_HINGE } from "../sim/gun-mount.js";
 
 /** The deck crew's rigged pilot, which both the Douglas and the TBD seat in their cockpits. */
 export const AIRCREW_PILOT_URL = "/assets/carrier-aircraft-pilot.glb";
 
+/** The approved twin rear gun. Its cradle hinge is the origin and its barrels run aft (+Z). */
+export const AIRCREW_GUN_URL = "/assets/weapon.rear-gun.glb";
+
 let pilotRig: GLTF | undefined;
+let gunRig: GLTF | undefined;
+let gripClip: T.AnimationClip | undefined;
+
+/**
+ * The baked neutral grip, as local quaternions of the four arm bones, measured on root's accepted
+ * `gunner-grip` bake of the game's own export (`tools/extract-gunner-grip.mjs`, rest space checked
+ * there). Only these four bones override the `sit` body idle; a static hold is enough because the
+ * gun aims on its own pivot, not through the man's hands.
+ */
+export const GUNNER_GRIP_ARMS: Readonly<
+  Record<string, readonly [number, number, number, number]>
+> = Object.freeze({
+  upperarm_l: [0.14411, -0.07332, -0.74977, 0.64164],
+  lowerarm_l: [0.00061, 0.0144, -0.07052, 0.99741],
+  upperarm_r: [0.10767, 0.08663, 0.85991, 0.49138],
+  lowerarm_r: [0.01159, -0.16726, 0.07036, 0.98333],
+});
+
+/** The grip clip name the gunner station plays, and the fallback where no bake is available. */
+export const GUNNER_GRIP_CLIP = "gunner-grip";
+
+/**
+ * Graft the baked arm hold onto the shipped `sit` clip: every non-arm track is copied unchanged and
+ * the four arm quaternions become two constant keys, so the seated body still idles while the hands
+ * stay on the grips. The graft is valid only because the bake and the shipped rig share one rest
+ * pose, which `tools/extract-gunner-grip.mjs` verifies bone by bone before these constants are cut.
+ */
+function buildGripClip(sit: T.AnimationClip): T.AnimationClip {
+  const tracks = sit.tracks.map((track) => {
+    const arm = GUNNER_GRIP_ARMS[track.name.replace(/\.quaternion$/, "")];
+    if (!arm || !track.name.endsWith(".quaternion")) return track.clone();
+    return new T.QuaternionKeyframeTrack(track.name, [0, sit.duration], [...arm, ...arm]);
+  });
+  return new T.AnimationClip(GUNNER_GRIP_CLIP, sit.duration, tracks);
+}
 
 /** Hand the loaded pilot GLTF to every cockpit factory. Idempotent, so each load re-publishes it. */
 export function configureAircrewPilot(gltf: GLTF): void {
   pilotRig = gltf;
+  const sit = gltf.animations.find((clip) => clip.name === "sit");
+  if (!sit) throw new Error("The aircrew pilot rig has no sit clip to graft the gunner grip onto.");
+  gripClip = buildGripClip(sit);
+}
+
+/** Hand the loaded rear gun to every cockpit factory. Idempotent, like the pilot. */
+export function configureAircrewGun(gltf: GLTF): void {
+  gunRig = gltf;
 }
 
 /**
@@ -60,6 +107,21 @@ function seatedFurniture(parent: T.Object3D, seat: T.Material, frame: T.Material
   for (const x of [-0.17, 0.17]) rod(parent, [x, py - 0.105, pz], [x, 0.05, pz], 0.018, frame);
 }
 
+/** A local point in the station frame, placed into the aircraft frame: seat plus the station yaw. */
+function stationToRoot(
+  seat: readonly [number, number, number],
+  yaw: number,
+  local: readonly [number, number, number],
+): [number, number, number] {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  return [
+    seat[0] + local[0] * c + local[2] * s,
+    seat[1] + local[1],
+    seat[2] - local[0] * s + local[2] * c,
+  ];
+}
+
 export interface ISeatedStationOptions {
   /** Build the placeholder twin-gun mount and publish its pivot. */
   gun?: boolean;
@@ -98,34 +160,35 @@ export function createSeatedStation(
   fittings.add(furniture);
   let gun: T.Group | undefined;
   if (options.gun) {
-    // Twin .30 flexible mount, a placeholder the user replaces, carried in the seat's own frame so
-    // it follows the man to any cockpit. Only the cradle, barrels and magazine turn with the
-    // controls; the pedestal is fixed to the seat, so a yaw or pitch swings the gun and never the
-    // man, his seat or the airframe. Nothing here is gunnery logic.
-    const frame = mat(0x4a5148, { metalness: 0.55, roughness: 0.5 });
-    const gunMat = mat(0x33383a, { metalness: 0.8, roughness: 0.35 });
-    rod(furniture, [0, 0.56, 0.85], [0, 1.2, 0.85], 0.03, frame);
+    // The approved twin gun, its own pivot on the station, carried in the aircraft frame so a yaw or
+    // pitch swings the gun and never the man, his seat or the airframe. The supplied model carries
+    // its own pedestal; nothing procedural is drawn. The pivot is placed in the station frame at
+    // root's approved hinge offset and parented to the station root (not the fittings), so the
+    // shared GLTF geometry is never handed to the scene's per-instance disposal.
+    if (!gunRig) throw new Error(`Load the aircrew rear gun before building the ${name}.`);
+    const pivot = stationToRoot(seat, yaw, REAR_GUN_HINGE);
     gun = new T.Group();
     gun.name = `${name} gun pivot`;
-    gun.position.set(0, 1.22, 0.85);
-    furniture.add(gun);
-    box(gun, 0.24, 0.06, 0.12, 0, 0, 0, frame);
-    for (const x of [-0.07, 0.07]) rod(gun, [x, 0.04, 0.02], [x, 0.08, 0.56], 0.026, gunMat);
-    box(gun, 0.22, 0.14, 0.12, 0.26, -0.2, 0.06, gunMat);
+    gun.position.set(...pivot);
+    gun.add(gunRig.scene.clone(true));
+    root.add(gun);
   }
   root.add(fittings);
+  // The gunner holds the baked grip grafted onto `sit`; the pilot keeps the plain seated clip.
+  const clip = options.gun ? GUNNER_GRIP_CLIP : "sit";
+  const clips = options.gun && gripClip ? [...pilotRig.animations, gripClip] : pilotRig.animations;
   const player = new SkeletalMesh3D({
     source: pilotRig.scene,
-    clips: pilotRig.animations,
+    clips,
     // Only the seated clip belongs to this occupant; the standing hero clips stay on the deck crew.
-    requiredClips: ["sit"],
+    requiredClips: [clip],
     // A seated man travels nowhere; an in-place idle must keep its authored rate.
     strideSync: false,
   });
   player.root.name = name;
   player.root.position.set(...seat);
   player.root.rotation.y = yaw;
-  player.play("sit");
+  player.play(clip);
   player.update(0);
   root.add(player.root);
   root.traverse((node) => {

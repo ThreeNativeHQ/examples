@@ -12,6 +12,12 @@ import {
   wrap,
 } from "./math.js";
 import { aircraftWorld, damageModifiers, initDamage, poseAxes, stepDamage } from "./damage.js";
+import {
+  rearGunHitsOwnTail,
+  rearGunMountFor,
+  rearGunMuzzle,
+  rearGunTailBoxFor,
+} from "./gun-mount.js";
 import { torpedoEnvelope, torpedoIntercept, updateStores } from "./armament.js";
 import { AircraftFlight, DECK_HEIGHT, initFlightState, SEA_WIND, steerToward, type ISteerLimits } from "./flight.js";
 import { DRIFT_RATE, isStale, STALE_SECONDS } from "./intel.js";
@@ -569,43 +575,60 @@ export const REAR_GUN_DOT = -0.6;
 export const REAR_GUN_ELEVATION = -0.13;
 
 /**
- * The rear gun's muzzle in the airframe's own frame (+x right, +y up, +z aft), at the supplied SBD
- * barrel tip. The TBD offset is still pending visual integration and shares this one until the
- * measured per-airframe tuple lands.
- */
-const REAR_GUN_MUZZLE: Record<string, { x: number; y: number; z: number }> = {
-  sbd: { x: 0, y: 1.0, z: 0.8 },
-};
-
-/**
  * One round from the tail gun, aimed along a world-space direction. Both the AI gunner and the
  * manned station fire through this, so the muzzle, event, tracer speed, ammunition and credit can
- * never drift apart between the two callers. Callers own the gate, cooldown and ammo test.
+ * never drift apart between the two callers. The muzzle is one of the approved gun's own two mouths,
+ * rotated by the gun's aim and alternating barrels; a round that would cross the aircraft's own fin
+ * is refused (the shared `gun-mount` guard) rather than fired through the tail. Callers own the gate,
+ * cooldown and ammo test. Returns whether a round left the gun.
  */
-function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: number): void {
+function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: number): boolean {
+  const mount = rearGunMountFor(a.airframe);
+  if (!mount) return false;
   const len = Math.hypot(dx, dy, dz) || 1;
-  // The muzzle rides the airframe's real attitude: a banked gunner's round leaves the actual gun,
-  // not a point offset in world axes.
-  const muzzle = aircraftWorld(a, REAR_GUN_MUZZLE[a.airframe] || REAR_GUN_MUZZLE.sbd);
+  const nx = dx / len;
+  const ny = dy / len;
+  const nz = dz / len;
+  // The gun's own angles, measured in the airframe's real attitude frame: the same mapping the
+  // pivot Euler uses, so the drawn barrel and the round leave the same mouth.
+  const frame = poseAxes(a);
+  const lx = nx * frame.r.x + ny * frame.r.y + nz * frame.r.z;
+  const ly = nx * frame.u.x + ny * frame.u.y + nz * frame.u.z;
+  const lz = -(nx * frame.f.x + ny * frame.f.y + nz * frame.f.z);
+  const yaw = Math.atan2(lx, lz);
+  const pitch = Math.asin(clamp(ly, -1, 1));
+  const barrel = (a.rearBarrel = a.rearBarrel ? 0 : 1);
+  const mouth = rearGunMuzzle(mount, barrel, yaw, pitch);
+  const local = [
+    mount.pivot[0] + mouth[0],
+    mount.pivot[1] + mouth[1],
+    mount.pivot[2] + mouth[2],
+  ] as const;
+  const tail = rearGunTailBoxFor(a.airframe);
+  if (tail && rearGunHitsOwnTail(tail, local, [lx, ly, lz])) return false;
+  const muzzle = aircraftWorld(a, { x: local[0], y: local[1], z: local[2] });
   const mx = muzzle.x;
   const my = muzzle.y;
   const mz = muzzle.z;
   a.rearAmmo -= 1;
+  a.rearYaw = yaw;
+  a.rearPitch = pitch;
   b.event("gun", { at: { x: mx, y: my, z: mz }, source: a.id, weapon: "gun30" });
   b.bullets.push({
     id: b.id("bullet"),
     x: mx,
     y: my,
     z: mz,
-    vx: (dx / len) * 730 + (b.random() - 0.5) * spread,
-    vy: (dy / len) * 730 + (b.random() - 0.5) * spread,
-    vz: (dz / len) * 730 + (b.random() - 0.5) * spread,
+    vx: nx * 730 + (b.random() - 0.5) * spread,
+    vy: ny * 730 + (b.random() - 0.5) * spread,
+    vz: nz * 730 + (b.random() - 0.5) * spread,
     ttl: 1.1,
     team: a.team,
     owner: a.id,
     type: "gun",
     damage: 3,
   });
+  return true;
 }
 
 /**
@@ -624,8 +647,9 @@ export function fireRearManual(
   if (a.mode === "crashing" || !(a.rearAmmo > 0)) return;
   a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
   if (!fire || !aim || a.rearTimer > 0) return;
-  a.rearTimer = 0.08;
-  rearShot(b, a, aim.x, aim.y, aim.z, 3);
+  // A refused shot (the round would cross the fin) leaves the trigger free, so holding it fires the
+  // moment the aim clears rather than waiting out a cadence for a round that never left.
+  a.rearTimer = rearShot(b, a, aim.x, aim.y, aim.z, 3) ? 0.08 : 0;
 }
 
 export function rearGunner(b: Any, a: Any, dt: number): void {
@@ -677,8 +701,9 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
   GUN_AIM.x = t.x + (t.vx || 0) * tt - a.x;
   GUN_AIM.y = t.y + (t.vy || 0) * tt - a.y;
   GUN_AIM.z = t.z + (t.vz || 0) * tt - a.z;
-  a.rearTimer = 0.28;
-  rearShot(b, a, GUN_AIM.x, GUN_AIM.y, GUN_AIM.z, 13);
+  // A refused shot (the round would cross the fin) keeps the gun on target without a cadence, so it
+  // fires the moment the aircraft's own attitude clears the tail.
+  a.rearTimer = rearShot(b, a, GUN_AIM.x, GUN_AIM.y, GUN_AIM.z, 13) ? 0.28 : 0;
 }
 
 export function navigateHome(b: Any, a: Any, dt: number): void {

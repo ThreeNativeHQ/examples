@@ -24,4 +24,18 @@ Supplied GLBs → existing Blender import scripts → `public/assets` → the in
 ## Execution phases
 
 1. Inspect and rebuild materials/rigid moving parts from the originals; preserve backups under ignored screenshots. Update the existing import pipeline. Status: IN PROGRESS.
-2. Wire animation, run focused checks and inspect web captures. Record concise results here. Status: NOT STARTED.
+2. Wire animation, run focused checks and inspect web captures. Record concise results here. Status: IN PROGRESS.
+
+## Rear-gun integration (this lane)
+
+The approved twin gun `/tmp/douglas-gun-aligned.glb` (root's locked fit) now ships as
+`public/assets/weapon.rear-gun.glb` — every one of its 4764 triangles, WebP 90, separate vertex
+layout, supplied source untouched — packed by `tools/blender/normalize-rear-gun.py`, whose measured
+landmarks are frozen constants (no direction search). Both airframes mount it on their rear station
+at root's approved hinge `REAR_GUN_HINGE`; the procedural placeholder is gone. `src/sim/gun-mount.ts`
+is the single pure source for the hinge, the two approved muzzle mouths, the barrel-pair rotation and
+a simple fin guard, read by the sim (alternating barrels, no doubled ammo), the renderer and the
+checks. The gunner holds the baked grip grafted onto `sit` (`GUNNER_GRIP_ARMS`, rest space verified by
+`tools/extract-gunner-grip.mjs`). Focused gates: `typecheck`, `check-aircraft` (both pivots equal the
+fired mount; 4764 triangles; hands on the receiver), `check-gunner`, `check-asset-polish`,
+`check-weapons`, `vite build`. The final WebGPU capture is `tools/capture-gunner.mjs`.

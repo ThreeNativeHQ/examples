@@ -11,7 +11,9 @@ import type { WebGPURenderer } from "three/webgpu";
 import { mat, rod } from "./assets.js";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import {
+  AIRCREW_GUN_URL,
   AIRCREW_PILOT_URL,
+  configureAircrewGun,
   configureAircrewPilot,
   createSeatedStation,
   type ISeatedStation,
@@ -130,6 +132,7 @@ export async function loadImportedAircraft(ctx: Pick<ICtx, "assets" | "renderer"
   const urls = [
     DOUGLAS_URL,
     AIRCREW_PILOT_URL,
+    AIRCREW_GUN_URL,
     ...new Set(Object.values(IMPORTS).flatMap((airframe) => [airframe.hero, airframe.ai])),
   ];
   const [models] = await Promise.all([
@@ -153,6 +156,7 @@ export async function loadImportedAircraft(ctx: Pick<ICtx, "assets" | "renderer"
   });
   source = imported.get(DOUGLAS_URL)!;
   configureAircrewPilot(imported.get(AIRCREW_PILOT_URL)!);
+  configureAircrewGun(imported.get(AIRCREW_GUN_URL)!);
 }
 
 /**
