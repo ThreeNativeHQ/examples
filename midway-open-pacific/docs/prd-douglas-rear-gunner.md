@@ -120,8 +120,9 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
   2 skipped. Failures were `check-flight.mjs` (ordered-wing strike completed no seed),
   `check-carrier-cycle.mjs` (68-aircraft cap never reached), `check-fleet.mjs` (the new
   `weapon.rear-gun.glb` unreferenced) and `check-repair.mjs` (line 40 forward wing-gun muzzle-flash
-  wait timed out after its keyboard-release check passed). The two pure-sim failures predate this
-  lane and were not re-run.
+  wait timed out after its keyboard-release check passed). `check-fleet.mjs` was fixed and rechecked;
+  the whole handoff has **not** since been re-run, so the count stands at 19/4 with the three
+  remaining failures separately proved pre-existing (see below).
 - **This focused pass:** `pnpm typecheck` PASS; `node scripts/check-gunner.mjs` PASS (now including
   the SBD depressed central refusal, no-round/no-barrel-flip, immediate level resume, a clear
   depressed side shot, and a TBD control); `pnpm exec vite build` PASS; `node tools/check-fleet.mjs`
@@ -131,12 +132,17 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
   `screenshots/gunner-rear-station-{sbd,tbd}.png`, `gunner-rear-blocked-sbd.png` (LOW FUEL +
   AIRFRAME BLOCKS FIRE + reticle together), `gunner-rear-firing-*`, `gunner-exterior-gun-*`,
   `gunner-cockpit-closeup-*`, `gunner-front-pilot-*`.
-- **Still failing, cause unclassified:** `check-repair.mjs` reproduces the line-40 forward wing-gun
-  muzzle-flash timeout. It is **not** baseline-proved: the baseline reproduction
-  (`/tmp/douglas-baseline-report.md`) proved only two pure-sim failures (`check-flight.mjs`,
-  `check-carrier-cycle.mjs`), not `check-repair`. It also failed before the supplied HTML
-  rear-station work landed, so it is not caused by the new HTML, but its cause is unclassified here.
-  Not passed, and not to be silenced by touching the forward pilot cockpit.
+- **Still failing, proved pre-existing on `dcd83dc`:** `check-repair.mjs` reproduces the line-40
+  forward wing-gun muzzle-flash timeout. It is now **baseline-proved**: on an untouched `origin/main`
+  `dcd83dc` fixture (`git archive` source, `@threenative/core` pinned to the same
+  `0.3.2-tracerfix` tarball as this lane, `public/assets` symlinked unchanged, the pilot GLB
+  overwritten with the actual `dcd83dc` bytes, sha256 `5c49a3a4…`) `tools/check-repair.mjs` fails at
+  the same `tools/check-repair.mjs:40:13` `page.waitForFunction` with the same 30000 ms timeout on
+  WebGPU `nvidia|turing` (log `/tmp/douglas-browser-proof-baseline-check-repair.log`). The two other
+  pure-sim failures are proved independently on the same baseline (`/tmp/douglas-baseline-report.md`):
+  `check-flight.mjs:521:8` and `check-carrier-cycle.mjs:142:10`, same assertions and lines on
+  baseline and feature. None is introduced by this lane; all three remain unfixed here. The forward
+  pilot cockpit is unchanged and must not be touched to silence them.
 - **Rear-gun audio (reconstruction):** `public/assets/audio/gun-30.ogg` is replaced with the audio
   arm's cleaned one-shot — 0.180 s, mono 44.1 kHz Vorbis. `content/audio/midway-audio.json` and
   `tools/audio-catalog.mjs` retag `gun-30` `identity: "reconstruction"` (ElevenLabs
