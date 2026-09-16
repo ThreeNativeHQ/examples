@@ -479,6 +479,19 @@ export const GUN_BATTERIES: Readonly<Record<string, GunBattery>> = Object.freeze
   },
 });
 
+/**
+ * Rounds carried by an airframe's rear (defensive) mounts, all mounts together. Zero when the
+ * airframe has no rear mount, so a single-seat fighter keeps an empty rear station. Unknown
+ * airframes return zero: only the table is a source of truth.
+ */
+export function rearRoundsFor(airframeId: string): number {
+  const battery = GUN_BATTERIES[airframeId];
+  if (!battery) return 0;
+  let rounds = 0;
+  for (const mount of battery.mounts) if (mount.facing === "rear") rounds += mount.rounds;
+  return rounds;
+}
+
 export class UnknownAirframeGunsError extends Error {
   constructor(id: string) {
     super(`no gun battery recorded for airframe: ${id}`);

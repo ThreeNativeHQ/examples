@@ -140,13 +140,26 @@ Exact keys the controls arm reads (`src/render/world.ts` on `midway/douglas-gunn
 ## SBD rear aperture
 
 - The supplied SBD canopy is one glass mesh (`defaultMaterial_node_7`, z −2.871…0.199) with no rear
-  section to slide or hide, so `openCanopyAft` clones its geometry per instance and drops every
-  triangle whose aircraft-frame centroid is aft of `REAR_OPEN_Z = −1.25`: the pilot keeps the whole
-  forward greenhouse and the gunner at z = −0.763 stands in an open rear cockpit. The clone is
-  disposed in `disposeDouglas`; the source GLB is untouched. A rearward ray from the gunner eye now
-  reaches the first solid surface 3.9 m away.
-- **Pending parent frame review**: the visible cut edge and the retained metal frame
-  (`defaultMaterial_node_8`) need an eye on a capture before this is called accepted.
+  section to slide or hide, so `openCanopyAft` clones its geometry per instance and cuts it at the
+  plane `REAR_OPEN_Z = −1.25`: crossing triangles are split and interpolated, not dropped by centroid
+  (a centroid test left a broad diagonal pane across the gunner and the firing ray). The separate
+  metal frame (`defaultMaterial_node_8`) is cut at the same plane, so the closed rear frame and its
+  full-width hoop do not outlive the glass. The pilot keeps the whole forward greenhouse; the gunner
+  at z = −0.763 stands in an open rear cockpit. Both clones are disposed in `disposeDouglas`; the
+  source GLB is untouched.
+- TBD: the greenhouse now stops at `REAR_OPEN_STATION = 5` (x = 0.27), removing the aft panes and
+  arches that overlapped the gunner's crown by ~4 cm; the station-5 arch closes the opening and the
+  pilot keeps the forward greenhouse. The rearmost seat's backrest is moved forward of the aft-facing
+  gunner's pelvis (it had his legs through it).
+
+## Rear ammunition
+
+- `rearRoundsFor(airframe)` in `src/sim/armament.ts` reads the rear mount's rounds from
+  `GUN_BATTERIES`: the SBD's provisional 1200 total, the TBD's documented 600, zero on a
+  single-seater. `battle.ts` seeds the player, every launched AI aircraft and the rearm from it; the
+  forward pool is unchanged (no forward rebalance). The TBD's supplied twin-barrel visual is a
+  VT-8-style approximation; the 600-round document is the standard single mount, not proof of
+  retrofit twin capacity. `scripts/check-gunner.mjs` asserts the seed values and a drain.
 
 ## Integration phase results (controls merge + frame fix)
 

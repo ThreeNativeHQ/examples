@@ -553,8 +553,11 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
       mesh(geometry([a!, 0.22, side * wa!, b!, 0.22, side * wb!, b!, 0.47, side * wb!, a!, 0.47, side * wa!], [0, 0, 1, 0, 1, 1, 0, 1], [0, 1, 2, 0, 2, 3]), M.cockpit!, cockpit);
   }
   for (const x of [-2.46, -0.98, 0.55]) {
-    const seat = box([0.4, 0.48, 0.45], [x, 0.55, 0], M.cockpit!, cockpit);
-    seat.rotation.z = -0.12;
+    // The rearmost station's gunner faces aft, so his backrest sits forward of his pelvis; the
+    // forward-facing seats' backrest, aft of the pelvis, had his legs through it.
+    const aft = x === 0.55;
+    const seat = box([0.4, 0.48, 0.45], [aft ? x - 0.3 : x, 0.55, 0], M.cockpit!, cockpit);
+    seat.rotation.z = aft ? 0.12 : -0.12;
     box([0.44, 0.1, 0.43], [x - 0.15, 0.31, 0], M.seat!, cockpit);
     if (!ai)
       for (const side of [-1, 1]) {
@@ -597,7 +600,12 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
   sliding.name = "canopy";
   root.add(sliding);
   parts.canopy = sliding;
-  for (let i = 0; i < canopyStations.length - 1; i++) {
+  // The gunner's station is open. The supplied greenhouse closes over the rearmost seat whose crown
+  // the aft glazing overlapped by ~4 cm, so the panes and their arches stop at station 4 and the
+  // station-5 arch closes the opening; the pilot keeps the whole forward greenhouse. Nothing aft of
+  // the lip is drawn, so no floating arches are left behind the gun.
+  const REAR_OPEN_STATION = 5;
+  for (let i = 0; i < REAR_OPEN_STATION; i++) {
     const parent = i === 1 ? sliding : canopyStatic;
     const a = section(canopyStations[i]!);
     const b = section(canopyStations[i + 1]!);
@@ -607,7 +615,7 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
       pane.renderOrder = 3;
       rod(a[j] as [number, number, number], b[j] as [number, number, number], j === 0 || j === 4 ? 0.023 : 0.016, M.frame!, parent);
       rod(a[j] as [number, number, number], a[j + 1] as [number, number, number], 0.023, M.frame!, parent);
-      if (i === canopyStations.length - 2 || i === 1) rod(b[j] as [number, number, number], b[j + 1] as [number, number, number], 0.023, M.frame!, parent);
+      if (i === REAR_OPEN_STATION - 1 || i === 1) rod(b[j] as [number, number, number], b[j + 1] as [number, number, number], 0.023, M.frame!, parent);
     }
   }
   for (const side of [-1, 1]) {

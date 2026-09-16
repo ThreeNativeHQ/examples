@@ -10,6 +10,8 @@ import * as T from 'three';
 const { outputFiles } = await build({ entryPoints: ['src/sim/battle.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
 const battleUrl = `data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString('base64')}`;
 const { Battle } = await import(battleUrl);
+const armament = await build({ entryPoints: ['src/sim/armament.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
+const { rearRoundsFor } = await import(`data:text/javascript;base64,${Buffer.from(armament.outputFiles[0].text).toString('base64')}`);
 const airborne = () => { const b = new Battle(); b.start(true); b.aircraft.length = 0; return b; };
 const deck = () => { const b = new Battle(); b.start(); return b; };
 const tick = (b, seconds, input = {}) => { for (let i = 0; i < Math.round(seconds * 60); i++) b.step(1 / 60, input); };
@@ -124,6 +126,18 @@ below.vx = below.vy = below.vz = 0;
 frame.aircraft.push(noseUp, below);
 frame.updateAircraft(1 / 60);
 assert.equal(noseUp.rearAmmo, 239, 'the AI rear gun uses the aircraft up frame, not world Y');
+
+// 6c. Rear capacity comes from the gun table, not a 240 constant: the SBD's provisional 1200 and
+// the TBD's documented 600, empty on a single-seater, and a burst drains the seeded count.
+const seeded = airborne();
+assert.equal(rearRoundsFor('sbd'), 1200, 'the SBD rear capacity is the provisional 1200');
+assert.equal(rearRoundsFor('tbd'), 600, 'the TBD rear capacity is the documented 600');
+assert.equal(rearRoundsFor('zero'), 0, 'a single-seat fighter has no rear capacity');
+assert.equal(seeded.player.rearAmmo, rearRoundsFor('sbd'), 'the player rear gun is seeded from the gun table');
+seeded.player.rearTimer = 0;
+seeded.setGunner(true);
+seeded.step(1 / 60, { fire: true });
+assert.equal(seeded.player.rearAmmo, rearRoundsFor('sbd') - 1, 'a burst drains the seeded rear capacity');
 
 // 7. The station is left on a crash, a touchdown and a recovery.
 const crashed = airborne();

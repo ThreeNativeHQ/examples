@@ -91,6 +91,8 @@ const instances = new WeakMap<
     canopyMaterial: T.Material;
     /** The per-instance trimmed canopy clone, the only pane geometry this aircraft owns. */
     canopyGeometry: T.BufferGeometry;
+    /** The frame trimmed to match the pane cut, when the supplied model separates it. */
+    canopyFrameGeometry?: T.BufferGeometry;
     blades: T.Object3D[];
     blur: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>;
     instrumentRoot: T.Group;
@@ -185,9 +187,12 @@ const PILOT_SEAT: readonly [number, number, number] = [0, -0.2, -1.81];
 const REAR_OPEN_Z = -1.25;
 
 /**
- * A clone of `mesh`'s geometry with every triangle whose aircraft-frame centre lies aft of `aftOf`
- * removed. `mesh.matrixWorld` maps its vertices into the aircraft root's frame, which is where the
- * cockpit stations live, so the cut is placed in metres of the airframe and not of the mesh.
+ * A clone of `mesh`'s geometry with everything aft of the plane z = `aftOf` cut away, in the
+ * aircraft's own frame. Each triangle that crosses the plane is split at it rather than dropped by
+ * its centroid: a centroid test leaves whole diagonal triangles spanning the opening, which is what
+ * put a broad pane across the gunner and the firing ray. Attributes are interpolated on the split
+ * so the retained glass and its frame keep clean edges. `mesh.matrixWorld` maps its vertices into
+ * the root frame, where the cockpit stations live, so the cut is in metres of the airframe.
  */
 function openCanopyAft(mesh: T.Mesh, aftOf: number): T.BufferGeometry {
   const source = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
@@ -195,22 +200,50 @@ function openCanopyAft(mesh: T.Mesh, aftOf: number): T.BufferGeometry {
   const normal = source.getAttribute("normal");
   const uv = source.getAttribute("uv");
   const toRoot = mesh.matrixWorld;
-  const a = new T.Vector3();
-  const b = new T.Vector3();
-  const c = new T.Vector3();
-  const centre = new T.Vector3();
+  const probe = new T.Vector3();
+  interface Cut {
+    p: number[];
+    n: number[];
+    u: number[];
+    z: number;
+  }
+  const at = (i: number): Cut => {
+    probe.set(position.getX(i), position.getY(i), position.getZ(i)).applyMatrix4(toRoot);
+    return {
+      p: [position.getX(i), position.getY(i), position.getZ(i)],
+      n: normal ? [normal.getX(i), normal.getY(i), normal.getZ(i)] : [],
+      u: uv ? [uv.getX(i), uv.getY(i)] : [],
+      z: probe.z,
+    };
+  };
+  const mix = (a: Cut, b: Cut, f: number): Cut => ({
+    p: a.p.map((v, k) => v + (b.p[k]! - v) * f),
+    n: a.n.map((v, k) => v + (b.n[k]! - v) * f),
+    u: a.u.map((v, k) => v + (b.u[k]! - v) * f),
+    z: aftOf,
+  });
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
+  const push = (c: Cut): void => {
+    positions.push(...c.p);
+    if (normal) normals.push(...c.n);
+    if (uv) uvs.push(...c.u);
+  };
   for (let t = 0; t < position.count; t += 3) {
-    a.fromBufferAttribute(position, t).applyMatrix4(toRoot);
-    b.fromBufferAttribute(position, t + 1).applyMatrix4(toRoot);
-    c.fromBufferAttribute(position, t + 2).applyMatrix4(toRoot);
-    if (centre.copy(a).add(b).add(c).multiplyScalar(1 / 3).z > aftOf) continue;
-    for (const i of [t, t + 1, t + 2]) {
-      positions.push(position.getX(i), position.getY(i), position.getZ(i));
-      if (normal) normals.push(normal.getX(i), normal.getY(i), normal.getZ(i));
-      if (uv) uvs.push(uv.getX(i), uv.getY(i));
+    const tri = [at(t), at(t + 1), at(t + 2)];
+    const kept: Cut[] = [];
+    for (let k = 0; k < 3; k++) {
+      const cur = tri[k]!;
+      const nxt = tri[(k + 1) % 3]!;
+      const curIn = cur.z <= aftOf;
+      if (curIn) kept.push(cur);
+      if (curIn !== nxt.z <= aftOf) kept.push(mix(cur, nxt, (aftOf - cur.z) / (nxt.z - cur.z)));
+    }
+    for (let k = 1; k + 1 < kept.length; k++) {
+      push(kept[0]!);
+      push(kept[k]!);
+      push(kept[k + 1]!);
     }
   }
   source.dispose();
@@ -285,7 +318,12 @@ export function createDouglas(withCockpit = false): T.Group {
   root.updateMatrixWorld(true);
   const canopyGeometry = openCanopyAft(canopy, REAR_OPEN_Z);
   canopy.geometry = canopyGeometry;
+  // The metal frame is a separate mesh over the same greenhouse; cut it at the same plane or the
+  // closed rear frame and its full-width hoop stay behind the gunner with the glass gone.
   const canopyFrame = model.getObjectByName("defaultMaterial_node_8");
+  const canopyFrameGeometry =
+    canopyFrame instanceof T.Mesh ? openCanopyAft(canopyFrame, REAR_OPEN_Z) : undefined;
+  if (canopyFrame instanceof T.Mesh) canopyFrame.geometry = canopyFrameGeometry!;
   // Fuselage shells that share the cockpit's space and peek around the detailed interior.
   const cockpitFuselage = ["defaultMaterial_node_12", "defaultMaterial_node_18"]
     .map((name) => model.getObjectByName(name))
@@ -408,6 +446,7 @@ export function createDouglas(withCockpit = false): T.Group {
     gear,
     canopyMaterial,
     canopyGeometry,
+    canopyFrameGeometry,
     blades,
     blur,
     instrumentRoot,
@@ -477,6 +516,7 @@ export function disposeDouglas(root: T.Group): void {
   instance.gunner.player.dispose();
   instance.canopyMaterial.dispose();
   instance.canopyGeometry.dispose();
+  instance.canopyFrameGeometry?.dispose();
   instance.blur.geometry.dispose();
   instance.blur.material.map?.dispose();
   instance.blur.material.dispose();

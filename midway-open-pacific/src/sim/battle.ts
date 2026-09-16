@@ -27,6 +27,7 @@ import {
 import {
   actualRunDepth,
   applyLoadout,
+  rearRoundsFor,
   torpedoEnvelope,
   torpedoVariant,
   torpedoVariantForAirframe,
@@ -799,7 +800,7 @@ export class Battle {
       hp: 100,
       fuel: 100,
       ammo: 1400,
-      rearAmmo: 240,
+      rearAmmo: rearRoundsFor("sbd"),
       rearTimer: 0,
       bombs: 3,
       torpedo: 0,
@@ -1526,7 +1527,9 @@ export class Battle {
     a.musterUntil = s.waveTimes[a.section] + 85;
     a.fuelCapacity = a.fuel;
     a.airframe = airframe;
-    a.rearAmmo = kind === "fighter" ? 0 : 240;
+    // The rear mount's own capacity from the gun table; zero for a single-seater. A rear gun on an
+    // airframe with no battery entry yet (the Val) keeps the old 240 rather than losing it silently.
+    a.rearAmmo = kind === "fighter" ? 0 : rearRoundsFor(airframe) || 240;
     a.rearTimer = 0;
     this.aircraft.push(a);
     return a;
@@ -3561,11 +3564,12 @@ export class Battle {
           p.fuel += fuel;
           h.air.fuel = Math.max(0, h.air.fuel - fuel * FUEL_PER_LAUNCH / 100);
           if (p.fuel < 100) supplies.push(`Fuel ${Math.floor(p.fuel)}% — carrier tanks exhausted.`);
-          if (p.ammo < 1400 || p.rearAmmo < 240) {
+          const rear = rearRoundsFor(p.airframe);
+          if (p.ammo < 1400 || p.rearAmmo < rear) {
             if ((h.air.stores.ammo ?? 0) >= 1) {
               h.air.stores.ammo -= 1;
               p.ammo = 1400;
-              p.rearAmmo = 240;
+              p.rearAmmo = rear;
             } else supplies.push("No gun ammunition available; remaining rounds retained.");
           }
           if ((h.air.stores[family] ?? 0) > 0) {
