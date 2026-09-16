@@ -2,8 +2,8 @@
 
 **Status:** implemented and visually accepted by root. Both airframes seat a front pilot and a rear
 radioman/gunner, man the approved twin gun, open the rear canopy, and share one firing path with a
-measured airframe guard and a dedicated blocked-fire cue. The first-person cockpit interior is
-provisional pending the user's polished asset.
+measured airframe guard and a dedicated blocked-fire cue. The first-person cockpit interior is now
+the user's supplied rear-station study (see *First-person rear station* below).
 **Lane:** branch `midway/douglas-rear-gunner`, base `89d2462e6e8ddfdbce9852a20efddc54cc4f73b2`.
 **Ownership:** the lane owns the seats, crew render, gun mount/aim, rear-gun sim, HUD cue and the
 captures. `@threenative/core` owns the flight model; no engine change was needed.
@@ -31,16 +31,17 @@ the A6M3/B5N2 crews. The SBD/TBD cockpit shell stays procedural/provisional.
   tub's three seats, measured eye `(0, 1.223, 0.528)`, pivot `(-0.003, 1.065, 1.236)`.
 - Published keys (`src/render/world.ts`): `userData.crew[0]` (front pilot station, the only actor
   the cockpit view hides), `pilotEye`, `gunner` (rear rig root), `gunnerRig`, `gunnerEye`,
-  `rearGun` (gun pivot; base identity, `YXZ` written by controls). The gun pivot carries cradle,
-  barrels and magazine only; the pedestal and seat live in the fittings and the rig is never under
-  the pivot. Station roots carry a `MOVING_NODE` token so the static freeze stops above them.
+  `rearGun` (gun pivot; base identity, `YXZ` written by controls). The gun pivot carries the whole
+  supplied `weapon.rear-gun.glb`, including the pedestal under the pivot (the asset ships its own
+  mount); the seat and fittings live in the station and the rig is never under the pivot. Station
+  roots carry a `MOVING_NODE` token so the static freeze stops above them.
 - The gunner rig is hidden only in his own first-person station (`p.gunner`), leaving the pilot and
   the gun drawn.
 
 ## Rear aperture
 
 - **SBD:** the supplied canopy is one glass mesh with no rear section; `openCanopyAft` clones the
-  geometry per instance and splits crossing triangles at `REAR_OPEN_Z = -1.25` (not a centroid
+  geometry per instance and splits crossing triangles at `REAR_OPEN_Z = -1.21` (not a centroid
   drop), so the pilot keeps the forward greenhouse and the gunner stands in an open rear cockpit.
   The metal frame (`node_8`) is cut at the same plane. Accepted at the -1.21 m hoop cut.
 - **TBD:** the greenhouse stops at `REAR_OPEN_STATION = 5`, removing the aft panes that overlapped
@@ -78,6 +79,36 @@ the A6M3/B5N2 crews. The SBD/TBD cockpit shell stays procedural/provisional.
   FIRE** cue is independent of the general warning chain, so LOW FUEL / LOW AIRSPEED never suppress
   the reason the gun will not fire; the general warning keeps its existing priority.
 
+## First-person rear station (supplied assets)
+
+Bounded scope: replace only the provisional rear FPP surround with the user's supplied reference.
+The main pilot cockpit, its interior and its camera are untouched, as are the exterior and friendly
+AI aircraft, which keep the approved `weapon.rear-gun.glb` and crew fit.
+
+- **Sources (user-supplied, rights unverified):** `~/Downloads/cockpit(1).html` ("Rear cockpit"
+  structure study) supplies the rear-station airframe skin, canopy frame, glazing, seat and radio
+  equipment; `~/Downloads/douglas-gunner.html` supplies the twin-gun geometry and materials. Both
+  originals are kept unchanged. Their old gun, demo renderers, camera/input loops, backgrounds,
+  DOM/UI and inlined Three.js are not ported.
+- **Module:** `src/render/rear-station.ts` exports `createRearStation(airframe)`, returning
+  `{ group, shell, pivot, muzzles, dispose }`. Static geometry is batched per material; the gun's
+  moving parts stay separate. Textures use the repo's existing canvas path and degrade to plain
+  colours where no DOM canvas exists (the CPU checks).
+- **Fitting:** the shell is yawed π to face aft and scaled uniformly so its declared eye
+  `[0,1.60,1.48]` lands on the live camera anchor (`gunnerEye + [0,0.03,-0.20]`); the measured
+  flexible-mount centre then falls ~0.14 m off the sim hinge, which is documented, not corrected by
+  distorting an axis. The twin gun is oriented π about Y and normalised uniformly to the sim's
+  measured mouths: the visible muzzles sit within 0.008 m of the fired mouths at angle, since the
+  pivot is the sim hinge and the renderer applies the same `rearGunPivotEuler`.
+- **Ownership:** `world.ts` builds the station for the **player mesh only**, in `setAirframe`, and
+  disposes it through the player's `userData`. AI aircraft never allocate one. The FPP shell and gun
+  are shown only while `p.gunner` and `mode === "flight"`; the external `rearGun` and the exterior
+  `cockpitShell` are hidden only in the rear FPP and restored afterwards.
+- **Acceptance:** `check-aircraft.mjs` asserts the FPP muzzles against `rearGunMuzzle` at neutral
+  and angled aim on both airframes; `capture-gunner.mjs` asserts the FPP shell+gun are drawn only in
+  the rear station and never leaked into the exterior or pilot view, and leaves a frame of each for
+  the root's visual review. No permission, licence or provenance beyond "user-supplied" is claimed.
+
 ## Verification
 
 Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`check-gunner` and
@@ -101,3 +132,11 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
 - **Still failing, not ours:** `check-repair.mjs` reproduces the same line-40 forward wing-gun flash
   timeout; this lane does not touch the forward fire path, so it is recorded as a baseline failure,
   not passed.
+
+- **First-person rear station pass:** `pnpm typecheck` PASS; `node scripts/check-aircraft.mjs` PASS
+  (now also asserting both airframes' FPP muzzles against `rearGunMuzzle` at neutral and angled aim,
+  the FPP station starting hidden, the measured 0.0078 m muzzle residual, and that the AI build
+  carries no station); `node scripts/check-gunner.mjs` PASS; `pnpm exec vite build` PASS;
+  `bash tools/capture-lock.sh node tools/capture-gunner.mjs` PASS on **nvidia / turing**
+  (`MIDWAY_URL=http://127.0.0.1:5312`) with the FPP shell+twin drawn only in the rear station and
+  the exterior gun, shell and pilot path restored on exit.

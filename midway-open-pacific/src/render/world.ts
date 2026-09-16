@@ -10,6 +10,7 @@ import { airframeLod } from "./airframe-lod.js";
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
 import { animateDevastator, disposeDevastator } from "./devastator.js";
+import { createRearStation, type RearStation } from "./rear-station.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScars } from "./model-damage.js";
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
 import { createOcean, REFLECTED_LAYER } from "./ocean.js";
@@ -544,6 +545,17 @@ export class WorldView {
       type === "sbd" ? createDouglas(true) : createAirframe("tbd1", "hero", true);
     this.playerMesh.userData.airframe = type;
     addDamageVisuals(this.playerMesh);
+    // The player's own first-person rear station, built here and nowhere else: an AI aircraft never
+    // allocates one. It reads the same published eye the gunner camera uses, so shell and camera
+    // share one anchor.
+    const rearEye = this.playerMesh.userData.gunnerEye as T.Vector3 | undefined;
+    if (rearEye) {
+      const station = createRearStation(type, [rearEye.x, rearEye.y, rearEye.z]);
+      if (station) {
+        this.playerMesh.add(station.group);
+        this.playerMesh.userData.rearStation = station;
+      }
+    }
     this.scene.add(this.playerMesh);
     this.freezeStatic(this.playerMesh);
     this.snap = true;
@@ -990,6 +1002,9 @@ export class WorldView {
     // returns it to its rest barrel instead of freezing where the player let go.
     const rearGun = this.playerMesh.userData.rearGun as T.Object3D | undefined;
     if (rearGun) {
+      // The supplied exterior gun yields its place to the first-person twin in the rear station;
+      // every other view (pilot, chase, external) draws it exactly as before.
+      rearGun.visible = !gunnerView;
       if (gunnerView) {
         const e = this.battle.rearGunPivotEuler();
         rearGun.rotation.set(e.x, e.y, e.z, "YXZ");
@@ -999,11 +1014,22 @@ export class WorldView {
         rearGun.rotation.set(-(p.rearPitch ?? 0), p.rearYaw, 0, "YXZ");
       } else rearGun.rotation.set(0, 0, 0);
     }
+    // The player's first-person rear station: shell and visible twin gun show only while the gun
+    // owns the view, and the gun pivot rides the same sim euler the rounds leave from.
+    const rearStation = this.playerMesh.userData.rearStation as RearStation | undefined;
+    if (rearStation) {
+      rearStation.shell.visible = gunnerView;
+      rearStation.pivot.visible = gunnerView;
+      if (gunnerView) {
+        const e = this.battle.rearGunPivotEuler();
+        rearStation.pivot.rotation.set(e.x, e.y, e.z, "YXZ");
+      } else rearStation.pivot.rotation.set(0, 0, 0);
+    }
     // The detailed interior and the supplied canopy shell are alternatives: show the interior in
-    // the pilot view, the exterior canopy every other time.
+    // the pilot view, the exterior canopy every other time the rear station is not inside it.
     if (this.playerMesh.userData.cockpitInterior) this.playerMesh.userData.cockpitInterior.visible = cockpit;
     if (this.playerMesh.userData.cockpitShell)
-      for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit;
+      for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit && !gunnerView;
     document.body.classList.toggle("cockpit-view", cockpit);
     if (this.snap || briefing || cockpit || gunnerView) {
       this.camera.position.copy(this.targetCamera);
@@ -1266,6 +1292,7 @@ export class WorldView {
     const torpedo = group.userData.torpedoLoad as T.Object3D | undefined;
     torpedo?.traverse((o) => (o as T.Mesh).geometry?.dispose());
     (group.userData.cockpitRig as { dispose?: () => void } | undefined)?.dispose?.();
+    (group.userData.rearStation as RearStation | undefined)?.dispose?.();
     // The Devastator's own parts are given back by `disposeDevastator` in `releaseAircraft`
     // before this runs; traversing them here would dispose geometry twice.
     if (group.userData.detailed || group.userData.importedAircraft || group.userData.importedShip || group.userData.devastator)

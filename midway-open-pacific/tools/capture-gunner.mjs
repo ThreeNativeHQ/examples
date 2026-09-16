@@ -101,6 +101,8 @@ try {
         pilotVisible: w.playerMesh.userData.crew?.[0]?.visible,
         gunVisible: w.playerMesh.userData.rearGun?.visible,
         gunYaw: w.playerMesh.userData.rearGun?.rotation.y ?? 0,
+        fppShellVisible: w.playerMesh.userData.rearStation?.shell?.visible ?? null,
+        fppGunVisible: w.playerMesh.userData.rearStation?.pivot?.visible ?? null,
         rearYaw: p.rearYaw,
       };
     });
@@ -170,7 +172,11 @@ try {
     assert.equal(manned.cameraMode, 1, "the gunner station takes the camera");
     assert.equal(manned.gunnerVisible, false, "the player's own gunner body is hidden");
     assert.equal(manned.pilotVisible, true, "the front pilot stays drawn");
-    assert.equal(manned.gunVisible, true, "the gun stays drawn");
+    // The first-person station owns the view: its own shell and visible twin gun are drawn, and the
+    // exterior supplied gun is put away so the two never render on top of each other.
+    assert.equal(manned.fppShellVisible, true, "the first-person rear shell is drawn in the station");
+    assert.equal(manned.fppGunVisible, true, "the first-person twin gun is drawn in the station");
+    assert.equal(manned.gunVisible, false, "the exterior gun yields to the first-person twin");
     // 1b. A held D must swing the aim to the gunner's own screen-right (the aircraft's port when he
     // faces aft), checked against the camera-right captured before the key, not the world +X.
     const camRight0 = await page.evaluate(() => {
@@ -312,6 +318,11 @@ try {
     assert.equal(back.gunner, false, "Y returns to the pilot seat");
     assert.equal(back.cameraMode, before.cameraMode, "the pilot gets their previous camera back");
     assert.equal(back.gunnerVisible, true, "the gunner body is drawn again");
+    // Leaving the station restores the exterior gun and puts the first-person interior away, so no
+    // shell is leaked into the pilot or external view.
+    assert.equal(back.fppShellVisible, false, "the first-person shell is put away on return");
+    assert.equal(back.fppGunVisible, false, "the first-person twin is put away on return");
+    assert.equal(back.gunVisible, true, "the exterior gun is restored on return");
     assert.equal(back.nav, before.nav, "the navigation order survives the handover");
     // The AI gun now works a fresh enemy off the tail axis; its visible pivot follows the rounds.
     await page.evaluate(() => {

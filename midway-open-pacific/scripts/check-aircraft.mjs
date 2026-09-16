@@ -114,7 +114,7 @@ try {
   });
   const mountPath = resolve(temporary, "gun-mount.mjs");
   await writeFile(mountPath, mountOutput.outputFiles[0].text);
-  const { REAR_GUN_MOUNTS, REAR_GUN_TAIL } = await import(pathToFileURL(mountPath).href);
+  const { REAR_GUN_MOUNTS, REAR_GUN_TAIL, rearGunMuzzle } = await import(pathToFileURL(mountPath).href);
   const testTexture = new Texture();
   const sourceMesh = loaded.scene.getObjectByName("defaultMaterial_node_18");
   sourceMesh.material.map = testTexture;
@@ -434,6 +434,56 @@ try {
   // own instance. The supplied GLB is no longer the Devastator the game draws.
   const tbd = createAirframe("tbd1", "hero", true);
   const parkedTbd = createAirframe("tbd1", "ai");
+  // The player-only first-person rear station: the supplied shell and twin gun. It is built from
+  // the published eye and must never be allocated by an AI instance, so it is absent from the
+  // parked builds above and present only when `createRearStation` is called. Its visible muzzles
+  // must coincide with the sim's fired mouths at neutral and angled aim on both airframes.
+  {
+    const stationOutput = await build({
+      entryPoints: ["src/render/rear-station.ts"],
+      bundle: true,
+      packages: "external",
+      platform: "node",
+      format: "esm",
+      write: false,
+    });
+    const stationPath = resolve(temporary, "rear-station.mjs");
+    await writeFile(stationPath, stationOutput.outputFiles[0].text);
+    const { createRearStation } = await import(pathToFileURL(stationPath).href);
+    for (const [name, mesh, id, mount] of [
+      ["SBD", airplane, "sbd", REAR_GUN_MOUNTS.sbd],
+      ["TBD", tbd, "tbd", REAR_GUN_MOUNTS.tbd],
+    ]) {
+      const eye = mesh.userData.gunnerEye;
+      assert.ok(eye instanceof Vector3, `the ${name} publishes its gunner eye for the station`);
+      const station = createRearStation(id, [eye.x, eye.y, eye.z]);
+      assert.ok(station, `the ${name} builds a rear station`);
+      assert.equal(station.shell.visible, false, "the FPP shell starts hidden (rear-only)");
+      assert.equal(station.pivot.visible, false, "the FPP gun starts hidden (rear-only)");
+      assert.ok(station.muzzleError < 0.02, `${name} FPP mouths fit the supplied gun: ${station.muzzleError.toFixed(4)} m`);
+      for (const [yaw, pitch] of [[0, 0], [0.5, 0.2], [-0.35, -0.1]]) {
+        station.pivot.rotation.set(-pitch, yaw, 0, "YXZ");
+        station.pivot.updateMatrixWorld(true);
+        // The π yaw swaps the supplied gun's left/right barrel labels; the two measured mouths are
+        // symmetric to 8 mm, so what must hold is that every visible muzzle sits on a fired mouth.
+        const wanted = [0, 1].map((barrel) => {
+          const m = rearGunMuzzle(mount, barrel, yaw, pitch);
+          return new Vector3(mount.pivot[0] + m[0], mount.pivot[1] + m[1], mount.pivot[2] + m[2]);
+        });
+        for (const [i, node] of station.muzzles.entries()) {
+          const got = node.getWorldPosition(new Vector3());
+          const nearest = Math.min(...wanted.map((w) => got.distanceTo(w)));
+          assert.ok(
+            nearest < 0.02,
+            `${name} FPP muzzle ${i} at yaw ${yaw} pitch ${pitch}: ${nearest.toFixed(4)} m to a fired mouth`,
+          );
+        }
+      }
+      station.dispose();
+    }
+    // The AI builds above never carry an FPP station.
+    assert.equal(parkedTbd.userData.rearStation, undefined, "a parked TBD allocates no first-person station");
+  }
   assert.equal(tbd.name, "Douglas TBD-1 Devastator", "the player TBD is the ported airframe");
   assert.ok(tbd.userData.devastator, "the player TBD is the ported Devastator");
   const tbdSpan = new Box3().setFromObject(tbd).getSize(new Vector3()).x;
