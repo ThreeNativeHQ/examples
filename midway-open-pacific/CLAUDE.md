@@ -234,6 +234,7 @@ pnpm typecheck
 pnpm exec vite build
 node scripts/check-flight.mjs
 node scripts/check-aircraft.mjs
+node scripts/check-gunner.mjs
 node scripts/check-audio.mjs
 node scripts/check-intel.mjs
 node scripts/check-naval.mjs
@@ -250,6 +251,7 @@ bash tools/capture-lock.sh node tools/capture-deck.mjs
 bash tools/capture-lock.sh node tools/capture-fleet.mjs
 bash tools/capture-lock.sh node tools/capture-sortie.mjs
 bash tools/capture-lock.sh node tools/capture-sortie-runs.mjs
+bash tools/capture-lock.sh node tools/capture-gunner.mjs
 bash tools/capture-lock.sh node tools/capture-crash.mjs
 bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/cli.js \
   --scenario playtests/launch.playtest.json --url http://127.0.0.1:5199 --browser-recipe webgpu --headed --timeout 45000

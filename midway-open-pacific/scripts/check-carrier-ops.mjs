@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { build } from "esbuild";
 
 const { outputFiles } = await build({
-  stdin: { contents: 'export * from "./src/sim/carrier-ops.ts"; export { Battle } from "./src/sim/battle.ts";',
+  stdin: { contents: 'export * from "./src/sim/carrier-ops.ts"; export { Battle } from "./src/sim/battle.ts"; export { rearRoundsFor } from "./src/sim/armament.ts";',
     loader: "ts", resolveDir: process.cwd() },
   bundle: true,
   platform: "node",
@@ -211,7 +211,7 @@ for (const [carrierFuel, bombs, expectedFuel, ammo, fullGuns] of [[0, 2, 10, 0, 
   b.player.fuel = 10;
   b.player.bombs = 0;
   b.player.ammo = fullGuns ? 1400 : 12;
-  b.player.rearAmmo = fullGuns ? 240 : 7;
+  b.player.rearAmmo = fullGuns ? ops.rearRoundsFor("sbd") : 7;
   h.air.fuel = carrierFuel;
   h.air.stores.bomb = bombs;
   h.air.stores.ammo = ammo;
@@ -223,7 +223,7 @@ for (const [carrierFuel, bombs, expectedFuel, ammo, fullGuns] of [[0, 2, 10, 0, 
   assert.ok(Math.abs(h.air.fuel - (carrierFuel - (expectedFuel - 10) / 100)) < 1e-6,
     "carrier must spend only the fuel actually transferred");
   assert.equal(b.player.bombs, bombs > 0 ? 3 : 0);
-  assert.deepEqual([b.player.ammo, b.player.rearAmmo], ammo ? [1400, 240] : [12, 7], "gun refill requires ammunition stores");
+  assert.deepEqual([b.player.ammo, b.player.rearAmmo], ammo ? [1400, ops.rearRoundsFor("sbd")] : [12, 7], "gun refill requires ammunition stores");
   assert.equal(h.air.stores.ammo, ammo && !fullGuns ? ammo - 1 : ammo, "one gun refill costs one store; full guns cost nothing");
   const stock = JSON.stringify(h.air.stores);
   const payload = b.player.bombs;

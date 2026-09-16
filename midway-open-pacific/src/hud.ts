@@ -101,8 +101,20 @@ export class Hud {
     $("battle-clock").textContent = new Date((6 * 3600 + 30 * 60 + b.time) * 1000).toISOString().slice(11, 19);
     $("bomb-count").textContent = p.loadout === "torpedo" ? (p.torpedo ? "◆" : "◇") : "◆ ".repeat(p.bombs) + "◇ ".repeat(3 - p.bombs);
     $("ordnance-label").textContent = p.loadout === "torpedo" ? "TORPEDO" : "BOMBS";
-    $("btn-camera").textContent = viewCameraLabel(this.view.cameraMode);
+    // The rear-gun station: who is flying, the gun's own ammunition, and which hint line applies.
+    const gunner = p.gunner === true;
+    $("btn-camera").textContent = gunner ? "C / LOCKED" : viewCameraLabel(this.view.cameraMode);
     $("ammo").textContent = String(p.ammo);
+    $("btn-gunner").textContent = gunner ? "Y / PILOT" : "Y / REAR GUN";
+    $("btn-gunner").setAttribute("aria-pressed", String(gunner));
+    $("btn-gunner").setAttribute("aria-label", gunner ? "Return to the pilot seat" : "Man the rear gun");
+    // The station is first-person only, so the camera control is truly disabled, not cosmetic.
+    $("btn-camera").toggleAttribute("disabled", gunner);
+    $("btn-camera").setAttribute("aria-label", gunner ? "Camera locked to the rear gunner station" : "Cycle camera views");
+    $("rear-block").classList.toggle("hidden", !gunner);
+    $("rear-ammo").textContent = String(p.rearAmmo ?? 0);
+    $("camera-hint").classList.toggle("hidden", gunner);
+    $("gunner-hint").classList.toggle("hidden", !gunner);
     for (const [id, on] of [
       ["gear", p.gear],
       ["brakes", p.brakes],
@@ -205,6 +217,11 @@ export class Hud {
       else if (p.fuel < 15) warning = "LOW FUEL";
     }
     $("warning").textContent = warning;
+    // The rear gun refuses a round that would cross the aircraft's own tail or, on the Douglas, its
+    // own fuselage. The player is looking down the barrels, so the refusal needs its own cue: it is
+    // a status, not a warning, and must not be suppressed behind a higher-priority one (low fuel,
+    // low airspeed) even though those still own the warning line above.
+    $("gunner-block").classList.toggle("hidden", !(gunner && p.rearBlocked === true));
     const recent = b.radio.filter((r: any) => b.time - r.time < 23).slice(0, 2);
     const key = recent.map((r: any) => r.id).join();
     if (key !== this.lastRadio) {
@@ -390,6 +407,27 @@ export class Hud {
     c.fill();
     this.drawGauges();
     if (p.mode === "flight") {
+      // The gunner's sight. The rear-gun camera looks straight down the sim's own aim, so a fixed
+      // centre reticle is the true gun direction at every yaw and pitch — the asset's iron sights
+      // do not line up with the fixed eye, so this is the player's actual sight. Unobtrusive and in
+      // the same brass/pale palette as the rest of the HUD.
+      if (p.gunner === true) {
+        const rx = w / 2;
+        const ry = h / 2;
+        c.strokeStyle = "rgba(232,214,174,.7)";
+        c.lineWidth = 1;
+        c.beginPath();
+        c.arc(rx, ry, 8, 0, Math.PI * 2);
+        c.stroke();
+        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+          c.beginPath();
+          c.moveTo(rx + dx * 12, ry + dy * 12);
+          c.lineTo(rx + dx * 19, ry + dy * 19);
+          c.stroke();
+        }
+        c.fillStyle = "#edf1d9";
+        c.fillRect(rx - 1, ry - 1, 2, 2);
+      }
       const f = p.attitude ? attitudeAxes(p).f : forward(p.heading, p.pitch);
       const aim = this.view.project({ x: p.x + f.x * 1600, y: p.y + f.y * 1600, z: p.z + f.z * 1600 });
       if (aim.visible) {

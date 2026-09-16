@@ -38,6 +38,11 @@ export const LOADOUTS: Record<string, ILoadout> = Object.freeze({
 export function applyLoadout(p: Any, id: string): boolean {
   const load = LOADOUTS[id];
   if (!load) return false;
+  // A different airframe is a different aircraft and brings its own rear-gun capacity (the SBD's
+  // 1200, the TBD's 600). Applying the same loadout — a deck rearm — leaves every ammunition
+  // counter alone, so the carrier's finite stores stay the only refill and a rearm cannot top up
+  // the rear gun for free.
+  const airframeChanged = p.airframe !== load.airframe;
   Object.assign(p, {
     loadout: id,
     airframe: load.airframe,
@@ -45,6 +50,7 @@ export function applyLoadout(p: Any, id: string): boolean {
     bombs: load.bombs,
     torpedo: load.torpedo,
   });
+  if (airframeChanged) p.rearAmmo = rearRoundsFor(load.airframe);
   if (id === "torpedo") {
     p.brakes = false;
     p.brakePos = 0;
@@ -478,6 +484,19 @@ export const GUN_BATTERIES: Readonly<Record<string, GunBattery>> = Object.freeze
       "NOT YET IN docs/reference-dimensions.md — see the SBD note. These are the standard published A6M3 Model 32 mounts, and the two families match the cannon20/gun77 alternation the game already emits. Needs a cited §19.",
   },
 });
+
+/**
+ * Rounds carried by an airframe's rear (defensive) mounts, all mounts together. Zero when the
+ * airframe has no rear mount, so a single-seat fighter keeps an empty rear station. Unknown
+ * airframes return zero: only the table is a source of truth.
+ */
+export function rearRoundsFor(airframeId: string): number {
+  const battery = GUN_BATTERIES[airframeId];
+  if (!battery) return 0;
+  let rounds = 0;
+  for (const mount of battery.mounts) if (mount.facing === "rear") rounds += mount.rounds;
+  return rounds;
+}
 
 export class UnknownAirframeGunsError extends Error {
   constructor(id: string) {
