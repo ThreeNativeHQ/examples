@@ -8,9 +8,11 @@ import { clamp, wrap } from "./math.js";
 export type SubMode = "surfaced" | "periscope" | "deep";
 
 /**
- * `depth` is POSITIVE DOWNWARD, metres, 0 at the surface: 14 means 14 m under the water. The rest of
- * the game treats `y` as positive up, so a submerged boat sits at negative y. Use `subY` for that
- * conversion instead of writing the sign by hand at each site — this is the field read backwards.
+ * `depth` is POSITIVE DOWNWARD, metres, 0 at the surface, and it is measured to the KEEL the way a
+ * boat reports it: 13 means the keel is 13 m under the water, so the waterline is one draught
+ * shallower. The rest of the game treats `y` as positive up, so a submerged boat sits at negative y;
+ * use `subY` for that conversion instead of writing the sign by hand at each site. `src/render/
+ * ship-motion.ts` turns the keel depth into the hull's rendered waterline.
  */
 export interface SubState {
   depth: number;
@@ -24,7 +26,14 @@ export interface SubState {
 }
 
 export const SURFACE_DEPTH = 0;
-export const PERISCOPE_DEPTH = 14;
+/**
+ * Keel depth at which the periscope head is just awash. The shipped hulls measure 13.50 m (I-168)
+ * and 15.00 m (Nautilus) from keel to masthead — `catalog.ts`, measured off the GLBs — so 13 m
+ * leaves the Japanese boat's head 0.5 m proud and the American's 2 m: only the shears break the
+ * surface. The previous 14 m put the whole head under the sea, which is why a boat "at periscope
+ * depth" showed nothing at all.
+ */
+export const PERISCOPE_DEPTH = 13;
 export const DEEP_DEPTH = 60;
 
 export const SURFACED_MAX = 9.8;

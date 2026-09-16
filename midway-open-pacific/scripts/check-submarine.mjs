@@ -37,7 +37,7 @@ while (dive.depth < s.PERISCOPE_DEPTH && steps < 100) {
   steps += 1;
   maxDepth = Math.max(maxDepth, dive.depth);
 }
-assert.equal(steps, 14, `reaches 14 m in 14 half-second steps, got ${steps}`);
+assert.equal(steps, s.PERISCOPE_DEPTH, `reaches periscope depth in ${steps} half-second steps`);
 assert.equal(dive.depth, s.PERISCOPE_DEPTH);
 assert.equal(dive.mode, "periscope");
 assert.ok(maxDepth <= s.PERISCOPE_DEPTH, `never overshoots, peaked at ${maxDepth}`);

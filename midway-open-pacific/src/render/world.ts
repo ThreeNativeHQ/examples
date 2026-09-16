@@ -15,7 +15,7 @@ import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./envir
 import { createOcean, REFLECTED_LAYER } from "./ocean.js";
 import { CombatParticles } from "./particles.js";
 import { createRipples } from "./ripples.js";
-import { shipMotion } from "./ship-motion.js";
+import { shipMotion, submarineMotion } from "./ship-motion.js";
 
 /**
  * The real airframe drawn for an AI aircraft. Every battle type maps to a shipped model — no
@@ -650,9 +650,15 @@ export class WorldView {
     for (const s of b.ships) {
       const m = this.meshes.get(s.id);
       if (!m) continue;
-      // Depth already became y through `subY` in the simulation; the renderer never converts it.
-      const moving = s.kind !== "sub" || s.surfaced;
-      const motion = moving ? shipMotion(s, time, this.ripples.heightAt) : {x:0,y:0,z:0,pitch:0,roll:0};
+      // A submarine carries its own pose: the sim's keel depth becomes a waterline offset, the
+      // swell fades with depth, and the dive angle comes from the sim's own `depthRate`. A surface
+      // hull is unchanged. A wreck takes no pose — it is going down, not riding anything.
+      const motion =
+        s.kind === "sub"
+          ? s.sub && !s.sunk
+            ? submarineMotion(s, time, this.ripples.heightAt)
+            : { x: 0, y: 0, z: 0, pitch: 0, roll: 0 }
+          : shipMotion(s, time, this.ripples.heightAt);
       m.position.set(s.x + motion.x, s.y + motion.y, s.z + motion.z);
       m.rotation.set(motion.pitch, -s.heading, s.sunk ? s.sink * .35 : motion.roll + (s.list ?? 0), "YXZ");
       // The camera, not the player, is what decides whether a hull is a speck: it is also the pass
