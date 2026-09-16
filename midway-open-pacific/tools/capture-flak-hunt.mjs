@@ -2,11 +2,11 @@
  * Flak-freeze / tracer-line diagnostic probe (diagnostic only; edits no game source).
  *
  * The report under investigation: a multi-second freeze, then "enormous thin tracer lines" and
- * slowdown during flak bursts. `src/render/world.ts::updateProjectiles` writes one LineSegments
- * vertex pair per `battle.bullets` entry with a segment length of `|v| * 0.012` (0.02 for flak),
- * so an anomalous tracer length means either a non-finite/huge velocity on a projectile or a
- * stale/overrun tracer buffer. This probe measures both sides plus the CPU and GPU cost of the
- * phases around them.
+ * slowdown during flak bursts. `src/render/world.ts::updateProjectiles` writes one InstancedMesh
+ * matrix per `battle.bullets` entry, stretching a unit sphere along the round's velocity (its long
+ * axis is `|v| * 0.012`, 0.02 for flak, so a full streak is twice that), so an anomalous tracer
+ * length means either a non-finite/huge velocity on a projectile or a stale/overrun tracer pool.
+ * This probe measures both sides plus the CPU and GPU cost of the phases around them.
  *
  * Phases, each a warm-up then a wall sample (env-tunable), on the airborne battle with the cockpit
  * vantage the report comes from:
@@ -421,32 +421,52 @@ try {
       player: { hp: b.player.hp, y: +b.player.y.toFixed(1), mode: b.player.mode },
     });
 
-    // The sanity check the report needs: what the tracer buffer actually holds, and what the
-    // projectile velocities imply for the next write. Segment length comes from the CPU Float32Array
-    // the LineSegments geometry owns, not from a render.
+    // The sanity check the report needs: what the tracer pool actually holds, and what the
+    // projectile velocities imply for the next write. The source is one InstancedMesh; each
+    // instance's own matrix carries the streak direction and the per-round scale.
     P.tracerSnapshot = () => {
-      const g = w.tracers.geometry;
-      const pos = g.attributes.position.array;
-      const segs = Math.floor((g.drawRange.count || 0) / 2);
+      const im = w.tracers;
+      const arr = im.instanceMatrix.array;
+      const n = im.count;
       let finite = 0;
       let nonFinite = 0;
       let degenerate = 0;
       let maxLen = 0;
       let minLen = Infinity;
       let sumLen = 0;
-      for (let i = 0; i < segs; i += 1) {
-        const k = i * 6;
-        const v = [pos[k], pos[k + 1], pos[k + 2], pos[k + 3], pos[k + 4], pos[k + 5]];
-        if (!v.every(Number.isFinite)) {
+      let maxRadius = 0;
+      let minRadius = Infinity;
+      let maxCenterError = 0;
+      for (let i = 0; i < n; i += 1) {
+        const k = i * 16;
+        const m = [arr[k], arr[k + 1], arr[k + 2], arr[k + 3], arr[k + 4], arr[k + 5], arr[k + 6], arr[k + 7], arr[k + 8], arr[k + 9], arr[k + 10], arr[k + 11], arr[k + 12], arr[k + 13], arr[k + 14], arr[k + 15]];
+        if (!m.every(Number.isFinite)) {
           nonFinite += 1;
           continue;
         }
         finite += 1;
-        const L = Math.hypot(v[0] - v[3], v[1] - v[4], v[2] - v[5]);
-        if (L < 1e-6) degenerate += 1;
+        const half = Math.hypot(m[8], m[9], m[10]);
+        const L = 2 * half;
+        const radius = Math.hypot(m[0], m[1], m[2]);
+        if (half <= 0 || radius <= 0) degenerate += 1;
         if (L > maxLen) maxLen = L;
         if (L < minLen) minLen = L;
+        if (radius > maxRadius) maxRadius = radius;
+        if (radius < minRadius) minRadius = radius;
         sumLen += L;
+        // The instance centre must sit half a length BEHIND its bullet's own head, never past it.
+        const a = b.bullets[i];
+        if (a && half > 0) {
+          const speed = Math.hypot(a.vx, a.vy, a.vz);
+          if (speed > 1e-6) {
+            const ux = a.vx / speed, uy = a.vy / speed, uz = a.vz / speed;
+            const cx = a.x - ux * half;
+            const cy = a.y - uy * half;
+            const cz = a.z - uz * half;
+            const err = Math.hypot(m[12] - cx, m[13] - cy, m[14] - cz);
+            if (err > maxCenterError) maxCenterError = err;
+          }
+        }
       }
       let bulletsNonFinite = 0;
       let maxSpeed = 0;
@@ -461,18 +481,20 @@ try {
         if (L > maxExpected) maxExpected = L;
       }
       return {
-        geometry: g.type,
-        drawRange: { start: g.drawRange.start, count: g.drawRange.count },
-        attributeVertices: g.attributes.position.count,
-        arrayFloats: pos.length,
-        capacitySegments: pos.length / 6,
-        segmentsDrawn: segs,
-        finiteSegments: finite,
-        nonFiniteSegments: nonFinite,
-        degenerateSegments: degenerate,
+        geometry: im.type,
+        instanced: !!im.isInstancedMesh,
+        capacity: im.instanceMatrix.count,
+        instancesDrawn: n,
+        colorInstances: im.instanceColor ? im.instanceColor.count : 0,
+        finiteInstances: finite,
+        nonFiniteInstances: nonFinite,
+        degenerateInstances: degenerate,
         maxSegmentLength: +maxLen.toFixed(3),
         minSegmentLength: finite ? +minLen.toFixed(3) : null,
         meanSegmentLength: finite ? +(sumLen / finite).toFixed(3) : null,
+        minRadius: finite ? +minRadius.toFixed(4) : null,
+        maxRadius: finite ? +maxRadius.toFixed(4) : null,
+        maxCenterBehindError: +maxCenterError.toFixed(4),
         bullets: b.bullets.length,
         flakBullets,
         bulletsNonFinite,
@@ -482,15 +504,15 @@ try {
       };
     };
 
-    // The rendered-proxy topology, not the CPU segment buffer. The tracer source is a LineSegments
-    // (one vertex pair per projectile); the engine's projection may swap in a proxy that shares its
-    // geometry. A plain Line proxy connects pair N to pair N+1 into one continuous polyline — the
-    // reported "enormous thin tracer lines" — while the CPU buffer stays perfectly finite. So this
-    // reads the scene the renderer was actually handed on the main draw and reports what it holds.
+    // The rendered-proxy topology, not the CPU pool. The tracer source is an InstancedMesh (one
+    // stretched sphere per projectile); the engine's projection may swap in a proxy that shares
+    // its geometry. A proxy that draws the same geometry as a connected Line or a Lines strip
+    // would smear one projectile into the next — the reported "enormous thin tracer lines" — so
+    // this reads the scene the renderer was actually handed on the main draw and reports it.
     P.renderedTopology = () => {
       const source = w.tracers;
       const scene = P.mainDrawScene;
-      const out = { captured: !!scene, sourceIsLineSegments: !!source?.isLineSegments, found: false, type: null, isLineSegments: false, isLine: false, geometryShared: false };
+      const out = { captured: !!scene, sourceIsInstancedMesh: !!source?.isInstancedMesh, found: false, type: null, isInstancedMesh: false, isLine: false, isLineSegments: false, geometryShared: false, instanceMatrix: false };
       if (!scene || !source) return out;
       let found = null;
       const visit = (node) => {
@@ -505,10 +527,11 @@ try {
       if (!found) return out;
       out.found = true;
       out.type = found.type ?? null;
-      out.isLineSegments = !!found.isLineSegments;
+      out.isInstancedMesh = !!found.isInstancedMesh;
       out.isLine = !!found.isLine;
+      out.isLineSegments = !!found.isLineSegments;
+      out.instanceMatrix = !!found.instanceMatrix;
       out.geometryShared = found.geometry === source.geometry;
-      out.drawRange = { start: found.geometry.drawRange.start, count: found.geometry.drawRange.count };
       return out;
     };
 
@@ -636,14 +659,25 @@ try {
     };
     metrics.ringWorst = snap.ring.length ? snap.ring.filter(Number.isFinite).reduce((m, x) => Math.max(m, x), 0) : null;
     report.phases[name] = metrics;
-    // The tracer proxy must keep its segment topology. A drawing of it as a plain Line is the
-    // reported tracer defect and fails here even though the CPU buffer looked finite.
+    // The tracer source is an InstancedMesh now; the defect this gate exists for is a proxy that
+    // re-topologizes it (a Line/Lines that connects one round to the next). Fail on any proxy that
+    // drops the per-instance matrix, and require the CPU pool to stay finite and per-round.
     assert.ok(snap.rendered.found, "main draw must contain the tracer source or its projected proxy");
-    assert.ok(snap.rendered.isLineSegments, `projected tracer proxy must stay LineSegments, got ${snap.rendered.type}`);
+    assert.ok(
+      snap.rendered.isInstancedMesh || !(snap.rendered.isLine || snap.rendered.isLineSegments),
+      `projected tracer proxy must not degenerate to a Line; got ${snap.rendered.type}`,
+    );
+    assert.ok(snap.tracer.instanced, "tracer source must be an InstancedMesh");
+    assert.equal(snap.tracer.nonFiniteInstances, 0, "every tracer instance matrix must be finite");
+    assert.equal(snap.tracer.degenerateInstances, 0, "every tracer instance must have positive radius and length");
+    assert.ok(snap.tracer.maxCenterBehindError < 1e-3, `tracer centre must trail its own head, error ${snap.tracer.maxCenterBehindError}`);
+    if (snap.tracer.finiteInstances > 0) {
+      assert.ok(snap.tracer.minRadius >= 0.0149 && snap.tracer.maxRadius <= 0.4501, `tracer radius must be clamped to [0.015, 0.45], got ${snap.tracer.minRadius}..${snap.tracer.maxRadius}`);
+    }
     await page.screenshot({ path: join(OUT, `${name}.png`) });
-    const topo = snap.rendered.found ? (snap.rendered.isLineSegments ? "LineSegments" : snap.rendered.type) : "not-projected";
+    const topo = snap.rendered.found ? (snap.rendered.isInstancedMesh ? "InstancedMesh" : snap.rendered.type) : "not-projected";
     console.log(
-      `${name.padEnd(20)} frame CPU p95 ${fmt(metrics.cpu.frameCpu)} | render p95 ${fmt(metrics.cpu.render)} | worldUpdate p95 ${fmt(metrics.cpu.worldUpdate)} | projectiles p95 ${fmt(metrics.cpu.updateProjectiles)} | particles p95 ${fmt(metrics.cpu.particlesUpdate)} | prepare ${metrics.cpu.particlesPrepare?.samples ?? 0} (${fmt(metrics.cpu.particlesPrepare)}) writeBatch ${metrics.cpu.writeBatch?.samples ?? 0} | step p95 ${fmt(metrics.cpu.battleStep)} | gpu p95 ${fmt(metrics.gpu)} ms | draws ${snap.render.draws} tri ${snap.render.triangles} | bullets ${snap.tracer.bullets} (flak ${snap.tracer.flakBullets}) | tracer maxLen ${snap.tracer.maxSegmentLength} nonFinite ${snap.tracer.nonFiniteSegments} topo ${topo} | ring worst ${metrics.ringWorst}`,
+      `${name.padEnd(20)} frame CPU p95 ${fmt(metrics.cpu.frameCpu)} | render p95 ${fmt(metrics.cpu.render)} | worldUpdate p95 ${fmt(metrics.cpu.worldUpdate)} | projectiles p95 ${fmt(metrics.cpu.updateProjectiles)} | particles p95 ${fmt(metrics.cpu.particlesUpdate)} | prepare ${metrics.cpu.particlesPrepare?.samples ?? 0} (${fmt(metrics.cpu.particlesPrepare)}) writeBatch ${metrics.cpu.writeBatch?.samples ?? 0} | step p95 ${fmt(metrics.cpu.battleStep)} | gpu p95 ${fmt(metrics.gpu)} ms | draws ${snap.render.draws} tri ${snap.render.triangles} | bullets ${snap.tracer.bullets} (flak ${snap.tracer.flakBullets}) | tracer maxLen ${snap.tracer.maxSegmentLength} r ${snap.tracer.minRadius}..${snap.tracer.maxRadius} nonFinite ${snap.tracer.nonFiniteInstances} topo ${topo} | ring worst ${metrics.ringWorst}`,
     );
     return metrics;
   };
@@ -867,7 +901,7 @@ try {
   };
   await page.screenshot({ path: join(OUT, "final.png") });
   console.log(
-    `D-stall${" ".repeat(13)} before maxLen ${before.maxSegmentLength}m nonFinite seg ${before.nonFiniteSegments} bulletNonFinite ${before.bulletsNonFinite} -> after maxLen ${after.maxSegmentLength}m nonFinite seg ${after.nonFiniteSegments} bulletNonFinite ${after.bulletsNonFinite} | ring worst ${report.phases["D-stall"].ringWorst} | longTasks ${dSnap.longTasks.map((t) => t.dur).join(",") || "none"} | screenshot D-stall-immediate.png`,
+    `D-stall${" ".repeat(13)} before maxLen ${before.maxSegmentLength}m nonFinite inst ${before.nonFiniteInstances} bulletNonFinite ${before.bulletsNonFinite} -> after maxLen ${after.maxSegmentLength}m nonFinite inst ${after.nonFiniteInstances} bulletNonFinite ${after.bulletsNonFinite} | ring worst ${report.phases["D-stall"].ringWorst} | longTasks ${dSnap.longTasks.map((t) => t.dur).join(",") || "none"} | screenshot D-stall-immediate.png`,
   );
   }
 } finally {

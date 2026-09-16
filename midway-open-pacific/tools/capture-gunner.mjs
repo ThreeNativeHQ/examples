@@ -10,6 +10,7 @@
  *   MIDWAY_URL=http://127.0.0.1:53xx bash tools/capture-lock.sh node tools/capture-gunner.mjs
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 
@@ -61,6 +62,62 @@ try {
             const scene = (await import(url)).default.scene;
             if (scene?.battle) {
               window.midway = scene;
+              // Objective audio proof, not a call counter. The gun30 cue must reach Soundscape and
+              // then the mixer carrying the EXACT decoded gun30 buffer, with nonzero samples, on a
+              // running context, at positive effective gain. No ear audition on this host.
+              const s = scene;
+              s.__gun30 = 0;
+              s.__busPlays = 0;
+              const g30 = s.audio.buffers.get("gun30");
+              s.__gun30Info = g30
+                ? {
+                    duration: g30.duration,
+                    length: g30.length,
+                    channels: g30.numberOfChannels,
+                    peak: (() => {
+                      let peak = 0;
+                      for (let c = 0; c < g30.numberOfChannels; c += 1) {
+                        const data = g30.getChannelData(c);
+                        for (let i = 0; i < data.length; i += 1) if (Math.abs(data[i]) > peak) peak = Math.abs(data[i]);
+                      }
+                      return peak;
+                    })(),
+                  }
+                : null;
+              s.__gun30Plays = [];
+              const ev = s.audio.event.bind(s.audio);
+              s.audio.event = (e) => {
+                if (e.type === "gun" && e.weapon === "gun30") s.__gun30 += 1;
+                return ev(e);
+              };
+              // The player's own rear gun is a headset cue (`play`); AI guns are positional
+              // (`playAt`). Count both, and fingerprint the gun30 buffer itself on either path.
+              const play = s.audio.bus.play.bind(s.audio.bus);
+              s.audio.bus.play = (buf, opts) => {
+                s.__busPlays += 1;
+                const voice = play(buf, opts);
+                if (buf === g30)
+                  s.__gun30Plays.push({
+                    volume: opts?.volume ?? 1,
+                    contextState: s.audio.bus.listener.context.state,
+                    gain: voice?.gain?.gain?.value ?? null,
+                    positional: false,
+                  });
+                return voice;
+              };
+              const playAt = s.audio.bus.playAt.bind(s.audio.bus);
+              s.audio.bus.playAt = (buf, at, opts) => {
+                s.__busPlays += 1;
+                const voice = playAt(buf, at, opts);
+                if (buf === g30)
+                  s.__gun30Plays.push({
+                    volume: opts?.volume ?? 1,
+                    contextState: s.audio.bus.listener.context.state,
+                    gain: voice?.gain?.gain?.value ?? null,
+                    positional: true,
+                  });
+                return voice;
+              };
               return;
             }
           } catch {
@@ -83,6 +140,31 @@ try {
     await page.waitForTimeout(400);
   };
 
+  // Real pointer lock, as the browser reports it: the OS cursor is captured by the canvas and the
+  // engine's own raw state agrees. Both must hold, so a request alone never counts as a lock.
+  const lockState = () =>
+    page.evaluate(() => ({
+      pointerLockElement: document.pointerLockElement ? document.pointerLockElement.tagName + "#" + (document.pointerLockElement.id || "?") : null,
+      engineCaptured: window.midway.ctx.input.raw.pointer.captured === true,
+    }));
+
+  // Move the OS pointer under the private Xvfb this capture always runs inside. CDP mouse deltas
+  // read zero under pointer lock without OS focus, so the engine's relative aim would never move;
+  // xdotool warps the X pointer instead, and pointer lock reports the delta to the page.
+  const osMove = (dx, dy) => {
+    if (!process.env.DISPLAY) throw new Error("capture-gunner must run inside tools/capture-lock.sh (DISPLAY unset)");
+    try {
+      const ids = execFileSync("xdotool", ["search", "--onlyvisible", "--class", "chromium"], { encoding: "utf8" })
+        .trim()
+        .split("\n")
+        .filter(Boolean);
+      if (ids.length) execFileSync("xdotool", ["windowfocus", ids[ids.length - 1]], { stdio: "ignore" });
+    } catch {
+      // Window search/focus is best-effort; the warp below is what the test reads.
+    }
+    execFileSync("xdotool", ["mousemove_relative", "--", String(dx), String(dy)]);
+  };
+
   const rearView = () =>
     page.evaluate(() => {
       const s = window.midway;
@@ -96,6 +178,9 @@ try {
         nav: p.nav,
         cameraMode: w.cameraMode,
         rearAmmo: p.rearAmmo,
+        rearLoaded: p.rearLoaded,
+        rearReloadUntil: p.rearReloadUntil ?? 0,
+        time: b.time,
         ammo: p.ammo,
         gunnerVisible: w.playerMesh.userData.gunner?.visible,
         pilotVisible: w.playerMesh.userData.crew?.[0]?.visible,
@@ -165,7 +250,10 @@ try {
     assert.equal(before.gunner, false, "starts in the pilot seat with no gunner");
     if (useButton) await page.click("#btn-gunner");
     else await page.keyboard.press("y");
-    await page.waitForTimeout(250);
+    // A HUD button click leaves the button focused, which can swallow the held aim key; and the
+    // station camera swings aft over a few frames, so settle it before measuring its screen-right.
+    await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+    await page.waitForTimeout(600);
     const manned = await rearView();
     assert.equal(manned.gunner, true, "Y / the HUD button mans the rear gun");
     assert.equal(manned.autopilot, true, "manning hands the aircraft to the AI course hold");
@@ -201,11 +289,152 @@ try {
       `D aims toward the gunner's screen-right: ${dot(aim0, camRight0).toFixed(3)} -> ${dot(aim1, camRight0).toFixed(3)}`,
     );
     // Return the station to dead astern for the firing tests that follow.
+    const resetAim = () =>
+      page.evaluate(() => {
+        const p = window.midway.battle.player;
+        p.gunnerYaw = 0;
+        p.gunnerPitch = 0;
+        p.rearTimer = 0;
+      });
+    await resetAim();
+
+    // 1c. Real pointer lock: manning the station hid the OS cursor, and the browser and the engine
+    // agree; the lock survives motion past the window edge, and that relative motion is the only
+    // thing that aims. The motion comes from xdotool inside this capture-lock Xvfb because CDP
+    // deltas read zero under a lock without OS focus.
+    const lockManned = await lockState();
+    assert.ok(lockManned.pointerLockElement, `manning the gun takes a real pointer lock: ${JSON.stringify(lockManned)}`);
+    assert.equal(lockManned.engineCaptured, true, "the engine reports the pointer captured");
+    const camRight1 = await page.evaluate(() => {
+      const V = window.midway.world.camera.position.constructor;
+      const r = new V(1, 0, 0).applyQuaternion(window.midway.world.camera.quaternion);
+      return [r.x, r.y, r.z];
+    });
+    const aimM0 = await page.evaluate(() => {
+      const a = window.midway.battle.gunnerAim();
+      return [a.x, a.y, a.z];
+    });
+    for (let i = 0; i < 8; i += 1) osMove(40, 0);
+    await page.waitForTimeout(150);
+    const aimM1 = await page.evaluate(() => {
+      const a = window.midway.battle.gunnerAim();
+      return [a.x, a.y, a.z];
+    });
+    assert.ok(
+      dot(aimM1, camRight1) > dot(aimM0, camRight1) + 0.05,
+      `locked relative motion past the window edge aims the rear gun to screen-right: ${dot(aimM0, camRight1).toFixed(3)} -> ${dot(aimM1, camRight1).toFixed(3)}`,
+    );
+    assert.equal((await lockState()).engineCaptured, true, "the lock survives motion past the window edge");
+
+    // A left click while locked fires and reaches the audio mixer with the gun30 one-shot.
+    await resetAim();
+    const clickBefore = await rearView();
+    const gun30Before = await page.evaluate(() => window.midway.__gun30);
+    const busBefore = await page.evaluate(() => window.midway.__busPlays);
+    await page.mouse.down({ button: "left" });
+    await page.waitForTimeout(250);
+    await page.mouse.up({ button: "left" });
+    const clicked = await rearView();
+    assert.ok(clicked.rearAmmo < clickBefore.rearAmmo, "a bare left click fires the rear gun");
+    assert.equal(clicked.ammo, clickBefore.ammo, "a left click leaves the forward guns alone");
+    assert.ok(
+      (await page.evaluate(() => window.midway.__gun30)) > gun30Before,
+      "the rear shot reaches Soundscape as the gun30 cue",
+    );
+    assert.ok(
+      (await page.evaluate(() => window.midway.__busPlays)) > busBefore,
+      "the gun30 cue invokes the audio mixer",
+    );
+    // The exact-buffer proof: the cue that reached the mixer must be the decoded gun30 buffer,
+    // carrying samples, on a running context, at positive gain.
+    const gunProof = await page.evaluate(() => ({
+      info: window.midway.__gun30Info,
+      plays: window.midway.__gun30Plays.length,
+      last: window.midway.__gun30Plays.at(-1) ?? null,
+    }));
+    assert.ok(
+      gunProof.info && gunProof.info.length > 0 && gunProof.info.peak > 0.001,
+      `the gun30 buffer must decode to audible samples, got ${JSON.stringify(gunProof.info)}`,
+    );
+    assert.ok(gunProof.plays > 0, "the player's rear shot must invoke the mixer with the exact gun30 buffer");
+    assert.equal(gunProof.last.contextState, "running", "the audio context must be running, not suspended");
+    assert.ok(
+      gunProof.last.volume > 0 && (gunProof.last.gain === null || gunProof.last.gain > 0),
+      `the gun30 voice must leave the mixer at positive gain, got ${JSON.stringify(gunProof.last)}`,
+    );
+
+    // The exact conflict the user hit: left click fires while the right button holds the aim.
+    await resetAim();
+    const heldBefore = await rearView();
+    await page.mouse.down({ button: "right" });
+    await page.mouse.down({ button: "left" });
+    await page.waitForTimeout(250);
+    await page.mouse.up({ button: "left" });
+    await page.mouse.up({ button: "right" });
+    const held = await rearView();
+    assert.ok(held.rearAmmo < heldBefore.rearAmmo, "left click fires while the right button aims the gun");
+
+    await resetAim();
+
+    // Reload: R at the station starts a belt change, the trigger spends nothing while it runs, the
+    // sortie total never grows, and a full belt or an empty reserve is refused.
     await page.evaluate(() => {
       const p = window.midway.battle.player;
-      p.gunnerYaw = 0;
-      p.gunnerPitch = 0;
+      p.rearAmmo = 300;
+      p.rearLoaded = 30;
+      p.rearReloadUntil = 0;
+      p.rearTimer = 0;
     });
+    await page.keyboard.press("KeyR");
+    await page.waitForTimeout(150);
+    const mid = await rearView();
+    assert.ok(mid.rearReloadUntil > mid.time, `R starts a belt change in the rear station (until ${mid.rearReloadUntil}, t ${mid.time})`);
+    await page.mouse.down({ button: "left" });
+    await page.waitForTimeout(300);
+    await page.mouse.up({ button: "left" });
+    const during = await rearView();
+    assert.equal(during.rearAmmo, mid.rearAmmo, "no round is spent while the belt is changing");
+    assert.equal(during.rearLoaded, mid.rearLoaded, "the belt count cannot fall during a change");
+    await page.screenshot({ path: `${OUT}/gunner-reload-mid-${airframe}.png` });
+    await page.waitForTimeout(3800);
+    const reloaded = await rearView();
+    assert.equal(reloaded.rearAmmo, 300, "a completed belt change never changes the sortie total");
+    assert.equal(reloaded.rearLoaded, 240, "a completed belt change loads a full combined belt");
+    assert.equal(reloaded.rearReloadUntil, 0, "the belt change ends");
+    // A full belt is a no-op, and an exhausted total cannot be reloaded at all.
+    await page.keyboard.press("KeyR");
+    await page.waitForTimeout(120);
+    assert.equal((await rearView()).rearReloadUntil, 0, "R on a full belt is a no-op");
+    await page.evaluate(() => {
+      const p = window.midway.battle.player;
+      p.rearAmmo = 0;
+      p.rearLoaded = 0;
+      p.rearReloadUntil = 0;
+    });
+    await page.keyboard.press("KeyR");
+    await page.waitForTimeout(120);
+    assert.equal((await rearView()).rearReloadUntil, 0, "an exhausted sortie total cannot be reloaded");
+    // Restore a serviceable gun for the frames that follow.
+    await page.evaluate(() => {
+      const p = window.midway.battle.player;
+      p.rearAmmo = p.airframe === "tbd" ? 600 : 1200;
+      p.rearLoaded = 240;
+      p.rearReloadUntil = 0;
+    });
+
+    // A firing sequence: three frames while the trigger is held, with the shot state changing.
+    await page.mouse.down({ button: "left" });
+    const shots = [];
+    for (let i = 0; i < 3; i += 1) {
+      await page.waitForTimeout(140);
+      const v = await rearView();
+      shots.push(v.rearAmmo);
+      await page.screenshot({ path: `${OUT}/gunner-firing-${airframe}-${i}.png` });
+    }
+    await page.mouse.up({ button: "left" });
+    assert.ok(shots[0] > shots[1] && shots[1] > shots[2], `a held trigger fires across frames: ${shots.join(" > ")}`);
+
+    await resetAim();
     // Let the manning toast expire so the capture shows only the persistent controls row.
     await page.waitForTimeout(4000);
     await page.screenshot({ path: `${OUT}/gunner-rear-station-${airframe}.png` });
@@ -218,6 +447,25 @@ try {
     const locked = await rearView();
     assert.equal(locked.cameraMode, 1, "camera C/F1/F2/F3/J are all refused in the gunner station");
     assert.equal(locked.gunner, true, "no camera key left the station");
+
+    // 2b. Escape drops the lock and opens the pause menu, so the cursor comes back; Resume re-takes
+    // the lock from the click. This is the only path that unlocks without a game order.
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    const escaped = await lockState();
+    assert.equal(escaped.engineCaptured, false, "Escape releases the pointer lock");
+    assert.equal(escaped.pointerLockElement, null, "and the canvas no longer holds the cursor");
+    const paused = await page.evaluate(() => ({
+      paused: window.midway.paused,
+      hidden: document.getElementById("pause-overlay").classList.contains("hidden"),
+    }));
+    assert.equal(paused.paused, true, "Escape at the gun opens the pause menu");
+    assert.equal(paused.hidden, false, "the pause overlay is visible");
+    await page.click("#resume");
+    await page.waitForTimeout(300);
+    const resumed = await lockState();
+    assert.equal(resumed.engineCaptured, true, "Resume re-takes the pointer lock from its own click");
+    assert.equal((await rearView()).gunner, true, "and the player is still on the gun");
 
     // 3. Fire: only rear ammunition is spent.
     const ammoBefore = locked.rearAmmo;
@@ -316,6 +564,7 @@ try {
     await page.waitForTimeout(250);
     const back = await rearView();
     assert.equal(back.gunner, false, "Y returns to the pilot seat");
+    assert.equal((await lockState()).engineCaptured, false, "leaving the station releases the pointer lock");
     assert.equal(back.cameraMode, before.cameraMode, "the pilot gets their previous camera back");
     assert.equal(back.gunnerVisible, true, "the gunner body is drawn again");
     // Leaving the station restores the exterior gun and puts the first-person interior away, so no
@@ -431,7 +680,11 @@ try {
   console.log("WebGPU adapter:", JSON.stringify(adapter));
   console.log(
     "PASS: rear gunner on both airframes — station swap by key and HUD button, cameras locked, " +
-      "briefing loadout gives TBD 600 / SBD 1200, D aims screen-right, rear-ammo-only fire, " +
+      "briefing loadout gives TBD 600 / SBD 1200, D aims screen-right, a bare mouse move aims, " +
+      "a bare left click fires (rear-ammo-only, forward guns untouched) and reaches the soundscape " +
+      "as the gun30 cue and the mixer with the decoded gun30 buffer on a running context at positive " +
+      "gain, left click fires while the right button aims, R reloads the belt (no spend while loading, " +
+      "total never grows, full belt and empty reserve refused) and a held trigger fires across frames, " +
       "real rear damage, course preserved, gunner hidden / pilot+gun drawn, AI gun aims. " +
       "Captures: gunner-rear-station-*, gunner-rear-firing-*, gunner-exterior-gun-*, gunner-cockpit-closeup-*",
   );

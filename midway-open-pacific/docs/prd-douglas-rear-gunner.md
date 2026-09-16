@@ -111,6 +111,58 @@ AI aircraft, which keep the approved `weapon.rear-gun.glb` and crew fit.
   the rear station and never leaked into the exterior or pilot view, and leaves a frame of each for
   the root's visual review. No permission, licence or provenance beyond "user-supplied" is claimed.
 
+## Feedback fix — mouse aim, left-click fire, rear-shot feedback
+
+Root cause of the report, traced through `Midway.attachInput` → `Battle.aimRear` →
+`fireRearManual` → `rearShot` → `Soundscape.event`:
+
+- **Mouse aim was drag-only and aimed badly.** The station's aim moved only while the right button
+  was held (`pointermove` gated on `mouse.looking`), and the HUD hint named no button. The gunner
+  now aims on pointer motion alone (no button), with the first move after manning only re-anchoring
+  the pointer so taking the gun never jumps the barrels; the pilot's right-drag free-look and the
+  whole pilot cockpit are untouched.
+- **Left click did nothing while aiming.** Two causes: `pointerdown` discarded a left click whenever
+  `mouse.looking` was set, and a second button pressed while one is already down arrives as a
+  `pointermove`, not a `pointerdown`. Fire is now read from the button mask (`e.buttons & 1`) on
+  `pointermove` and recomputed on `pointerup`, so a held or clicked left trigger fires whether or not
+  the right button aims. The hint now reads `MOUSE / WASD AIM · LEFT CLICK OR SPACE FIRE`.
+- **No rear firing visual.** `rearShot` emitted only a `gun30` sound event; the forward wing guns
+  drew their flash at `Battle.fire`. A successful *player* round now also emits `fx("muzzle")` at
+  the fired mouth, and the authored `VentedBarrel` groups in the FPP twin (`rear-station.setRecoil`)
+  kick back from the sim's own `rearTimer`, so a refused/blocked or empty trigger (rearTimer 0) never
+  flashes and never recoils. Look remains game-owned in `src/render/`.
+- **Audio trace and fix.** The `gun30` cue routed the player's own round through the world-panned
+  `#playAt` path at the gunner's own ear, on the *shared* per-cue cooldown (so a distant AI `.30`
+  could claim the slot first) and ~5 dB under the audible forward `.50`; the supplied `gun-30.ogg`
+  is a 0.18 s pop (peak −3.9 dBFS) against `gun-50.ogg`'s 2.0 s. The player's own rear round now
+  emits as a headset cue with no world position — exactly like the forward guns — on its own
+  cooldown lane (an AI gun can no longer suppress it) with an own-shot gain (`OWN_SHOT.gun30` 0.8).
+  The capture proves the exact decoded `gun30` buffer reaches the mixer with nonzero samples, on a
+  running context, at positive effective gain. **Not ear auditioned** — this host has no audio input.
+- **Reload — the supplied controller's belt cycle, adopted as a gameplay approximation.** The rear
+  gun's total stays exactly `rearRoundsFor` (SBD 1200 provisional, TBD 600); a single `rearLoaded`
+  count (combined 240) is the belt, and the reserve is implicit as `total - loaded`. A shot spends
+  both; reloading only moves rounds from the reserve into the belt, so the total never changes and a
+  depleted total can never be reloaded back into existence. `R` in the station (pilot `R` still
+  reports) starts a 3.6 s belt change, a full belt is a no-op, and an empty belt auto-reloads when a
+  reserve remains. The AI gunner (including friendly Douglas SBD/TBD) runs the same state, so a
+  change survives the control handoff; Kate/Val keep their generic rear gun. `rear-station.setReload`
+  drives the authored `FeedCover` / `AmmoBoxLid` / `ChargingHandle` / belt cycle (open 1.32 rad, lid
+  1.15, handle a `0.24·sin` pulse); the HUD shows `total · loaded/reserve` or `LOADING n.ns`.
+  **Mechanism approximated, not historical:** the manual distinguishes 120-round belts only as a
+  gameplay figure, not a verified capacity (`docs/reference-dimensions.md` records no source).
+- **Tracers are round heads, not crosses.** Every round in every camera mode carried a
+  camera-facing cross (~10 px) at its head, which read as a field of plus signs. The `LineSegments`
+  pair is now one `InstancedMesh` of unit spheres stretched along each round's velocity: a thin
+  streak side-on, a small dot end-on. The radius is clamped to `[0.015, 0.45] m` at ~1.25 px of the
+  focal length, so a far round is a dot and never a balloon; the instance is centred half a length
+  *behind* the ballistic head so the visible streak trails the round instead of reaching past it; a
+  zero-velocity round falls back to a valid +Z orientation. One bounded pool (1000 instances), one
+  geometry, one draw, no per-frame allocation. This is the existing behaviour's replacement, not a
+  new feature: the same `bullets` array drives it. `capture-flak-hunt.mjs` is updated to the new
+  representation (instance count, per-instance finite scale, radius clamp, centre-behind error, and
+  a proxy that stays instanced rather than re-topologized into a Line).
+
 ## Verification
 
 Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`check-gunner` and
@@ -125,13 +177,18 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
   remaining failures separately proved pre-existing (see below).
 - **This focused pass:** `pnpm typecheck` PASS; `node scripts/check-gunner.mjs` PASS (now including
   the SBD depressed central refusal, no-round/no-barrel-flip, immediate level resume, a clear
-  depressed side shot, and a TBD control); `pnpm exec vite build` PASS; `node tools/check-fleet.mjs`
-  PASS (the rear gun is checked by `check-aircraft`/`check-gunner`, so it is exempted from the
-  fleet.json orphan scan); `bash tools/capture-lock.sh node tools/capture-gunner.mjs` PASS on
-  **nvidia / turing** (measured by the capture, not assumed) with screenshots
-  `screenshots/gunner-rear-station-{sbd,tbd}.png`, `gunner-rear-blocked-sbd.png` (LOW FUEL +
-  AIRFRAME BLOCKS FIRE + reticle together), `gunner-rear-firing-*`, `gunner-exterior-gun-*`,
-  `gunner-cockpit-closeup-*`, `gunner-front-pilot-*`.
+  depressed side shot, a TBD control, and the belt: total conservation, no spend while loading,
+  partial/full/empty `R`, AI auto-reload and a change that survives the control handoff);
+  `node scripts/check-audio.mjs` PASS (29 checks); `node scripts/check-aircraft.mjs` PASS;
+  `MIDWAY_URL=http://[::1]:5399 bash tools/capture-lock.sh node tools/capture-gunner.mjs` PASS on
+  **nvidia / turing**, proving the exact decoded `gun30` buffer reaches the mixer on a running
+  context at positive gain (`__gun30Plays`) and that `R` reloads, with frames
+  `gunner-reload-mid-{sbd,tbd}.png` and `gunner-firing-{sbd,tbd}-{0,1,2}.png`;
+  `MIDWAY_URL=http://[::1]:5399 MIDWAY_WARM_MS=2500 MIDWAY_SAMPLE_MS=6000 bash tools/capture-lock.sh
+  node tools/capture-flak-hunt.mjs` PASS with `topo InstancedMesh`, radii `0.19..0.45 m`, max streak
+  13.6 m equal to the bullets' own `|v|·0.012`, zero non-finite instances and centre-behind error
+  below 1e-3. `pnpm exec vite build`, `check-flight` and the remaining focused gates were **not**
+  re-run in this pass (budget); they are unchanged from the last recorded run.
 - **Still failing, proved pre-existing on `dcd83dc`:** `check-repair.mjs` reproduces the line-40
   forward wing-gun muzzle-flash timeout. It is now **baseline-proved**: on an untouched `origin/main`
   `dcd83dc` fixture (`git archive` source, `@threenative/core` pinned to the same

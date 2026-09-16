@@ -20,7 +20,17 @@ import {
   rearGunTailBoxFor,
   type RearGunMount,
 } from "./gun-mount.js";
-import { torpedoEnvelope, torpedoIntercept, updateStores } from "./armament.js";
+import {
+  advanceRearReload,
+  initRearState,
+  rearCanFire,
+  rearReloading,
+  spendRearRound,
+  startRearReload,
+  torpedoEnvelope,
+  torpedoIntercept,
+  updateStores,
+} from "./armament.js";
 import { AircraftFlight, DECK_HEIGHT, initFlightState, SEA_WIND, steerToward, type ISteerLimits } from "./flight.js";
 import { DRIFT_RATE, isStale, STALE_SECONDS } from "./intel.js";
 
@@ -637,10 +647,26 @@ function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: nu
   const mx = muzzle.x;
   const my = muzzle.y;
   const mz = muzzle.z;
-  a.rearAmmo -= 1;
+  spendRearRound(a);
   a.rearYaw = yaw;
   a.rearPitch = pitch;
-  b.event("gun", { at: { x: mx, y: my, z: mz }, source: a.id, weapon: "gun30" });
+  // The player's own round draws a rear muzzle flash and is headset audio, exactly like the
+  // forward guns: no world position, so it is neither panned nor distance-attenuated at the
+  // gunner's own ear and a distant AI .30 can never claim its cooldown slot. AI rear guns stay
+  // positional. A refused or empty trigger never reaches here, so neither can appear without a
+  // round leaving the gun.
+  if (a === b.player) {
+    b.fx("muzzle", { x: mx, y: my, z: mz }, 0.45);
+    b.event("gun", { weapon: "gun30" });
+  } else {
+    // Positional only: the emitter is the airframe at the muzzle, not the round. A bullet's
+    // 730 m/s would be read as source Doppler and shift the report absurdly.
+    b.event("gun", {
+      at: { x: mx, y: my, z: mz },
+      source: a.id,
+      weapon: "gun30",
+    });
+  }
   b.bullets.push({
     id: b.id("bullet"),
     x: mx,
@@ -659,6 +685,14 @@ function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: nu
 }
 
 /**
+ * Lazily seed the belt on an aircraft record that never went through `Battle.launch` (a test or a
+ * legacy record). An already-seeded aircraft is left untouched, so this can never top a belt up.
+ */
+function ensureRearState(a: Any): void {
+  if (a.rearLoaded === undefined) initRearState(a);
+}
+
+/**
  * The player's own hand on the rear gun. Aim is a world direction built by the caller from the
  * airframe's real attitude and the bounded station angles, so roll and pitch aim coherently. The
  * cooldown advances exactly once per tick whether or not the trigger is down, so releasing does
@@ -671,11 +705,25 @@ export function fireRearManual(
   fire: boolean,
   dt: number,
 ): void {
-  if (a.mode === "crashing" || !(a.rearAmmo > 0)) {
+  ensureRearState(a);
+  const now = b.time;
+  advanceRearReload(a, now);
+  // The cadence advances exactly once per tick on every path — empty belt, belt change, refusal,
+  // release or crash — so the last shot's recoil always settles and a dry or reloading trigger can
+  // never freeze the barrels at full deflection.
+  a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
+  if (a.mode === "crashing") {
     a.rearBlocked = false;
     return;
   }
-  a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
+  // A dry belt reloads itself from the same total whenever anything is left in reserve. This is the
+  // handoff-safe path: the AI gunner and the manned station share the aircraft's own state, so a
+  // belt change started by one continues under the other.
+  if ((a.rearLoaded ?? 0) <= 0) startRearReload(a, now);
+  if (!rearCanFire(a, now)) {
+    a.rearBlocked = false;
+    return;
+  }
   if (!fire || !aim || a.rearTimer > 0) {
     a.rearBlocked = false;
     return;
@@ -690,8 +738,19 @@ export function fireRearManual(
 }
 
 export function rearGunner(b: Any, a: Any, dt: number): void {
-  if (a.kind === "fighter" || a.kind === "recon" || !(a.rearAmmo > 0) || a.mode === "crashing") return;
+  ensureRearState(a);
+  const now = b.time;
+  advanceRearReload(a, now);
+  // Once per tick on every path, so an AI gun's cadence settles through an empty belt or a change.
   a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
+  if (a.kind === "fighter" || a.kind === "recon" || a.mode === "crashing") return;
+  if ((a.rearLoaded ?? 0) <= 0) {
+    // An empty belt on an AI gunner changes itself and resumes without a pause, exactly as the
+    // player's does; a depleted total leaves it silent for the rest of the sortie.
+    startRearReload(a, now);
+    if (!rearCanFire(a, now)) return;
+  }
+  if (rearReloading(a, now)) return;
   if (a.rearTimer > 0) return;
   // The tail cone and its depression are measured in the airframe's own frame, the same `poseAxes`
   // mapping the muzzle uses: a banked or pitched gunner's world `dy` is not his up.

@@ -1322,7 +1322,15 @@ function cartridgeGeometries(): { brass: T.BufferGeometry; tip: T.BufferGeometry
 }
 
 /** The supplied twin gun. Static geometry is baked per material; the moving groups stay separate. */
-function buildTwinGun(): { group: T.Group; muzzles: T.Object3D[] } {
+function buildTwinGun(): {
+  group: T.Group;
+  muzzles: T.Object3D[];
+  barrels: T.Object3D[];
+  covers: T.Object3D[];
+  handles: T.Object3D[];
+  lids: T.Object3D[];
+  belts: T.Object3D[];
+} {
   const M = makeGunMaterials();
   const group = new T.Group();
   group.name = "ProceduralTwinAircraftGun";
@@ -1382,6 +1390,14 @@ function buildTwinGun(): { group: T.Group; muzzles: T.Object3D[] } {
   gbake(cradle);
 
   const muzzles: T.Object3D[] = [];
+  // The authored vented barrels, kept so a live shot can kick them back along the bore.
+  const barrels: T.Object3D[] = [];
+  // The authored feed cycle parts, kept so a belt change can open the cover, pulse the charging
+  // handle, lift the box lid and draw the belt through, exactly as the supplied controller did.
+  const covers: T.Object3D[] = [];
+  const handles: T.Object3D[] = [];
+  const lids: T.Object3D[] = [];
+  const belts: T.Object3D[] = [];
   const bulletGeo = cartridgeGeometries();
   for (let side = 0; side < 2; side += 1) {
     const sign = side ? 1 : -1;
@@ -1431,6 +1447,7 @@ function buildTwinGun(): { group: T.Group; muzzles: T.Object3D[] } {
     cover.name = `${gun.name}-FeedCover`;
     cover.position.set(0, 0.302, -0.66);
     gun.add(cover);
+    covers.push(cover);
     gbox(cover, 0.431, 0.058, 1.65, M.steel!, 0, 0, 0.825, 0.014);
     gbox(cover, 0.245, 0.023, 1.15, M.dark!, 0, 0.039, 0.89, 0.009);
     gbox(cover, 0.235, 0.018, 0.33, M.steel!, 0, 0.051, 0.42, 0.008);
@@ -1446,6 +1463,7 @@ function buildTwinGun(): { group: T.Group; muzzles: T.Object3D[] } {
     handle.name = `${gun.name}-ChargingHandle`;
     handle.position.set(sign * 0.29, 0.1, 0.13);
     gun.add(handle);
+    handles.push(handle);
     grod(handle, [0, 0, 0], [sign * 0.13, 0, 0], 0.024, M.edge!);
     gcyl(handle, 0.046, 0.105, M.dark!, sign * 0.13, 0, 0, "y", 12);
     gbake(handle);
@@ -1453,6 +1471,7 @@ function buildTwinGun(): { group: T.Group; muzzles: T.Object3D[] } {
     const barrel = new T.Group();
     barrel.name = `${gun.name}-VentedBarrel`;
     gun.add(barrel);
+    barrels.push(barrel);
     gcyl(barrel, 0.056, 2.92, M.dark!, 0, 0.065, -2.22, "z");
     gmesh(barrel, gperforatedJacket(), M.steel!, 0, 0.065, -0.84, "perforated-jacket");
     for (const z of [-0.9, -3.12, -3.19]) gcyl(barrel, 0.159, z === -3.12 ? 0.025 : 0.073, M.steel!, 0, 0.065, z, "z");
@@ -1496,6 +1515,7 @@ function buildTwinGun(): { group: T.Group; muzzles: T.Object3D[] } {
     binLid.name = `${gun.name}-AmmoBoxLid`;
     binLid.position.set(0, 0.31, 0.34);
     bin.add(binLid);
+    lids.push(binLid);
     gbox(binLid, 0.475, 0.034, 0.59, M.paint!, 0, 0, -0.29, 0.012);
     gbake(binLid);
 
@@ -1511,6 +1531,7 @@ function buildTwinGun(): { group: T.Group; muzzles: T.Object3D[] } {
       m.frustumCulled = false;
       gun.add(m);
       inst.push(m);
+      belts.push(m);
     }
     // The belt hangs at its authored resting positions; the FPP gun does not animate reloads.
     const matrix = new T.Matrix4();
@@ -1540,7 +1561,7 @@ function buildTwinGun(): { group: T.Group; muzzles: T.Object3D[] } {
   // The supplied gun aims on its own hinges; the station drives it rigidly about the measured hinge
   // instead (see `createRearStation`), so the articulated sub-groups are left at rest for the look.
   elevation.rotation.x = 0;
-  return { group, muzzles };
+  return { group, muzzles, barrels, covers, handles, lids, belts };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1560,6 +1581,16 @@ export interface RearStation {
   muzzleError: number;
   /** Uniform scale the supplied weapon was normalised by. */
   weaponScale: number;
+  /**
+   * Kick the two authored barrels back along the bore, in metres (0 = battery). Render-only: the
+   * sim's byte-ballistics are untouched, and a refused or empty trigger never produces a kick.
+   */
+  setRecoil(metres: number): void;
+  /**
+   * Drive the authored belt-change cycle, `open` 0..1. Render-only: cover, lid, charging handle and
+   * belt move; the sim's ammunition and the round ballistics are untouched.
+   */
+  setReload(open: number): void;
   /** Release every geometry, material and texture this station built. */
   dispose(): void;
 }
@@ -1636,6 +1667,25 @@ export function createRearStation(airframe: string, gunnerEye: readonly [number,
   pivot.visible = false;
   group.add(pivot);
 
+  // The barrels live under the uniformly-scaled weapon group, so a world-space kick is divided by
+  // that scale before it is written to the barrel's own local `+Z` (the bore's rearward axis).
+  const setRecoil = (metres: number): void => {
+    const local = weaponScale > 0 ? metres / weaponScale : metres;
+    for (const barrel of twin.barrels) barrel.position.z = local;
+  };
+
+  // The authored belt-change cycle from the supplied controller: cover swings open 1.32 rad, the box
+  // lid 1.15, the charging handle pulses out and back, and the belt draws through. `open` runs 0..1
+  // across the change; this is purely visual and never touches the sim's ammunition.
+  const setReload = (open: number): void => {
+    const t = open < 0 ? 0 : open > 1 ? 1 : open;
+    for (const cover of twin.covers) cover.rotation.x = -t * 1.32;
+    for (const lid of twin.lids) lid.rotation.x = -t * 1.15;
+    const pulse = 0.24 * Math.sin(t * Math.PI);
+    for (const handle of twin.handles) handle.position.z = 0.13 + pulse;
+    for (const belt of twin.belts) belt.position.z = -0.05 * t;
+  };
+
   const dispose = (): void => {
     const geometries = new Set<T.BufferGeometry>();
     const mats = new Set<T.Material>();
@@ -1658,5 +1708,5 @@ export function createRearStation(airframe: string, gunnerEye: readonly [number,
     group.removeFromParent();
   };
 
-  return { group, shell, pivot, muzzles: twin.muzzles, muzzleError: best!.err, weaponScale, dispose };
+  return { group, shell, pivot, muzzles: twin.muzzles, muzzleError: best!.err, weaponScale, setRecoil, setReload, dispose };
 }

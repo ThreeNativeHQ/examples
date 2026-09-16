@@ -27,7 +27,11 @@ import {
 import {
   actualRunDepth,
   applyLoadout,
+  initRearState,
+  REAR_BELT_LOADED,
+  rearReloading,
   rearRoundsFor,
+  startRearReload,
   torpedoEnvelope,
   torpedoVariant,
   torpedoVariantForAirframe,
@@ -840,6 +844,7 @@ export class Battle {
       pitch: 0.22,
     });
     applyLoadout(this.player, "bomb");
+    initRearState(this.player);
     initDamage(this.player);
     this.playerFlight = new AircraftFlight(this.player, "sbd", home.deckHeight);
     this.playerFlight.reset();
@@ -969,9 +974,34 @@ export class Battle {
       } else {
         p.rearAmmo = Math.min(carriedRear, rear);
       }
+      initRearState(p);
     }
     this.playerFlight.setAirframe(p.airframe);
     return true;
+  }
+
+  /**
+   * R at the rear station: begin a belt change. A full belt is a no-op, and with the sortie total
+   * exhausted there is nothing to load, so a depleted gun can never be refilled for free. Returns
+   * whether a belt change actually started. Ignored when the pilot, not the gunner, has the aircraft.
+   */
+  reloadRear(): boolean {
+    const p = this.player;
+    if (!p.gunner) return false;
+    // A second R during a change is a no-op: it neither restarts the clock nor spends a round, and
+    // it must not claim the belt is dry while reserve is still behind it.
+    if (rearReloading(p, this.time)) {
+      this.event("notice", { text: "FEEDING BELT — STAND BY" });
+      return false;
+    }
+    if (startRearReload(p, this.time)) {
+      this.event("notice", { text: "CHARGING — FEEDING BELT" });
+      return true;
+    }
+    this.event("notice", {
+      text: (p.rearLoaded ?? 0) >= REAR_BELT_LOADED ? "REAR BELT FULL" : "REAR GUN — NO ROUNDS IN RESERVE",
+    });
+    return false;
   }
 
   toggleGear(): void {
@@ -1546,6 +1576,7 @@ export class Battle {
     // airframe with no battery entry yet (the Val) keeps the old 240 rather than losing it silently.
     a.rearAmmo = kind === "fighter" ? 0 : rearRoundsFor(airframe) || 240;
     a.rearTimer = 0;
+    initRearState(a);
     this.aircraft.push(a);
     return a;
   }
@@ -3587,6 +3618,8 @@ export class Battle {
               p.rearAmmo = rear;
             } else supplies.push("No gun ammunition available; remaining rounds retained.");
           }
+          // A fresh gun is loaded from whatever the total holds; a rearm never creates rounds.
+          initRearState(p);
           if ((h.air.stores[family] ?? 0) > 0) {
             h.air.stores[family] -= 1;
           } else {

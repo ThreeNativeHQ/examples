@@ -1,6 +1,7 @@
 /** The battle's Three.js world, built into the scene the framework owns. */
 import * as T from "three";
 import { shipClass } from "../sim/catalog.js";
+import { REAR_RELOAD_SECONDS } from "../sim/armament.js";
 import { attitudeAxes } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { addFloats, ellipsoid, mat, wakeTexture } from "./assets.js";
@@ -44,6 +45,9 @@ function importedAircraftFor(a: { team: string; kind: string }): () => T.Group {
 
 /** Reused so the per-frame camera orbit allocates nothing. */
 const WORLD_UP = new T.Vector3(0, 1, 0);
+
+/** The tracer ellipsoid's long axis, rotated onto each round's velocity every frame. */
+const TRACER_LONG = new T.Vector3(0, 0, 1);
 
 /**
  * Distance past which a hull's full imported detail stops paying.
@@ -340,13 +344,18 @@ export class WorldView {
   private gunnerPrevMode: number | null = null;
   /** Weapon-follow view state to restore on the same handback. */
   private gunnerPrevFollow = false;
-  tracers!: T.LineSegments;
-  // Six vertices per round: the velocity streak plus a camera-facing cross at the head. A 1 px
-  // line seen end-on — the player's own fire from the cockpit or chase — projects to nothing,
-  // and THREE.Points cannot carry it on the WebGPU backend (a 1 m HDR-red point 10 m ahead of
-  // the eye rasterizes zero fragments), so the cross rides the proven line path instead.
-  tracerPositions = new Float32Array(1000 * 18);
-  tracerColors = new Float32Array(1000 * 18);
+  tracers!: T.InstancedMesh;
+  // One instance of a unit sphere per round, stretched along its velocity: side-on a thin streak,
+  // end-on a small round dot. A 1 px line seen down its own path — the player's own fire from the
+  // cockpit or gunner — projects to nothing, and THREE.Points rasterizes zero fragments on the
+  // WebGPU backend, so the round is a real head instead of a camera-facing cross. One pool, one
+  // geometry and one draw; a frame only composes matrices and colours into them.
+  private tracerMatrix = new T.Matrix4();
+  private tracerQuat = new T.Quaternion();
+  private tracerDir = new T.Vector3();
+  private tracerPos = new T.Vector3();
+  private tracerScale = new T.Vector3();
+  private tracerTint = new T.Color();
   particles!: CombatParticles;
   ripples!: ReturnType<typeof createRipples>;
   private sky!: T.Texture;
@@ -618,11 +627,12 @@ export class WorldView {
   }
 
   makeTracers(): void {
-    const geom = new T.BufferGeometry();
-    geom.setAttribute("position", new T.BufferAttribute(this.tracerPositions, 3).setUsage(T.DynamicDrawUsage));
-    geom.setAttribute("color", new T.BufferAttribute(this.tracerColors, 3).setUsage(T.DynamicDrawUsage));
-    geom.setDrawRange(0, 0);
-    this.tracers = new T.LineSegments(geom, new T.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending }));
+    const geom = new T.SphereGeometry(1, 8, 6);
+    const mat = new T.MeshBasicMaterial({ transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending });
+    this.tracers = new T.InstancedMesh(geom, mat, 1000);
+    this.tracers.instanceMatrix.setUsage(T.DynamicDrawUsage);
+    this.tracers.instanceColor = new T.InstancedBufferAttribute(new Float32Array(1000 * 3), 3).setUsage(T.DynamicDrawUsage);
+    this.tracers.count = 0;
     this.tracers.frustumCulled = false;
     this.scene.add(this.tracers);
     this.freezeNode(this.tracers);
@@ -1024,6 +1034,14 @@ export class WorldView {
         const e = this.battle.rearGunPivotEuler();
         rearStation.pivot.rotation.set(e.x, e.y, e.z, "YXZ");
       } else rearStation.pivot.rotation.set(0, 0, 0);
+      // The visible barrels kick back only from a round that actually left the player's gun: the sim
+      // sets `rearTimer` on a successful shot and to zero on a refused or empty trigger, and the AI
+      // gunner never runs while this station owns the view.
+      rearStation.setRecoil(gunnerView ? Math.min(1, (p.rearTimer || 0) / 0.08) * 0.05 : 0);
+      // The belt change is a render-only cycle over the sim's own countdown: it opens with the
+      // change, peaks at the midpoint and closes as the belt is loaded. Outside a change it rests.
+      const reloadLeft = Math.max(0, (p.rearReloadUntil ?? 0) - this.battle.time);
+      rearStation.setReload(reloadLeft > 0 ? Math.sin(Math.PI * (1 - reloadLeft / REAR_RELOAD_SECONDS)) : 0);
     }
     // The detailed interior and the supplied canopy shell are alternatives: show the interior in
     // the pilot view, the exterior canopy every other time the rear station is not inside it.
@@ -1065,34 +1083,35 @@ export class WorldView {
     // near-constant angular size at the muzzle and at the target, and the converging markers are
     // what make the pilot's own fire readable.
     const me = this.camera.matrixWorld.elements;
-    const rx = me[0], ry = me[1], rz = me[2];
-    const ux = me[4], uy = me[5], uz = me[6];
     const ex = me[12], ey = me[13], ez = me[14];
     const focalPx = (this.host.viewport.size.height * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360);
-    const headHalfPx = 5;
     let i = 0;
     for (const a of b.bullets) {
       if (i >= 1000) break;
-      const k = i * 18;
-      const length = a.type === "flak" ? 0.02 : 0.012;
-      this.tracerPositions.set([a.x, a.y, a.z, a.x - a.vx * length, a.y - a.vy * length, a.z - a.vz * length], k);
-      const color = a.team === "us" ? [1, 0.83, 0.4] : [1, 0.42, 0.18];
-      this.tracerColors.set([...color, ...color.map((x) => x * 0.4)], k);
-      // The head is the same round seen end-on against bright sky, where the pale streak colour
-      // washes out: saturate it so it keeps an orange edge ACES cannot clip to white.
-      const head = a.team === "us" ? [1, 0.52, 0.12] : [1, 0.3, 0.08];
-      const arm = Math.min((Math.hypot(a.x - ex, a.y - ey, a.z - ez) * headHalfPx) / focalPx, 40);
-      this.tracerPositions.set(
-        [a.x - rx * arm, a.y - ry * arm, a.z - rz * arm, a.x + rx * arm, a.y + ry * arm, a.z + rz * arm,
-          a.x - ux * arm, a.y - uy * arm, a.z - uz * arm, a.x + ux * arm, a.y + uy * arm, a.z + uz * arm],
-        k + 6,
-      );
-      this.tracerColors.set([...head, ...head, ...head, ...head], k + 6);
+      // A round with no velocity (a just-spawned or resolved bullet) still gets a valid instance
+      // rather than a degenerate quaternion: the streak points along +Z and keeps a positive length.
+      const speed = Math.hypot(a.vx, a.vy, a.vz);
+      if (speed > 1e-6) this.tracerDir.set(a.vx, a.vy, a.vz).multiplyScalar(1 / speed);
+      else this.tracerDir.set(0, 0, 1);
+      const half = Math.max((a.type === "flak" ? 0.02 : 0.012) * speed, 0.02) * 0.5;
+      // The head holds ~1.25 px whatever the range (a world length that grows with distance), so a
+      // far round is a dot and never a balloon: the only clamp is a sane floor and ceiling.
+      const radius = T.MathUtils.clamp((Math.hypot(a.x - ex, a.y - ey, a.z - ez) * 1.25) / focalPx, 0.015, 0.45);
+      this.tracerQuat.setFromUnitVectors(TRACER_LONG, this.tracerDir);
+      // The ellipsoid is centred half a length BEHIND the ballistic head, so the visible streak
+      // trails the round instead of reaching past it.
+      this.tracerPos.set(a.x - this.tracerDir.x * half, a.y - this.tracerDir.y * half, a.z - this.tracerDir.z * half);
+      this.tracerScale.set(radius, radius, half);
+      this.tracerMatrix.compose(this.tracerPos, this.tracerQuat, this.tracerScale);
+      this.tracers.setMatrixAt(i, this.tracerMatrix);
+      if (a.team === "us") this.tracerTint.setRGB(1, 0.83, 0.4);
+      else this.tracerTint.setRGB(1, 0.42, 0.18);
+      this.tracers.setColorAt(i, this.tracerTint);
       i += 1;
     }
-    this.tracers.geometry.setDrawRange(0, i * 6);
-    (this.tracers.geometry.attributes.position as T.BufferAttribute).needsUpdate = true;
-    (this.tracers.geometry.attributes.color as T.BufferAttribute).needsUpdate = true;
+    this.tracers.count = i;
+    this.tracers.instanceMatrix.needsUpdate = true;
+    if (this.tracers.instanceColor) this.tracers.instanceColor.needsUpdate = true;
     const ids = new Set<string>();
     for (const a of [...b.bombs, ...b.airTorpedoes]) {
       ids.add(a.id);

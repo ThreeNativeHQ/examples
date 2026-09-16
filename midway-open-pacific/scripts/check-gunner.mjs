@@ -11,7 +11,7 @@ const { outputFiles } = await build({ entryPoints: ['src/sim/battle.ts'], bundle
 const battleUrl = `data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString('base64')}`;
 const { Battle } = await import(battleUrl);
 const armament = await build({ entryPoints: ['src/sim/armament.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
-const { rearRoundsFor } = await import(`data:text/javascript;base64,${Buffer.from(armament.outputFiles[0].text).toString('base64')}`);
+const { rearRoundsFor, initRearState } = await import(`data:text/javascript;base64,${Buffer.from(armament.outputFiles[0].text).toString('base64')}`);
 const airborne = () => { const b = new Battle(); b.start(true); b.aircraft.length = 0; return b; };
 const deck = () => { const b = new Battle(); b.start(); return b; };
 const tick = (b, seconds, input = {}) => { for (let i = 0; i < Math.round(seconds * 60); i++) b.step(1 / 60, input); };
@@ -355,6 +355,85 @@ assert.ok(
   Math.abs(spun.x - dir.x) < 1e-9 && Math.abs(spun.y - dir.y) < 1e-9 && Math.abs(spun.z - dir.z) < 1e-9,
   'the pivot Euler and the sim aim disagree',
 );
+
+// 12. The belt. One loaded count in the gun and an implicit reserve behind it (`total - loaded`).
+// Reloading moves rounds from the sortie total into the gun and never creates any; a full belt or an
+// exhausted total is refused; no round is spent while a change runs; the AI and the manned station
+// share one state across a handoff.
+const belt = airborne();
+belt.player.rearTimer = 0;
+assert.equal(belt.player.rearLoaded, 240, 'the SBD starts with a full combined belt');
+assert.equal(belt.player.rearAmmo, 1200, 'and holds its whole sortie total');
+belt.player.rearLoaded = 3;
+belt.player.rearAmmo = 903;
+belt.setGunner(true);
+belt.step(1 / 60, { fire: true });
+assert.equal(belt.player.rearAmmo, 902, 'a round leaves the sortie total');
+assert.equal(belt.player.rearLoaded, 2, 'and the same round leaves the belt');
+assert.equal(belt.reloadRear(), true, 'R starts a belt change on a partial belt');
+assert.ok(belt.player.rearReloadUntil > belt.time, 'the belt change runs on the shared sim clock');
+const heldTotal = belt.player.rearAmmo;
+for (let i = 0; i < 30; i++) {
+  belt.player.rearTimer = 0;
+  belt.step(1 / 60, { fire: true });
+}
+assert.equal(belt.player.rearAmmo, heldTotal, 'no round is spent while the belt is changing');
+assert.equal(belt.player.rearLoaded, 2, 'and the belt cannot fall further during a change');
+tick(belt, 3.7);
+assert.equal(belt.player.rearReloadUntil, 0, 'the belt change ends');
+assert.equal(belt.player.rearLoaded, 240, 'a finished change fills the belt to a full combined 240');
+assert.equal(belt.player.rearAmmo, heldTotal, 'a reload never changes the sortie total');
+assert.equal(belt.reloadRear(), false, 'R on a full belt is a no-op');
+belt.player.rearAmmo = 0;
+belt.player.rearLoaded = 0;
+assert.equal(belt.reloadRear(), false, 'an exhausted sortie total cannot be reloaded');
+assert.equal(belt.player.rearLoaded, 0, 'and no round appears from nowhere');
+
+// An empty AI belt reloads itself, and a change it starts survives the pilot taking the gun.
+const hand2 = airborne();
+hand2.player.rearAmmo = 500;
+hand2.player.rearLoaded = 0;
+hand2.player.rearTimer = 0;
+hand2.setGunner(false);
+tick(hand2, 1 / 60);
+assert.ok(hand2.player.rearReloadUntil > hand2.time, 'an empty AI belt starts its own change');
+hand2.setGunner(true);
+assert.equal(hand2.reloadRear(), false, 'R while a change is already running is a no-op');
+tick(hand2, 3.7);
+assert.equal(hand2.player.rearLoaded, 240, 'the AI-started change completes under the player');
+assert.equal(hand2.player.rearAmmo, 500, 'with the sortie total unchanged');
+assert.equal(hand2.player.gunner, true, 'and the station is still manned');
+
+// The recoil cadence advances on every path: a trigger held after the last loaded round or during a
+// belt change must still settle, so the barrels can never freeze at full deflection.
+const settle = airborne();
+settle.setGunner(true);
+settle.player.rearLoaded = 1;
+settle.player.rearAmmo = 1;
+settle.player.rearTimer = 0;
+settle.step(1 / 60, { fire: true });
+assert.equal(settle.player.rearLoaded, 0, 'the last loaded round leaves the belt');
+assert.ok(settle.player.rearTimer > 0, 'the last shot sets its recoil cadence');
+for (let i = 0; i < 6; i++) settle.step(1 / 60, { fire: true });
+assert.equal(settle.player.rearTimer, 0, 'the recoil settles through an empty, exhausted belt');
+assert.equal(settle.player.rearAmmo, 0, 'and a dry gun never invents a round');
+
+const settleReload = airborne();
+settleReload.setGunner(true);
+settleReload.player.rearLoaded = 2;
+settleReload.player.rearAmmo = 500;
+settleReload.player.rearTimer = 0.08;
+assert.equal(settleReload.reloadRear(), true, 'a belt change starts with reserve behind it');
+for (let i = 0; i < 6; i++) settleReload.step(1 / 60, { fire: true });
+assert.equal(settleReload.player.rearTimer, 0, 'the recoil settles through a belt change');
+assert.equal(settleReload.player.rearLoaded, 2, 'and the change spends nothing while it runs');
+
+// Seeding a belt is idempotent and never inflates the total.
+const seed = airborne();
+seed.player.rearAmmo = 137;
+initRearState(seed.player);
+assert.equal(seed.player.rearAmmo, 137, 'seeding a gun never changes the sortie total');
+assert.equal(seed.player.rearLoaded, 137, 'it loads the belt up to whatever the total holds');
 
 console.log(JSON.stringify({ pass: true, forwardAmmo: man.player.ammo, rearAmmo: silent.player.rearAmmo }));
 process.exit(0);

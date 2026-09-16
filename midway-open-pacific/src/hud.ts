@@ -112,7 +112,12 @@ export class Hud {
     $("btn-camera").toggleAttribute("disabled", gunner);
     $("btn-camera").setAttribute("aria-label", gunner ? "Camera locked to the rear gunner station" : "Cycle camera views");
     $("rear-block").classList.toggle("hidden", !gunner);
-    $("rear-ammo").textContent = String(p.rearAmmo ?? 0);
+    // Total sortie rounds, then the belt: LOADED/RESERVE, or the countdown while a belt change runs.
+    const rearLoaded = p.rearLoaded ?? 0;
+    const rearReloading = (p.rearReloadUntil ?? 0) > b.time;
+    $("rear-ammo").textContent = rearReloading
+      ? `${p.rearAmmo ?? 0} · LOADING ${Math.max(0, (p.rearReloadUntil ?? 0) - b.time).toFixed(1)}s`
+      : `${p.rearAmmo ?? 0} · ${rearLoaded}/${Math.max(0, (p.rearAmmo ?? 0) - rearLoaded)}`;
     $("camera-hint").classList.toggle("hidden", gunner);
     $("gunner-hint").classList.toggle("hidden", !gunner);
     for (const [id, on] of [
