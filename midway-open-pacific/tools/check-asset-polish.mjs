@@ -4,8 +4,8 @@ import {readFile} from 'node:fs/promises';
 import {AnimationMixer,Box3,Vector3,LoopOnce} from 'three';
 import {checkHumanoid,loadGlb} from './check-humanoid.mjs';
 const path=name=>new URL('../public/assets/'+name,import.meta.url);
-for(const [file,height] of [['carrier-aircraft-pilot.glb',1.78],['flight-deck-director.glb',1.8]])
- checkHumanoid(await loadGlb(path(file)),{clips:['idle','walk','gesture'],height,hands:'rigid'});
+for(const [file,height,clips] of [['carrier-aircraft-pilot.glb',1.78,['gesture','idle','sit','walk']],['flight-deck-director.glb',1.8,['idle','walk','gesture']]])
+ checkHumanoid(await loadGlb(path(file)),{clips,height,hands:'rigid'});
 checkHumanoid(await loadGlb(path('deck-crew.glb')),{clips:['crew.chock','crew.idle','crew.service','crew.signal','crew.wait','crew.walk'],height:1.83,minimumHandVertices:50,minimumFingerVertices:10});
 const clips=['propeller.spin','gear.retract','flaps.deploy','flight.pitch-up','flight.pitch-down','flight.roll-left','flight.roll-right','flight.rudder-left','flight.rudder-right'];
 for(const [file,span] of [['aircraft.tbd-devastator.glb',15.24],['aircraft.tbd-devastator.ai.glb',15.24],['aircraft.b5n2-kate.glb',15.52]]){

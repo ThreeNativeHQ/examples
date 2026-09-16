@@ -1,6 +1,7 @@
 /** The battle's Three.js world, built into the scene the framework owns. */
 import * as T from "three";
 import { shipClass } from "../sim/catalog.js";
+import { REAR_RELOAD_SECONDS } from "../sim/armament.js";
 import { attitudeAxes } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { addFloats, ellipsoid, mat, wakeTexture } from "./assets.js";
@@ -10,6 +11,7 @@ import { airframeLod } from "./airframe-lod.js";
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
 import { animateDevastator, disposeDevastator } from "./devastator.js";
+import { createRearStation, type RearStation } from "./rear-station.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScars } from "./model-damage.js";
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
 import { createOcean, REFLECTED_LAYER } from "./ocean.js";
@@ -43,6 +45,9 @@ function importedAircraftFor(a: { team: string; kind: string }): () => T.Group {
 
 /** Reused so the per-frame camera orbit allocates nothing. */
 const WORLD_UP = new T.Vector3(0, 1, 0);
+
+/** The tracer ellipsoid's long axis, rotated onto each round's velocity every frame. */
+const TRACER_LONG = new T.Vector3(0, 0, 1);
 
 /**
  * Distance past which a hull's full imported detail stops paying.
@@ -235,7 +240,7 @@ function markReflected(root: T.Object3D): void {
  * never again; a node whose parent moves stays correct because Three forces the parent's matrix
  * down through the children.
  */
-const MOVING_NODE = /threenativepivot|cockpit controls|propeller|aileron|rudder|flap|elevator|gear|wingport|wingstarboard|canopy|torpedo|hook|wheel/i;
+const MOVING_NODE = /threenativepivot|cockpit controls|propeller|aileron|rudder|flap|elevator|gear|wingport|wingstarboard|canopy|torpedo|hook|wheel|crew|gunner/i;
 
 /** Scratch for one scout's seat on its ship, refilled per scout. */
 const SCOUT_SEAT = new T.Vector3();
@@ -335,13 +340,22 @@ export class WorldView {
   playerMesh!: T.Group;
   /** Fixed eye point for the crash settle, chosen once at the moment of impact. */
   private wreckEye: T.Vector3 | null = null;
-  tracers!: T.LineSegments;
-  // Six vertices per round: the velocity streak plus a camera-facing cross at the head. A 1 px
-  // line seen end-on — the player's own fire from the cockpit or chase — projects to nothing,
-  // and THREE.Points cannot carry it on the WebGPU backend (a 1 m HDR-red point 10 m ahead of
-  // the eye rasterizes zero fragments), so the cross rides the proven line path instead.
-  tracerPositions = new Float32Array(1000 * 18);
-  tracerColors = new Float32Array(1000 * 18);
+  /** Camera mode to restore when the player leaves the rear-gun station; null when not on the gun. */
+  private gunnerPrevMode: number | null = null;
+  /** Weapon-follow view state to restore on the same handback. */
+  private gunnerPrevFollow = false;
+  tracers!: T.InstancedMesh;
+  // One instance of a unit sphere per round, stretched along its velocity: side-on a thin streak,
+  // end-on a small round dot. A 1 px line seen down its own path — the player's own fire from the
+  // cockpit or gunner — projects to nothing, and THREE.Points rasterizes zero fragments on the
+  // WebGPU backend, so the round is a real head instead of a camera-facing cross. One pool, one
+  // geometry and one draw; a frame only composes matrices and colours into them.
+  private tracerMatrix = new T.Matrix4();
+  private tracerQuat = new T.Quaternion();
+  private tracerDir = new T.Vector3();
+  private tracerPos = new T.Vector3();
+  private tracerScale = new T.Vector3();
+  private tracerTint = new T.Color();
   particles!: CombatParticles;
   ripples!: ReturnType<typeof createRipples>;
   private sky!: T.Texture;
@@ -540,6 +554,17 @@ export class WorldView {
       type === "sbd" ? createDouglas(true) : createAirframe("tbd1", "hero", true);
     this.playerMesh.userData.airframe = type;
     addDamageVisuals(this.playerMesh);
+    // The player's own first-person rear station, built here and nowhere else: an AI aircraft never
+    // allocates one. It reads the same published eye the gunner camera uses, so shell and camera
+    // share one anchor.
+    const rearEye = this.playerMesh.userData.gunnerEye as T.Vector3 | undefined;
+    if (rearEye) {
+      const station = createRearStation(type, [rearEye.x, rearEye.y, rearEye.z]);
+      if (station) {
+        this.playerMesh.add(station.group);
+        this.playerMesh.userData.rearStation = station;
+      }
+    }
     this.scene.add(this.playerMesh);
     this.freezeStatic(this.playerMesh);
     this.snap = true;
@@ -598,6 +623,9 @@ export class WorldView {
   }
 
   setCamera(mode: number): void {
+    // The rear-gun station owns the view: a camera order must not take it, or leave it.
+    const p = this.battle?.player;
+    if (p?.gunner === true && p.mode === "flight") return;
     this.cameraMode = mode;
     this.snap = true;
     this.followBomb = false;
@@ -651,11 +679,12 @@ export class WorldView {
   }
 
   makeTracers(): void {
-    const geom = new T.BufferGeometry();
-    geom.setAttribute("position", new T.BufferAttribute(this.tracerPositions, 3).setUsage(T.DynamicDrawUsage));
-    geom.setAttribute("color", new T.BufferAttribute(this.tracerColors, 3).setUsage(T.DynamicDrawUsage));
-    geom.setDrawRange(0, 0);
-    this.tracers = new T.LineSegments(geom, new T.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending }));
+    const geom = new T.SphereGeometry(1, 8, 6);
+    const mat = new T.MeshBasicMaterial({ transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending });
+    this.tracers = new T.InstancedMesh(geom, mat, 1000);
+    this.tracers.instanceMatrix.setUsage(T.DynamicDrawUsage);
+    this.tracers.instanceColor = new T.InstancedBufferAttribute(new Float32Array(1000 * 3), 3).setUsage(T.DynamicDrawUsage);
+    this.tracers.count = 0;
     this.tracers.frustumCulled = false;
     this.scene.add(this.tracers);
     this.freezeNode(this.tracers);
@@ -804,6 +833,13 @@ export class WorldView {
       if (m.userData.detailed) detailed += 1;
       m.position.set(a.x, a.y, a.z);
       m.rotation.set(a.pitch, -a.heading, a.roll, "YXZ");
+      // A visible AI gun rides the angle it last fired at, so the drawn barrel points where its
+      // rounds went instead of resetting to the rest position every frame.
+      const aiGun = m.userData.rearGun as T.Object3D | undefined;
+      if (aiGun) {
+        if (typeof a.rearYaw === "number") aiGun.rotation.set(-(a.rearPitch ?? 0), a.rearYaw, 0, "YXZ");
+        else aiGun.rotation.set(0, 0, 0);
+      }
       const camD = Math.hypot(a.x - camPos.x, a.y - camPos.y, a.z - camPos.z);
       const projectedPx = (2 * (m.userData.radius as number) * focalPx) / Math.max(1, camD);
       // Below the merged line the airframe is one draw: hide the full content — model, gear, stores
@@ -892,6 +928,21 @@ export class WorldView {
     const axes = p.attitude ? attitudeAxes(p) : { f: forward(p.heading, p.pitch), u: { x: 0, y: 1, z: 0 }, r: { x: 1, y: 0, z: 0 } };
     const f = axes.f;
     const u = axes.u;
+    // The rear-gun station is a camera the player can leave: remember the view they came from and
+    // restore it on the way back, so gunning never silently changes their camera choice.
+    const gunnerView = p.gunner === true && p.mode === "flight";
+    if (gunnerView && this.gunnerPrevMode === null) {
+      this.gunnerPrevMode = this.cameraMode;
+      this.gunnerPrevFollow = this.followBomb;
+      this.cameraMode = 1;
+      this.followBomb = false;
+      this.snap = true;
+    } else if (!gunnerView && this.gunnerPrevMode !== null) {
+      this.cameraMode = this.gunnerPrevMode;
+      this.followBomb = this.gunnerPrevFollow;
+      this.gunnerPrevMode = null;
+      this.snap = true;
+    }
     const ownBomb = [...this.battle.bombs, ...this.battle.airTorpedoes, ...this.battle.torpedoes].filter((a: any) => a.owner === "player").at(-1);
     let cockpit = false;
     // The wreck is in the water and the camera is not: it stops at the surface, backs off and
@@ -921,6 +972,26 @@ export class WorldView {
       this.targetCamera.set(focus.x + 17 + Math.sin(time * 0.055) * 2, focus.y + 6.5, focus.z + 21);
       this.look.set(focus.x - 5, focus.y - 0.1, focus.z - 4);
       this.camera.fov = 49;
+    } else if (gunnerView) {
+      // The gunner's own eye, from the visual contract: `userData.gunnerEye` is the station in
+      // aircraft-root coordinates. An authored framing offset is added in that same frame — 0.32 m
+      // toward the nose and 3 cm up — so the externally-scaled gun sits low in the lens instead of
+      // filling it; it is a camera anchor, not a claim about an exact eye bone, and the world gun
+      // scale, pivot and ballistics are untouched. Still inside the open rear station. The 0.32 m
+      // offset and 72° lens hold the externally-scaled gun low in frame and cut the extreme
+      // foreshortening on the breech boxes without changing the aim direction.
+      const eye = this.playerMesh.userData.gunnerEye as T.Vector3 | undefined;
+      if (eye) this.targetCamera.set(eye.x, eye.y + 0.03, eye.z - 0.32);
+      this.playerMesh.localToWorld(this.targetCamera);
+      // The sight and the camera are one ray: the sim's own aim, off the airframe's real attitude,
+      // so a banked or pitched aircraft keeps the eye, the gun pivot and the bullet agreeing.
+      const dir = this.battle.gunnerAim();
+      this.look.set(
+        this.targetCamera.x + dir.x * 1000,
+        this.targetCamera.y + dir.y * 1000,
+        this.targetCamera.z + dir.z * 1000,
+      );
+      this.camera.fov = 72;
     } else if (this.followBomb && ownBomb) {
       this.targetCamera.set(ownBomb.x + 12, ownBomb.y + 16, ownBomb.z + 28);
       this.look.set(ownBomb.x + ownBomb.vx * 0.6, ownBomb.y + (ownBomb.vy ?? 0) * 0.6, ownBomb.z + ownBomb.vz * 0.6);
@@ -989,13 +1060,51 @@ export class WorldView {
       this.camera.fov = overhead ? 64 : wide ? 60 : 56;
     }
     if (this.playerMesh.userData.crew) this.playerMesh.userData.crew[0].visible = !cockpit;
+    // The player's own gunner figure is hidden only in his first-person station; the pilot and
+    // chase views show the crew exactly as before.
+    if (this.playerMesh.userData.gunner) (this.playerMesh.userData.gunner as T.Object3D).visible = !gunnerView;
+    // One mapping for the gun's one pivot, in every view: the station aims it, and leaving the gun
+    // returns it to its rest barrel instead of freezing where the player let go.
+    const rearGun = this.playerMesh.userData.rearGun as T.Object3D | undefined;
+    if (rearGun) {
+      // The supplied exterior gun yields its place to the first-person twin in the rear station;
+      // every other view (pilot, chase, external) draws it exactly as before.
+      rearGun.visible = !gunnerView;
+      if (gunnerView) {
+        const e = this.battle.rearGunPivotEuler();
+        rearGun.rotation.set(e.x, e.y, e.z, "YXZ");
+      } else if (typeof p.rearYaw === "number") {
+        // The AI gunner works the same gun while the pilot flies: show the angle it last fired at,
+        // so the drawn barrel points where the rounds went instead of snapping back to rest.
+        rearGun.rotation.set(-(p.rearPitch ?? 0), p.rearYaw, 0, "YXZ");
+      } else rearGun.rotation.set(0, 0, 0);
+    }
+    // The player's first-person rear station: shell and visible twin gun show only while the gun
+    // owns the view, and the gun pivot rides the same sim euler the rounds leave from.
+    const rearStation = this.playerMesh.userData.rearStation as RearStation | undefined;
+    if (rearStation) {
+      rearStation.shell.visible = gunnerView;
+      rearStation.pivot.visible = gunnerView;
+      if (gunnerView) {
+        const e = this.battle.rearGunPivotEuler();
+        rearStation.pivot.rotation.set(e.x, e.y, e.z, "YXZ");
+      } else rearStation.pivot.rotation.set(0, 0, 0);
+      // The visible barrels kick back only from a round that actually left the player's gun: the sim
+      // sets `rearTimer` on a successful shot and to zero on a refused or empty trigger, and the AI
+      // gunner never runs while this station owns the view.
+      rearStation.setRecoil(gunnerView ? Math.min(1, (p.rearTimer || 0) / 0.08) * 0.05 : 0);
+      // The belt change is a render-only cycle over the sim's own countdown: it opens with the
+      // change, peaks at the midpoint and closes as the belt is loaded. Outside a change it rests.
+      const reloadLeft = Math.max(0, (p.rearReloadUntil ?? 0) - this.battle.time);
+      rearStation.setReload(reloadLeft > 0 ? Math.sin(Math.PI * (1 - reloadLeft / REAR_RELOAD_SECONDS)) : 0);
+    }
     // The detailed interior and the supplied canopy shell are alternatives: show the interior in
-    // the pilot view, the exterior canopy every other time.
+    // the pilot view, the exterior canopy every other time the rear station is not inside it.
     if (this.playerMesh.userData.cockpitInterior) this.playerMesh.userData.cockpitInterior.visible = cockpit;
     if (this.playerMesh.userData.cockpitShell)
-      for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit;
+      for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit && !gunnerView;
     document.body.classList.toggle("cockpit-view", cockpit);
-    if (this.snap || briefing || cockpit) {
+    if (this.snap || briefing || cockpit || gunnerView) {
       this.camera.position.copy(this.targetCamera);
       this.snap = false;
     } else {
@@ -1006,8 +1115,8 @@ export class WorldView {
       }
       this.camera.position.lerp(this.targetCamera, 1 - Math.exp(-dt * 6));
     }
-    this.camera.near = cockpit ? 0.045 : 0.35;
-    if (cockpit) this.camera.up.set(u.x, u.y, u.z);
+    this.camera.near = cockpit || gunnerView ? 0.045 : 0.35;
+    if (cockpit || gunnerView) this.camera.up.set(u.x, u.y, u.z);
     else this.camera.up.set(u.x * 0.13, 0.87 + u.y * 0.13, u.z * 0.13).normalize();
     if (!briefing && p.mode === "flight") {
       const buffet = Math.min(0.12, (p.stall || 0) * 0.045 + Math.max(0, Math.abs(p.gforce || 1) - 4) * 0.008);
@@ -1029,34 +1138,35 @@ export class WorldView {
     // near-constant angular size at the muzzle and at the target, and the converging markers are
     // what make the pilot's own fire readable.
     const me = this.camera.matrixWorld.elements;
-    const rx = me[0], ry = me[1], rz = me[2];
-    const ux = me[4], uy = me[5], uz = me[6];
     const ex = me[12], ey = me[13], ez = me[14];
     const focalPx = (this.host.viewport.size.height * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360);
-    const headHalfPx = 5;
     let i = 0;
     for (const a of b.bullets) {
       if (i >= 1000) break;
-      const k = i * 18;
-      const length = a.type === "flak" ? 0.02 : 0.012;
-      this.tracerPositions.set([a.x, a.y, a.z, a.x - a.vx * length, a.y - a.vy * length, a.z - a.vz * length], k);
-      const color = a.team === "us" ? [1, 0.83, 0.4] : [1, 0.42, 0.18];
-      this.tracerColors.set([...color, ...color.map((x) => x * 0.4)], k);
-      // The head is the same round seen end-on against bright sky, where the pale streak colour
-      // washes out: saturate it so it keeps an orange edge ACES cannot clip to white.
-      const head = a.team === "us" ? [1, 0.52, 0.12] : [1, 0.3, 0.08];
-      const arm = Math.min((Math.hypot(a.x - ex, a.y - ey, a.z - ez) * headHalfPx) / focalPx, 40);
-      this.tracerPositions.set(
-        [a.x - rx * arm, a.y - ry * arm, a.z - rz * arm, a.x + rx * arm, a.y + ry * arm, a.z + rz * arm,
-          a.x - ux * arm, a.y - uy * arm, a.z - uz * arm, a.x + ux * arm, a.y + uy * arm, a.z + uz * arm],
-        k + 6,
-      );
-      this.tracerColors.set([...head, ...head, ...head, ...head], k + 6);
+      // A round with no velocity (a just-spawned or resolved bullet) still gets a valid instance
+      // rather than a degenerate quaternion: the streak points along +Z and keeps a positive length.
+      const speed = Math.hypot(a.vx, a.vy, a.vz);
+      if (speed > 1e-6) this.tracerDir.set(a.vx, a.vy, a.vz).multiplyScalar(1 / speed);
+      else this.tracerDir.set(0, 0, 1);
+      const half = Math.max((a.type === "flak" ? 0.02 : 0.012) * speed, 0.02) * 0.5;
+      // The head holds ~1.25 px whatever the range (a world length that grows with distance), so a
+      // far round is a dot and never a balloon: the only clamp is a sane floor and ceiling.
+      const radius = T.MathUtils.clamp((Math.hypot(a.x - ex, a.y - ey, a.z - ez) * 1.25) / focalPx, 0.015, 0.45);
+      this.tracerQuat.setFromUnitVectors(TRACER_LONG, this.tracerDir);
+      // The ellipsoid is centred half a length BEHIND the ballistic head, so the visible streak
+      // trails the round instead of reaching past it.
+      this.tracerPos.set(a.x - this.tracerDir.x * half, a.y - this.tracerDir.y * half, a.z - this.tracerDir.z * half);
+      this.tracerScale.set(radius, radius, half);
+      this.tracerMatrix.compose(this.tracerPos, this.tracerQuat, this.tracerScale);
+      this.tracers.setMatrixAt(i, this.tracerMatrix);
+      if (a.team === "us") this.tracerTint.setRGB(1, 0.83, 0.4);
+      else this.tracerTint.setRGB(1, 0.42, 0.18);
+      this.tracers.setColorAt(i, this.tracerTint);
       i += 1;
     }
-    this.tracers.geometry.setDrawRange(0, i * 6);
-    (this.tracers.geometry.attributes.position as T.BufferAttribute).needsUpdate = true;
-    (this.tracers.geometry.attributes.color as T.BufferAttribute).needsUpdate = true;
+    this.tracers.count = i;
+    this.tracers.instanceMatrix.needsUpdate = true;
+    if (this.tracers.instanceColor) this.tracers.instanceColor.needsUpdate = true;
     const ids = new Set<string>();
     for (const a of [...b.bombs, ...b.airTorpedoes]) {
       ids.add(a.id);
@@ -1256,6 +1366,7 @@ export class WorldView {
     const torpedo = group.userData.torpedoLoad as T.Object3D | undefined;
     torpedo?.traverse((o) => (o as T.Mesh).geometry?.dispose());
     (group.userData.cockpitRig as { dispose?: () => void } | undefined)?.dispose?.();
+    (group.userData.rearStation as RearStation | undefined)?.dispose?.();
     // The Devastator's own parts are given back by `disposeDevastator` in `releaseAircraft`
     // before this runs; traversing them here would dispose geometry twice.
     if (group.userData.detailed || group.userData.importedAircraft || group.userData.importedShip || group.userData.devastator)

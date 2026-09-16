@@ -9,6 +9,7 @@
 import * as T from "three";
 import { softCircleDataTexture } from "@threenative/core";
 import { emblem } from "./assets.js";
+import { createSeatedStation, SEATED_PELVIS, type ISeatedStation } from "./aircrew.js";
 import { createCockpitInterior, getCockpitMaterials, type CockpitInterior } from "./cockpit-detail.js";
 
 const PI = Math.PI;
@@ -552,8 +553,11 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
       mesh(geometry([a!, 0.22, side * wa!, b!, 0.22, side * wb!, b!, 0.47, side * wb!, a!, 0.47, side * wa!], [0, 0, 1, 0, 1, 1, 0, 1], [0, 1, 2, 0, 2, 3]), M.cockpit!, cockpit);
   }
   for (const x of [-2.46, -0.98, 0.55]) {
-    const seat = box([0.4, 0.48, 0.45], [x, 0.55, 0], M.cockpit!, cockpit);
-    seat.rotation.z = -0.12;
+    // The rearmost station's gunner faces aft, so his backrest sits forward of his pelvis; the
+    // forward-facing seats' backrest, aft of the pelvis, had his legs through it.
+    const aft = x === 0.55;
+    const seat = box([0.4, 0.48, 0.45], [aft ? x - 0.3 : x, 0.55, 0], M.cockpit!, cockpit);
+    seat.rotation.z = aft ? 0.12 : -0.12;
     box([0.44, 0.1, 0.43], [x - 0.15, 0.31, 0], M.seat!, cockpit);
     if (!ai)
       for (const side of [-1, 1]) {
@@ -572,11 +576,9 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
     if (!ai) for (let i = 0; i < 5; i++) rod([-2.93 + i * 0.1, 0.55, side * 0.43], [-2.93 + i * 0.1, 0.61, side * 0.43], 0.01, M.steel!, cockpit);
   }
   box([0.3, 0.3, 0.48], [0.17, 0.48, 0], M.black!, cockpit);
-  if (!ai) {
-    rod([0.82, 0.61, 0], [1.15, 0.8, 0], 0.035, M.dark!, cockpit);
-    rod([1.05, 0.8, 0], [1.75, 0.85, 0], 0.027, M.dark!, cockpit, 0.018, 12);
-    box([0.26, 0.1, 0.09], [1.0, 0.78, 0], M.dark!, cockpit);
-  }
+  // No legacy rear gun is drawn here: the approved twin-mount asset (`createSeatedStation`'s
+  // `gun: true`) is the one rear weapon on the airframe. The old rod pedestal, barrel and magazine
+  // that used to sit under it are removed so two guns never overlap in the rear station.
   batch(cockpit);
 
   const canopyStations: Station[] = [
@@ -596,7 +598,12 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
   sliding.name = "canopy";
   root.add(sliding);
   parts.canopy = sliding;
-  for (let i = 0; i < canopyStations.length - 1; i++) {
+  // The gunner's station is open. The supplied greenhouse closes over the rearmost seat whose crown
+  // the aft glazing overlapped by ~4 cm, so the panes and their arches stop at station 4 and the
+  // station-5 arch closes the opening; the pilot keeps the whole forward greenhouse. Nothing aft of
+  // the lip is drawn, so no floating arches are left behind the gun.
+  const REAR_OPEN_STATION = 5;
+  for (let i = 0; i < REAR_OPEN_STATION; i++) {
     const parent = i === 1 ? sliding : canopyStatic;
     const a = section(canopyStations[i]!);
     const b = section(canopyStations[i + 1]!);
@@ -606,7 +613,7 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
       pane.renderOrder = 3;
       rod(a[j] as [number, number, number], b[j] as [number, number, number], j === 0 || j === 4 ? 0.023 : 0.016, M.frame!, parent);
       rod(a[j] as [number, number, number], a[j + 1] as [number, number, number], 0.023, M.frame!, parent);
-      if (i === canopyStations.length - 2 || i === 1) rod(b[j] as [number, number, number], b[j + 1] as [number, number, number], 0.023, M.frame!, parent);
+      if (i === REAR_OPEN_STATION - 1 || i === 1) rod(b[j] as [number, number, number], b[j + 1] as [number, number, number], 0.023, M.frame!, parent);
     }
   }
   for (const side of [-1, 1]) {
@@ -814,6 +821,8 @@ const instances = new WeakMap<
     blur: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>;
     torpedo: T.Object3D;
     interior?: CockpitInterior;
+    /** The two-men crew, each with its own skeleton and mixer. */
+    crew: ISeatedStation[];
   }
 >();
 
@@ -929,7 +938,47 @@ export function makeDevastator(detail: "hero" | "ai" = "hero", withCockpit = fal
       (node): node is T.Object3D => Boolean(node),
     );
   }
-  instances.set(root, { model, propeller, blades, blur, torpedo: model.parts.torpedo!, interior });
+  // The two manned crew on the ported cockpit's own three seats: the forward pilot and the rearmost
+  // radioman/gunner. The rig's measured pelvis is put on that seat's own cushion centre, so the man
+  // sits where the airframe was drawn rather than at an SBD-derived offset. The middle seat is the
+  // bombardier/torpedo officer, not the gunner. The forward pilot's published eye is authoritative —
+  // the cockpit camera flies to it — so his station is shifted until the measured eye lands there.
+  // `furniture: false` because the TBD already models its seats; the station still owns the gun pivot.
+  // The cushion top: buildModel's pan centre 0.31 plus its 0.05 half-height, on the gear datum.
+  const seatTop = 0.36 + model.root.position.y;
+  // Cushion centre in the final (nose -Z) frame is the seat's model x minus its 0.15 m forward
+  // cushion offset; the model's own +X maps to +Z. Seats are at x = -2.46, -0.98, +0.55.
+  const seatAt = (pelvisZ: number, yaw: number): [number, number, number] => {
+    const [px, py, pz] = SEATED_PELVIS;
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    return [-px * c - pz * s, seatTop - py, pelvisZ + px * s - pz * c];
+  };
+  const pilot = createSeatedStation("TBD front pilot", seatAt(-2.61, PI), PI, { furniture: false });
+  const shift = eye.clone().sub(pilot.eye);
+  pilot.root.position.add(shift);
+  pilot.eye.add(shift);
+  root.add(pilot.root);
+  root.userData.crew = [pilot.root];
+  root.userData.pilotRig = pilot.player;
+  root.userData.pilotEye = pilot.eye;
+  // The gunner's own rig root is published — not the station — so a first-person station can hide
+  // the man without taking his seat or the gun with him; `rearGun` is the pivot the controls turn.
+  const gunner = createSeatedStation("TBD rear gunner", seatAt(0.4, 0), 0, {
+    gun: true,
+    furniture: false,
+  });
+  root.add(gunner.root);
+  root.userData.gunner = gunner.player.root;
+  root.userData.gunnerRig = gunner.player;
+  root.userData.gunnerEye = gunner.eye;
+  root.userData.rearGun = gunner.gun;
+  root.userData.owned = [
+    ...((root.userData.owned as T.Object3D[] | undefined) ?? []),
+    pilot.furniture,
+    gunner.furniture,
+  ];
+  instances.set(root, { model, propeller, blades, blur, torpedo: model.parts.torpedo!, interior, crew: [pilot, gunner] });
   return root;
 }
 
@@ -971,10 +1020,15 @@ export function animateDevastator(
   // Same swap point and same fixed opacity as the Douglas, so the two aircraft's propellers match.
   blades.visible = rpm < 0.24;
   blur.visible = rpm >= 0.24;
+  // Each seated man holds the sit idle at the frame's own dt, so a paused (dt = 0) frame freezes
+  // him exactly like the propeller.
+  for (const station of inst.crew) station.player.update(dt);
 }
 export function disposeDevastator(root: T.Group): void {
   const inst = instances.get(root);
   if (!inst) return;
+  // The crew's skinned geometry is the shared pilot GLTF's; only their mixer bindings are ours.
+  for (const station of inst.crew) station.player.dispose();
   inst.interior?.dispose();
   inst.model.dispose();
   inst.blur.geometry.dispose();

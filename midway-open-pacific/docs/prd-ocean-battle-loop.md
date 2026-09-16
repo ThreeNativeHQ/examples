@@ -94,3 +94,31 @@ candidate is UNVERIFIED:** attribution runs failed at browser startup on the sha
   stopped. Other worktrees and the primary dev server were left running.
 ## Out of scope
 Engine `FlightModel`/`WaveField`; `SpectralOcean`; whole-battle reset; native targets; new repo reports.
+
+## Regression follow-up: rear-gunner + own tracers restored (midway/gunner-restore)
+
+Two develop regressions, both from one feature lane that was never merged
+(`midway/douglas-rear-gunner`, tip 71b3a21; merge-base dcd83dc) — not a redesign:
+
+- **Rear-gunner station.** Develop had no `#btn-gunner`, no `src/render/rear-station.ts`, no rear
+  belt state, and only a `V` hold-rear cam. Recovered the feature files (`rear-station.ts`,
+  `aircrew.ts`, `sim/gun-mount.ts`, `tactics.ts`, `armament.ts`, `imported-aircraft.ts`,
+  `devastator.ts`, `airframe-lod.ts`, plus the `weapon.rear-gun.glb` / `gun-30.ogg` assets) and
+  three-way merged the shared files (`world.ts`, `Midway.ts`, `hud.ts`, `battle.ts`, `style.css`,
+  `index.html`) onto develop. `battle.ts`/`audio-catalog.mjs`/`midway-audio.json` were taken at
+  362eb05 so the unrelated wingman-warnings feature (fdf3e39) and its R32/R33 audio stay out.
+- **Own tracers.** Develop's own rounds were `T.LineSegments` with a camera-facing cross (e9e304e +
+  8fb656b), which read as crosses in the gunsight. Restored the lane's `T.InstancedMesh` of a
+  velocity-stretched sphere (one pooled draw, one round = one ellipsoid head) introduced by 362eb05.
+
+Preserved on develop: ocean 4404e62, cockpit warmup 40734df (`warmUpViews`), carrier replacement /
+battle status d3ee729 (`takeAnotherAircraft`, `downed` mode, `#downed`/`#take-aircraft`, map
+`battleStatus`), and radio cue wiring 42413df. Gunner is refused unless `mode === "flight"`; a
+crash calls `leaveGunnerStation` and a replacement resets `gunner/gunnerYaw/gunnerPitch`.
+
+Evidence (isolated port 5393): `pnpm typecheck` PASS · `pnpm exec vite build` PASS ·
+`node scripts/check-gunner.mjs` PASS · `check-battle-continuation` PASS (assertion updated to the
+gun-table SBD rear capacity, 1200, not the old 240 constant) · `check-audio` (29) ·
+`check-radio` (8) · `check-intel` (15) PASS · `tools/capture-gunner.mjs` PASS on SBD and TBD ·
+`tools/capture-tracers.mjs` PASS (instanced ellipsoid, live rounds). `check-flight`/`check-aircraft`
+not run: known pre-existing baseline failures named above.

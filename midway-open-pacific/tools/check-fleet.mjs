@@ -241,7 +241,10 @@ const sizeOf = (object) => new Box3().setFromObject(object).getSize(new Vector3(
   // the supplied IJN destroyer that imported-fleet.ts loads, it runs along X rather than glTF -Z,
   // and it is asserted against its own contract in the block above. A hull that came out of the
   // fleet.json pipeline and was never registered there still trips this scan.
-  const checkedUnderAnotherContract = new Set(["destroyer.samidare.glb"]);
+  // weapon.rear-gun.glb is the rear-gun asset from tools/blender/normalize-rear-gun.py, not a
+  // fleet.json hull: check-aircraft.mjs asserts its triangle count and hinge and check-gunner.mjs
+  // its ballistics, so it is not an unregistered fleet asset.
+  const checkedUnderAnotherContract = new Set(["destroyer.samidare.glb", "weapon.rear-gun.glb"]);
   const orphans = readdirSync(new URL("../public/assets/", import.meta.url)).filter(
     (name) =>
       /^(carrier|cruiser|destroyer|submarine|weapon)\..+\.glb$/.test(name) &&

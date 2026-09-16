@@ -99,7 +99,11 @@ export const SFX = [
 
   // Weapons
   { id: "gun-50", seconds: 2, loop: false, identity: "documented", prompt: "One short burst from a single aircraft-mounted Browning fifty-caliber machine gun, rapid hard mechanical reports with a dry percussive attack, outdoors, no shell impacts." },
-  { id: "gun-30", seconds: 2, loop: false, identity: "documented", prompt: "One short burst from a flexible aircraft-mounted thirty-caliber Browning machine gun, lighter fast mechanical chatter, outdoors, no shell impacts." },
+  // gun-30 is a reconstruction: ElevenLabs `eleven_text_to_sound_v2` (1 s request), post-processed
+  // to a mono 0.180 s one-shot (40 Hz high-pass, 1 ms guard fade-in, 50 ms fade-out to true zero,
+  // -6.0 dB before Vorbis q6). The prompt below is the exact 450-character request text sent, so a
+  // forced regeneration replays the same words; identity is reconstruction, not a recording.
+  { id: "gun-30", seconds: 1, loop: false, identity: "reconstruction", prompt: "A single round fired from an aircraft-mounted thirty-caliber Browning machine gun, extremely close and dry, one hard metallic report and a short crisp mechanical action clatter immediately decaying to near silence, rifle-caliber snap not a heavy cannon boom, no echo, no wind, no aircraft engine, no shell impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack a" },
   { id: "gun-77", seconds: 2, loop: false, identity: "documented", prompt: "One short burst from a Japanese aircraft seven point seven millimeter machine gun, quick light mechanical chatter and sharp small reports, outdoors, no shell impacts." },
   { id: "cannon-20", seconds: 2, loop: false, identity: "documented", prompt: "One short burst from a Japanese Type 99 twenty millimeter aircraft cannon, distinct heavy automatic reports with mechanical cycling, outdoors, no shell impacts." },
   { id: "bullet-near", seconds: 1, loop: false, identity: "reconstruction", prompt: "One brief close supersonic rifle-caliber projectile crack and air snap passing the listener outdoors, no gun muzzle report and no impact." },

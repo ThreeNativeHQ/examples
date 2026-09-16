@@ -11,8 +11,26 @@ import {
   segmentDistance,
   wrap,
 } from "./math.js";
-import { damageModifiers, initDamage, stepDamage } from "./damage.js";
-import { torpedoEnvelope, torpedoIntercept, updateStores } from "./armament.js";
+import { aircraftWorld, damageModifiers, initDamage, poseAxes, stepDamage } from "./damage.js";
+import {
+  REAR_GUN_MOUNTS,
+  rearGunHitsOwnTail,
+  rearGunMountFor,
+  rearGunMuzzle,
+  rearGunTailBoxFor,
+  type RearGunMount,
+} from "./gun-mount.js";
+import {
+  advanceRearReload,
+  initRearState,
+  rearCanFire,
+  rearReloading,
+  spendRearRound,
+  startRearReload,
+  torpedoEnvelope,
+  torpedoIntercept,
+  updateStores,
+} from "./armament.js";
 import { AircraftFlight, DECK_HEIGHT, initFlightState, SEA_WIND, steerToward, type ISteerLimits } from "./flight.js";
 import { DRIFT_RATE, isStale, STALE_SECONDS } from "./intel.js";
 
@@ -560,13 +578,189 @@ export function fireClear(b: Any, a: Any, t: Any): boolean {
   return true;
 }
 
-export function rearGunner(b: Any, a: Any, dt: number): void {
-  if (a.kind === "fighter" || a.kind === "recon" || !(a.rearAmmo > 0) || a.mode === "crashing") return;
+/**
+ * The rear gun's one engagement envelope, shared by the AI gunner and the manned station: the
+ * muzzle must stay in the tail cone (at least 127° from the nose, `dot < REAR_GUN_DOT`) and no
+ * lower than a shallow depression. The manned station adds no second envelope.
+ */
+export const REAR_GUN_DOT = -0.6;
+export const REAR_GUN_ELEVATION = -0.13;
+
+/**
+ * The mount a rear gun fires from. The Douglas and TBD carry the approved two-mouth asset, so their
+ * measured mount is used directly. Any other airframe that actually carries rear rounds (the Kate's
+ * Type 92, a Val's defensive gun) keeps the long-standing generic SBD-derived muzzle rather than
+ * falling silent just because it lacks the new Douglas mount; an aircraft with an empty rear rack
+ * still has none. Keyed on the loaded rounds, not the gun table, because some rear-armed types
+ * (the Val) carry their capacity outside `GUN_BATTERIES`.
+ */
+function rearMountFor(a: Any): RearGunMount | null {
+  const mount = rearGunMountFor(a.airframe);
+  if (mount) return mount;
+  return a.rearAmmo > 0 ? REAR_GUN_MOUNTS.sbd! : null;
+}
+
+/**
+ * One round from the tail gun, aimed along a world-space direction. Both the AI gunner and the
+ * manned station fire through this, so the muzzle, event, tracer speed, ammunition and credit can
+ * never drift apart between the two callers. The muzzle is one of the approved gun's own two mouths,
+ * rotated by the gun's aim and alternating barrels; a round that would cross the aircraft's own fin
+ * is refused (the shared `gun-mount` guard) rather than fired through the tail. Callers own the gate,
+ * cooldown and ammo test. Returns whether a round left the gun.
+ */
+function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: number): boolean {
+  const mount = rearMountFor(a);
+  if (!mount) return false;
+  const len = Math.hypot(dx, dy, dz) || 1;
+  const nx = dx / len;
+  const ny = dy / len;
+  const nz = dz / len;
+  // The gun's own angles, measured in the airframe's real attitude frame: the same mapping the
+  // pivot Euler uses, so the drawn barrel and the round leave the same mouth.
+  const frame = poseAxes(a);
+  const lx = nx * frame.r.x + ny * frame.r.y + nz * frame.r.z;
+  const ly = nx * frame.u.x + ny * frame.u.y + nz * frame.u.z;
+  const lz = -(nx * frame.f.x + ny * frame.f.y + nz * frame.f.z);
+  const yaw = Math.atan2(lx, lz);
+  const pitch = Math.asin(clamp(ly, -1, 1));
+  // The Douglas alone: its thin fin guard below does not cover the fuselage and horizontal tail a
+  // depressed central shot passes through. Measured against the exported airframe mesh (parent BVH
+  // grid, both mouths): pitch −0.13 hits the hull to |yaw| ≤ 0.45, and −0.08 to |yaw| ≤ 0.05, while
+  // the TBD stays clear. The SBD below-level central sector is refused conservatively.
+  // ponytail: |yaw| ≤ 0.50 also blocks some genuinely clear downward rays; fit a hull envelope only
+  // if play shows this too restrictive. No runtime mesh physics.
+  // The −0.01 rad floor keeps a level shot (whose computed pitch carries ~1e-15 of noise) clear.
+  if (a.airframe === "sbd" && pitch < -0.01 && Math.abs(yaw) <= 0.5) return false;
+  // The candidate barrel is chosen but not committed: a refused shot (crossing the fin) must not
+  // flip the barrel, so the two mouths only alternate on rounds that actually leave the gun.
+  const barrel = a.rearBarrel ? 0 : 1;
+  const mouth = rearGunMuzzle(mount, barrel, yaw, pitch);
+  const local = [
+    mount.pivot[0] + mouth[0],
+    mount.pivot[1] + mouth[1],
+    mount.pivot[2] + mouth[2],
+  ] as const;
+  const tail = rearGunTailBoxFor(a.airframe);
+  if (tail && rearGunHitsOwnTail(tail, local, [lx, ly, lz])) return false;
+  a.rearBarrel = barrel;
+  const muzzle = aircraftWorld(a, { x: local[0], y: local[1], z: local[2] });
+  const mx = muzzle.x;
+  const my = muzzle.y;
+  const mz = muzzle.z;
+  spendRearRound(a);
+  a.rearYaw = yaw;
+  a.rearPitch = pitch;
+  // The player's own round draws a rear muzzle flash and is headset audio, exactly like the
+  // forward guns: no world position, so it is neither panned nor distance-attenuated at the
+  // gunner's own ear and a distant AI .30 can never claim its cooldown slot. AI rear guns stay
+  // positional. A refused or empty trigger never reaches here, so neither can appear without a
+  // round leaving the gun.
+  if (a === b.player) {
+    b.fx("muzzle", { x: mx, y: my, z: mz }, 0.45);
+    b.event("gun", { weapon: "gun30" });
+  } else {
+    // Positional only: the emitter is the airframe at the muzzle, not the round. A bullet's
+    // 730 m/s would be read as source Doppler and shift the report absurdly.
+    b.event("gun", {
+      at: { x: mx, y: my, z: mz },
+      source: a.id,
+      weapon: "gun30",
+    });
+  }
+  b.bullets.push({
+    id: b.id("bullet"),
+    x: mx,
+    y: my,
+    z: mz,
+    vx: nx * 730 + (b.random() - 0.5) * spread,
+    vy: ny * 730 + (b.random() - 0.5) * spread,
+    vz: nz * 730 + (b.random() - 0.5) * spread,
+    ttl: 1.1,
+    team: a.team,
+    owner: a.id,
+    type: "gun",
+    damage: 3,
+  });
+  return true;
+}
+
+/**
+ * Lazily seed the belt on an aircraft record that never went through `Battle.launch` (a test or a
+ * legacy record). An already-seeded aircraft is left untouched, so this can never top a belt up.
+ */
+function ensureRearState(a: Any): void {
+  if (a.rearLoaded === undefined) initRearState(a);
+}
+
+/**
+ * The player's own hand on the rear gun. Aim is a world direction built by the caller from the
+ * airframe's real attitude and the bounded station angles, so roll and pitch aim coherently. The
+ * cooldown advances exactly once per tick whether or not the trigger is down, so releasing does
+ * not freeze it; a tight spread and the same tracer speed keep it the same weapon as the AI's.
+ */
+export function fireRearManual(
+  b: Any,
+  a: Any,
+  aim: { x: number; y: number; z: number } | null,
+  fire: boolean,
+  dt: number,
+): void {
+  ensureRearState(a);
+  const now = b.time;
+  advanceRearReload(a, now);
+  // The cadence advances exactly once per tick on every path — empty belt, belt change, refusal,
+  // release or crash — so the last shot's recoil always settles and a dry or reloading trigger can
+  // never freeze the barrels at full deflection.
   a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
+  if (a.mode === "crashing") {
+    a.rearBlocked = false;
+    return;
+  }
+  // A dry belt reloads itself from the same total whenever anything is left in reserve. This is the
+  // handoff-safe path: the AI gunner and the manned station share the aircraft's own state, so a
+  // belt change started by one continues under the other.
+  if ((a.rearLoaded ?? 0) <= 0) startRearReload(a, now);
+  if (!rearCanFire(a, now)) {
+    a.rearBlocked = false;
+    return;
+  }
+  if (!fire || !aim || a.rearTimer > 0) {
+    a.rearBlocked = false;
+    return;
+  }
+  // A refused shot (the round would cross the fin) leaves the trigger free, so holding it fires the
+  // moment the aim clears rather than waiting out a cadence for a round that never left. `rearBlocked`
+  // is the visible cue's source: the player is looking down the barrels, so a silent refusal reads as
+  // a broken gun unless the HUD says the airframe is in the way.
+  const fired = rearShot(b, a, aim.x, aim.y, aim.z, 3);
+  a.rearBlocked = !fired;
+  a.rearTimer = fired ? 0.08 : 0;
+}
+
+export function rearGunner(b: Any, a: Any, dt: number): void {
+  ensureRearState(a);
+  const now = b.time;
+  advanceRearReload(a, now);
+  // Once per tick on every path, so an AI gun's cadence settles through an empty belt or a change.
+  a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
+  if (a.kind === "fighter" || a.kind === "recon" || a.mode === "crashing") return;
+  if ((a.rearLoaded ?? 0) <= 0) {
+    // An empty belt on an AI gunner changes itself and resumes without a pause, exactly as the
+    // player's does; a depleted total leaves it silent for the rest of the sortie.
+    startRearReload(a, now);
+    if (!rearCanFire(a, now)) return;
+  }
+  if (rearReloading(a, now)) return;
   if (a.rearTimer > 0) return;
-  const fx = Math.sin(a.heading) * Math.cos(a.pitch);
-  const fy = Math.sin(a.pitch);
-  const fz = -Math.cos(a.heading) * Math.cos(a.pitch);
+  // The tail cone and its depression are measured in the airframe's own frame, the same `poseAxes`
+  // mapping the muzzle uses: a banked or pitched gunner's world `dy` is not his up.
+  const frame = poseAxes(a);
+  const fx = frame.f.x;
+  const fy = frame.f.y;
+  const fz = frame.f.z;
+  const ux = frame.u.x;
+  const uy = frame.u.y;
+  const uz = frame.u.z;
   // One pass for the first enemy behind the tail, in aircraft order with the player last, and the
   // range found once instead of twice. A squared reject keeps the (slow) `Math.hypot` for the rare
   // foe already in the 25–650 m envelope, which is the only place its value is used.
@@ -591,7 +785,7 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
     const d2 = dx * dx + dy * dy + dz * dz;
     if (d2 >= 422500 || d2 <= 625) continue;
     const dd = Math.hypot(dx, dy, dz);
-    if ((dx * fx + dy * fy + dz * fz) / dd < -0.6 && dy / dd > -0.13) {
+    if ((dx * fx + dy * fy + dz * fz) / dd < REAR_GUN_DOT && (dx * ux + dy * uy + dz * uz) / dd > REAR_GUN_ELEVATION) {
       t = e;
       d = dd;
       break;
@@ -603,28 +797,9 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
   GUN_AIM.x = t.x + (t.vx || 0) * tt - a.x;
   GUN_AIM.y = t.y + (t.vy || 0) * tt - a.y;
   GUN_AIM.z = t.z + (t.vz || 0) * tt - a.z;
-  const len = Math.hypot(GUN_AIM.x, GUN_AIM.y, GUN_AIM.z) || 1;
-  a.rearTimer = 0.28;
-  a.rearAmmo -= 1;
-  b.event("gun", {
-    at: { x: a.x - fx * 4, y: a.y + 0.8, z: a.z - fz * 4 },
-    source: a.id,
-    weapon: "gun30",
-  });
-  b.bullets.push({
-    id: b.id("bullet"),
-    x: a.x - fx * 4,
-    y: a.y + 0.8,
-    z: a.z - fz * 4,
-    vx: (GUN_AIM.x / len) * 730 + (b.random() - 0.5) * 13,
-    vy: (GUN_AIM.y / len) * 730 + (b.random() - 0.5) * 13,
-    vz: (GUN_AIM.z / len) * 730 + (b.random() - 0.5) * 13,
-    ttl: 1.1,
-    team: a.team,
-    owner: a.id,
-    type: "gun",
-    damage: 3,
-  });
+  // A refused shot (the round would cross the fin) keeps the gun on target without a cadence, so it
+  // fires the moment the aircraft's own attitude clears the tail.
+  a.rearTimer = rearShot(b, a, GUN_AIM.x, GUN_AIM.y, GUN_AIM.z, 13) ? 0.28 : 0;
 }
 
 export function navigateHome(b: Any, a: Any, dt: number): void {
