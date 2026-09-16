@@ -27,7 +27,7 @@ interface IFpsStats {
 }
 
 export function viewCameraLabel(mode: number): string {
-  return ["C / COCKPIT", "C / WIDE VIEW", "C / CHASE"][mode];
+  return ["C / COCKPIT", "C / WIDE VIEW", "C / ATTACK CAM", "C / CHASE"][mode];
 }
 
 export class Hud {

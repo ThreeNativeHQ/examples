@@ -242,8 +242,10 @@ export class Midway extends Scene<GameState, undefined> {
       if (this.paused) return;
       if (this.mouse.looking) {
         // Right-drag aims the rear gun from the gunner station, and free-looks from the cockpit.
+        // Facing aft, the view's screen-right is the aircraft's port, so a rightward drag must
+        // lower the station yaw rather than raise it (matching D / ArrowRight).
         if (this.battle.player.gunner) {
-          this.battle.aimRear((e.clientX - this.mouse.lx) * 0.004, -(e.clientY - this.mouse.ly) * 0.004);
+          this.battle.aimRear(-(e.clientX - this.mouse.lx) * 0.004, -(e.clientY - this.mouse.ly) * 0.004);
         } else {
           this.world.lookYaw = clamp((this.world.lookYaw || 0) + (e.clientX - this.mouse.lx) * 0.005, -2.7, 2.7);
           this.world.lookPitch = clamp((this.world.lookPitch || 0) - (e.clientY - this.mouse.ly) * 0.004, -0.8, 0.95);
@@ -261,18 +263,20 @@ export class Midway extends Scene<GameState, undefined> {
     this.wall += dt;
     const b = this.battle;
     const inFlight = b.status === "playing" && !this.paused;
-    let speed = 1;
     if (inFlight) {
       const turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
       // Inverted pitch, as a flight-sim stick: pulling back (Down) raises the nose. The mouse
       // never commands pitch or roll — it fires the guns and, held right, moves the view.
       const pitch = (this.keys.has("ArrowDown") ? 1 : 0) - (this.keys.has("ArrowUp") ? 1 : 0);
       // Manning the gun, the same keys aim the rear station instead of the aircraft: the AI pilot
-      // already holds the course, so a stray stick input must not disengage it.
+      // already holds the course, so a stray stick input must not disengage it. The gunner looks
+      // aft, where the camera's screen-right is the aircraft's port (−X), so the keys are mapped
+      // to the view rather than the aircraft's +X: D / ArrowRight raises the aim to the gunner's
+      // right, A / ArrowLeft to the left.
       const gunner = b.player.gunner === true;
       const input = gunner
         ? {
-            aimYaw: (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0),
+            aimYaw: (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0) - (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0),
             aimPitch: (this.keys.has("ArrowUp") || this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("ArrowDown") || this.keys.has("KeyS") ? 1 : 0),
             fire: this.keys.has("Space") || this.mouse.fire,
           }
@@ -286,7 +290,12 @@ export class Midway extends Scene<GameState, undefined> {
             fire: this.keys.has("Space") || this.mouse.fire,
           };
       this.world.rear = !gunner && this.keys.has("KeyV");
-      speed = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && b.canAccelerate() ? 3 : 1;
+      // Shift is a simulation control only: it runs extra fixed steps, and never touches
+      // thrust, the camera, animation rates or audio. `canAccelerate()` gates it to level
+      // flight above 120 m, undamaged, with no enemy aircraft within 2400 m or ship within
+      // 2800 m, so it can never fast-forward a fight.
+      const speed =
+        (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && b.canAccelerate() ? 3 : 1;
       for (let i = 0; i < speed; i += 1) b.step(1 / 60, input);
       for (const e of b.events.splice(0)) {
         this.audio.event(e);
@@ -295,7 +304,7 @@ export class Midway extends Scene<GameState, undefined> {
       }
     }
     this.world.update(this.paused ? 0 : dt, this.wall, b.status === "briefing");
-    this.hud.update(dt, speed);
+    this.hud.update(dt);
     const p = b.player;
     const onShip = p.mode === "deck" || p.mode === "launch" || p.mode === "arrest" || p.mode === "service";
     const nearShip = onShip || b.ships.some((s: any) => s.team === "us" && s.kind === "carrier" && !s.sunk && distance2(s, p) < 1800 * 1800);
@@ -511,7 +520,7 @@ export class Midway extends Scene<GameState, undefined> {
       return;
     }
     this.world.setCamera(mode);
-    this.hud.toast(["CHASE CAMERA", "PILOT COCKPIT — HOLD RIGHT MOUSE TO LOOK", "WIDE CHASE CAMERA"][mode]);
+    this.hud.toast(["CHASE CAMERA", "PILOT COCKPIT — HOLD RIGHT MOUSE TO LOOK", "WIDE CHASE CAMERA", "OVERHEAD ATTACK CAMERA — LOOKING DOWN ON YOUR AIRCRAFT"][mode]);
   }
 
   /** Y and the HUD button: swap the pilot and the rear gunner, or say why the seat is unavailable. */
@@ -656,7 +665,11 @@ export class Midway extends Scene<GameState, undefined> {
         this.hud.toast(`PITCH TRIM ${(p.trim * 57.3).toFixed(1)}°`);
         break;
       case "KeyC":
-        this.setCamera((this.world.cameraMode + 1) % 3);
+        this.setCamera((this.world.cameraMode + 1) % 4);
+        break;
+      case "KeyO":
+        // Direct jump to the overhead attack view, wherever the C cycle left off.
+        this.setCamera(3);
         break;
       case "F1":
         this.setCamera(1);

@@ -160,7 +160,7 @@ try {
       lastSwitch = elapsed();
       const before = await page.evaluate(() => window.midway.world.cameraMode);
       await page.keyboard.press("KeyC");
-      await page.waitForFunction(m => window.midway.world.cameraMode === m, (before + 1) % 3, { timeout: 15000 });
+      await page.waitForFunction(m => window.midway.world.cameraMode === m, (before + 1) % 4, { timeout: 15000 });
     }
     await sample(phase);
     await page.waitForTimeout(5000);

@@ -2735,7 +2735,7 @@ export class Battle {
     }
     if (this.time > 35 && !this.reconNotice) {
       this.reconNotice = true;
-      this.say("PATROL CONTROL", "Reports place the enemy northwest of the task force. Use T for course hold; hold Shift above 400 ft to accelerate quiet transit.");
+      this.say("PATROL CONTROL", "Reports place the enemy northwest of the task force. Use T for course hold.");
     }
     if (this.time > 130 && !this.threatNotice) {
       this.threatNotice = true;
@@ -4252,7 +4252,14 @@ export class Battle {
       }
     }
   }
-
+  /**
+   * Whether the simulation may run at 3x.
+   *
+   * Simulation-only: the caller runs extra fixed steps and nothing else changes — not thrust, not
+   * the camera, not animation rates, not audio. Gated so a fight can never be fast-forwarded:
+   * level flight above 120 m, undamaged, no enemy aircraft within 2400 m and no enemy ship within
+   * 2800 m.
+   */
   canAccelerate(): boolean {
     return (
       this.player.mode === "flight" &&
