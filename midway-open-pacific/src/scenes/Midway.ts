@@ -287,6 +287,18 @@ export class Midway extends Scene<GameState, undefined> {
       this.wasCaptured = false;
       this.ctx.input.releaseMouse();
     }
+    // Losing a lock we actually held is an Esc: the browser drops it with no keydown, and the
+    // cursor comes back. Detect it before the controls are computed so the tick that lost the
+    // lock opens the menu instead of spending one last round on a held trigger.
+    if (
+      b.player.gunner === true &&
+      !this.paused &&
+      this.wasCaptured &&
+      !this.ctx.input.raw.pointer.captured
+    ) {
+      this.wasCaptured = false;
+      this.showOverlay("pause-overlay");
+    }
     const inFlight = b.status === "playing" && !this.paused;
     if (inFlight) {
       const turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
@@ -422,19 +434,18 @@ export class Midway extends Scene<GameState, undefined> {
     }
   }
 
-  /** Aim from the lock only; a real lock first, then an Esc unlock is a pause request. */
+  /** Aim from the lock only; the lock's own loss is handled before the controls, in update(). */
   private aimFromPointer(): void {
     const pointer = this.ctx.input.raw.pointer;
-    if (!pointer.captured) {
-      // The browser releases the lock on Esc without a keydown. Only a lock we actually held can
-      // be lost, so a still-pending or refused request leaves the player unlocked and clicking.
-      if (this.wasCaptured) {
-        this.wasCaptured = false;
-        this.showOverlay("pause-overlay");
-      }
+    if (!pointer.captured) return;
+    if (!this.wasCaptured) {
+      // The first tick that sees the lock can still carry the cursor movement that took it — the
+      // HUD button click walks the pointer across the screen — or the browser's warp into the
+      // lock. Applying that one sample would snap the barrels to a clamp on entry, so drop it;
+      // the engine's per-tick relative reset clears it, and the next real motion aims normally.
+      this.wasCaptured = true;
       return;
     }
-    this.wasCaptured = true;
     const d = this.ctx.input.vector("aim");
     if (d.x !== 0 || d.y !== 0) this.battle.aimRear(-d.x * 0.004, -d.y * 0.004);
   }

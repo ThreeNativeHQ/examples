@@ -130,7 +130,7 @@ Root cause of the report, traced through `Midway.attachInput` → `Battle.aimRea
   `mouse.looking` was set, and a second button pressed while one is already down arrives as a
   `pointermove`, not a `pointerdown`. Fire is now read from the button mask (`e.buttons & 1`) on
   `pointermove` and recomputed on `pointerup`, so a held or clicked left trigger fires whether or not
-  the right button aims. The hint now reads `MOUSE / WASD AIM · LEFT CLICK OR SPACE FIRE`.
+  the right button aims. The hint now reads `MOUSE / WASD AIM · LEFT CLICK OR SPACE FIRE · R RELOAD · ESC MENU`.
 - **No rear firing visual.** `rearShot` emitted only a `gun30` sound event; the forward wing guns
   drew their flash at `Battle.fire`. A successful *player* round now also emits `fx("muzzle")` at
   the fired mouth, and the authored `VentedBarrel` groups in the FPP twin (`rear-station.setRecoil`)
@@ -265,12 +265,25 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
   PASS; `check-gunner` (incl. the new recoil-settles-dry and recoil-settles-mid-change cases),
   `check-radio` (R26–R33), `check-audio` (29) and `check-aircraft` PASS. `check-gunner.mjs` also
   asserts an AI rear shot carries **no** bullet-velocity field, so the report can no longer be read
-  as source Doppler. `capture-gunner.mjs` now asserts a **real** lock (`document.pointerLockElement`
+  as source Doppler. `capture-gunner.mjs` asserts a **real** lock (`document.pointerLockElement`
   plus `ctx.input.raw.pointer.captured`), relative aim motion past the window edge driven by
   `xdotool` inside the private `capture-lock` Xvfb, `Esc`-to-pause with the cursor returned, Resume
   re-capturing from its own click, and release on station exit; the audio path still proves the exact
-  decoded `gun30` buffer on a running context at positive gain. Its pre-existing `D`-key screen-right
-  assertion (a camera-right projection unrelated to the cursor change) does **not** pass on this
-  contended host in the time-boxed pass, so the browser capture is left honest: the code and the
-  lock/motion assertions are in place, but a green `capture-gunner` run is **not** claimed here.
-  No standalone verification document was added; no engine, `node_modules` or new-dependency change.
+  decoded `gun30` buffer on a running context at positive gain. `bash tools/capture-lock.sh node
+  tools/capture-gunner.mjs` on **nvidia / turing** (`MIDWAY_URL=http://127.0.0.1:5312`) now PASSes
+  on both airframes, including the unchanged `D`-key screen-right assertion.
+
+- **Entry-snap root cause and fix (this is what the earlier `D` failure actually was):** manning
+  from the HUD button walks the OS pointer from the last UI target to `#btn-gunner` before the lock
+  is granted; the engine's `InputMap` accumulates that pre-capture `movementX/movementY` into its
+  relative sample, and the first tick that observed the lock applied it through
+  `ctx.input.vector("aim")`, clamping the TBD gun to its maximum up-pitch (measured `gunnerPitch`
+  `0.9273`) where the tail cone leaves almost no yaw — so the subsequent `D` had nowhere to travel.
+  Key-`Y` manning never moves the pointer and was unaffected. `Midway.aimFromPointer` now latches
+  `wasCaptured` on the first captured tick and discards that one sample; no angle is reset on entry
+  and the engine's per-tick relative reset clears it, so later motion aims continuously and moving
+  the cursor up to the HUD while manning cannot rotate the barrels. Separately, the Esc unlock is
+  now detected before the controls are computed, so the tick that lost the lock opens the menu
+  instead of spending a last round. The private probe that proved the mechanism
+  (`gpitch 0.9273 → 0` on HUD entry, `0 → 0` on key `Y`) was removed before commit. No engine,
+  `node_modules` or new-dependency change; no standalone verification document was added.
