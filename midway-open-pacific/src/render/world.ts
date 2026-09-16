@@ -810,7 +810,7 @@ export class WorldView {
     updateDamageVisuals(this.playerMesh, p);
     // The wreck is under the splash from the moment it hits: the airframe goes with the impact,
     // not two seconds later when the report opens.
-    this.playerMesh.visible = b.status !== "lost" && p.mode !== "wreck";
+    this.playerMesh.visible = b.status !== "lost" && p.mode !== "wreck" && p.mode !== "downed";
     this.updateProjectiles();
     this.updateCamera(dt, briefing, time);
     // The eye below the surface is in a different medium: the dawn sky behind a submerged hull
@@ -843,8 +843,9 @@ export class WorldView {
     const ownBomb = [...this.battle.bombs, ...this.battle.airTorpedoes, ...this.battle.torpedoes].filter((a: any) => a.owner === "player").at(-1);
     let cockpit = false;
     // The wreck is in the water and the camera is not: it stops at the surface, backs off and
-    // watches the splash from outside it rather than descending into its own plume.
-    if (p.mode === "wreck") {
+    // watches the splash from outside it rather than descending into its own plume. A downed pilot
+    // waits for a replacement from that same offshore eye, so the shot does not snap back inside.
+    if (p.mode === "wreck" || p.mode === "downed") {
       if (!this.wreckEye) {
         const dx = this.camera.position.x - p.x;
         const dz = this.camera.position.z - p.z;

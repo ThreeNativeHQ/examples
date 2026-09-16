@@ -668,6 +668,46 @@ export interface IReport extends Contact {
   /** The observer's kind when it was an aircraft, so a delivered track can name its source role. */
   observerKind?: string;
   reported: boolean;
+  /**
+   * Deck condition *as this observation saw it*: true when the observer looked at an enemy carrier
+   * whose deck was already unable to launch. Set only by `recordContact`, so a hit nobody observed
+   * never becomes a map claim, and a later observation of a repaired deck clears it.
+   */
+  deckOut?: boolean;
+  /**
+   * True once an observation looked at this hull already under the sea. A confirmed sinking is
+   * terminal: it is a wreck the crew can still see, so unlike `deckOut` it is never cleared by a
+   * later report and it counts on the map even after the positional track has gone stale. Set only
+   * by `recordContact`, never read from an unobserved ship's own state.
+   */
+  sunk?: boolean;
+}
+
+/**
+ * The tactical map's appraisal of the battle, from friendly records and the crew's own observations.
+ * It never reads a hidden hull's health, so damage nobody reported cannot move the label. Only
+ * *confirmed* enemy carrier attrition is compared against friendly decks out of action; a reported
+ * but intact contact establishes no enemy strength, so it can never on its own create an allied lead.
+ */
+export interface IBattleStatus {
+  /** Friendly carriers still afloat, and how many of those can still launch (deck condition). */
+  friendlyAfloat: number;
+  friendlyOperational: number;
+  friendlySunk: number;
+  /** Enemy carriers the crew currently holds a contact on. */
+  enemyReported: number;
+  /**
+   * Of those, the carriers an observation has confirmed out of action — sunk, or seen unable to
+   * launch. A confirmed sinking is terminal and still counts after its track ages.
+   */
+  enemyDecksOut: number;
+  /** Friendly aircraft lost (fleet decks plus the player's own), and the player's confirmed kills. */
+  airLosses: number;
+  airKills: number;
+  appraisal: "ALLIES LEADING" | "ENEMY LEADING" | "CONTESTED" | "INSUFFICIENT INTELLIGENCE";
+  line: string;
+  /** Plain statement of what the appraisal is and is not based on. */
+  basis: string;
 }
 
 export { LOADOUTS };
@@ -742,6 +782,7 @@ export class Battle {
     nearMisses: 0,
     wingShipHits: 0,
     wingShipsSunk: 0,
+    playerLosses: 0,
   };
   /** Each side's delivered reports. Beliefs, not ships: no exact position and no deck health. */
   teamIntel: Record<string, Map<string, IReport>> = { us: new Map(), jp: new Map() };
@@ -763,6 +804,8 @@ export class Battle {
   voiceFlags: Record<string, any> = {};
   /** The assignment the player chose in the briefing, and its progress. */
   sortie: ISortie = newSortie();
+  /** The last sortie frozen before a replacement aircraft opened a new one; the debrief's record. */
+  lastResult: IResult | null = null;
 
   constructor(seed = 19420604) {
     this.random = rng(seed);
@@ -2049,8 +2092,11 @@ export class Battle {
 
   /** A newer, vaguer report improves the position but cannot un-identify a hull already named. */
   keepIdentity(prev: IReport | undefined, next: IReport): IReport {
-    if (!prev?.identified || next.identified) return next;
-    return { ...next, name: prev.name, kind: prev.kind, identified: true };
+    if (!prev) return next;
+    // A confirmed sinking is terminal truth; a later, vaguer report cannot put the hull back afloat.
+    const sunk = prev.sunk || next.sunk;
+    if (!prev.identified || next.identified) return sunk ? { ...next, sunk: true } : next;
+    return { ...next, name: prev.name, kind: prev.kind, identified: true, deckOut: next.deckOut ?? prev.deckOut, sunk };
   }
 
   dropBomb(a: Any = this.player): boolean {
@@ -2299,9 +2345,13 @@ export class Battle {
       time: this.time,
       identified: true,
       source,
+      // The observer is looking at the hull now, so it can see whether the deck is fit to launch, and
+      // whether the hull is already under the sea.
+      deckOut: s.kind === "carrier" ? s.deck < LAUNCH_DECK : undefined,
+      sunk: s.sunk === true,
       reported: prev?.reported || false,
     });
-    if (!prev && source === "visual" && s.kind === "carrier") {
+    if (!prev && !s.sunk && source === "visual" && s.kind === "carrier") {
       this.say("REAR GUNNER", `Carrier off the nose! ${s.name}, bearing ${String(Math.round((bearing(this.player, s) * 180) / Math.PI) % 360).padStart(3, "0")}. Press R to send the contact.`, true);
       this.voice("R04", { identity: s.id });
       this.voiceFlags.r04id = s.id;
@@ -2589,11 +2639,16 @@ export class Battle {
    */
   crashPlayer(reason: string): void {
     const p = this.player;
-    if (this.status !== "playing" || p.mode === "crashing") return;
+    if (this.status !== "playing" || p.mode === "crashing" || p.mode === "wreck" || p.mode === "downed") return;
     if (p.mode !== "flight") {
-      this.lose(reason);
+      // No fall to animate: the aircraft was lost on a surface or deck already, so it goes straight to
+      // the downed wait and is counted there exactly once.
+      this.losePlayerAircraft(reason);
       return;
     }
+    // The player's own airframe is a fleet loss too; `recordLoss` deliberately skips the player,
+    // so this is the one place it is counted.
+    this.stats.playerLosses += 1;
     p.mode = "crashing";
     p.crashAge = 0;
     p.hp = 0;
@@ -2645,7 +2700,51 @@ export class Battle {
     const p = this.player;
     p.crashSettle = (p.crashSettle || 0) + dt;
     p.y = 0;
-    if (p.crashSettle >= 2.2) this.lose(this.crashReason || "Aircraft lost.", false);
+    if (p.crashSettle < 2.2) return;
+    // A shoot-down freezes the sortie, not the battle. While a friendly carrier is still afloat the
+    // pilot can be spotted another aircraft; only losing the whole carrier force is a defeat.
+    this.goDownedOrLose(this.crashReason || "Aircraft lost.");
+  }
+
+  /**
+   * One player airframe is gone without a fall to animate — it was destroyed on deck, in an
+   * arrestment, or on the sea. That is the same single loss `crashPlayer` counts: the pilot waits
+   * downed while any friendly deck is afloat, and only a genuine fleet defeat ends the battle.
+   */
+  private losePlayerAircraft(reason: string): void {
+    const p = this.player;
+    if (this.status !== "playing" || p.mode === "downed" || p.mode === "wreck") return;
+    this.stats.playerLosses += 1;
+    this.crashReason = reason;
+    this.goDownedOrLose(reason);
+  }
+
+  /**
+   * The one share of the after-loss transition every aircraft loss routes through: freeze the lost
+   * sortie under its own id, and park the pilot downed if a friendly deck remains, otherwise hand the
+   * loss to `lose`. A no-friendly-carrier condition is a defeat either way, so the global check in
+   * `step` and this call can never disagree — they both read `friendlyCarrierAfloat`.
+   */
+  private goDownedOrLose(reason: string): void {
+    const p = this.player;
+    p.hp = 0;
+    p.engineCut = true;
+    p.throttle = 0;
+    if (!this.friendlyCarrierAfloat) {
+      this.lose(reason, false);
+      return;
+    }
+    // Freeze the lost sortie under its own id whatever the assignment: the replacement opens a new
+    // id, so no weapon stamped for this flight can score in the next one.
+    if (!this.sortie.result) this.sortie.result = this.snapshotResult("lost", this.home);
+    p.mode = "downed";
+    this.event("notice", { text: "AIRCRAFT LOST — TAKE ANOTHER AIRCRAFT FROM A FRIENDLY DECK" });
+    this.say("BATTLE CONTROL", "We still have decks. Another aircraft is being spotted for you.", true);
+  }
+
+  /** Is any friendly flight deck still in the water? The one defeat condition a shoot-down can meet. */
+  get friendlyCarrierAfloat(): boolean {
+    return this.ships.some((s: Any) => s.kind === "carrier" && s.team === "us" && !s.sunk);
   }
 
   lose(reason: string, blast = true): void {
@@ -2660,6 +2759,116 @@ export class Battle {
   }
 
   reason = "";
+
+  /**
+   * The nearest friendly carrier that can put the player's own aircraft type up right now: a free
+   * deck, a ready airframe of that type, a store for it and aviation fuel. `canLaunch` is the only
+   * gate, so this refuses for exactly the reasons the AI launch side does. The player's type is
+   * fixed: changing airframe mid-battle is not offered here rather than silently substituted.
+   */
+  private chooseReplacementDeck(): { deck: Any; reason: string } {
+    const p = this.player;
+    const airframe = p.airframe || "sbd";
+    const store = storeFamilyOf(airframe);
+    let reason = "no operational friendly flight deck";
+    let best: Any = null;
+    for (const s of this.ships) {
+      if (s.team !== "us" || s.kind !== "carrier" || s.sunk || !s.air || !s.deckState) continue;
+      this.refreshDeck(s);
+      const check = canLaunch(s.air, s.deckState, airframe, store, this.time, this.activeAircraft, ACTIVE_CAP);
+      if (!check.ok) {
+        reason = check.reason;
+        continue;
+      }
+      if (s.air.fuel < FUEL_PER_LAUNCH) {
+        reason = "no aviation fuel";
+        continue;
+      }
+      // The nearest deck is the one the pilot would be flown to; ties keep the first found.
+      if (!best || distance2(s, p) < distance2(best, p)) best = s;
+    }
+    return { deck: best, reason };
+  }
+
+  /** What the downed panel shows: the frozen flight-loss outcome plus the replacement deck or a refusal. */
+  replacementStatus(): { available: boolean; carrier: string; reason: string; last: string } {
+    const found = this.chooseReplacementDeck();
+    const frozen = this.sortie.result;
+    const last = frozen ? outcomeText(frozen) : this.crashReason || "Aircraft lost.";
+    if (found.deck)
+      return { available: true, carrier: found.deck.name, reason: `A fresh ${this.player.airframe.toUpperCase()} is ready on ${found.deck.name}.`, last };
+    return { available: false, carrier: "", reason: `No replacement available — ${found.reason}.`, last };
+  }
+
+  /**
+   * Take a replacement aircraft while downed. `applyLaunch` charges the conserved inventory — one
+   * ready airframe and one store — exactly once; the deck run that follows (`W`) charges nothing
+   * more, and `resetPlayerForLaunch` draws the one fuel load. A second call while already flying is a
+   * no-op, so a repeated click cannot double-debit the deck.
+   */
+  takeAnotherAircraft(): boolean {
+    const p = this.player;
+    if (this.status !== "playing" || p.mode !== "downed") return false;
+    const found = this.chooseReplacementDeck();
+    if (!found.deck) {
+      this.event("notice", { text: `NO REPLACEMENT AIRCRAFT — ${found.reason.toUpperCase()}` });
+      return false;
+    }
+    const s = found.deck;
+    const airframe = p.airframe || "sbd";
+    const applied = applyLaunch(s.air, s.deckState, airframe, storeFamilyOf(airframe), this.time, TIMES);
+    s.air = applied.air;
+    s.deckState = applied.deck;
+    this.refreshDeck(s);
+    // The failed sortie's record and every release stamp it owns are frozen under its own id; the
+    // next sortie gets a new one, so no old weapon can score in it.
+    this.lastResult = this.sortie.result ?? this.lastResult;
+    this.sortie = newSortie(this.sortie.assignment, this.time, this.sortie.id + 1, this.sortie.duty);
+    this.resetPlayerForLaunch(s, true);
+    this.event("notice", { text: `NEW AIRCRAFT READY — ${s.name.toUpperCase()}` });
+    return true;
+  }
+
+  /**
+   * The tactical map's honest appraisal. Enemy carriers are the crew's observed contacts and the
+   * confirmed losses among them — a sinking an observation looked at, or a deck an observation saw
+   * unable to launch. A hull nobody reported is absent, and a reported but intact contact establishes
+   * no enemy strength. The comparison is therefore confirmed enemy attrition against friendly decks
+   * out of action, never reported-contact counts.
+   */
+  battleStatus(): IBattleStatus {
+    const carriers = this.ships.filter((s: Any) => s.kind === "carrier");
+    const friendly = carriers.filter((s: Any) => s.team === "us");
+    const friendlyAfloat = friendly.filter((s: Any) => !s.sunk).length;
+    const friendlyOperational = friendly.filter((s: Any) => !s.sunk && s.deck >= LAUNCH_DECK).length;
+    const friendlySunk = friendly.length - friendlyAfloat;
+    const friendlyOut = friendlySunk + (friendlyAfloat - friendlyOperational);
+    const airLosses = friendly.reduce((n: number, s: Any) => n + (s.lostAircraft ?? 0), 0) + this.stats.playerLosses;
+    const observed = [...this.contacts.values()].filter((c: IReport) => c.kind === "carrier");
+    const reported = observed.filter((c: IReport) => !isStale(c, this.time, STALE_SECONDS));
+    const enemyReported = reported.length;
+    // A confirmed sinking is terminal and counts even after the positional track ages; a deck merely
+    // observed out still needs a current sighting, and a later observation of a repaired deck clears it.
+    const enemySunk = observed.filter((c: IReport) => c.sunk === true).length;
+    const enemyDecksOut = enemySunk + reported.filter((c: IReport) => c.sunk !== true && c.deckOut === true).length;
+    let appraisal: IBattleStatus["appraisal"];
+    if (enemyReported === 0 && enemyDecksOut === 0) appraisal = "INSUFFICIENT INTELLIGENCE";
+    else if (enemyDecksOut > friendlyOut) appraisal = "ALLIES LEADING";
+    else if (enemyDecksOut < friendlyOut) appraisal = "ENEMY LEADING";
+    else appraisal = "CONTESTED";
+    return {
+      friendlyAfloat,
+      friendlyOperational,
+      friendlySunk,
+      enemyReported,
+      enemyDecksOut,
+      airLosses,
+      airKills: this.stats.kills,
+      appraisal,
+      basis: "BASIS: CONFIRMED ENEMY CARRIERS DISABLED OR SUNK (VISUALLY OBSERVED) VS FRIENDLY DECKS OUT OF ACTION — REPORTED BUT INTACT CONTACTS DO NOT REVEAL ENEMY STRENGTH.",
+      line: `ALLIED DECKS ${friendlyOperational}/${friendly.length} OPERATIONAL · ${friendlyOut} OUT OF ACTION · ENEMY ${enemyDecksOut} CONFIRMED OUT (${enemyReported} REPORTED) · AIR ${airLosses} LOST / ${this.stats.kills} YOUR CONFIRMED KILLS`,
+    };
+  }
 
   step(dt: number, input: Any = {}): void {
     if (this.status !== "playing") return;
@@ -3469,9 +3678,98 @@ export class Battle {
     this.surfaceGroups.push(group);
   }
 
+  /**
+   * Put the player back on a flight deck ready to launch, from the same finite inventory as every
+   * other aircraft. The post-recovery service completion and a downed replacement both route
+   * through here. `replacement` is true for a fresh airframe: the deck run that follows `applyLaunch`
+   * must not draw a second store, and a new aircraft starts with a full tank.
+   */
+  private resetPlayerForLaunch(h: Any, replacement: boolean): void {
+    const p = this.player;
+    // Re-arming on deck starts another sortie, so the calls that belong to one sortie re-arm with it:
+    // the deck announcement before this launch, the sighting calls for the aircraft this trip meets,
+    // and the run-in on the target. The contact report (R04/R05) stands — the fleet was told once.
+    for (const k of ["r01", "r02", "r03", "r16", "p02"]) this.voiceFlags[k] = false;
+    Object.assign(p, {
+      home: h.id,
+      hp: 100,
+      rearTimer: 0,
+      bombs: 3,
+      torpedo: 0,
+      mode: "deck",
+      deckOffset: -55,
+      deckLateral: 0,
+      deckSpeed: 0,
+      chocks: true,
+      throttle: 0.18,
+      brakes: false,
+      gear: true,
+      gearManual: false,
+      autoGearPending: false,
+      gearClimbTime: 0,
+      flaps: 0.33,
+      landingAssist: null,
+      autopilot: false,
+      nav: "search",
+      engineCut: false,
+      takeoffGrace: 0,
+      launchAssist: 0,
+      crashAge: 0,
+      crashSettle: 0,
+      divertNotice: false,
+      killCredited: false,
+    });
+    if (replacement) {
+      // A fresh airframe inherits nothing from the one that went down: it draws its own full load
+      // from the carrier's finite ammo store, or flies with empty guns if the store is dry.
+      p.fuel = 0;
+      p.ammo = 0;
+      p.rearAmmo = 0;
+    }
+    applyLoadout(p, p.loadout || "bomb");
+    // The player rearms out of the same finite stores as every other aircraft on the ship. With the
+    // racks empty the aircraft still flies; it just has nothing to drop.
+    const family = storeFamilyOf(p.airframe);
+    const supplies = [];
+    if (h.air) {
+      const fuel = Math.min(Math.max(0, 100 - p.fuel), Math.max(0, h.air.fuel) * 100 / FUEL_PER_LAUNCH);
+      p.fuel += fuel;
+      h.air.fuel = Math.max(0, h.air.fuel - fuel * FUEL_PER_LAUNCH / 100);
+      if (p.fuel < 100) supplies.push(`Fuel ${Math.floor(p.fuel)}% — carrier tanks exhausted.`);
+      if (p.ammo < 1400 || p.rearAmmo < 240) {
+        if ((h.air.stores.ammo ?? 0) >= 1) {
+          h.air.stores.ammo -= 1;
+          p.ammo = 1400;
+          p.rearAmmo = 240;
+        } else supplies.push(replacement ? "No gun ammunition available." : "No gun ammunition available; remaining rounds retained.");
+      }
+      // A replacement's store was already drawn by `applyLaunch`, so only the service path draws it.
+      if (!replacement) {
+        if ((h.air.stores[family] ?? 0) > 0) {
+          h.air.stores[family] -= 1;
+        } else {
+          p.bombs = 0;
+          p.torpedo = 0;
+          updateStores(p);
+          supplies.push(`No ${family === "torpedo" ? "torpedoes" : "bombs"} left aboard. Racks empty.`);
+        }
+      }
+    }
+    this.playerFlight.setAirframe(p.airframe);
+    initDamage(p);
+    p.killCredited = false;
+    this.playerFlight.reset();
+    this.stats.sorties += 1;
+    this.say("DECK CREW", `${supplies.length ? `Repairs complete. ${supplies.join(" ")}` : "Refueled, repaired and rearmed."} Takeoff flaps set. Advance power when ready.`, supplies.length > 0);
+  }
+
   updatePlayer(dt: number, input: Any): void {
     const p = this.player;
     if (p.mode === "spectator") return;
+    // Downed: the airframe is gone and the pilot waits for a replacement. The battle, the clock and
+    // the AI keep running; the player takes no orders until `takeAnotherAircraft`. Losing the last
+    // friendly carrier during the wait is a real defeat, not an indefinite pause.
+    if (p.mode === "downed") return;
     if (p.mode === "crashing") {
       this.updateCrash(dt);
       return;
@@ -3496,7 +3794,7 @@ export class Battle {
     if (h) this.playerFlight.setDeck(h.deckHeight);
     if (p.mode === "service") {
       if (!h || h.sunk || h.deck < DECK_FAILED) {
-        this.lose("The carrier was destroyed during recovery.");
+        this.losePlayerAircraft("The carrier was destroyed during recovery.");
         return;
       }
       p.serviceTime -= dt;
@@ -3510,61 +3808,7 @@ export class Battle {
       p.speed = 0;
       setAttitude(p, h.heading, 0.22, 0);
       if (p.serviceTime <= 0) {
-        // Re-arming on deck starts another sortie, so the calls that belong to one sortie re-arm
-        // with it: the deck announcement before this launch, the sighting calls for the aircraft
-        // this trip meets, and the run-in on the target. The contact report (R04/R05) stands —
-        // the fleet was told once and does not need telling again.
-        for (const k of ["r01", "r02", "r03", "r16", "p02"]) this.voiceFlags[k] = false;
-        Object.assign(p, {
-          hp: 100,
-          rearTimer: 0,
-          bombs: 3,
-          mode: "deck",
-          deckOffset: -55,
-          deckLateral: 0,
-          deckSpeed: 0,
-          chocks: true,
-          throttle: 0.18,
-          brakes: false,
-          gear: true,
-          gearManual: false,
-          autoGearPending: false,
-          gearClimbTime: 0,
-          flaps: 0.33,
-          landingAssist: null,
-        });
-        applyLoadout(p, p.loadout || "bomb");
-        // The player rearms out of the same finite stores as every other aircraft on the ship. With
-        // the racks empty the aircraft still flies; it just has nothing to drop.
-        const family = storeFamilyOf(p.airframe);
-        const supplies = [];
-        if (h.air) {
-          const fuel = Math.min(Math.max(0, 100 - p.fuel), Math.max(0, h.air.fuel) * 100 / FUEL_PER_LAUNCH);
-          p.fuel += fuel;
-          h.air.fuel = Math.max(0, h.air.fuel - fuel * FUEL_PER_LAUNCH / 100);
-          if (p.fuel < 100) supplies.push(`Fuel ${Math.floor(p.fuel)}% — carrier tanks exhausted.`);
-          if (p.ammo < 1400 || p.rearAmmo < 240) {
-            if ((h.air.stores.ammo ?? 0) >= 1) {
-              h.air.stores.ammo -= 1;
-              p.ammo = 1400;
-              p.rearAmmo = 240;
-            } else supplies.push("No gun ammunition available; remaining rounds retained.");
-          }
-          if ((h.air.stores[family] ?? 0) > 0) {
-            h.air.stores[family] -= 1;
-          } else {
-            p.bombs = 0;
-            p.torpedo = 0;
-            updateStores(p);
-            supplies.push(`No ${family === "torpedo" ? "torpedoes" : "bombs"} left aboard. Racks empty.`);
-          }
-        }
-        this.playerFlight.setAirframe(p.airframe);
-        initDamage(p);
-        p.killCredited = false;
-        this.playerFlight.reset();
-        this.stats.sorties += 1;
-        this.say("DECK CREW", `${supplies.length ? `Repairs complete. ${supplies.join(" ")}` : "Refueled, repaired and rearmed."} Takeoff flaps set. Advance power when ready.`, supplies.length > 0);
+        this.resetPlayerForLaunch(h, false);
         if (this.sortie.assignment === "operation" && !this.sortie.result) {
           // Open Pacific ends on its own conditions, not on one neutralized deck: full success needs
           // the threats resolved and the fleet able to fly, and the conclusion is frozen once.
@@ -3581,7 +3825,7 @@ export class Battle {
     }
     if (p.mode === "arrest") {
       if (!h || h.sunk || h.deck < DECK_FAILED) {
-        this.lose("The carrier deck failed during arrestment.");
+        this.losePlayerAircraft("The carrier deck failed during arrestment.");
         return;
       }
       p.deckSpeed = Math.max(0, p.deckSpeed - dt * 19);
@@ -3599,7 +3843,7 @@ export class Battle {
       p.speed = Math.hypot(p.vx - this.wind.x, p.vz - this.wind.z);
       p.ias = p.speed * Math.sqrt(airDensity(p.y) / 1.225);
       if (p.deckOffset > h.deckLength / 2) {
-        this.lose("The arresting run overran the bow. Touch down farther aft and slower.");
+        this.losePlayerAircraft("The arresting run overran the bow. Touch down farther aft and slower.");
         return;
       }
       if (p.deckSpeed < 0.4) this.recover(h);
@@ -3611,7 +3855,7 @@ export class Battle {
     p.fuel = Math.max(0, p.fuel - dt * (0.009 + p.throttle * 0.018));
     if (p.mode === "deck") {
       if (!h || h.sunk || h.deck < DECK_FAILED) {
-        this.lose("Your carrier can no longer launch aircraft.");
+        this.losePlayerAircraft("Your carrier can no longer launch aircraft.");
         return;
       }
       const departure = this.playerFlight.stepDeck(h, dt, input);
@@ -3796,17 +4040,17 @@ export class Battle {
             this.touchdown(s);
             return;
           }
-          this.lose("Hard deck impact. Lower gear, align from astern, keep wings level and reduce descent below 1,000 ft/min.");
+          this.losePlayerAircraft("Hard deck impact. Lower gear, align from astern, keep wings level and reduce descent below 1,000 ft/min.");
           return;
         }
         if (p.y < s.deckHeight) {
-          this.lose("Impact with the carrier. Fly the approach from astern.");
+          this.losePlayerAircraft("Impact with the carrier. Fly the approach from astern.");
           return;
         }
       }
     }
     if (p.y < 1.1) {
-      this.lose("Your aircraft ditched in the Pacific. Unload the wing and regain airspeed before pulling up.");
+      this.losePlayerAircraft("Your aircraft ditched in the Pacific. Unload the wing and regain airspeed before pulling up.");
       return;
     }
     if (Math.abs(p.x) > 28000 || Math.abs(p.z) > 28000) {
@@ -4206,20 +4450,31 @@ export class Battle {
   updateIntel(): void {
     const p = this.player;
     for (const s of this.ships) {
-      if (s.team === "us" || s.sunk || (s.kind === "sub" && !s.surfaced)) continue;
+      if (s.team === "us" || (s.kind === "sub" && !s.surfaced)) continue;
       const d = distance2(s, p);
       const angle = Math.abs(angleDelta(bearing(p, s), p.heading));
       const visualRange = clamp(2900 + p.y * 1.8, 2900, 6200);
-      if (p.mode === "flight" && d < visualRange && (angle < 1.45 || d < 1300)) this.recordContact(s);
-      else if (this.aircraft.some((a) => a.team === "us" && a.kind === "recon" && distance2(a, s) < 4300)) {
+      const byPlayer = p.mode === "flight" && d < visualRange && (angle < 1.45 || d < 1300);
+      const byRecon = !byPlayer && this.aircraft.some((a) => a.team === "us" && a.kind === "recon" && distance2(a, s) < 4300);
+      const seen =
+        byPlayer ||
+        byRecon ||
+        this.aircraft.some((a) => a.team === "us" && a.wing && a.hp > 0 && a.target === s.id && distance2(a, s) < 4300);
+      if (s.sunk) {
+        // Match the visible sinking hull's lifetime; visiting its submerged position proves nothing.
+        if (seen && s.sink < 0.95 && !this.contacts.get(s.id)?.sunk)
+          this.recordContact(s, byPlayer ? "visual" : byRecon ? "PBY reconnaissance" : "aircraft visual");
+        continue;
+      }
+      if (byPlayer) this.recordContact(s);
+      else if (byRecon) {
         const was = this.contacts.has(s.id);
         this.recordContact(s, "PBY reconnaissance");
         if (!was && s.kind === "carrier") this.say("CATALINA FIVE", `Carrier contact northwest. ${s.name} sighted. Position entered on your intelligence map.`, true);
-      } else if (this.aircraft.some((a) => a.team === "us" && a.wing && a.hp > 0 && a.target === s.id && distance2(a, s) < 4300)) {
-        this.recordContact(s, "aircraft visual");
-      }
+      } else if (seen) this.recordContact(s, "aircraft visual");
     }
   }
+
   /**
    * Whether the simulation may run at 3x.
    *

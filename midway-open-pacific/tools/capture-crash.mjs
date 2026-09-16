@@ -137,15 +137,82 @@ try {
   assert.equal(impact.status, "playing", "the sea takes the aircraft before the report opens");
   assert.equal(impact.debriefOpen, false, "the debrief must not be up over the splash");
   await page.screenshot({ path: `${OUT}/05-impact.png` });
-  await page.waitForFunction(() => window.midway.battle.status === "lost", null, { timeout: 30000 });
-  const end = await page.evaluate(() => ({ y: +window.midway.battle.player.y.toFixed(2), reason: window.midway.battle.reason }));
-  log("report", end);
-  // The clock stops with the sortie, so the debrief frame waits on the wall, not the battle time.
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${OUT}/06-debrief.png` });
+  // The wreck settles into a downed pilot, not a defeat: the battle keeps running and a
+  // replacement is offered on a friendly deck.
+  await page.waitForFunction(() => window.midway.battle.player.mode === "downed", null, { timeout: 60000 });
+  await page.waitForTimeout(400);
+  const downed = await page.evaluate(() => {
+    const b = window.midway.battle;
+    return {
+      mode: b.player.mode,
+      status: b.status,
+      sortie: b.sortie.id,
+      frozen: b.sortie.result ? b.sortie.result.outcome : null,
+      debriefOpen: !document.getElementById("debrief").classList.contains("hidden"),
+      button: !document.getElementById("downed").classList.contains("hidden"),
+    };
+  });
+  log("downed", downed);
+  assert.equal(downed.status, "playing", "a shoot-down must not end the battle while a deck is afloat");
+  assert.equal(downed.mode, "downed");
+  assert.equal(downed.debriefOpen, false, "no debrief opens while the pilot is downed");
+  assert.equal(downed.frozen, "lost", "the lost sortie is frozen before a replacement");
+  assert.equal(downed.button, true, "the replacement button is offered while downed");
+  // The panel and its button must be truly laid out inside the viewport, not just un-hidden: a
+  // pointer-events:none ancestor would leave a visible button no click could ever reach.
+  const downedBox = await page.locator("#downed").boundingBox();
+  assert.ok(downedBox && downedBox.width > 0 && downedBox.height > 0, `the downed panel must be laid out: ${JSON.stringify(downedBox)}`);
+  const buttonBox = await page.locator("#take-aircraft").boundingBox();
+  assert.ok(buttonBox && buttonBox.width > 0 && buttonBox.height > 0, `the replacement button must be laid out inside the viewport: ${JSON.stringify(buttonBox)}`);
+  const downedText = await page.locator("#downed-reason").textContent();
+  assert.ok(/aircraft lost/i.test(downedText), `the downed panel names the flight loss, not a generic game-over: ${downedText}`);
+  await page.screenshot({ path: `${OUT}/06-downed.png` });
+
+  // The clock keeps running through the downed wait and the AI is still fighting.
+  const beforeTime = await page.evaluate(() => window.midway.battle.time);
+  await page.waitForFunction((t) => window.midway.battle.time >= t + 2, beforeTime, { timeout: 20000 });
+
+  // The button really works: a new sortie id, the old result preserved, the pilot back on a deck.
+  const oldId = downed.sortie;
+  await page.click("#take-aircraft");
+  const replaced = await page.evaluate(() => {
+    const b = window.midway.battle;
+    return { mode: b.player.mode, status: b.status, sortie: b.sortie.id, home: b.home?.name ?? "", last: b.lastResult?.outcome ?? null };
+  });
+  log("replaced", replaced);
+  assert.equal(replaced.mode, "deck", "the replacement puts the pilot on a deck");
+  assert.equal(replaced.status, "playing");
+  assert.equal(replaced.sortie, oldId + 1, "the replacement opens a new sortie id");
+  assert.equal(replaced.last, "lost", "the lost sortie's frozen result survives the replacement");
+  await page.screenshot({ path: `${OUT}/07-replacement-deck.png` });
+
+  // And it really flies: hold the throttle until it lifts off.
+  await page.keyboard.down("KeyW");
+  await page.waitForFunction(() => window.midway.battle.player.mode === "flight", null, { timeout: 45000 });
+  await page.keyboard.up("KeyW");
+  await page.screenshot({ path: `${OUT}/08-relaunch.png` });
+
+  // The map's battle appraisal, with the fleet still fighting.
+  await page.keyboard.press("KeyM");
+  await page.waitForTimeout(500);
+  const intel = await page.evaluate(() => ({
+    appraisal: document.getElementById("battle-appraisal").textContent,
+    line: document.getElementById("battle-line").textContent,
+    basis: document.getElementById("battle-basis").textContent,
+    mapOpen: !document.getElementById("map-overlay").classList.contains("hidden"),
+  }));
+  log("battle status", intel);
+  assert.equal(intel.mapOpen, true, "the map opens");
+  assert.ok(intel.appraisal.length > 0, "the map must carry an appraisal");
+  assert.ok(/DECK|REPORTED/.test(intel.line), `the supporting line names decks and reports: ${intel.line}`);
+  assert.ok(/BASIS:/.test(intel.basis), `the appraisal must state its basis: ${intel.basis}`);
+  const statusBox = await page.locator("#battle-status").boundingBox();
+  assert.ok(statusBox && statusBox.width > 0 && statusBox.height > 0, `the battle status block must be visibly laid out: ${JSON.stringify(statusBox)}`);
+  await page.screenshot({ path: `${OUT}/09-battle-status.png` });
+  await page.keyboard.press("KeyM");
 
   assert.equal(errors.length, 0, `console/page errors: ${errors.join(" | ")}`);
-  console.log(`capture-crash: 6 frames in ${OUT}`);
+  console.log(`capture-crash: 9 frames in ${OUT}`);
 } finally {
   await browser.close();
 }

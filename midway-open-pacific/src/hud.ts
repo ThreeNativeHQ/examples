@@ -37,6 +37,8 @@ export class Hud {
   ctx: CanvasRenderingContext2D;
   lastRadio = "";
   lastContacts = "";
+  lastBattleStatus = "";
+  lastDowned = "";
   lastTip = "";
   toastUntil = 0;
   hitFlash = 0;
@@ -247,11 +249,50 @@ export class Hud {
       $("service-bar").style.width = `${(1 - p.serviceTime / 12) * 100}%`;
       $("service-time").textContent = `READY FOR LAUNCH IN ${Math.ceil(p.serviceTime)} SECONDS`;
     }
+    this.updateDownedPanel();
     this.drawRadar();
     if (this.mapOpen) {
       this.drawMap();
       this.updateContactList();
+      this.updateBattleStatus();
     }
+  }
+
+  /**
+   * The replacement prompt, published on change only: the panel itself is new, so it must not write
+   * to the DOM every frame. `replacementStatus` is what the button and its reason read.
+   */
+  updateDownedPanel(): void {
+    const downed = this.b.player.mode === "downed";
+    const status = downed ? this.b.replacementStatus() : null;
+    const key = downed ? `${status.available}|${status.carrier}|${status.reason}|${status.last}` : "";
+    if (key === this.lastDowned) return;
+    this.lastDowned = key;
+    const panel = $("downed");
+    panel.classList.toggle("hidden", !downed);
+    if (!downed) return;
+    $("downed-title").textContent = status.available ? "Take another aircraft." : "No aircraft ready.";
+    $("downed-reason").textContent = `${status.last} ${status.reason}`;
+    const button = $("take-aircraft") as HTMLButtonElement;
+    button.disabled = !status.available;
+    button.textContent = status.available ? `↩ TAKE ANOTHER AIRCRAFT — ${status.carrier.toUpperCase()}` : "NO AIRCRAFT AVAILABLE";
+  }
+
+  /**
+   * The map's battle appraisal, published on change only, from `Battle.battleStatus`. Enemy figures
+   * are the crew's beliefs, so damage nobody reported never moves the label.
+   */
+  updateBattleStatus(): void {
+    const s = this.b.battleStatus();
+    const key = `${s.appraisal}|${s.friendlyOperational}|${s.friendlySunk}|${s.enemyReported}|${s.enemyDecksOut}|${s.airLosses}|${s.airKills}`;
+    if (key === this.lastBattleStatus) return;
+    this.lastBattleStatus = key;
+    const appraisal = $("battle-appraisal");
+    if (appraisal) appraisal.textContent = s.appraisal;
+    const line = $("battle-line");
+    if (line) line.textContent = s.line;
+    const basis = $("battle-basis");
+    if (basis) basis.textContent = s.basis;
   }
 
   /** One canvas paint of the latest state, once per presented frame. */

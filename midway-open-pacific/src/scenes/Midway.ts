@@ -148,6 +148,7 @@ export class Midway extends Scene<GameState, undefined> {
         this.goHome();
         this.hideOverlays();
       },
+      "take-aircraft": () => this.takeAnotherAircraft(),
       "btn-audio": () => {
         this.audio.start();
         this.audio.muted = !this.audio.muted;
@@ -356,10 +357,10 @@ export class Midway extends Scene<GameState, undefined> {
     }
     // The pilot's own view ends with the aircraft. From the moment it is a wreck the camera watches
     // it go in from outside, the way the player watches the ones they shoot down.
-    if ((p.mode === "crashing" || p.mode === "wreck") && !this.crashCam) {
+    if ((p.mode === "crashing" || p.mode === "wreck" || p.mode === "downed") && !this.crashCam) {
       this.crashCam = true;
       if (this.world.cameraMode === 1) this.world.setCamera(0);
-    } else if (p.mode !== "crashing" && p.mode !== "wreck" && this.crashCam) this.crashCam = false;
+    } else if (p.mode !== "crashing" && p.mode !== "wreck" && p.mode !== "downed" && this.crashCam) this.crashCam = false;
     if ((b.status === "lost" || b.status === "won" || b.status === "debrief") && !this.ended) {
       this.ended = true;
       this.clearInput();
@@ -399,6 +400,8 @@ export class Midway extends Scene<GameState, undefined> {
       this.hud.drawMap();
       this.hud.lastContacts = "";
       this.hud.updateContactList();
+      this.hud.lastBattleStatus = "";
+      this.hud.updateBattleStatus();
     }
   }
 
@@ -507,6 +510,16 @@ export class Midway extends Scene<GameState, undefined> {
     this.hud.toast(`RETURN COURSE — ${home.name.toUpperCase()}`);
   }
 
+  /** Take a replacement aircraft after a shoot-down. A refusal is surfaced by the battle's notice. */
+  private takeAnotherAircraft(): void {
+    if (!this.battle.takeAnotherAircraft()) return;
+    this.world.snap = true;
+    this.world.followBomb = false;
+    this.audio.event({ type: "engineStart", airframe: this.battle.player.airframe });
+    this.updateLoadoutUI();
+    this.hud.toast("NEW AIRCRAFT ON DECK — HOLD W TO LAUNCH");
+  }
+
   private designateTarget(id: string): void {
     if (!this.battle.designateTarget(id)) {
       this.hud.toast("CONTACT NOT ELIGIBLE FOR THIS ASSIGNMENT");
@@ -560,6 +573,12 @@ export class Midway extends Scene<GameState, undefined> {
     const p = this.battle.player;
     // A wrecked aircraft takes no more orders; the keys go dead until it hits the water.
     if (p.mode === "crashing" || p.mode === "wreck") return;
+    // Downed: no aircraft to command. The replacement order is the only one that lands; the map and
+    // manual were already handled above, on their own paths.
+    if (p.mode === "downed") {
+      if (code === "Enter") this.takeAnotherAircraft();
+      return;
+    }
     switch (code) {
       case "KeyB":
         this.battle.releaseOrdnance();
