@@ -300,6 +300,46 @@ guarded.step(1 / 60, { fire: true });
 assert.equal(guarded.player.rearAmmo, 239, 'a dead-astern shot clears the straddled fin');
 assert.equal(guarded.player.rearBarrel, 0, 'only the clearing shot flips the barrel');
 
+// 10c. The Douglas fuselage and horizontal tail sit inside a conservative below-level central
+// sector the thin-fin guard alone does not cover (parent BVH grid: pitch −0.13 hits the hull to
+// |yaw| ≤ 0.45), so an SBD depressed central shot is refused — no round, no ammunition, no barrel
+// flip, and no cadence lock: levelling the gun fires at once. A depressed shot swung off the
+// centreline (outside the sector) still clears, and the TBD is never refused for depression.
+const lowCentre = airborne();
+lowCentre.setGunner(true);
+lowCentre.player.rearAmmo = 240;
+lowCentre.player.rearBarrel = 1; // the next round would leave the port mouth at x = -0.091
+lowCentre.player.gunnerYaw = 0;
+lowCentre.player.gunnerPitch = Math.asin(-0.13);
+lowCentre.player.rearTimer = 0;
+lowCentre.step(1 / 60, { fire: true });
+assert.equal(lowCentre.player.rearAmmo, 240, 'an SBD depressed central shot spends no round');
+assert.equal(lowCentre.bullets.filter((b) => b.owner === 'player').length, 0, 'no bullet leaves on the refused SBD shot');
+assert.equal(lowCentre.player.rearBlocked, true, 'the refused SBD shot raises the block cue');
+assert.equal(lowCentre.player.rearBarrel, 1, 'a refused SBD shot never flips the barrel');
+// The very next tick, gun levelled: the round clears the straddled thin fin and the refused shot
+// left the cadence free, so it fires at once.
+lowCentre.player.gunnerPitch = 0;
+lowCentre.step(1 / 60, { fire: true });
+assert.equal(lowCentre.player.rearAmmo, 239, 'the SBD fires at once once the gun is levelled');
+assert.equal(lowCentre.player.rearBlocked, false, 'a clearing shot lowers the block cue');
+// The same depression off the centreline is outside the guarded sector and still fires.
+lowCentre.player.rearTimer = 0;
+lowCentre.player.gunnerYaw = 0.7;
+lowCentre.player.gunnerPitch = Math.asin(-0.13);
+lowCentre.step(1 / 60, { fire: true });
+assert.equal(lowCentre.player.rearAmmo, 238, 'an SBD depressed side shot outside the central sector still fires');
+// A TBD at the same depression and yaw always fires: the guard is Douglas-only.
+const tbdLow = airborne();
+tbdLow.player.airframe = 'tbd';
+tbdLow.setGunner(true);
+tbdLow.player.rearAmmo = 240;
+tbdLow.player.gunnerYaw = 0;
+tbdLow.player.gunnerPitch = Math.asin(-0.13);
+tbdLow.player.rearTimer = 0;
+tbdLow.step(1 / 60, { fire: true });
+assert.equal(tbdLow.player.rearAmmo, 239, 'the TBD has no below-level central guard');
+
 // 11. The visual pivot's Euler mapping agrees with the sim aim, so the sight and barrel cannot drift.
 const pivot = airborne();
 pivot.setGunner(true);

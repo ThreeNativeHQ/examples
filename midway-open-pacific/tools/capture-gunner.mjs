@@ -223,6 +223,64 @@ try {
     assert.ok(fired.rearAmmo < ammoBefore, `the rear gun spends rear ammunition (${fired.rearAmmo})`);
     assert.equal(fired.ammo, forwardBefore, "the forward guns are untouched in the gunner seat");
 
+    // 3b. The conservative SBD below-level central guard, with a dedicated cue a higher-priority
+    // warning cannot suppress: a depressed dead-astern shot is refused, spends no round, and the
+    // concurrent LOW FUEL warning still owns the warning line while AIRFRAME BLOCKS FIRE stays
+    // visible; levelling the gun then fires again at once.
+    if (airframe === "sbd") {
+      const fuelBefore = await page.evaluate(() => {
+        const p = window.midway.battle.player;
+        const fuel = p.fuel;
+        p.fuel = 10;
+        p.gunnerYaw = 0;
+        p.gunnerPitch = Math.asin(-0.13);
+        p.rearTimer = 0;
+        return fuel;
+      });
+      const blockedBefore = await rearView();
+      await page.keyboard.down("Space");
+      await page.waitForTimeout(400);
+      const blocked = await page.evaluate(() => {
+        const p = window.midway.battle.player;
+        const cue = document.getElementById("gunner-block");
+        return {
+          rearAmmo: p.rearAmmo,
+          rearBlocked: p.rearBlocked === true,
+          warning: document.getElementById("warning").textContent,
+          cueText: cue.textContent,
+          cueHidden: cue.classList.contains("hidden"),
+          cueRole: cue.getAttribute("role"),
+        };
+      });
+      // Capture while the trigger is still held: a released trigger clears the cue on the next tick.
+      await page.screenshot({ path: `${OUT}/gunner-rear-blocked-${airframe}.png` });
+      await page.keyboard.up("Space");
+      assert.equal(blocked.rearAmmo, blockedBefore.rearAmmo, "a blocked SBD central shot spends no rear round");
+      assert.equal(blocked.rearBlocked, true, "the SBD below-level central aim is refused");
+      assert.equal(blocked.warning, "LOW FUEL", `the higher-priority warning still owns its line: ${blocked.warning}`);
+      assert.equal(blocked.cueHidden, false, "the dedicated block cue survives the higher warning");
+      assert.match(blocked.cueText, /AIRFRAME BLOCKS FIRE/, "the dedicated cue names the airframe");
+      assert.equal(blocked.cueRole, "status", "the dedicated cue is an accessible status");
+      await page.evaluate((fuel) => {
+        const p = window.midway.battle.player;
+        p.fuel = fuel;
+        p.gunnerYaw = 0;
+        p.gunnerPitch = 0;
+        p.rearTimer = 0;
+      }, fuelBefore);
+      await page.keyboard.down("Space");
+      await page.waitForFunction((before) => window.midway.battle.player.rearAmmo < before, blockedBefore.rearAmmo, {
+        timeout: 5000,
+      });
+      await page.keyboard.up("Space");
+      const cleared = await page.evaluate(() => ({
+        rearAmmo: window.midway.battle.player.rearAmmo,
+        rearBlocked: window.midway.battle.player.rearBlocked === true,
+      }));
+      assert.ok(cleared.rearAmmo < blockedBefore.rearAmmo, "the rear gun fires again once the aim clears the airframe");
+      assert.equal(cleared.rearBlocked, false, "the block cue clears with the aim");
+    }
+
     // 4. A real enemy placed astern takes real damage from the rear gun.
     const foeId = await placeAstern(120, -6);
     await page.evaluate(() => {
@@ -260,8 +318,11 @@ try {
       const b = window.midway.battle;
       b.aircraft = b.aircraft.filter((a) => !String(a.id).startsWith("capture-foe-"));
     });
-    await placeAstern(140, -5, 40);
-    const aiBefore = fired.rearAmmo;
+    // Thrust the target slightly above the tail axis: the SBD's below-level central guard (a
+    // deliberate, conservative refusal of its own fuselage) would refuse a depressed astern shot,
+    // so a level or raised one is what proves the visible pivot follows the AI's rounds.
+    await placeAstern(140, 8, 40);
+    const aiBefore = (await rearView()).rearAmmo;
     await page.waitForFunction(
       (before) => window.midway.battle.player.rearAmmo < before,
       aiBefore,
@@ -269,7 +330,7 @@ try {
     );
     await page.waitForTimeout(300);
     const ai = await rearView();
-    assert.ok(ai.rearAmmo < fired.rearAmmo, "the AI rear gunner resumes and fires when the pilot returns");
+    assert.ok(ai.rearAmmo < aiBefore, "the AI rear gunner resumes and fires when the pilot returns");
     assert.ok(Math.abs(ai.gunYaw) > 0.02, `the visible gun aims where the AI fires: ${JSON.stringify(ai)}`);
     await page.waitForTimeout(200);
 

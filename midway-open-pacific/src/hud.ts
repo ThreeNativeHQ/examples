@@ -215,11 +215,13 @@ export class Hud {
       else if (p.ias < 39) warning = "LOW AIRSPEED — UNLOAD WING";
       else if (p.hp < 25) warning = "AIRFRAME CRITICAL";
       else if (p.fuel < 15) warning = "LOW FUEL";
-      // The rear gun refuses a round that would cross the aircraft's own tail. The player is looking
-      // down the barrels, so without this cue the refusal reads as a jammed gun.
-      else if (p.gunner === true && p.rearBlocked === true) warning = "AIRFRAME BLOCKS FIRE";
     }
     $("warning").textContent = warning;
+    // The rear gun refuses a round that would cross the aircraft's own tail or, on the Douglas, its
+    // own fuselage. The player is looking down the barrels, so the refusal needs its own cue: it is
+    // a status, not a warning, and must not be suppressed behind a higher-priority one (low fuel,
+    // low airspeed) even though those still own the warning line above.
+    $("gunner-block").classList.toggle("hidden", !(gunner && p.rearBlocked === true));
     const recent = b.radio.filter((r: any) => b.time - r.time < 23).slice(0, 2);
     const key = recent.map((r: any) => r.id).join();
     if (key !== this.lastRadio) {
@@ -405,6 +407,27 @@ export class Hud {
     c.fill();
     this.drawGauges();
     if (p.mode === "flight") {
+      // The gunner's sight. The rear-gun camera looks straight down the sim's own aim, so a fixed
+      // centre reticle is the true gun direction at every yaw and pitch — the asset's iron sights
+      // do not line up with the fixed eye, so this is the player's actual sight. Unobtrusive and in
+      // the same brass/pale palette as the rest of the HUD.
+      if (p.gunner === true) {
+        const rx = w / 2;
+        const ry = h / 2;
+        c.strokeStyle = "rgba(232,214,174,.7)";
+        c.lineWidth = 1;
+        c.beginPath();
+        c.arc(rx, ry, 8, 0, Math.PI * 2);
+        c.stroke();
+        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+          c.beginPath();
+          c.moveTo(rx + dx * 12, ry + dy * 12);
+          c.lineTo(rx + dx * 19, ry + dy * 19);
+          c.stroke();
+        }
+        c.fillStyle = "#edf1d9";
+        c.fillRect(rx - 1, ry - 1, 2, 2);
+      }
       const f = p.attitude ? attitudeAxes(p).f : forward(p.heading, p.pitch);
       const aim = this.view.project({ x: p.x + f.x * 1600, y: p.y + f.y * 1600, z: p.z + f.z * 1600 });
       if (aim.visible) {

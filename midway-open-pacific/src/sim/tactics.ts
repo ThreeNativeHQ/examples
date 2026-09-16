@@ -613,6 +613,14 @@ function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: nu
   const lz = -(nx * frame.f.x + ny * frame.f.y + nz * frame.f.z);
   const yaw = Math.atan2(lx, lz);
   const pitch = Math.asin(clamp(ly, -1, 1));
+  // The Douglas alone: its thin fin guard below does not cover the fuselage and horizontal tail a
+  // depressed central shot passes through. Measured against the exported airframe mesh (parent BVH
+  // grid, both mouths): pitch −0.13 hits the hull to |yaw| ≤ 0.45, and −0.08 to |yaw| ≤ 0.05, while
+  // the TBD stays clear. The SBD below-level central sector is refused conservatively.
+  // ponytail: |yaw| ≤ 0.50 also blocks some genuinely clear downward rays; fit a hull envelope only
+  // if play shows this too restrictive. No runtime mesh physics.
+  // The −0.01 rad floor keeps a level shot (whose computed pitch carries ~1e-15 of noise) clear.
+  if (a.airframe === "sbd" && pitch < -0.01 && Math.abs(yaw) <= 0.5) return false;
   // The candidate barrel is chosen but not committed: a refused shot (crossing the fin) must not
   // flip the barrel, so the two mouths only alternate on rounds that actually leave the gun.
   const barrel = a.rearBarrel ? 0 : 1;
