@@ -16,6 +16,7 @@ import { chromium } from "playwright";
 
 const URL = process.env.MIDWAY_URL || "http://127.0.0.1:5199";
 const OUT = process.env.MIDWAY_SHOTS || "screenshots";
+const [VIEW_W, VIEW_H] = (process.env.MIDWAY_VIEWPORT || "1280x720").split("x").map(Number);
 
 const browser = await chromium.launch({
   headless: false,
@@ -29,7 +30,7 @@ const browser = await chromium.launch({
 });
 const errors = [];
 try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const page = await browser.newPage({ viewport: { width: VIEW_W, height: VIEW_H } });
   await page.addInitScript(() => {
     class SilentSocket {
       readyState = 0;
@@ -237,6 +238,48 @@ try {
       [dist, drop, side],
     );
 
+  // Drive the manual gun onto a live foe the way the sim's own rear gunner does: solve the world aim
+  // from the fired mouth with a `dist / 730` lead and write the station angles each animation frame,
+  // so a 70 m/s target cannot walk out of the line between the aim sample and the shot. The user's
+  // rounds, ammunition and damage stay the real ones; only the steering is driven.
+  const trackFoe = (foeId) =>
+    page.evaluate((id) => {
+      const s = window.midway;
+      const b = s.battle;
+      const m = s.world.playerMesh;
+      const V = s.world.camera.position.constructor;
+      const Q = m.quaternion.constructor;
+      cancelAnimationFrame(window.__trackRaf || 0);
+      const step = () => {
+        const p = b.player;
+        const foe = b.aircraft.find((a) => a.id === id);
+        if (!foe) return;
+        m.updateMatrixWorld(true);
+        const q = m.getWorldQuaternion(new Q());
+        const f = new V(0, 0, -1).applyQuaternion(q);
+        const u = new V(0, 1, 0).applyQuaternion(q);
+        const r = new V(1, 0, 0).applyQuaternion(q);
+        const mouth = m.userData.rearStation.muzzles[0].getWorldPosition(new V());
+        const dx = foe.x - mouth.x;
+        const dy = foe.y - mouth.y;
+        const dz = foe.z - mouth.z;
+        const lead = Math.hypot(dx, dy, dz) / 730;
+        let wx = dx + (foe.vx || 0) * lead;
+        let wy = dy + (foe.vy || 0) * lead;
+        let wz = dz + (foe.vz || 0) * lead;
+        const wl = Math.hypot(wx, wy, wz) || 1;
+        wx /= wl;
+        wy /= wl;
+        wz /= wl;
+        p.gunnerYaw = Math.atan2(wx * r.x + wy * r.y + wz * r.z, -(wx * f.x + wy * f.y + wz * f.z));
+        p.gunnerPitch = Math.asin(Math.max(-1, Math.min(1, wx * u.x + wy * u.y + wz * u.z)));
+        window.__trackRaf = requestAnimationFrame(step);
+      };
+      window.__trackRaf = requestAnimationFrame(step);
+    }, foeId);
+
+  const untrackFoe = () => page.evaluate(() => cancelAnimationFrame(window.__trackRaf || 0));
+
   const runAirframe = async (airframe, expectedRear, useButton) => {
     // 1. The real briefing loadout button named the airframe, and it starts with that airframe's own
     // rear-gun capacity — not the SBD's 1200 inherited by the TBD.
@@ -314,15 +357,21 @@ try {
       const a = window.midway.battle.gunnerAim();
       return [a.x, a.y, a.z];
     });
-    for (let i = 0; i < 8; i += 1) osMove(40, 0);
+    // One rendered tick between warps: Chromium coalesces pointer-lock mousemoves that arrive in the
+    // same frame, so each warp must land in its own delivered delta instead of fusing into one.
+    for (let i = 0; i < 8; i += 1) {
+      osMove(40, 0);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(null))));
+    }
     await page.waitForTimeout(150);
     const aimM1 = await page.evaluate(() => {
       const a = window.midway.battle.gunnerAim();
       return [a.x, a.y, a.z];
     });
+    const rawRel = await page.evaluate(() => window.midway.ctx.input.raw.pointer.relative);
     assert.ok(
       dot(aimM1, camRight1) > dot(aimM0, camRight1) + 0.05,
-      `locked relative motion past the window edge aims the rear gun to screen-right: ${dot(aimM0, camRight1).toFixed(3)} -> ${dot(aimM1, camRight1).toFixed(3)}`,
+      `locked relative motion past the window edge aims the rear gun to screen-right: ${dot(aimM0, camRight1).toFixed(3)} -> ${dot(aimM1, camRight1).toFixed(3)} (raw rel ${JSON.stringify(rawRel)})`,
     );
     assert.equal((await lockState()).engineCaptured, true, "the lock survives motion past the window edge");
 
@@ -449,7 +498,12 @@ try {
     assert.equal(locked.gunner, true, "no camera key left the station");
 
     // 2b. Escape drops the lock and opens the pause menu, so the cursor comes back; Resume re-takes
-    // the lock from the click. This is the only path that unlocks without a game order.
+    // the lock from the click. This is the only path that unlocks without a game order. Resume must
+    // preserve the aim exactly — a pause/resume that nudged the barrels would be a real input bug.
+    const aimBeforeEscape = await page.evaluate(() => ({
+      yaw: window.midway.battle.player.gunnerYaw,
+      pitch: window.midway.battle.player.gunnerPitch,
+    }));
     await page.keyboard.press("Escape");
     await page.waitForTimeout(300);
     const escaped = await lockState();
@@ -466,6 +520,11 @@ try {
     const resumed = await lockState();
     assert.equal(resumed.engineCaptured, true, "Resume re-takes the pointer lock from its own click");
     assert.equal((await rearView()).gunner, true, "and the player is still on the gun");
+    const aimAfterResume = await page.evaluate(() => ({
+      yaw: window.midway.battle.player.gunnerYaw,
+      pitch: window.midway.battle.player.gunnerPitch,
+    }));
+    assert.deepEqual(aimAfterResume, aimBeforeEscape, "Resume preserves the gun aim it paused with");
 
     // 3. Fire: only rear ammunition is spent.
     const ammoBefore = locked.rearAmmo;
@@ -535,27 +594,37 @@ try {
       assert.equal(cleared.rearBlocked, false, "the block cue clears with the aim");
     }
 
-    // 4. A real enemy placed astern takes real damage from the rear gun.
-    const foeId = await placeAstern(120, -6);
+    // 4. A real enemy astern takes real damage from the player's own rear gun. The neutral aim is set
+    // for BOTH airframes here rather than inherited: the SBD obstruction test resets it as a side
+    // effect and the TBD skips that test, so the fixture must not depend on it. The gunner then tracks
+    // the live target with the sim's own lead, because a fixed aim cannot hit a 70 m/s aircraft that
+    // walks out of the line between the sample and the shot.
+    await resetAim();
+    await page.waitForTimeout(120);
+    const foeId = await placeAstern(120, 0);
     await page.evaluate(() => {
       window.midway.battle.player.rearTimer = 0;
     });
+    await trackFoe(foeId);
     await page.keyboard.down("Space");
     await page.waitForFunction(
       (id) => {
-        const b = window.midway.battle;
-        const foe = b.aircraft.find((a) => a.id === id);
+        const foe = window.midway.battle.aircraft.find((a) => a.id === id);
         return !foe || foe.hp < 60;
       },
       foeId,
       { timeout: 8000 },
     );
     await page.keyboard.up("Space");
+    await untrackFoe();
     const hurt = await page.evaluate((id) => {
       const foe = window.midway.battle.aircraft.find((a) => a.id === id);
-      return foe ? { hp: foe.hp, gone: false } : { hp: 0, gone: true };
+      return foe
+        ? { hp: foe.hp, gone: false, attacker: foe.lastAttacker ?? null }
+        : { hp: 0, gone: true, attacker: null };
     }, foeId);
-    assert.ok(hurt.gone || hurt.hp < 60, "a real rear-gun round damaged the enemy behind the tail");
+    assert.ok(hurt.gone || hurt.hp < 60, "a real rear-gun round damaged the enemy astern");
+    assert.equal(hurt.attacker, "player", "the damage is credited to the player's own rear gun, not a wingman or a crash");
     assert.equal((await rearView()).nav, before.nav, "manning the gun preserves the navigation order");
     await page.screenshot({ path: `${OUT}/gunner-rear-firing-${airframe}.png` });
 

@@ -25,7 +25,7 @@ const FWD = new T.Vector3(0, 0, 1);
 const SHELL_EYE: readonly [number, number, number] = [0, 1.6, 1.48];
 const SHELL_MOUNT: readonly [number, number, number] = [0, 1.035, -0.03];
 /** The live gunner camera anchor, in aircraft-root coordinates (world.ts's authored framing). */
-const CAMERA_OFFSET: readonly [number, number, number] = [0, 0.03, -0.2];
+const CAMERA_OFFSET: readonly [number, number, number] = [0, 0.03, -0.32];
 
 let canvasCapable: boolean | undefined;
 /**
@@ -994,7 +994,7 @@ function srgb(t: T.Texture): T.Texture {
 function surfaceMap(kind: "paint" | "steel" | "brass", seed: number): T.CanvasTexture | null {
   if (!canCanvas()) return null;
   const rand = rng(seed);
-  const base = kind === "paint" ? [91, 96, 66] : kind === "brass" ? [174, 124, 52] : [67, 72, 77];
+  const base = kind === "paint" ? [91, 96, 66] : kind === "brass" ? [148, 116, 64] : [67, 72, 77];
   return tex(512, 512, (ctx) => {
     const image = ctx.createImageData(512, 512);
     const field = Array.from({ length: 33 * 33 }, () => rand());
@@ -1045,20 +1045,23 @@ function makeGunMaterials(): GunMaterials {
     if (!map) return standard(props);
     return standard({ ...props, map, bumpMap: map });
   };
-  const steel = mk(steelMap, { metalness: 0.88, roughness: 0.39, bumpScale: 0.003, envMapIntensity: 1.25, color: 0xffffff });
-  const paint = mk(paintMap, { metalness: 0.64, roughness: 0.54, bumpScale: 0.002, envMapIntensity: 0.9, color: 0xffffff });
-  const brass = mk(brassMap, { metalness: 0.83, roughness: 0.32, envMapIntensity: 1.4, color: 0xffffff });
+  // Dark blued steel, lifted off near-black so the receiver holds a mid-tone under the sky instead
+  // of reading as flat plastic. `edge` is deliberately a muted worn steel — a bright chamfer along a
+  // full receiver length reads as a cartoon outline — so it stays sparing and broken into segments.
+  const steel = mk(steelMap, { metalness: 0.84, roughness: 0.38, bumpScale: 0.0035, envMapIntensity: 1.25, color: 0xd0dae4 });
+  const paint = mk(paintMap, { metalness: 0.58, roughness: 0.6, bumpScale: 0.002, envMapIntensity: 0.75, color: 0xffffff });
+  const brass = mk(brassMap, { metalness: 0.72, roughness: 0.52, envMapIntensity: 0.8, color: 0xc9b98f });
   const textures = [steelMap, paintMap, brassMap].filter((t): t is T.CanvasTexture => t !== null).map(srgb);
   return {
     steel,
     paint,
-    edge: standard({ color: 0x92928a, metalness: 0.9, roughness: 0.39 }),
+    edge: standard({ color: 0x7d837b, metalness: 0.9, roughness: 0.33 }),
     dark: standard({ color: 0x121719, metalness: 0.6, roughness: 0.45 }),
     black: standard({ color: 0x090c0d, roughness: 0.8 }),
     parkerized: mk(steelMap, { color: 0x292e2c, metalness: 0.76, roughness: 0.5 }),
     brass,
-    copper: standard({ color: 0xad7149, metalness: 0.82, roughness: 0.3 }),
-    grip: standard({ color: 0x272521, roughness: 0.8, metalness: 0.1 }),
+    copper: standard({ color: 0x76502f, metalness: 0.72, roughness: 0.5 }),
+    grip: standard({ color: 0x1d1c19, roughness: 0.72, metalness: 0.08 }),
     label: standard({ color: 0xbab392, roughness: 0.65, metalness: 0.05 }),
     textures,
   };
@@ -1125,7 +1128,7 @@ function gcyl(parent: T.Object3D, radius: number, length: number, mat: T.Materia
 }
 
 function gtorus(parent: T.Object3D, radius: number, thickness: number, mat: T.Material, x: number, y: number, z: number, axis: "x" | "y" | "z" = "z", arc = TAU): T.Mesh {
-  const m = gmesh(parent, new T.TorusGeometry(radius, thickness, 6, 32, arc), mat, x, y, z);
+  const m = gmesh(parent, new T.TorusGeometry(radius, thickness, 6, Math.max(12, Math.ceil((20 * arc) / TAU)), arc), mat, x, y, z);
   if (axis === "y") m.rotation.x = Math.PI / 2;
   if (axis === "x") m.rotation.y = Math.PI / 2;
   return m;
@@ -1142,7 +1145,7 @@ function grod(parent: T.Object3D, a: number[], b: number[], radius: number, mat:
 }
 
 function gbolt(parent: T.Object3D, x: number, y: number, z: number, axis: "x" | "y" | "z", M: GunMaterials, radius = 0.035): void {
-  gcyl(parent, radius * 1.28, 0.013, M.dark!, x, y, z, axis, 18);
+  gcyl(parent, radius * 1.28, 0.013, M.dark!, x, y, z, axis, 10);
   gcyl(parent, radius, 0.025, M.edge!, x, y, z, axis, 6);
   const notch = gbox(parent, radius * 1.25, 0.004, 0.007, M.dark!, x, y + 0.014, z, 0.001);
   if (axis === "x") {
@@ -1184,6 +1187,23 @@ function geye(parent: T.Object3D, x: number, y: number, z: number, M: GunMateria
   return gmesh(parent, g, M.steel!, x, y, z);
 }
 
+/**
+ * The ring-and-cross sight: a thin wire ring on a foot bracketed to the jacket, deliberately
+ * **larger than the barrel jacket** so the hoop silhouettes against the sky instead of reading as a
+ * bead on the muzzle. `radius` is in gun-local units (the weapon is normalised by ~0.22, so 0.18
+ * reads as an ~8 cm hoop in the world). 36 tube segments: at 20 the hoop was visibly polygonal.
+ */
+function gringSight(parent: T.Object3D, x: number, y: number, z: number, M: GunMaterials, radius = 0.18): void {
+  const jacketTop = 0.223;
+  // Foot bracket + clamp bolt on the jacket crown, then the post up to the ring's lower arc.
+  gbox(parent, 0.11, 0.05, 0.12, M.steel!, x, jacketTop - 0.012, z, 0.012);
+  gbolt(parent, x + 0.062, jacketTop - 0.012, z, "x", M, 0.016);
+  grod(parent, [x, jacketTop + 0.005, z], [x, y - radius + 0.012, z], 0.013, M.steel!);
+  gmesh(parent, new T.TorusGeometry(radius, 0.0085, 6, 36), M.steel!, x, y, z, "ring-sight-hoop");
+  gbox(parent, 0.009, radius * 2, 0.0085, M.steel!, x, y, z, 0.002);
+  gbox(parent, radius * 2, 0.009, 0.0085, M.steel!, x, y, z, 0.002);
+}
+
 function gperforatedJacket(radius = 0.144, length = 2.34): T.BufferGeometry {
   const pos: number[] = [];
   const normals: number[] = [];
@@ -1196,7 +1216,7 @@ function gperforatedJacket(radius = 0.144, length = 2.34): T.BufferGeometry {
   const rx = 0.042;
   const ry = 0.048;
   const thickness = 0.014;
-  const ringSteps = 3;
+  const ringSteps = 2;
   const angles: number[] = [];
   for (let i = 0; i < 32; i += 1) angles.push((i * TAU) / 32);
   const corner = Math.atan2(cellH * 0.5, cellW * 0.5);
@@ -1309,14 +1329,16 @@ function gbake(root: T.Object3D): void {
 }
 
 function cartridgeGeometries(): { brass: T.BufferGeometry; tip: T.BufferGeometry; links: T.BufferGeometry } {
-  const profile = [[0.035, 0], [0.039, 0.012], [0.034, 0.025], [0.034, 0.17], [0.027, 0.202], [0.023, 0.208], [0.023, 0.244]];
+  // A .30 case, the same profile at 0.62 scale: the full-width case telescopes into its fore-and-aft
+  // neighbour in the belt.
+  const profile = [[0.022, 0], [0.024, 0.012], [0.021, 0.025], [0.021, 0.17], [0.017, 0.202], [0.014, 0.208], [0.014, 0.244]];
   const brass = new T.LatheGeometry(profile.map((p) => new T.Vector2(p[0]!, p[1]!)), 12);
   brass.rotateX(-Math.PI / 2);
   brass.translate(0, 0, 0.13);
-  const tip = new T.LatheGeometry([[0.023, 0], [0.022, 0.027], [0.019, 0.055], [0.013, 0.078], [0.001, 0.11]].map((p) => new T.Vector2(p[0]!, p[1]!)), 12);
+  const tip = new T.LatheGeometry([[0.014, 0], [0.0135, 0.027], [0.012, 0.055], [0.008, 0.078], [0.001, 0.11]].map((p) => new T.Vector2(p[0]!, p[1]!)), 12);
   tip.rotateX(-Math.PI / 2);
   tip.translate(0, 0, -0.114);
-  const links = new T.TorusGeometry(0.039, 0.009, 5, 12, Math.PI * 1.72);
+  const links = new T.TorusGeometry(0.028, 0.009, 6, 14, Math.PI * 1.72);
   links.translate(0, 0, 0.015);
   return { brass, tip, links };
 }
@@ -1378,6 +1400,8 @@ function buildTwinGun(): {
   cradle.name = "TwinGunCradle";
   elevation.add(cradle);
   grod(cradle, [-0.99, 0, 0], [0.99, 0, 0], 0.075, M.steel!);
+  // Trunnion bearings either side of the yoke.
+  for (const x of [-0.34, 0.34]) gtorus(cradle, 0.115, 0.022, M.steel!, x, 0, 0, "x");
   for (const x of [-0.72, 0.72]) {
     gbox(cradle, 0.09, 0.14, 1.72, M.paint!, x, -0.24, 0.15);
     gsidePlate(cradle, [[-0.75, -0.29], [-0.75, 0.29], [-0.57, 0.33], [-0.43, 0.1], [0.54, -0.11], [1.02, -0.1], [1.03, -0.29]], [[-0.64, 0.18, 0.045, 0.053]], 0.07, M.paint!, x);
@@ -1409,15 +1433,39 @@ function buildTwinGun(): {
     const shell = new T.Group();
     shell.name = `${gun.name}-Receiver`;
     gun.add(shell);
-    gbox(shell, 0.43, 0.45, 1.69, M.steel!, 0, 0.055, 0.14, 0.02);
+    // Stepped breech, not one flat slab: a slim body carrying a proud machined band, a raised rear
+    // block that meets the cover, a tapered forward shoulder, and an exposed feed tray between the
+    // cover rails. The chamfers are broken into short segments instead of one full-length strip: a
+    // continuous bright line down the whole receiver read as a cartoon outline.
+    gbox(shell, 0.43, 0.34, 1.69, M.steel!, 0, 0.01, 0.14, 0.016);
+    gbox(shell, 0.452, 0.1, 0.5, M.steel!, 0, -0.02, 0.36, 0.014);
+    gbox(shell, 0.12, 0.145, 0.92, M.steel!, 0.14, 0.235, 0.59, 0.012);
+    gbox(shell, 0.12, 0.145, 0.92, M.steel!, -0.14, 0.235, 0.59, 0.012);
+    gbox(shell, 0.17, 0.05, 0.9, M.dark!, 0, 0.243, 0.59, 0.006);
+    gbox(shell, 0.03, 0.022, 0.88, M.steel!, 0.082, 0.262, 0.59, 0.004);
+    gbox(shell, 0.03, 0.022, 0.88, M.steel!, -0.082, 0.262, 0.59, 0.004);
+    gbox(shell, 0.14, 0.05, 0.34, M.edge!, 0, 0.272, 0.74, 0.01);
+    gbox(shell, 0.41, 0.10, 0.62, M.steel!, 0, 0.20, -0.32, 0.012);
+    for (const sx of [-1, 1]) {
+      for (let k = 0; k < 3; k += 1) gbox(shell, 0.012, 0.016, 0.26, M.edge!, sx * 0.207, 0.135, -0.46 + k * 0.5, 0.003);
+      for (let k = 0; k < 3; k += 1) gbox(shell, 0.009, 0.018, 0.28, M.edge!, sx * 0.244, -0.075, -0.42 + k * 0.56, 0.002);
+      gbox(shell, 0.01, 0.014, 0.4, M.edge!, sx * 0.192, 0.30, 0.42, 0.003);
+      gbox(shell, 0.01, 0.014, 0.34, M.edge!, sx * 0.192, 0.30, 0.86, 0.003);
+    }
     gbox(shell, 0.39, 0.075, 1.64, M.dark!, 0, -0.19, 0.14);
     gbox(shell, 0.044, 0.36, 1.47, M.steel!, 0.218, 0.05, 0.12, 0.011);
     gbox(shell, 0.044, 0.36, 1.47, M.steel!, -0.218, 0.05, 0.12, 0.011);
     gbox(shell, 0.45, 0.075, 0.13, M.edge!, 0, 0.228, -0.59, 0.013);
+    for (const lz of [0.16, 0.72]) {
+      gbox(shell, 0.03, 0.055, 0.10, M.edge!, 0.222, 0.10, lz, 0.006);
+      gbox(shell, 0.03, 0.055, 0.10, M.edge!, -0.222, 0.10, lz, 0.006);
+      gbolt(shell, 0.228, 0.10, lz, "x", M, 0.017);
+      gbolt(shell, -0.228, 0.10, lz, "x", M, 0.017);
+    }
     for (const sx of [-1, 1]) {
-      gbox(shell, 0.009, 0.018, 1.37, M.edge!, sx * 0.244, -0.075, 0.13, 0.002);
-      gbox(shell, 0.008, 0.01, 1.04, M.edge!, sx * 0.244, 0.11, 0.22, 0.002);
-      gbox(shell, 0.014, 0.135, 0.37, M.dark!, sx * 0.246, 0.025, -0.27, 0.003);
+      // Ejection port: a raised steel surround with the dark opening recessed inside it.
+      gbox(shell, 0.024, 0.2, 0.46, M.steel!, sx * 0.232, 0.025, -0.24, 0.006);
+      gbox(shell, 0.014, 0.14, 0.38, M.dark!, sx * 0.246, 0.025, -0.24, 0.003);
       gbox(shell, 0.018, 0.04, 0.51, M.steel!, sx * 0.255, -0.15, -0.2, 0.004);
       for (const z of [-0.55, -0.32, 0.28, 0.58, 0.82]) {
         gbolt(shell, sx * 0.251, 0.179, z, "x", M, 0.021);
@@ -1426,13 +1474,20 @@ function buildTwinGun(): {
     }
     gcyl(shell, 0.17, 0.14, M.dark!, 0, 0.065, -0.73, "z");
     gcyl(shell, 0.164, 0.07, M.edge!, 0, 0.065, -0.8, "z");
-    gcyl(shell, 0.2, 0.115, M.steel!, 0, 0.045, 1.005, "z");
-    gbox(shell, 0.25, 0.36, 0.055, M.dark!, 0, 0.04, 1.075);
-    const grip = gcyl(shell, 0.054, 0.38, M.grip!, 0, -0.17, 1.27, "y", 20);
-    grip.rotation.x = -0.15;
+    // Rear buffer: a distinct stepped backplate, its buffer disc, and a latch lever on the outside.
+    gbox(shell, 0.32, 0.33, 0.075, M.steel!, 0, 0.03, 1.07, 0.016);
+    gbox(shell, 0.26, 0.28, 0.06, M.dark!, 0, 0.03, 1.13, 0.012);
+    gcyl(shell, 0.105, 0.1, M.steel!, 0, 0.04, 1.02, "z");
+    gcyl(shell, 0.068, 0.06, M.edge!, 0, 0.04, 1.17, "z", 20);
+    grod(shell, [0.14, 0.12, 1.11], [0.25, 0.2, 1.15], 0.02, M.edge!);
+    gbox(shell, 0.075, 0.05, 0.05, M.steel!, 0.26, 0.21, 1.15, 0.008);
+    // Spade grip: a smooth black casting that sweeps down and outboard, with a flattened end plate.
+    const gripCurve = new T.CatmullRomCurve3([[0, -0.11, 1.21], [sign * 0.02, -0.24, 1.26], [sign * 0.06, -0.35, 1.32], [sign * 0.085, -0.42, 1.37]].map((v) => new T.Vector3(v[0]!, v[1]!, v[2]!)));
+    gmesh(shell, new T.TubeGeometry(gripCurve, 12, 0.05, 10, false), M.grip!);
+    gbox(shell, 0.115, 0.05, 0.09, M.grip!, sign * 0.09, -0.435, 1.38, 0.024);
+    gbox(shell, 0.07, 0.036, 0.07, M.edge!, sign * 0.09, -0.462, 1.38, 0.014);
     gcyl(shell, 0.07, 0.035, M.steel!, 0, 0.026, 1.24);
-    gcyl(shell, 0.074, 0.034, M.steel!, 0, -0.363, 1.298);
-    for (let i = 0; i < 10; i += 1) gtorus(shell, 0.054, 0.004, M.black!, 0, -0.315 + i * 0.032, 1.29 - i * 0.004, "y");
+    gcyl(shell, 0.062, 0.032, M.steel!, sign * 0.02, -0.20, 1.245);
     grod(shell, [0, 0.04, 1.025], [0, 0.04, 1.245], 0.034, M.steel!);
     grod(shell, [0, -0.34, 1.025], [0, -0.34, 1.285], 0.028, M.steel!);
     gbox(shell, 0.035, 0.075, 0.05, M.dark!, 0, -0.045, 1.35, 0.01);
@@ -1451,9 +1506,24 @@ function buildTwinGun(): {
     gbox(cover, 0.431, 0.058, 1.65, M.steel!, 0, 0, 0.825, 0.014);
     gbox(cover, 0.245, 0.023, 1.15, M.dark!, 0, 0.039, 0.89, 0.009);
     gbox(cover, 0.235, 0.018, 0.33, M.steel!, 0, 0.051, 0.42, 0.008);
+    // The cover is the receiver's top surface, so it carries the long ridge, edge seams and latch
+    // blocks instead of reading as one blank lid.
+    gbox(cover, 0.10, 0.02, 1.44, M.steel!, 0, 0.036, 0.86, 0.006);
+    // Broken chamfers, plus the raised machined spines and the two cover hinge lugs on the top
+    // surfaces. The rear aperture is a slim open loop, not a wide holed plate.
+    for (const sx of [-1, 1]) {
+      for (let k = 0; k < 3; k += 1) gbox(cover, 0.014, 0.014, 0.28, M.edge!, sx * 0.205, 0.03, 0.2 + k * 0.46, 0.003);
+      gbox(cover, 0.016, 0.02, 0.62, M.steel!, sx * 0.13, 0.041, 0.72, 0.005);
+      gbox(cover, 0.022, 0.05, 0.06, M.steel!, sx * 0.2, -0.03, 0.02, 0.006);
+      gbolt(cover, sx * 0.2, -0.03, 0.02, "x", M, 0.013);
+    }
+    for (const lz of [0.18, 0.66, 1.14]) {
+      gbox(cover, 0.05, 0.032, 0.10, M.steel!, 0, 0.045, lz, 0.008);
+      gbolt(cover, 0, 0.061, lz, "y", M, 0.015);
+    }
     gcyl(cover, 0.038, 0.46, M.edge!, 0, 0.014, 0.07, "x", 18);
     gbox(cover, 0.16, 0.043, 0.12, M.steel!, 0, 0.026, 1.51, 0.008);
-    geye(cover, 0.1, 0.207, 1.42, M, 0.125, 0.34);
+    geye(cover, 0.1, 0.185, 1.42, M, 0.055, 0.12);
     gbox(cover, 0.24, 0.045, 0.09, M.steel!, 0.05, 0.049, 1.37, 0.007);
     gbolt(cover, -0.135, 0.038, 1.33, "y", M, 0.023);
     gbolt(cover, 0.13, 0.038, 0.27, "y", M, 0.022);
@@ -1473,6 +1543,9 @@ function buildTwinGun(): {
     gun.add(barrel);
     barrels.push(barrel);
     gcyl(barrel, 0.056, 2.92, M.dark!, 0, 0.065, -2.22, "z");
+    // A dark sleeve inside the jacket: without it the holes showed the lit inner wall and read as
+    // almost no perforation at all.
+    gcyl(barrel, 0.10, 2.1, M.black!, 0, 0.065, -1.42, "z", 16);
     gmesh(barrel, gperforatedJacket(), M.steel!, 0, 0.065, -0.84, "perforated-jacket");
     for (const z of [-0.9, -3.12, -3.19]) gcyl(barrel, 0.159, z === -3.12 ? 0.025 : 0.073, M.steel!, 0, 0.065, z, "z");
     for (const z of [-0.89, -3.195]) gtorus(barrel, 0.154, 0.006, M.edge!, 0, 0.065, z);
@@ -1485,8 +1558,10 @@ function buildTwinGun(): {
     const bore = gmesh(barrel, new T.CircleGeometry(0.055, 24), M.black!, 0, 0.065, -3.735);
     bore.rotation.y = Math.PI;
     gtorus(barrel, 0.078, 0.006, M.edge!, 0, 0.065, -3.778);
-    geye(barrel, 0, 0.317, -3.205, M, 0.13, 0.275);
-    gbox(barrel, 0.06, 0.13, 0.06, M.steel!, 0, 0.188, -3.19, 0.01);
+    // Ring-and-cross sight on a post over the jacket, sized wider than the jacket so the hoop
+    // silhouettes against the sky.
+    gringSight(barrel, 0, 0.58, -1.95, M);
+    gbox(barrel, 0.05, 0.10, 0.05, M.steel!, 0, 0.165, -3.19, 0.008);
     for (const sx of [-1, 1]) gbox(barrel, 0.025, 0.026, 0.137, M.dark!, sx * 0.087, 0.065, -3.55, 0.009);
     gbake(barrel);
     const muzzle = new T.Object3D();
@@ -1519,11 +1594,28 @@ function buildTwinGun(): {
     gbox(binLid, 0.475, 0.034, 0.59, M.paint!, 0, 0, -0.29, 0.012);
     gbake(binLid);
 
-    const curve = new T.CatmullRomCurve3([[sign * 0.25, 0.08, -0.08], [sign * 0.47, 0.155, -0.08], [sign * 0.7, 0.14, -0.08], [sign * 0.9, -0.07, -0.08], [sign * 0.83, -0.27, -0.08]].map((v) => new T.Vector3(v[0]!, v[1]!, v[2]!)));
-    const count = 16;
+    // A linked ladder: the feed runs across the gun, so every round's long axis lies fore-and-aft
+    // along the bore (-Z) and only the route bends in X/Y, from the receiver's feed out and down
+    // into the box. Rounds are placed by the route's own arclength, spaced at a pitch just above the
+    // 0.048 case width so the cartridges abut and read as one belt rather than loose rounds.
+    const curve = new T.CatmullRomCurve3(
+      [
+        [sign * 0.24, 0.1, -0.06],
+        [sign * 0.5, 0.185, -0.06],
+        [sign * 0.76, 0.135, -0.06],
+        [sign * 0.94, -0.09, -0.05],
+        [sign * 0.88, -0.3, -0.04],
+        [sign * 0.8, -0.46, -0.03],
+      ].map((v) => new T.Vector3(v[0]!, v[1]!, v[2]!)),
+    );
+    const count = Math.max(2, Math.round(curve.getLength() / 0.054));
     const inst: T.InstancedMesh[] = [];
-    for (const [geo, mat] of [[bulletGeo.brass, M.brass!], [bulletGeo.tip, M.copper!], [bulletGeo.links, M.dark!]] as const) {
-      const m = new T.InstancedMesh(geo, mat, count);
+    for (const [geo, mat, n] of [
+      [bulletGeo.brass, M.brass!, count],
+      [bulletGeo.tip, M.copper!, count],
+      [bulletGeo.links, M.dark!, count - 1],
+    ] as const) {
+      const m = new T.InstancedMesh(geo, mat, n);
       m.name = `${gun.name}-Belt`;
       m.instanceMatrix.setUsage(T.DynamicDrawUsage);
       m.castShadow = true;
@@ -1533,23 +1625,31 @@ function buildTwinGun(): {
       inst.push(m);
       belts.push(m);
     }
-    // The belt hangs at its authored resting positions; the FPP gun does not animate reloads.
+    // Resting feed route; setReload moves the belt meshes together during a belt change.
     const matrix = new T.Matrix4();
     const q = new T.Quaternion();
     const one = new T.Vector3(1, 1, 1);
     const axis = new T.Vector3();
+    const chord = new T.Vector3();
+    const prev = new T.Vector3();
     for (let i = 0; i < count; i += 1) {
       const t = (i + 1) / (count + 1);
-      const cp = curve.getPoint(t);
-      const tangent = curve.getTangent(t);
-      axis.set(tangent.y * 0.86, -tangent.x * 0.86, -0.55).normalize();
+      const cp = curve.getPointAt(t);
+      const tangent = curve.getTangentAt(t);
+      axis.set(tangent.x * 0.16, tangent.y * 0.16, -1).normalize();
       q.setFromUnitVectors(FWD.clone().negate(), axis);
       matrix.compose(cp, q, one);
       inst[0]!.setMatrixAt(i, matrix);
-      matrix.compose(cp.clone().addScaledVector(axis, 0.039), q, one);
       inst[1]!.setMatrixAt(i, matrix);
-      matrix.compose(cp.clone().addScaledVector(axis, -0.014), q, one);
-      inst[2]!.setMatrixAt(i, matrix);
+      // One dark link ring per gap, its axis on the chord between the two rounds, so the rounds are
+      // visibly joined along the route instead of floating apart.
+      if (i > 0) {
+        chord.subVectors(cp, prev).normalize();
+        q.setFromUnitVectors(FWD, chord);
+        matrix.compose(cp.clone().add(prev).multiplyScalar(0.5), q, one);
+        inst[2]!.setMatrixAt(i - 1, matrix);
+      }
+      prev.copy(cp);
     }
   }
   const bridge = new T.Group();
@@ -1600,7 +1700,7 @@ export interface RearStation {
  * live camera anchor, and the supplied twin gun normalised onto the sim's measured mouths.
  *
  * The shell is yawed π (barrels and the study's forward both face aft), scaled uniformly so its
- * declared eye lands on `gunnerEye + [0,0.03,-0.2]`, and translated there. The gun keeps its own
+ * declared eye lands on `gunnerEye + [0,0.03,-0.32]`, and translated there. The gun keeps its own
  * hinge geometry but is driven rigidly by the pivot at `REAR_GUN_MOUNTS[airframe].pivot`, so its
  * two visible muzzles coincide with `rearGunMuzzle` within `muzzleError` at every aim.
  */
@@ -1624,7 +1724,7 @@ export function createRearStation(airframe: string, gunnerEye: readonly [number,
   buildEquipment(native, materials, airframe);
   shell.add(native);
 
-  // The live camera anchor, `gunnerEye + [0,0.03,-0.20]`, matching world.ts's authored framing.
+  // The live camera anchor, `gunnerEye + [0,0.03,-0.32]`, matching world.ts's authored framing.
   const anchor = new T.Vector3(gunnerEye[0] + CAMERA_OFFSET[0], gunnerEye[1] + CAMERA_OFFSET[1], gunnerEye[2] + CAMERA_OFFSET[2]);
   const hinge = new T.Vector3(mount.pivot[0], mount.pivot[1], mount.pivot[2]);
   const eyeToMount = new T.Vector3(SHELL_EYE[0] - SHELL_MOUNT[0], SHELL_EYE[1] - SHELL_MOUNT[1], SHELL_EYE[2] - SHELL_MOUNT[2]).length();

@@ -188,6 +188,18 @@ Voice: `r32.ogg` 2.508 s, `r33.ogg` 4.923 s (mono Vorbis, mean −21.4/−20.2 d
 repo's ElevenLabs pipeline into the same `wingman` voice as R26–R31; the subtitle is the script
 text, so caption equals speech. **Not ear-auditioned.**
 
+## Visual polish — FPP twin gun
+
+Bounded scope: the player's own first-person twin gun on both airframes (`buildTwinGun` geometry and
+`makeGunMaterials` in `src/render/rear-station.ts`), plus one gunner-camera framing move in
+`src/render/world.ts` — the eye goes 0.32 m off the gun (was 0.20 m) at FOV 72° (was 82°). The
+framing changes neither the aim direction nor the sim hinge, fired mouths or reload/recoil groups, so the
+muzzles stay on `rearGunMuzzle`; the main pilot cockpit, its interior and its camera are untouched,
+and the exterior and AI aircraft keep the approved fit. The polish gives both airframes stepped steel
+receivers, larger ring sights, a connected belt (each round's long axis on the bore, one dark link
+ring per gap following the belt curve) and slimmer spade grips, all **below the pre-polish station
+budget** of 317,366 geometry / 427,874 instance-weighted / 113 draws.
+
 ## Verification
 
 Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`check-gunner` and
@@ -246,8 +258,8 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
   `node tools/capture-gunner.mjs` pass (`MIDWAY_URL=http://127.0.0.1:5312`) shows
   `U.S. NAVY / SBD-3` and `U.S. NAVY / TBD-1` in `screenshots/gunner-rear-station-{sbd,tbd}.png`,
   reticle, input and obstruction unchanged.
-- **Player-only cost (measured, CPU stub):** the first-person rear station measures **317,366
-  geometry triangles** — 427,874 instance-weighted rendered triangles, since 27 `InstancedMesh` nodes
+- **Player-only cost (measured, CPU stub, before visual polish):** the first-person rear station
+  measures **317,366 geometry triangles** — 427,874 instance-weighted rendered triangles, since 27 `InstancedMesh` nodes
   add 112,572 — over **113 draws** / 24 materials, drawn only in the player's own rear view and
   allocated by no AI aircraft (asserted by `check-aircraft`). The build report's `317,366` is the
   geometry count; a later `31,366` was a dropped-digit transcription of it. No desktop, Android or
@@ -272,6 +284,18 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
   decoded `gun30` buffer on a running context at positive gain. `bash tools/capture-lock.sh node
   tools/capture-gunner.mjs` on **nvidia / turing** (`MIDWAY_URL=http://127.0.0.1:5312`) now PASSes
   on both airframes, including the unchanged `D`-key screen-right assertion.
+
+- **FPP twin-gun visual pass:** `pnpm typecheck`, `node scripts/check-aircraft.mjs` and
+  `pnpm exec vite build` PASS (`/tmp/douglas-gun-final-progress.txt`), the FPP muzzle/pivot asserts
+  holding since the barrel local transforms did not move. Measured on the CPU bundle of
+  `createRearStation`: **306,030** geometry triangles / **423,354** instance-weighted / **111**
+  draws / 27 `InstancedMesh`, under the pre-polish 317,366 / 427,874 / 113. `bash tools/capture-lock.sh
+  node tools/capture-gunner.mjs` now PASSes on **both airframes** on **nvidia / turing**
+  (`/tmp/douglas-final-capture.log`). Visually reviewed the 1280-wide neutral frames of both airframes,
+  the TBD reload frame and the SBD firing frame, plus a textured Blender preview. The astern fixture
+  had placed its target ~6 m off the fired ray; the harness now tracks the **actual** target with the
+  interception lead, and asserts the damage is credited to the player (`lastAttacker`) and that Resume
+  preserves the gun aim it paused with.
 
 - **Entry-snap root cause and fix (this is what the earlier `D` failure actually was):** manning
   from the HUD button walks the OS pointer from the last UI target to `#btn-gunner` before the lock

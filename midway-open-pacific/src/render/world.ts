@@ -921,12 +921,14 @@ export class WorldView {
       this.camera.fov = 49;
     } else if (gunnerView) {
       // The gunner's own eye, from the visual contract: `userData.gunnerEye` is the station in
-      // aircraft-root coordinates. An authored framing offset is added in that same frame — 0.20 m
+      // aircraft-root coordinates. An authored framing offset is added in that same frame — 0.32 m
       // toward the nose and 3 cm up — so the externally-scaled gun sits low in the lens instead of
       // filling it; it is a camera anchor, not a claim about an exact eye bone, and the world gun
-      // scale, pivot and ballistics are untouched. Still inside the open rear station.
+      // scale, pivot and ballistics are untouched. Still inside the open rear station. The 0.32 m
+      // offset and 72° lens hold the externally-scaled gun low in frame and cut the extreme
+      // foreshortening on the breech boxes without changing the aim direction.
       const eye = this.playerMesh.userData.gunnerEye as T.Vector3 | undefined;
-      if (eye) this.targetCamera.set(eye.x, eye.y + 0.03, eye.z - 0.2);
+      if (eye) this.targetCamera.set(eye.x, eye.y + 0.03, eye.z - 0.32);
       this.playerMesh.localToWorld(this.targetCamera);
       // The sight and the camera are one ray: the sim's own aim, off the airframe's real attitude,
       // so a banked or pitched aircraft keeps the eye, the gun pivot and the bullet agreeing.
@@ -936,7 +938,7 @@ export class WorldView {
         this.targetCamera.y + dir.y * 1000,
         this.targetCamera.z + dir.z * 1000,
       );
-      this.camera.fov = 82;
+      this.camera.fov = 72;
     } else if (this.followBomb && ownBomb) {
       this.targetCamera.set(ownBomb.x + 12, ownBomb.y + 16, ownBomb.z + 28);
       this.look.set(ownBomb.x + ownBomb.vx * 0.6, ownBomb.y + (ownBomb.vy ?? 0) * 0.6, ownBomb.z + ownBomb.vz * 0.6);
