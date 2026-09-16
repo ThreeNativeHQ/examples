@@ -135,6 +135,7 @@ export class Midway extends Scene<GameState, undefined> {
       "start-air": () => this.begin(true),
       "brief-help": () => this.showOverlay("pause-overlay"),
       "btn-camera": () => this.action("KeyC"),
+      "btn-gunner": () => this.action("KeyY"),
       "btn-pause": () => this.showOverlay("pause-overlay"),
       "btn-map": () => this.showOverlay("map-overlay"),
       "close-pause": () => this.hideOverlays(),
@@ -240,8 +241,13 @@ export class Midway extends Scene<GameState, undefined> {
     this.on(window, "pointermove", (e) => {
       if (this.paused) return;
       if (this.mouse.looking) {
-        this.world.lookYaw = clamp((this.world.lookYaw || 0) + (e.clientX - this.mouse.lx) * 0.005, -2.7, 2.7);
-        this.world.lookPitch = clamp((this.world.lookPitch || 0) - (e.clientY - this.mouse.ly) * 0.004, -0.8, 0.95);
+        // Right-drag aims the rear gun from the gunner station, and free-looks from the cockpit.
+        if (this.battle.player.gunner) {
+          this.battle.aimRear((e.clientX - this.mouse.lx) * 0.004, -(e.clientY - this.mouse.ly) * 0.004);
+        } else {
+          this.world.lookYaw = clamp((this.world.lookYaw || 0) + (e.clientX - this.mouse.lx) * 0.005, -2.7, 2.7);
+          this.world.lookPitch = clamp((this.world.lookPitch || 0) - (e.clientY - this.mouse.ly) * 0.004, -0.8, 0.95);
+        }
         this.mouse.lx = e.clientX;
         this.mouse.ly = e.clientY;
       }
@@ -257,20 +263,29 @@ export class Midway extends Scene<GameState, undefined> {
     const inFlight = b.status === "playing" && !this.paused;
     let speed = 1;
     if (inFlight) {
-      let turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
+      const turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
       // Inverted pitch, as a flight-sim stick: pulling back (Down) raises the nose. The mouse
       // never commands pitch or roll — it fires the guns and, held right, moves the view.
       const pitch = (this.keys.has("ArrowDown") ? 1 : 0) - (this.keys.has("ArrowUp") ? 1 : 0);
-      const input = {
-        turn,
-        pitch,
-        rudder: (this.keys.has("KeyE") ? 1 : 0) - (this.keys.has("KeyZ") ? 1 : 0),
-        wheelBrake: this.keys.has("KeyK"),
-        throttleUp: this.keys.has("KeyW"),
-        throttleDown: this.keys.has("KeyS"),
-        fire: this.keys.has("Space") || this.mouse.fire,
-      };
-      this.world.rear = this.keys.has("KeyV");
+      // Manning the gun, the same keys aim the rear station instead of the aircraft: the AI pilot
+      // already holds the course, so a stray stick input must not disengage it.
+      const gunner = b.player.gunner === true;
+      const input = gunner
+        ? {
+            aimYaw: (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0),
+            aimPitch: (this.keys.has("ArrowUp") || this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("ArrowDown") || this.keys.has("KeyS") ? 1 : 0),
+            fire: this.keys.has("Space") || this.mouse.fire,
+          }
+        : {
+            turn,
+            pitch,
+            rudder: (this.keys.has("KeyE") ? 1 : 0) - (this.keys.has("KeyZ") ? 1 : 0),
+            wheelBrake: this.keys.has("KeyK"),
+            throttleUp: this.keys.has("KeyW"),
+            throttleDown: this.keys.has("KeyS"),
+            fire: this.keys.has("Space") || this.mouse.fire,
+          };
+      this.world.rear = !gunner && this.keys.has("KeyV");
       speed = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && b.canAccelerate() ? 3 : 1;
       for (let i = 0; i < speed; i += 1) b.step(1 / 60, input);
       for (const e of b.events.splice(0)) {
@@ -490,8 +505,33 @@ export class Midway extends Scene<GameState, undefined> {
   }
 
   private setCamera(mode: number): void {
+    // Authority boundary: the gunner station is first-person only, so no route may change the view.
+    if (this.battle.player.gunner) {
+      this.hud.toast("CAMERA LOCKED — REAR GUNNER · Y FOR THE PILOT SEAT");
+      return;
+    }
     this.world.setCamera(mode);
     this.hud.toast(["CHASE CAMERA", "PILOT COCKPIT — HOLD RIGHT MOUSE TO LOOK", "WIDE CHASE CAMERA"][mode]);
+  }
+
+  /** Y and the HUD button: swap the pilot and the rear gunner, or say why the seat is unavailable. */
+  private toggleGunner(): void {
+    const b = this.battle;
+    if (b.player.gunner) {
+      b.setGunner(false);
+      this.hud.toast("PILOT — YOU HAVE CONTROL");
+      return;
+    }
+    if (!b.setGunner(true)) {
+      this.hud.toast("REAR GUN NEEDS AN SBD OR TBD IN FLIGHT");
+      return;
+    }
+    this.audio.start();
+    this.hud.toast(
+      b.player.rearAmmo > 0
+        ? "REAR GUNNER — AI PILOT · WASD/DRAG AIM · SPACE FIRE · Y PILOT"
+        : "REAR GUN EMPTY — INSPECT STATION · Y PILOT",
+    );
   }
 
   private goHome(): void {
@@ -556,7 +596,22 @@ export class Midway extends Scene<GameState, undefined> {
     const p = this.battle.player;
     // A wrecked aircraft takes no more orders; the keys go dead until it hits the water.
     if (p.mode === "crashing" || p.mode === "wreck") return;
+    // The rear-gun station owns the view: camera and view orders are refused at the route, not
+    // merely reset a frame later.
+    if (p.gunner && ["KeyC", "F1", "F2", "F3", "KeyJ", "KeyV"].includes(code)) {
+      this.hud.toast("CAMERA LOCKED — REAR GUNNER · Y FOR THE PILOT SEAT");
+      return;
+    }
+    // The AI pilot owns the aircraft while the player is on the gun; these orders would either
+    // disengage it or drop the bombs from the wrong seat.
+    if (p.gunner && ["KeyT", "KeyL", "KeyB", "KeyF", "KeyG", "KeyN", "KeyI", "KeyU", "BracketLeft", "BracketRight"].includes(code)) {
+      this.hud.toast("AI PILOT HAS CONTROL — Y TO RETURN TO THE PILOT SEAT");
+      return;
+    }
     switch (code) {
+      case "KeyY":
+        this.toggleGunner();
+        break;
       case "KeyB":
         this.battle.releaseOrdnance();
         break;

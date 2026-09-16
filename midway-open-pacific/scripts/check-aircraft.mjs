@@ -65,6 +65,12 @@ const tbdSource = await stripGlb("../public/assets/aircraft.tbd-devastator.glb")
 assert.equal(tbdSource.animations.length, 9, "the TBD ships one clip per moving part");
 const tbdParts = ["aileronleft", "aileronright", "elevator", "flapleft", "flapright", "gearleft", "gearright", "propeller", "rudder"];
 for (const name of tbdParts) assert.ok(tbdSource.scene.getObjectByName(name), `TBD ships a separated ${name}`);
+// The deck crew's pilot rig, which the Douglas also seats in its rear cockpit.
+const pilotSource = await stripGlb("../public/assets/carrier-aircraft-pilot.glb");
+assert.ok(
+  pilotSource.animations.some((clip) => clip.name === "sit"),
+  "the pilot rig ships the seated clip the rear gunner plays",
+);
 await mkdir("node_modules/.cache", { recursive: true });
 const temporary = await mkdtemp(resolve("node_modules/.cache/aircraft-check-"));
 try {
@@ -81,11 +87,22 @@ try {
   const { loadImportedAircraft, createDouglas, animateDouglas, disposeDouglas, createAirframe, animateDevastator, disposeAirframe } = await import(
     pathToFileURL(modulePath).href
   );
+  const lodOutput = await build({
+    entryPoints: ["src/render/airframe-lod.ts"],
+    bundle: true,
+    packages: "external",
+    platform: "node",
+    format: "esm",
+    write: false,
+  });
+  const lodPath = resolve(temporary, "airframe-lod.mjs");
+  await writeFile(lodPath, lodOutput.outputFiles[0].text);
+  const { airframeLod } = await import(pathToFileURL(lodPath).href);
   const testTexture = new Texture();
   const sourceMesh = loaded.scene.getObjectByName("defaultMaterial_node_18");
   sourceMesh.material.map = testTexture;
   await loadImportedAircraft({
-    assets: { model: async (url) => (/tbd-devastator/.test(String(url)) ? tbdSource : loaded) },
+    assets: { model: async (url) => (/tbd-devastator/.test(String(url)) ? tbdSource : /carrier-aircraft-pilot/.test(String(url)) ? pilotSource : loaded) },
     renderer: { raw: { getMaxAnisotropy: () => 8 } },
   });
   assert.equal(
@@ -103,6 +120,68 @@ try {
   };
   const airplane = createDouglas(true);
   const parked = createDouglas();
+  // The two-man cockpit: the forward pilot is `userData.crew[0]`, the hook the cockpit view hides
+  // with the player's own aircraft; the gunner is published separately behind that camera.
+  const pilot = airplane.getObjectByName("Douglas front pilot crew");
+  const gunner = airplane.getObjectByName("Douglas rear gunner crew");
+  assert.ok(pilot && gunner, "the Douglas carries both cockpit stations");
+  assert.deepEqual(airplane.userData.crew, [pilot], "the forward pilot is the cockpit-view crew hook");
+  assert.equal(airplane.userData.pilotRig.current, "sit", "the forward pilot holds the seated clip");
+  assert.equal(airplane.userData.gunnerRig.current, "sit", "the gunner holds the seated clip");
+  // The published gunner is the man's own rig, NOT the whole station: a first-person station hides
+  // him without taking his seat, the fittings or the gun with him.
+  assert.equal(
+    airplane.userData.gunner,
+    gunner.getObjectByName("Douglas rear gunner"),
+    "the gunner rig is published, not the station",
+  );
+  assert.equal(airplane.userData.gunner.parent, gunner, "the published gunner sits inside his station");
+  const gunPivot = airplane.userData.rearGun;
+  const gunFittings = airplane.getObjectByName("Douglas rear gunner cockpit fittings");
+  assert.ok(gunPivot?.isObject3D, "the rear gun pivot is published");
+  assert.ok(
+    !airplane.userData.gunner.getObjectByName(gunPivot.name),
+    "the gun pivot is separate from the rig the station hides",
+  );
+  airplane.userData.gunner.visible = false;
+  assert.equal(gunFittings.visible, true, "hiding the gunner leaves the seat and fittings");
+  assert.equal(gunPivot.visible, true, "hiding the gunner leaves the gun");
+  airplane.userData.gunner.visible = true;
+  assert.ok(airplane.userData.gunnerEye instanceof Vector3, "the gunner eye is a published Vector3");
+  assert.ok(
+    airplane.userData.gunnerEye.y > 0.6 && airplane.userData.gunnerEye.y < 1.184,
+    `the gunner eye stays under the 1.184 m canopy roof: ${airplane.userData.gunnerEye.y.toFixed(3)}`,
+  );
+  assert.ok(
+    airplane.userData.gunnerEye.z > airplane.userData.pilotEye.z,
+    "the gunner eye is aft of the pilot eye",
+  );
+  for (const [label, station] of [["pilot", pilot], ["gunner", gunner]]) {
+    let skinned = 0;
+    station.traverse((node) => {
+      if (node.isSkinnedMesh) skinned += 1;
+    });
+    assert.equal(skinned, 1, `the ${label} is exactly one skinned rig`);
+  }
+  assert.ok(parked.getObjectByName("Douglas front pilot crew"), "every Douglas seats its own pilot");
+  assert.ok(parked.getObjectByName("Douglas rear gunner crew"), "every Douglas seats its own gunner");
+  const pilotHead = pilot.getObjectByName("Head");
+  const gunnerHead = gunner.getObjectByName("Head");
+  assert.ok(pilotHead && gunnerHead, "both crew rigs carry their Head bone");
+  const pilotEye = pilotHead.getWorldPosition(new Vector3());
+  const gunnerEye = gunnerHead.getWorldPosition(new Vector3());
+  // Forward is -Z: the pilot sits ahead of the gunner and faces the nose, the gunner aft of him.
+  assert.ok(pilotEye.z < gunnerEye.z, `the pilot sits ahead of the gunner: ${pilotEye.z.toFixed(3)} < ${gunnerEye.z.toFixed(3)}`);
+  assert.ok(pilotEye.z < -1.5 && pilotEye.z > -1.75, `the pilot head is at the cockpit eye z: ${pilotEye.z.toFixed(3)}`);
+  assert.ok(pilotEye.y > gunnerEye.y, "the pilot sits higher than the gunner behind him");
+  assert.ok(
+    pilotEye.y > 0.6 && pilotEye.y < 1.207,
+    `the forward head stays under the 1.207 m canopy glass: ${pilotEye.y.toFixed(3)}`,
+  );
+  assert.ok(
+    gunnerEye.y > 0.6 && gunnerEye.y < 1.184,
+    `the seated head stays under the 1.184 m canopy roof: ${gunnerEye.y.toFixed(3)}`,
+  );
   const { gearClearance } = await import("@threenative/core");
   airplane.rotation.set(0.22, 0, 0, "YXZ");
   airplane.position.set(0, 20.06 + gearClearance({ pitch: 0.22 }), 15);
@@ -168,16 +247,26 @@ try {
     "gauge needles move with flight state",
   );
   animateDouglas(airplane, {}, 0);
+  // The cockpit view hides the forward pilot with the player's own aircraft; hide him here too, or
+  // his head is the first thing ahead of the eye instead of the panel.
+  airplane.userData.crew[0].visible = false;
   airplane.updateMatrixWorld(true);
   const eye = airplane.userData.cockpit;
   const panelPoint = interior.localToWorld(new Vector3(0, 0.66, -0.455));
+  // Raycaster ignores an ancestor's `visible`, so exclude the hidden forward pilot explicitly.
+  const hidden = airplane.userData.crew[0];
+  const inCrew = (node) => {
+    for (let n = node; n; n = n.parent) if (n === hidden) return true;
+    return false;
+  };
   const forward = new Raycaster(eye, panelPoint.clone().sub(eye).normalize(), 0.045, eye.distanceTo(panelPoint) + 0.02)
     .intersectObject(airplane, true)
-    .filter((hit) => hit.object.visible && !hit.object.material.transparent);
+    .filter((hit) => hit.object.visible && !hit.object.material.transparent && !inCrew(hit.object));
   assert.ok(forward.length > 0, "the detailed panel is ahead of the pilot");
   let onInterior = false;
   for (let node = forward[0].object; node; node = node.parent) if (node === panelRoot) onInterior = true;
   assert.ok(onInterior, "the first thing ahead of the pilot is the cockpit interior");
+  airplane.userData.crew[0].visible = true;
   assert.ok(Math.abs(new Box3().setFromObject(airplane).getSize(new Vector3()).x - 12.66) < 0.001);
   const glass = airplane.getObjectByName("defaultMaterial_node_7");
   const frames = airplane.getObjectByName("defaultMaterial_node_8");
@@ -243,6 +332,13 @@ try {
   const stopped = propeller.quaternion.clone();
   animateDouglas(airplane, { rpm: 0 }, 0.1);
   assert.ok(propeller.quaternion.equals(stopped), "a stopped propeller does not advance");
+  // The sit idle is a real clip on the gunner's own skeleton, not a frozen bind pose.
+  const headBefore = gunnerHead.getWorldPosition(new Vector3()).clone();
+  for (let i = 0; i < 24; i++) animateDouglas(airplane, {}, 1 / 60);
+  assert.ok(
+    gunnerHead.getWorldPosition(new Vector3()).distanceTo(headBefore) > 0.0005,
+    "the sit idle animates the gunner skeleton",
+  );
   disposeDouglas(airplane);
   disposeDouglas(parked);
 
@@ -258,6 +354,56 @@ try {
   assert.ok(
     Math.abs(new Box3().setFromObject(tbd).min.y + 1.82) < 0.02,
     "the Devastator rests on the 1.82 m gear datum the flight model and the deck park both use",
+  );
+  // The TBD's own two-man cockpit: the same shared rig, seated on the ported airframe's own seats,
+  // published with the same freeze/LOD contract as the Douglas.
+  const tbdPilot = tbd.getObjectByName("TBD front pilot crew");
+  const tbdGunner = tbd.getObjectByName("TBD rear gunner crew");
+  assert.ok(tbdPilot && tbdGunner, "every TBD seats a visible two-man crew");
+  assert.deepEqual(tbd.userData.crew, [tbdPilot], "the TBD forward pilot is the cockpit-view crew hook");
+  assert.equal(tbd.userData.pilotRig.current, "sit", "the TBD pilot holds the seated clip");
+  assert.equal(tbd.userData.gunnerRig.current, "sit", "the TBD gunner holds the seated clip");
+  assert.ok(tbd.userData.gunnerEye instanceof Vector3, "the TBD gunner eye is a published Vector3");
+  assert.ok(
+    tbd.userData.gunnerEye.z > tbd.userData.pilotEye.z + 2.5,
+    `the TBD gunner sits on the rearmost seat, not the middle one: ${tbd.userData.gunnerEye.z.toFixed(3)}`,
+  );
+  assert.ok(tbd.userData.rearGun?.isObject3D, "the TBD rear gun pivot is published");
+  for (const [label, station] of [["pilot", tbdPilot], ["gunner", tbdGunner]]) {
+    let skinned = 0;
+    station.traverse((node) => {
+      if (node.isSkinnedMesh) skinned += 1;
+    });
+    assert.equal(skinned, 1, `the TBD ${label} is exactly one skinned rig`);
+  }
+  // Both station roots carry a MOVING_NODE token, so `freezeNode` stops before baking the skinned
+  // children and the sit idle keeps playing on a frozen aircraft.
+  for (const name of ["TBD front pilot crew", "TBD rear gunner crew"])
+    assert.match(name, /crew|gunner/i, `${name} stays out of the static freeze`);
+  // The merged stand-in must skip the skinned crew: its vertices are bind-pose and would bake a
+  // T-pose into the distant silhouette.
+  const lod = airframeLod(tbd);
+  assert.ok(lod, "the TBD builds a merged stand-in");
+  const countTriangles = (node) =>
+    node.geometry.index ? node.geometry.index.count / 3 : node.geometry.attributes.position.count / 3;
+  let fullTriangles = 0;
+  let skinnedTriangles = 0;
+  tbd.traverse((node) => {
+    if (!node.isMesh || !node.geometry) return;
+    fullTriangles += countTriangles(node);
+    if (node.isSkinnedMesh) skinnedTriangles += countTriangles(node);
+  });
+  assert.ok(skinnedTriangles > 0, "the crew really is skinned geometry");
+  assert.ok(
+    lod.geometry.getAttribute("position").count / 3 <= fullTriangles - skinnedTriangles,
+    "the merged stand-in leaves the skinned crew out",
+  );
+  const tbdGunnerHead = tbdGunner.getObjectByName("Head");
+  const tbdHeadBefore = tbdGunnerHead.getWorldPosition(new Vector3()).clone();
+  for (let i = 0; i < 24; i++) animateDevastator(tbd, {}, 1 / 60);
+  assert.ok(
+    tbdGunnerHead.getWorldPosition(new Vector3()).distanceTo(tbdHeadBefore) > 0.0005,
+    "the sit idle animates the TBD gunner's own skeleton",
   );
   const part = (name) => tbd.getObjectByName(name);
   const moved = ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].map(part);
@@ -277,7 +423,10 @@ try {
       node.quaternion.angleTo(tbdNeutral[i]) > 0.05,
       `${node.name} follows its control: ${node.quaternion.angleTo(tbdNeutral[i])}`,
     );
-  assert.equal(part("propeller").visible, false, "the running propeller hands off to its blur");
+  // The blades are hidden, not the wrapper: `propeller_blades` is what actually turns, and the
+  // blur rides the same pivot as a sibling, so hiding the wrapper would take the blur with it.
+  assert.equal(part("propeller_blades").visible, false, "the running blades hand off to their blur");
+  assert.equal(part("propeller").visible, true, "the propeller pivot itself stays on the aircraft");
   assert.equal(tbd.getObjectByName("Propeller motion blur").visible, true);
   assert.ok(tbd.userData.torpedoLoad, "the Devastator carries its own store");
   for (const [i, name] of ["aileronleft", "elevator", "flapleft", "gearleft", "rudder"].entries())

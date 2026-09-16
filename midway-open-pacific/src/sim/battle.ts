@@ -1,6 +1,6 @@
 /** Pure deterministic game state. Rendering, audio and browser APIs stay outside this module. */
 import { updateGunnery, updateEvasion } from "./gunnery.js";
-import { chooseCarrierMission, DESTROYED_MODIFIERS, rearGunner, strikeContact, updateTacticalAircraft } from "./tactics.js";
+import { chooseCarrierMission, DESTROYED_MODIFIERS, fireRearManual, REAR_GUN_DOT, REAR_GUN_ELEVATION, rearGunner, strikeContact, updateTacticalAircraft } from "./tactics.js";
 import {
   aircraftHit,
   aircraftWorld,
@@ -560,6 +560,19 @@ const AIR_REPORT_DELAY = 30;
 const SHIP_REPORT_DELAY = 8;
 
 /**
+ * The player's rear-gun station aims in the aircraft's own frame — yaw measured from dead astern,
+ * pitch up. Its envelope is the AI gunner's one tail cone (`REAR_GUN_DOT`, 127° from the nose) and
+ * depression (`REAR_GUN_ELEVATION`), not an arbitrary box: yaw alone reaches the cone edge at level
+ * pitch, and closes toward zero as the gun is raised because the cone is circular in the frame.
+ * One clamp serves the keys, the pointer and the camera.
+ */
+const REAR_GUN_FULL_YAW = Math.acos(-REAR_GUN_DOT);
+const REAR_GUN_PITCH_MIN = Math.asin(REAR_GUN_ELEVATION);
+const REAR_GUN_PITCH_MAX = Math.acos(-REAR_GUN_DOT);
+const REAR_GUN_YAW_RATE = 1.5;
+const REAR_GUN_PITCH_RATE = 1.0;
+
+/**
  * A flown airframe by role and team. The launch role never picks a *kind* of aircraft out of thin
  * air: it names the airframe a deck actually has, and the store family that arms it follows from the
  * airframe. A carrier search leg is flown by the dive bomber the ship carries — the cruiser
@@ -808,6 +821,13 @@ export class Battle {
       heat: 0,
       payloadMass: 0,
       payloadDrag: 0,
+      // The rear-gun station. `gunner` is the player's seat; the two aim fields are its bounded
+      // angles in the airframe's frame, and `gunnerPrevAutopilot` remembers whether the pilot was
+      // on course hold before manning the gun, so leaving restores exactly that.
+      gunner: false,
+      gunnerYaw: 0,
+      gunnerPitch: 0,
+      gunnerPrevAutopilot: false,
     };
     Object.assign(this.player, {
       flaps: 0.33,
@@ -1085,6 +1105,8 @@ export class Battle {
     if (this.status !== "briefing") return;
     this.status = "playing";
     this.voiceFlags = {};
+    this.leaveGunnerStation();
+    this.player.gunnerPrevAutopilot = false;
     // The player's own deck holds its aircraft until the player is off it: a wingman that launches
     // while Scout Two is still chocked does not have his wing. `updateCarrier` opens this gate on
     // liftoff. Every other carrier launches as before.
@@ -2097,6 +2119,83 @@ export class Battle {
     };
   }
 
+  /**
+   * Man or leave the rear gun. Only the two-seat Douglas airframes have a rear station: a
+   * single-seat fighter has none, and honouring the order on the deck, in a wreck or after the
+   * sortie would hide the pilot's own aircraft. Manning hands the aircraft to its existing
+   * course-hold autopilot, the same flight law the player already flies, so the stick can work the
+   * gun without also steering. An empty gun is still admitted — the station is inspectable and Y
+   * always returns to the pilot.
+   */
+  setGunner(on: boolean): boolean {
+    const p = this.player;
+    if (!on) {
+      if (!p.gunner) return false;
+      p.gunner = false;
+      p.gunnerYaw = 0;
+      p.gunnerPitch = 0;
+      p.autopilot = p.gunnerPrevAutopilot === true;
+      return true;
+    }
+    if (p.gunner) return true;
+    if (this.status !== "playing" || p.mode !== "flight" || (p.airframe !== "sbd" && p.airframe !== "tbd")) return false;
+    p.gunnerPrevAutopilot = p.autopilot === true;
+    p.gunner = true;
+    p.autopilot = true;
+    p.gunnerYaw = 0;
+    p.gunnerPitch = 0;
+    return true;
+  }
+
+  /** The one clamp for the manned station, shared by held keys and pointer drag. */
+  aimRear(dYaw: number, dPitch: number): void {
+    const p = this.player;
+    if (!p.gunner) return;
+    if (!Number.isFinite(dYaw) || !Number.isFinite(dPitch)) return;
+    const pitch = clamp(p.gunnerPitch + dPitch, REAR_GUN_PITCH_MIN, REAR_GUN_PITCH_MAX);
+    // Stay inside the shared tail cone: dot with the nose < REAR_GUN_DOT, i.e. `cos(yaw)·cos(pitch)
+    // > -REAR_GUN_DOT`. Raising the gun narrows the yaw window rather than letting a fixed box cut
+    // a corner outside the envelope the AI fires from.
+    const cosPitch = Math.cos(pitch);
+    const maxYaw = Math.min(REAR_GUN_FULL_YAW, Math.acos(Math.min(1, -REAR_GUN_DOT / cosPitch)));
+    p.gunnerYaw = clamp(p.gunnerYaw + dYaw, -maxYaw, maxYaw);
+    p.gunnerPitch = pitch;
+  }
+
+  /** Where the rear gun points in world space, off the airframe's real attitude. */
+  gunnerAim(): { x: number; y: number; z: number } {
+    const p = this.player;
+    const axes = p.attitude
+      ? attitudeAxes(p)
+      : { f: forward(p.heading, p.pitch), u: { x: 0, y: 1, z: 0 }, r: { x: 1, y: 0, z: 0 } };
+    const cy = Math.cos(p.gunnerYaw);
+    const sy = Math.sin(p.gunnerYaw);
+    const ct = Math.cos(p.gunnerPitch);
+    const st = Math.sin(p.gunnerPitch);
+    return {
+      x: -axes.f.x * cy * ct + axes.r.x * sy * ct + axes.u.x * st,
+      y: -axes.f.y * cy * ct + axes.r.y * sy * ct + axes.u.y * st,
+      z: -axes.f.z * cy * ct + axes.r.z * sy * ct + axes.u.z * st,
+    };
+  }
+
+  /**
+   * The visual rear-gun pivot's Euler angles. The pivot's rest barrel is local +Z (aft) and
+   * Three's positive X rotation pitches +Z down, so the station's up-positive pitch enters negated.
+   * Kept beside the sim aim, and shared with the renderer, so the sight and the barrel cannot drift.
+   */
+  rearGunPivotEuler(): { x: number; y: number; z: number } {
+    return { x: -this.player.gunnerPitch, y: this.player.gunnerYaw, z: 0 };
+  }
+
+  /** Leave the station for any reason, without touching the aircraft's flight. */
+  private leaveGunnerStation(): void {
+    const p = this.player;
+    p.gunner = false;
+    p.gunnerYaw = 0;
+    p.gunnerPitch = 0;
+  }
+
   fire(a: Any, aim: Any = null): void {
     if (a.ammo <= 0 || a.gunTimer > 0 || a.hp <= 0) return;
     a.gunTimer = a === this.player ? 0.075 : 0.2;
@@ -2519,6 +2618,7 @@ export class Battle {
     p.autopilot = false;
     p.landingAssist = null;
     p.engineCut = true;
+    this.leaveGunnerStation();
     this.crashReason = reason;
     if (p.damage) p.damage.engine.fire = Math.max(0.7, p.damage.engine.fire);
     this.fx("explosion", p, 1.4);
@@ -2568,6 +2668,7 @@ export class Battle {
 
   lose(reason: string, blast = true): void {
     if (this.status !== "playing") return;
+    this.leaveGunnerStation();
     if (isShort(this.sortie) && !this.sortie.result) this.sortie.result = this.snapshotResult("lost", this.home);
     else if (this.sortie.assignment === "operation" && !this.sortie.result)
       concludeOperation(this.sortie, { state: "defeat", reason }, this.time);
@@ -3445,6 +3546,10 @@ export class Battle {
           gearClimbTime: 0,
           flaps: 0.33,
           landingAssist: null,
+          gunner: false,
+          gunnerYaw: 0,
+          gunnerPitch: 0,
+          gunnerPrevAutopilot: false,
         });
         applyLoadout(p, p.loadout || "bomb");
         // The player rearms out of the same finite stores as every other aircraft on the ship. With
@@ -3549,8 +3654,10 @@ export class Battle {
       return;
     }
     if (p.mode !== "flight") return;
-    rearGunner(this, p, dt);
-    const controls = { ...input };
+    // The AI rear gunner works the gun only while the player is flying the aircraft. Manning the
+    // station takes the gun over with no second trigger and no double fire.
+    if (!p.gunner) rearGunner(this, p, dt);
+    const controls = p.gunner ? { autopilot: true, turn: 0, pitch: 0, rudder: 0 } : { ...input };
     if (p.launchAssist > 0) {
       p.launchAssist -= dt;
       if (!input.pitch && !input.turn && !p.autopilot && p.assist) {
@@ -3559,7 +3666,7 @@ export class Battle {
         controls.autopilot = true;
       }
     }
-    if (p.autopilot && (Math.abs(input.turn || 0) > 0.25 || Math.abs(input.pitch || 0) > 0.25 || Math.abs(input.rudder || 0) > 0.25)) {
+    if (!p.gunner && p.autopilot && (Math.abs(input.turn || 0) > 0.25 || Math.abs(input.pitch || 0) > 0.25 || Math.abs(input.rudder || 0) > 0.25)) {
       p.autopilot = false;
       p.landingAssist = null;
       this.event("notice", { text: "COURSE HOLD DISENGAGED — YOU HAVE CONTROL" });
@@ -3678,7 +3785,13 @@ export class Battle {
       }
     }
     if (p.takeoffGrace > 0) p.takeoffGrace -= dt;
-    if (input.fire) {
+    if (p.gunner) {
+      // Aim and fire are the rear station's only commands; they never touch the forward guns, the
+      // throttle or the autopilot the AI pilot is flying. The cooldown is advanced by the shared
+      // firing path on every tick, so a released trigger does not freeze it.
+      this.aimRear((input.aimYaw || 0) * REAR_GUN_YAW_RATE * dt, (input.aimPitch || 0) * REAR_GUN_PITCH_RATE * dt);
+      fireRearManual(this, p, this.gunnerAim(), input.fire === true, dt);
+    } else if (input.fire) {
       const f = attitudeAxes(p).f;
       const aim = this.aircraft
         .filter((a: Any) => a.team === "jp" && a.hp > 0 && distance3(p, a) < 1400)
@@ -3746,6 +3859,7 @@ export class Battle {
       landingAssist: null,
       throttle: 0,
     });
+    this.leaveGunnerStation();
     // Wheels thump onto the planks first, then the hook grabs a wire: two cues, in order.
     this.event("land", { wire: false });
     this.event("land", { wire: true });
@@ -3766,6 +3880,7 @@ export class Battle {
       autopilot: false,
       landingAssist: null,
     });
+    this.leaveGunnerStation();
     this.score += 200;
     if (isShort(this.sortie) && !this.sortie.result) {
       this.sortie.result = this.snapshotResult("recovered", s);

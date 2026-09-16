@@ -57,6 +57,10 @@ No license document was supplied with these files. The `generator` tag records t
 
 The pilot/director use their measured source shape and CC0 Quaternius UAL idle/walk/talking
 clips fitted by `rig_humanoid.py`; the replacement sailor retains the existing six crew clips.
+The Douglas rear radioman/gunner is the same pilot rig on the UAL1 `Sitting_Idle_Loop` clip
+(`sit`), from the same CC0 Quaternius Universal Animation Library
+(https://quaternius.itch.io/universal-animation-library, `Sitting_Idle_Loop.glb`,
+SHA-256 `4d045aed897a4c44e82eb8a63756b6308f9ec0d315d0321d278c54f7ece54f0a`, CC0).
 The PT-59 preserves all 156,663 triangles and converts legacy spec/gloss materials to supported
 metal/rough PBR, then WebP. It has no source animation. The new models' distribution rights
 remain unverified, as with the supplied files above. Downloads were not modified.

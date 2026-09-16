@@ -11,7 +11,7 @@ import {
   segmentDistance,
   wrap,
 } from "./math.js";
-import { damageModifiers, initDamage, stepDamage } from "./damage.js";
+import { aircraftWorld, damageModifiers, initDamage, poseAxes, stepDamage } from "./damage.js";
 import { torpedoEnvelope, torpedoIntercept, updateStores } from "./armament.js";
 import { AircraftFlight, DECK_HEIGHT, initFlightState, SEA_WIND, steerToward, type ISteerLimits } from "./flight.js";
 import { DRIFT_RATE, isStale, STALE_SECONDS } from "./intel.js";
@@ -560,13 +560,87 @@ export function fireClear(b: Any, a: Any, t: Any): boolean {
   return true;
 }
 
+/**
+ * The rear gun's one engagement envelope, shared by the AI gunner and the manned station: the
+ * muzzle must stay in the tail cone (at least 127° from the nose, `dot < REAR_GUN_DOT`) and no
+ * lower than a shallow depression. The manned station adds no second envelope.
+ */
+export const REAR_GUN_DOT = -0.6;
+export const REAR_GUN_ELEVATION = -0.13;
+
+/**
+ * The rear gun's muzzle in the airframe's own frame (+x right, +y up, +z aft), at the supplied SBD
+ * barrel tip. The TBD offset is still pending visual integration and shares this one until the
+ * measured per-airframe tuple lands.
+ */
+const REAR_GUN_MUZZLE: Record<string, { x: number; y: number; z: number }> = {
+  sbd: { x: 0, y: 1.0, z: 0.8 },
+};
+
+/**
+ * One round from the tail gun, aimed along a world-space direction. Both the AI gunner and the
+ * manned station fire through this, so the muzzle, event, tracer speed, ammunition and credit can
+ * never drift apart between the two callers. Callers own the gate, cooldown and ammo test.
+ */
+function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: number): void {
+  const len = Math.hypot(dx, dy, dz) || 1;
+  // The muzzle rides the airframe's real attitude: a banked gunner's round leaves the actual gun,
+  // not a point offset in world axes.
+  const muzzle = aircraftWorld(a, REAR_GUN_MUZZLE[a.airframe] || REAR_GUN_MUZZLE.sbd);
+  const mx = muzzle.x;
+  const my = muzzle.y;
+  const mz = muzzle.z;
+  a.rearAmmo -= 1;
+  b.event("gun", { at: { x: mx, y: my, z: mz }, source: a.id, weapon: "gun30" });
+  b.bullets.push({
+    id: b.id("bullet"),
+    x: mx,
+    y: my,
+    z: mz,
+    vx: (dx / len) * 730 + (b.random() - 0.5) * spread,
+    vy: (dy / len) * 730 + (b.random() - 0.5) * spread,
+    vz: (dz / len) * 730 + (b.random() - 0.5) * spread,
+    ttl: 1.1,
+    team: a.team,
+    owner: a.id,
+    type: "gun",
+    damage: 3,
+  });
+}
+
+/**
+ * The player's own hand on the rear gun. Aim is a world direction built by the caller from the
+ * airframe's real attitude and the bounded station angles, so roll and pitch aim coherently. The
+ * cooldown advances exactly once per tick whether or not the trigger is down, so releasing does
+ * not freeze it; a tight spread and the same tracer speed keep it the same weapon as the AI's.
+ */
+export function fireRearManual(
+  b: Any,
+  a: Any,
+  aim: { x: number; y: number; z: number } | null,
+  fire: boolean,
+  dt: number,
+): void {
+  if (a.mode === "crashing" || !(a.rearAmmo > 0)) return;
+  a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
+  if (!fire || !aim || a.rearTimer > 0) return;
+  a.rearTimer = 0.08;
+  rearShot(b, a, aim.x, aim.y, aim.z, 3);
+}
+
 export function rearGunner(b: Any, a: Any, dt: number): void {
   if (a.kind === "fighter" || a.kind === "recon" || !(a.rearAmmo > 0) || a.mode === "crashing") return;
   a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
   if (a.rearTimer > 0) return;
-  const fx = Math.sin(a.heading) * Math.cos(a.pitch);
-  const fy = Math.sin(a.pitch);
-  const fz = -Math.cos(a.heading) * Math.cos(a.pitch);
+  // The tail cone and its depression are measured in the airframe's own frame, the same `poseAxes`
+  // mapping the muzzle uses: a banked or pitched gunner's world `dy` is not his up.
+  const frame = poseAxes(a);
+  const fx = frame.f.x;
+  const fy = frame.f.y;
+  const fz = frame.f.z;
+  const ux = frame.u.x;
+  const uy = frame.u.y;
+  const uz = frame.u.z;
   // One pass for the first enemy behind the tail, in aircraft order with the player last, and the
   // range found once instead of twice. A squared reject keeps the (slow) `Math.hypot` for the rare
   // foe already in the 25–650 m envelope, which is the only place its value is used.
@@ -591,7 +665,7 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
     const d2 = dx * dx + dy * dy + dz * dz;
     if (d2 >= 422500 || d2 <= 625) continue;
     const dd = Math.hypot(dx, dy, dz);
-    if ((dx * fx + dy * fy + dz * fz) / dd < -0.6 && dy / dd > -0.13) {
+    if ((dx * fx + dy * fy + dz * fz) / dd < REAR_GUN_DOT && (dx * ux + dy * uy + dz * uz) / dd > REAR_GUN_ELEVATION) {
       t = e;
       d = dd;
       break;
@@ -603,28 +677,8 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
   GUN_AIM.x = t.x + (t.vx || 0) * tt - a.x;
   GUN_AIM.y = t.y + (t.vy || 0) * tt - a.y;
   GUN_AIM.z = t.z + (t.vz || 0) * tt - a.z;
-  const len = Math.hypot(GUN_AIM.x, GUN_AIM.y, GUN_AIM.z) || 1;
   a.rearTimer = 0.28;
-  a.rearAmmo -= 1;
-  b.event("gun", {
-    at: { x: a.x - fx * 4, y: a.y + 0.8, z: a.z - fz * 4 },
-    source: a.id,
-    weapon: "gun30",
-  });
-  b.bullets.push({
-    id: b.id("bullet"),
-    x: a.x - fx * 4,
-    y: a.y + 0.8,
-    z: a.z - fz * 4,
-    vx: (GUN_AIM.x / len) * 730 + (b.random() - 0.5) * 13,
-    vy: (GUN_AIM.y / len) * 730 + (b.random() - 0.5) * 13,
-    vz: (GUN_AIM.z / len) * 730 + (b.random() - 0.5) * 13,
-    ttl: 1.1,
-    team: a.team,
-    owner: a.id,
-    type: "gun",
-    damage: 3,
-  });
+  rearShot(b, a, GUN_AIM.x, GUN_AIM.y, GUN_AIM.z, 13);
 }
 
 export function navigateHome(b: Any, a: Any, dt: number): void {

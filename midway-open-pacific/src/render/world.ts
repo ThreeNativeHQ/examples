@@ -235,7 +235,7 @@ function markReflected(root: T.Object3D): void {
  * never again; a node whose parent moves stays correct because Three forces the parent's matrix
  * down through the children.
  */
-const MOVING_NODE = /threenativepivot|cockpit controls|propeller|aileron|rudder|flap|elevator|gear|wingport|wingstarboard|canopy|torpedo|hook|wheel/i;
+const MOVING_NODE = /threenativepivot|cockpit controls|propeller|aileron|rudder|flap|elevator|gear|wingport|wingstarboard|canopy|torpedo|hook|wheel|crew|gunner/i;
 
 /** Scratch for one scout's seat on its ship, refilled per scout. */
 const SCOUT_SEAT = new T.Vector3();
@@ -335,6 +335,10 @@ export class WorldView {
   playerMesh!: T.Group;
   /** Fixed eye point for the crash settle, chosen once at the moment of impact. */
   private wreckEye: T.Vector3 | null = null;
+  /** Camera mode to restore when the player leaves the rear-gun station; null when not on the gun. */
+  private gunnerPrevMode: number | null = null;
+  /** Weapon-follow view state to restore on the same handback. */
+  private gunnerPrevFollow = false;
   tracers!: T.LineSegments;
   tracerPositions = new Float32Array(1000 * 6);
   tracerColors = new Float32Array(1000 * 6);
@@ -542,6 +546,9 @@ export class WorldView {
   }
 
   setCamera(mode: number): void {
+    // The rear-gun station owns the view: a camera order must not take it, or leave it.
+    const p = this.battle?.player;
+    if (p?.gunner === true && p.mode === "flight") return;
     this.cameraMode = mode;
     this.snap = true;
     this.followBomb = false;
@@ -836,6 +843,21 @@ export class WorldView {
     const axes = p.attitude ? attitudeAxes(p) : { f: forward(p.heading, p.pitch), u: { x: 0, y: 1, z: 0 }, r: { x: 1, y: 0, z: 0 } };
     const f = axes.f;
     const u = axes.u;
+    // The rear-gun station is a camera the player can leave: remember the view they came from and
+    // restore it on the way back, so gunning never silently changes their camera choice.
+    const gunnerView = p.gunner === true && p.mode === "flight";
+    if (gunnerView && this.gunnerPrevMode === null) {
+      this.gunnerPrevMode = this.cameraMode;
+      this.gunnerPrevFollow = this.followBomb;
+      this.cameraMode = 1;
+      this.followBomb = false;
+      this.snap = true;
+    } else if (!gunnerView && this.gunnerPrevMode !== null) {
+      this.cameraMode = this.gunnerPrevMode;
+      this.followBomb = this.gunnerPrevFollow;
+      this.gunnerPrevMode = null;
+      this.snap = true;
+    }
     const ownBomb = [...this.battle.bombs, ...this.battle.airTorpedoes, ...this.battle.torpedoes].filter((a: any) => a.owner === "player").at(-1);
     let cockpit = false;
     // The wreck is in the water and the camera is not: it stops at the surface, backs off and
@@ -864,6 +886,21 @@ export class WorldView {
       this.targetCamera.set(focus.x + 17 + Math.sin(time * 0.055) * 2, focus.y + 6.5, focus.z + 21);
       this.look.set(focus.x - 5, focus.y - 0.1, focus.z - 4);
       this.camera.fov = 49;
+    } else if (gunnerView) {
+      // The gunner's own eye, from the visual contract: `userData.gunnerEye` is the station in
+      // aircraft-root coordinates.
+      const eye = this.playerMesh.userData.gunnerEye as T.Vector3 | undefined;
+      if (eye) this.targetCamera.copy(eye);
+      this.playerMesh.localToWorld(this.targetCamera);
+      // The sight and the camera are one ray: the sim's own aim, off the airframe's real attitude,
+      // so a banked or pitched aircraft keeps the eye, the gun pivot and the bullet agreeing.
+      const dir = this.battle.gunnerAim();
+      this.look.set(
+        this.targetCamera.x + dir.x * 1000,
+        this.targetCamera.y + dir.y * 1000,
+        this.targetCamera.z + dir.z * 1000,
+      );
+      this.camera.fov = 65;
     } else if (this.followBomb && ownBomb) {
       this.targetCamera.set(ownBomb.x + 12, ownBomb.y + 16, ownBomb.z + 28);
       this.look.set(ownBomb.x + ownBomb.vx * 0.6, ownBomb.y + (ownBomb.vy ?? 0) * 0.6, ownBomb.z + ownBomb.vz * 0.6);
@@ -929,13 +966,25 @@ export class WorldView {
       this.camera.fov = wide ? 60 : 56;
     }
     if (this.playerMesh.userData.crew) this.playerMesh.userData.crew[0].visible = !cockpit;
+    // The player's own gunner figure is hidden only in his first-person station; the pilot and
+    // chase views show the crew exactly as before.
+    if (this.playerMesh.userData.gunner) (this.playerMesh.userData.gunner as T.Object3D).visible = !gunnerView;
+    // One mapping for the gun's one pivot, in every view: the station aims it, and leaving the gun
+    // returns it to its rest barrel instead of freezing where the player let go.
+    const rearGun = this.playerMesh.userData.rearGun as T.Object3D | undefined;
+    if (rearGun) {
+      if (gunnerView) {
+        const e = this.battle.rearGunPivotEuler();
+        rearGun.rotation.set(e.x, e.y, e.z, "YXZ");
+      } else rearGun.rotation.set(0, 0, 0);
+    }
     // The detailed interior and the supplied canopy shell are alternatives: show the interior in
     // the pilot view, the exterior canopy every other time.
     if (this.playerMesh.userData.cockpitInterior) this.playerMesh.userData.cockpitInterior.visible = cockpit;
     if (this.playerMesh.userData.cockpitShell)
       for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit;
     document.body.classList.toggle("cockpit-view", cockpit);
-    if (this.snap || briefing || cockpit) {
+    if (this.snap || briefing || cockpit || gunnerView) {
       this.camera.position.copy(this.targetCamera);
       this.snap = false;
     } else {
@@ -946,8 +995,8 @@ export class WorldView {
       }
       this.camera.position.lerp(this.targetCamera, 1 - Math.exp(-dt * 6));
     }
-    this.camera.near = cockpit ? 0.045 : 0.35;
-    if (cockpit) this.camera.up.set(u.x, u.y, u.z);
+    this.camera.near = cockpit || gunnerView ? 0.045 : 0.35;
+    if (cockpit || gunnerView) this.camera.up.set(u.x, u.y, u.z);
     else this.camera.up.set(u.x * 0.13, 0.87 + u.y * 0.13, u.z * 0.13).normalize();
     if (!briefing && p.mode === "flight") {
       const buffet = Math.min(0.12, (p.stall || 0) * 0.045 + Math.max(0, Math.abs(p.gforce || 1) - 4) * 0.008);

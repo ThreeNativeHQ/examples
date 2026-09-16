@@ -11,6 +11,12 @@ import type { WebGPURenderer } from "three/webgpu";
 import { mat, rod } from "./assets.js";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import {
+  AIRCREW_PILOT_URL,
+  configureAircrewPilot,
+  createSeatedStation,
+  type ISeatedStation,
+} from "./aircrew.js";
+import {
   createCockpitInterior,
   ensureCockpitMaterials,
   getCockpitMaterials,
@@ -83,12 +89,16 @@ const instances = new WeakMap<
   {
     player: AnimationPlayer;
     canopyMaterial: T.Material;
+    /** The per-instance trimmed canopy clone, the only pane geometry this aircraft owns. */
+    canopyGeometry: T.BufferGeometry;
     blades: T.Object3D[];
     blur: T.Mesh<T.PlaneGeometry, T.MeshBasicMaterial>;
     instrumentRoot: T.Group;
     interior: CockpitInterior | undefined;
     actions: Map<string, T.AnimationAction>;
     gear: ReturnType<typeof createDauntlessGear>;
+    pilot: ISeatedStation;
+    gunner: ISeatedStation;
   }
 >();
 
@@ -117,6 +127,7 @@ export async function loadImportedAircraft(ctx: Pick<ICtx, "assets" | "renderer"
   const anisotropy = (ctx.renderer.raw as WebGPURenderer).getMaxAnisotropy();
   const urls = [
     DOUGLAS_URL,
+    AIRCREW_PILOT_URL,
     ...new Set(Object.values(IMPORTS).flatMap((airframe) => [airframe.hero, airframe.ai])),
   ];
   const [models] = await Promise.all([
@@ -139,6 +150,77 @@ export async function loadImportedAircraft(ctx: Pick<ICtx, "assets" | "renderer"
     });
   });
   source = imported.get(DOUGLAS_URL)!;
+  configureAircrewPilot(imported.get(AIRCREW_PILOT_URL)!);
+}
+
+/**
+ * The rear radioman/gunner's station in the Douglas' own frame (nose -Z, +X starboard).
+ *
+ * Measured, not guessed: with the rig's baked `sit` clip the seated Head bone sits 1.175 m above
+ * the rig origin and the mesh tops out at 1.36 m, so the origin is dropped 0.26 m to keep the head
+ * under the canopy roof (1.184 m at z = -0.80). He faces aft (the rig faces +Z at yaw 0, like the
+ * deck party), which puts his back at z = -0.98 and his knees at z = -0.20, aft of the pilot's eye
+ * (z = -1.650) and forward of the canopy's rear edge (z = +0.20).
+ */
+const GUNNER_SEAT: readonly [number, number, number] = [0, -0.26, -0.55];
+
+/**
+ * The front pilot's station in the Douglas' own frame (nose -Z, +X starboard), facing the nose.
+ *
+ * The rig faces +Z at yaw 0, so the pilot is yawed PI and the same measured `sit` pose that fits
+ * the radioman is mirrored fore-aft. Chosen from the cockpit's own eye (0, 1.080, -1.650): with the
+ * rig origin here that eye lands on the posed Head joint, and the seated crown (origin + 1.378 m)
+ * reaches 1.178 m — under the 1.207 m canopy glass at this z — while his feet stay inside the nose.
+ */
+const PILOT_SEAT: readonly [number, number, number] = [0, -0.2, -1.81];
+
+/**
+ * The station aft of which the Douglas canopy glass is cut away, in the aircraft's own frame.
+ *
+ * Chosen 0.4 m behind the pilot's eye (z = -1.650) so he keeps the whole forward greenhouse while
+ * the gunner at z = -0.763 stands in an open rear cockpit, matching the SBD-3's fixed forward
+ * windscreen and open after station better than the supplied all-enclosing pane. The measured glass
+ * runs z = -2.871…0.199, so this removes only the after third.
+ */
+const REAR_OPEN_Z = -1.25;
+
+/**
+ * A clone of `mesh`'s geometry with every triangle whose aircraft-frame centre lies aft of `aftOf`
+ * removed. `mesh.matrixWorld` maps its vertices into the aircraft root's frame, which is where the
+ * cockpit stations live, so the cut is placed in metres of the airframe and not of the mesh.
+ */
+function openCanopyAft(mesh: T.Mesh, aftOf: number): T.BufferGeometry {
+  const source = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+  const position = source.getAttribute("position");
+  const normal = source.getAttribute("normal");
+  const uv = source.getAttribute("uv");
+  const toRoot = mesh.matrixWorld;
+  const a = new T.Vector3();
+  const b = new T.Vector3();
+  const c = new T.Vector3();
+  const centre = new T.Vector3();
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  for (let t = 0; t < position.count; t += 3) {
+    a.fromBufferAttribute(position, t).applyMatrix4(toRoot);
+    b.fromBufferAttribute(position, t + 1).applyMatrix4(toRoot);
+    c.fromBufferAttribute(position, t + 2).applyMatrix4(toRoot);
+    if (centre.copy(a).add(b).add(c).multiplyScalar(1 / 3).z > aftOf) continue;
+    for (const i of [t, t + 1, t + 2]) {
+      positions.push(position.getX(i), position.getY(i), position.getZ(i));
+      if (normal) normals.push(normal.getX(i), normal.getY(i), normal.getZ(i));
+      if (uv) uvs.push(uv.getX(i), uv.getY(i));
+    }
+  }
+  source.dispose();
+  const trimmed = new T.BufferGeometry();
+  trimmed.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
+  if (normal) trimmed.setAttribute("normal", new T.Float32BufferAttribute(normals, 3));
+  if (uv) trimmed.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
+  trimmed.computeBoundingSphere();
+  trimmed.computeBoundingBox();
+  return trimmed;
 }
 
 /** Metres, nose -Z; the body's origin is the flight model's centre of gravity. */
@@ -195,6 +277,14 @@ export function createDouglas(withCockpit = false): T.Group {
   canopyMaterial.forceSinglePass = true;
   canopy.material = canopyMaterial;
   canopy.castShadow = false;
+  // The rear cockpit is open. The supplied canopy is one glass mesh over both stations and ships no
+  // rear section to slide or hide, so its own triangles aft of the partition are dropped: the pilot
+  // keeps the forward greenhouse and the flexible gun fires through an open rear cockpit rather
+  // than through sealed glazing. The geometry is cloned because the original belongs to the shared
+  // GLTF's scene; `disposeDouglas` gives the clone back.
+  root.updateMatrixWorld(true);
+  const canopyGeometry = openCanopyAft(canopy, REAR_OPEN_Z);
+  canopy.geometry = canopyGeometry;
   const canopyFrame = model.getObjectByName("defaultMaterial_node_8");
   // Fuselage shells that share the cockpit's space and peek around the detailed interior.
   const cockpitFuselage = ["defaultMaterial_node_12", "defaultMaterial_node_18"]
@@ -290,15 +380,40 @@ export function createDouglas(withCockpit = false): T.Group {
   root.userData.cockpitInterior = instrumentRoot;
   root.userData.cockpitShell = cockpitShell;
   root.userData.cockpitRig = interior;
+  // Both seats of the two-man cockpit. The forward pilot is `userData.crew[0]`: the cockpit view
+  // hides that one with the player's own aircraft. The gunner sits behind that camera and is
+  // published separately, so the crew hook can never take him off the aircraft. `userData.gunner`
+  // is the man's own rig root — not the station — so a first-person station can hide the gunner
+  // without taking his seat, the fittings or the gun with him; `userData.rearGun` is the separate
+  // pivot the controls arm turns.
+  const pilot = createSeatedStation("Douglas front pilot", PILOT_SEAT, Math.PI);
+  root.add(pilot.root);
+  root.userData.crew = [pilot.root];
+  root.userData.pilotRig = pilot.player;
+  root.userData.pilotEye = pilot.eye;
+  const gunner = createSeatedStation("Douglas rear gunner", GUNNER_SEAT, 0, { gun: true });
+  root.add(gunner.root);
+  root.userData.gunner = gunner.player.root;
+  root.userData.gunnerRig = gunner.player;
+  root.userData.gunnerEye = gunner.eye;
+  root.userData.rearGun = gunner.gun;
+  root.userData.owned = [
+    ...((root.userData.owned as T.Object3D[] | undefined) ?? []),
+    pilot.furniture,
+    gunner.furniture,
+  ];
   instances.set(root, {
     player,
     actions,
     gear,
     canopyMaterial,
+    canopyGeometry,
     blades,
     blur,
     instrumentRoot,
     interior,
+    pilot,
+    gunner,
   });
   animateDouglas(root, {}, 0);
   return root;
@@ -346,6 +461,10 @@ export function animateDouglas(root: T.Group, p: IDouglasControls, dt: number): 
   // into, so a folded leg hangs in open air under the wing and reads as a pale box from above.
   // With the gear up the aircraft simply carries none: draw the assembly only while it is down.
   gear.gear.visible = (p.gearPos ?? 1) > 0.02;
+  // Each seated man holds the sit idle, driven at the frame's own dt so a paused (dt = 0) frame
+  // freezes him, exactly like the propeller.
+  instance.pilot.player.update(dt);
+  instance.gunner.player.update(dt);
   player.update(dt);
 }
 
@@ -353,7 +472,11 @@ export function disposeDouglas(root: T.Group): void {
   const instance = instances.get(root);
   if (!instance) return;
   instance.player.dispose();
+  // The seated crews' skinned geometry is the shared pilot GLTF's; only their mixer bindings are ours.
+  instance.pilot.player.dispose();
+  instance.gunner.player.dispose();
   instance.canopyMaterial.dispose();
+  instance.canopyGeometry.dispose();
   instance.blur.geometry.dispose();
   instance.blur.material.map?.dispose();
   instance.blur.material.dispose();
