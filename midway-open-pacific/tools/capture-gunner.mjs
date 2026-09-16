@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 
-const URL = process.env.MIDWAY_URL || "http://127.0.0.1:5391";
+const URL = process.env.MIDWAY_URL || "http://127.0.0.1:5199";
 const OUT = process.env.MIDWAY_SHOTS || "screenshots";
 
 const browser = await chromium.launch({
@@ -194,6 +194,12 @@ try {
       dot(aim1, camRight0) > dot(aim0, camRight0) + 0.05,
       `D aims toward the gunner's screen-right: ${dot(aim0, camRight0).toFixed(3)} -> ${dot(aim1, camRight0).toFixed(3)}`,
     );
+    // Return the station to dead astern for the firing tests that follow.
+    await page.evaluate(() => {
+      const p = window.midway.battle.player;
+      p.gunnerYaw = 0;
+      p.gunnerPitch = 0;
+    });
     // Let the manning toast expire so the capture shows only the persistent controls row.
     await page.waitForTimeout(4000);
     await page.screenshot({ path: `${OUT}/gunner-rear-station-${airframe}.png` });
