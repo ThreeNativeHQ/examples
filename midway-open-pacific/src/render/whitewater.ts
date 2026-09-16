@@ -13,6 +13,12 @@ export class Whitewater {
   capacity: number; wave: RippleField; heightAt: (x: number, z: number, time: number) => number;
   hullHeightAt: (x: number, z: number) => number;
   start: Float32Array; motion: Float32Array; style: Float32Array; flags: Uint8Array;
+  /**
+   * Per parcel [e, travel, terminal, the dt they were computed for]. `-1` means "recompute": dt is
+   * never negative, so a fresh or recycled slot can never be mistaken for a warm one, and a caller
+   * that legitimately passes dt 0 is not handed another parcel's coefficients.
+   */
+  decay: Float64Array;
   cursor = 0; time = 0; wind = { x: 3.8, z: 1.1 };
   flow = { x: 0, z: 0 }; dirty = true; saturated = false;
   stats = emptyStats();
@@ -20,7 +26,7 @@ export class Whitewater {
     if(!Number.isInteger(capacity)||capacity<1)throw new RangeError('Invalid whitewater capacity');
     this.capacity=capacity;this.wave=wave;this.heightAt=heightAt;this.hullHeightAt=hullHeightAt;
     this.start=new Float32Array(capacity*4);this.motion=new Float32Array(capacity*4);this.style=new Float32Array(capacity*4);
-    this.flags=new Uint8Array(capacity);this.cursor=0;this.time=0;
+    this.flags=new Uint8Array(capacity);this.decay=new Float64Array(capacity*4);this.cursor=0;this.time=0;
     this.wind={x:3.8,z:1.1};this.flow={x:0,z:0};this.dirty=true;
     this.reset();
   }
@@ -38,7 +44,7 @@ export class Whitewater {
     this.start[k]=x;this.start[k+1]=y;this.start[k+2]=z;this.start[k+3]=birth;
     this.motion[k]=vx;this.motion[k+1]=vy;this.motion[k+2]=vz;this.motion[k+3]=life;
     this.style[k]=size;this.style[k+1]=kind;this.style[k+2]=seed;this.style[k+3]=drag;
-    this.flags[i]=0;this.stats.emitted++;this.dirty=true;return i;
+    this.flags[i]=0;this.decay[k+3]=-1;this.stats.emitted++;this.dirty=true;return i;
   }
   activeCount(time=this.time){let count=0;for(let i=0;i<this.capacity;i++){const k=i*4,age=time-this.start[k+3];if(age>=0&&age<this.motion[k+3])count++;}return count;}
   counts(){const out={spray:0,mist:0,bubbles:0,foam:0};const keys=['spray','mist','bubbles','foam'];for(let i=0;i<this.capacity;i++){const k=i*4,a=this.time-this.start[k+3];if(a>=0&&a<this.motion[k+3])out[keys[this.style[k+1]] as keyof typeof out]++;}return out;}
@@ -49,7 +55,12 @@ export class Whitewater {
     this.flags[i]=2;this.stats.foamBirths++;
   }
   step(dt:number,time:number){
-    this.time=time;this.saturated=false;const {start:p,motion:v,style:s,wave}=this,flow=this.flow;
+    this.time=time;this.saturated=false;const {start:p,motion:v,style:s,wave,decay}=this,flow=this.flow;
+    // `dt` is fixed for the whole call, so the bubble's rise decay is one exponential, not one
+    // per bubble per step. The ballistic parcels below cannot share theirs — the coefficient is
+    // each parcel's own drag — so they memoise it against the dt it was computed for instead,
+    // which is the same double, computed once per parcel life rather than once per step.
+    const bubbleDecay=Math.exp(-2.8*dt);
     for(let i=0;i<this.capacity;i++){
       const k=i*4,age=time-p[k+3];if(age<=1e-9||age>=v[k+3]||v[k+3]<=0)continue;
       const kind=s[k+1],size=s[k],seed=s[k+2],ox=p[k],oy=p[k+1],oz=p[k+2];
@@ -62,7 +73,7 @@ export class Whitewater {
       }
       let x,y,z,vx,vy,vz;
       if(kind===2){
-        wave.flowAt(ox,oz,flow);const e=Math.exp(-2.8*dt),rise=.65+Math.sqrt(size)*1.1;
+        wave.flowAt(ox,oz,flow);const e=bubbleDecay,rise=.65+Math.sqrt(size)*1.1;
         vx=flow.x+(v[k]-flow.x)*e;vz=flow.z+(v[k+2]-flow.z)*e;vy=rise+(v[k+1]-rise)*e;
         x=ox+vx*dt;y=oy+vy*dt;z=oz+vz*dt;
         const surface=this.heightAt(x,z,time);
@@ -78,7 +89,10 @@ export class Whitewater {
         const gust=kind===1?Math.sin(ox*.07+oz*.11+time*1.7+seed*13)*.45:0;
         const wx=this.wind.x+gust,wz=this.wind.z-gust*.5,g=-9.81;
         if(drag>1e-5){
-          const e=Math.exp(-drag*dt),travel=(1-e)/drag,terminal=g/drag;
+          let e:number,travel:number,terminal:number;
+          if(decay[k+3]===dt){e=decay[k]!;travel=decay[k+1]!;terminal=decay[k+2]!;}
+          else{e=Math.exp(-drag*dt);travel=(1-e)/drag;terminal=g/drag;
+            decay[k]=e;decay[k+1]=travel;decay[k+2]=terminal;decay[k+3]=dt;}
           x=ox+wx*dt+(v[k]-wx)*travel;z=oz+wz*dt+(v[k+2]-wz)*travel;
           y=oy+terminal*dt+(v[k+1]-terminal)*travel;
           vx=wx+(v[k]-wx)*e;vz=wz+(v[k+2]-wz)*e;vy=terminal+(v[k+1]-terminal)*e;
@@ -125,7 +139,7 @@ export class Whitewater {
   }
   reset(){
     this.start.fill(0);for(let i=0;i<this.capacity;i++)this.start[i*4+3]=-1000;
-    this.motion.fill(0);this.style.fill(0);this.flags.fill(0);
+    this.motion.fill(0);this.style.fill(0);this.flags.fill(0);this.decay.fill(-1);
     this.cursor=0;this.time=0;this.saturated=false;this.dirty=true;this.stats=emptyStats();
   }
 }

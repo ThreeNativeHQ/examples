@@ -21,9 +21,13 @@ export function createRipples() {
   const normalNode=(p:any):any=>vec2(heightNode(p.add(vec2(field.dx,0))).sub(heightNode(p.sub(vec2(field.dx,0)))),
     heightNode(p.add(vec2(0,field.dx))).sub(heightNode(p.sub(vec2(0,field.dx))))).div(2*field.dx);
   const surfaceNode=(p:any):any=>oceanSwellNode(p,time).add(heightNode(p));
+  const sx=(v:number)=>{const t=Math.min(1,Math.max(0,v/.07));return t*t*(3-2*t);};
   const rimCPU=(x:number,z:number)=>{
-    const sx=(v:number)=>{const t=Math.min(1,Math.max(0,v/.07));return t*t*(3-2*t);};
     const u=(x-field.centerX)/field.size+.5,v=(z-field.centerZ)/field.size+.5;
+    // `sx` saturates at exactly 1 once its argument reaches .07, so every point this far inside the
+    // patch returns exactly 1*1*1*1. Taking that early is the same double, not an approximation,
+    // and it is the common case: the rim is a 7% band and whitewater lives in the middle.
+    if(u>=.07&&u<=.93&&v>=.07&&v<=.93)return 1;
     return sx(u)*sx(1-u)*sx(v)*sx(1-v);
   };
   const heightAt=(x:number,z:number,t:number)=>oceanSwell(x,z,t)+field.heightAt(x,z)*rimCPU(x,z);
@@ -80,7 +84,11 @@ export function createRipples() {
     effects.step(delta);effects.render();
   };
   return {field,effects,heightNode,normalNode,foamNode:(p:any)=>read(p).g,flowNode:(p:any)=>read(p).ba,heightAt,update,
-    energy:()=>field.energy(),peak:()=>({high:Math.max(...field.height),low:Math.min(...field.height)}),
+    energy:()=>field.energy(),
+    // Not `Math.max(...field.height)`: that spreads 36,864 arguments onto the stack and throws
+    // `RangeError` on a larger patch. One pass, no spread.
+    peak:()=>{let high=-Infinity,low=Infinity;const h=field.height;
+      for(let i=0;i<h.length;i++){const q=h[i]!;if(q>high)high=q;if(q<low)low=q;}return {high,low};},
     syncTexture,packedVersion:()=>lastPackedVersion,
     // The DataTexture's own version counts uploads: `needsUpdate` bumps it, and the only thing that
     // sets `needsUpdate` here is a pack. Gates count packs with this rather than by wrapping a

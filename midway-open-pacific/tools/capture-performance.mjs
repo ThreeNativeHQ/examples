@@ -60,6 +60,9 @@ const IMPACT_PERIOD = 4;
 // MIDWAY_WALL_CAP bounds the wall time so a stalled run fails instead of hanging.
 const SAMPLE_TICKS = Number(process.env.MIDWAY_SAMPLE_TICKS || 30);
 const WALL_CAP = Number(process.env.MIDWAY_WALL_CAP || 240);
+// Opt-in CDP CPU profile, off unless a path is given, so the default run opens no CDP session and
+// measures exactly as before. The warm-up is never profiled.
+const CPU_PROFILE = process.env.MIDWAY_CPU_PROFILE_OUT || null;
 // AC-23's approved envelope: the live-aircraft ceiling Battle enforces (`ACTIVE_CAP` in
 // src/sim/battle.ts). It is fixed and never env-overridable, because an override could only lower
 // the bar. A 30-minute natural run was measured to plateau at 22, so the current natural battle
@@ -910,6 +913,14 @@ try {
     }
   }
 
+  // Optional attribution run: a CDP CPU profile of the sampled window, written for a flame graph.
+  // The warm-up above is deliberately outside it; when unset no session is opened at all.
+  const cdp = CPU_PROFILE ? await page.context().newCDPSession(page) : null;
+  if (cdp) {
+    await cdp.send("Profiler.enable");
+    await cdp.send("Profiler.setSamplingInterval", { interval: 1000 });
+    await cdp.send("Profiler.start");
+  }
   const result = await page.evaluate(async ({ sample, workload, startTick, sampleTicks, wallCap, wrapSource }) => {
     const s = window.midway;
     const renderer = s.world.renderer;
@@ -1162,6 +1173,11 @@ try {
     wallCap: WALL_CAP,
     wrapSource: wrapCalls.toString(),
   });
+  if (cdp) {
+    const profile = await cdp.send("Profiler.stop");
+    await writeFile(CPU_PROFILE, JSON.stringify(profile.profile ?? profile));
+    console.log(`cpu profile written to ${CPU_PROFILE}`);
+  }
   if (WORKLOAD !== "water-impact") await page.keyboard.up("Space");
   if (!burning && WORKLOAD !== "water-impact") await page.keyboard.up("ArrowRight");
 
