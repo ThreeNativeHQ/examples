@@ -336,8 +336,12 @@ export class WorldView {
   /** Fixed eye point for the crash settle, chosen once at the moment of impact. */
   private wreckEye: T.Vector3 | null = null;
   tracers!: T.LineSegments;
-  tracerPositions = new Float32Array(1000 * 6);
-  tracerColors = new Float32Array(1000 * 6);
+  // Six vertices per round: the velocity streak plus a camera-facing cross at the head. A 1 px
+  // line seen end-on — the player's own fire from the cockpit or chase — projects to nothing,
+  // and THREE.Points cannot carry it on the WebGPU backend (a 1 m HDR-red point 10 m ahead of
+  // the eye rasterizes zero fragments), so the cross rides the proven line path instead.
+  tracerPositions = new Float32Array(1000 * 18);
+  tracerColors = new Float32Array(1000 * 18);
   particles!: CombatParticles;
   ripples!: ReturnType<typeof createRipples>;
   private sky!: T.Texture;
@@ -905,9 +909,12 @@ export class WorldView {
         !briefing &&
         (p.mode === "arrest" || p.mode === "service" || (p.mode === "deck" && (p.deckSpeed ?? 0) < 2));
       const wide = this.cameraMode === 2;
-      const distance = onDeck ? (wide ? 26 : 13) : wide ? 58 : 18;
+      // Mode 3 is the "look down on your aircraft" view: high above and astern, pitched down onto
+      // the machine and the sea it is attacking, so a bomb hit or a ship going up stays in shot.
+      const overhead = this.cameraMode === 3;
+      const distance = onDeck ? (wide ? 26 : 13) : overhead ? 24 : wide ? 58 : 18;
       const sign = this.rear ? 1 : -1;
-      const up = onDeck ? (wide ? 9 : 5.5) : wide ? 12 : 4.2;
+      const up = onDeck ? (wide ? 9 : 5.5) : overhead ? 30 : wide ? 12 : 4.2;
       if (!this.lookActive) {
         this.lookYaw *= Math.exp(-dt * 7);
         this.lookPitch *= Math.exp(-dt * 7);
@@ -924,9 +931,9 @@ export class WorldView {
         this.orbit.applyAxisAngle(this.orbitAxis.normalize(), -this.lookPitch);
       this.targetCamera.set(p.x + this.orbit.x, p.y + this.orbit.y, p.z + this.orbit.z);
       const framing = 1 - Math.min(1, (Math.abs(this.lookYaw) + Math.abs(this.lookPitch)) * 2.2);
-      const lead = onDeck ? framing * 3 : (this.rear ? -35 : 40) * framing;
+      const lead = onDeck ? framing * 3 : overhead ? (this.rear ? -16 : 14) * framing : (this.rear ? -35 : 40) * framing;
       this.look.set(p.x + f.x * lead, p.y + f.y * lead + (onDeck ? 1.2 : 1.5), p.z + f.z * lead);
-      this.camera.fov = wide ? 60 : 56;
+      this.camera.fov = overhead ? 64 : wide ? 60 : 56;
     }
     if (this.playerMesh.userData.crew) this.playerMesh.userData.crew[0].visible = !cockpit;
     // The detailed interior and the supplied canopy shell are alternatives: show the interior in
@@ -961,17 +968,32 @@ export class WorldView {
 
   updateProjectiles(): void {
     const b = this.battle;
+    // Camera basis for the head cross: each round's streak foreshortens to nothing end-on, so
+    // the cross carries the round in the views the player actually fires from.
+    const me = this.camera.matrixWorld.elements;
+    const rx = me[0], ry = me[1], rz = me[2];
+    const ux = me[4], uy = me[5], uz = me[6];
+    const arm = 0.7;
     let i = 0;
     for (const a of b.bullets) {
       if (i >= 1000) break;
-      const k = i * 6;
+      const k = i * 18;
       const length = a.type === "flak" ? 0.02 : 0.012;
       this.tracerPositions.set([a.x, a.y, a.z, a.x - a.vx * length, a.y - a.vy * length, a.z - a.vz * length], k);
       const color = a.team === "us" ? [1, 0.83, 0.4] : [1, 0.42, 0.18];
       this.tracerColors.set([...color, ...color.map((x) => x * 0.4)], k);
+      // The head is the same round seen end-on against bright sky, where the pale streak colour
+      // washes out: saturate it so it keeps an orange edge ACES cannot clip to white.
+      const head = a.team === "us" ? [1, 0.52, 0.12] : [1, 0.3, 0.08];
+      this.tracerPositions.set(
+        [a.x - rx * arm, a.y - ry * arm, a.z - rz * arm, a.x + rx * arm, a.y + ry * arm, a.z + rz * arm,
+          a.x - ux * arm, a.y - uy * arm, a.z - uz * arm, a.x + ux * arm, a.y + uy * arm, a.z + uz * arm],
+        k + 6,
+      );
+      this.tracerColors.set([...head, ...head, ...head, ...head], k + 6);
       i += 1;
     }
-    this.tracers.geometry.setDrawRange(0, i * 2);
+    this.tracers.geometry.setDrawRange(0, i * 6);
     (this.tracers.geometry.attributes.position as T.BufferAttribute).needsUpdate = true;
     (this.tracers.geometry.attributes.color as T.BufferAttribute).needsUpdate = true;
     const ids = new Set<string>();

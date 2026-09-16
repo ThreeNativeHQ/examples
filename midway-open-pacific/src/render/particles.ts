@@ -161,7 +161,24 @@ export class CombatParticles {
     const muzzle = e.type === "muzzle";
     const size = e.size;
     if (muzzle) {
-      this.emit(this.glow, e, { life: 0.045, size: size * 0.7, kind: 1, color: [1.5, 0.85, 0.32], alpha: 0.65, drag: 0 });
+      // The pilot reads their own fire here, not downrange: the wing muzzles sit at the frame
+      // edge, so the flash has to last more than a frame and leave a dark wisp that survives the
+      // bright-sky washout additive light cannot beat.
+      this.emit(this.glow, e, { life: 0.09, size: size * 1.1, kind: 1, color: [1.5, 0.85, 0.32], alpha: 0.9, drag: 0 });
+      for (let j = 0; j < 2; j += 1)
+        this.emit(this.smoke, { x: e.x + this.spread(0.3), y: e.y + this.spread(0.3), z: e.z + this.spread(0.3) }, {
+          vx: this.spread(6),
+          vy: 2 + this.random() * 2,
+          vz: this.spread(6),
+          drag: 2,
+          gravity: 0,
+          buoyancy: 0.38,
+          life: 0.35 + this.random() * 0.25,
+          size: size * 0.9,
+          growth: size * 3,
+          alpha: 0.5,
+          color: [0.09, 0.09, 0.09],
+        });
       return;
     }
     if (water) {
