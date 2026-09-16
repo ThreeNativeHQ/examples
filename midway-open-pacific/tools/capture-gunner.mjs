@@ -150,20 +150,52 @@ try {
       [dist, drop, side],
     );
 
-  const runAirframe = async (airframe) => {
-    // 1. Y mans the rear gun and hands the aircraft to its own course hold.
+  const runAirframe = async (airframe, expectedRear, useButton) => {
+    // 1. The real briefing loadout button named the airframe, and it starts with that airframe's own
+    // rear-gun capacity — not the SBD's 1200 inherited by the TBD.
     const before = await rearView();
     assert.equal(before.airframe, airframe, `flying the ${airframe}`);
+    assert.equal(
+      before.rearAmmo,
+      expectedRear,
+      `the real briefing loadout gives the ${airframe.toUpperCase()} its ${expectedRear} rear rounds`,
+    );
     assert.equal(before.gunner, false, "starts in the pilot seat with no gunner");
-    await page.keyboard.press("y");
+    if (useButton) await page.click("#btn-gunner");
+    else await page.keyboard.press("y");
     await page.waitForTimeout(250);
     const manned = await rearView();
-    assert.equal(manned.gunner, true, "Y mans the rear gun");
+    assert.equal(manned.gunner, true, "Y / the HUD button mans the rear gun");
     assert.equal(manned.autopilot, true, "manning hands the aircraft to the AI course hold");
     assert.equal(manned.cameraMode, 1, "the gunner station takes the camera");
     assert.equal(manned.gunnerVisible, false, "the player's own gunner body is hidden");
     assert.equal(manned.pilotVisible, true, "the front pilot stays drawn");
     assert.equal(manned.gunVisible, true, "the gun stays drawn");
+    // 1b. A held D must swing the aim to the gunner's own screen-right (the aircraft's port when he
+    // faces aft), checked against the camera-right captured before the key, not the world +X.
+    const camRight0 = await page.evaluate(() => {
+      const V = window.midway.world.camera.position.constructor;
+      const r = new V(1, 0, 0).applyQuaternion(window.midway.world.camera.quaternion);
+      return [r.x, r.y, r.z];
+    });
+    const aim0 = await page.evaluate(() => {
+      const a = window.midway.battle.gunnerAim();
+      return [a.x, a.y, a.z];
+    });
+    await page.keyboard.down("d");
+    await page.waitForTimeout(350);
+    await page.keyboard.up("d");
+    const aim1 = await page.evaluate(() => {
+      const a = window.midway.battle.gunnerAim();
+      return [a.x, a.y, a.z];
+    });
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    assert.ok(
+      dot(aim1, camRight0) > dot(aim0, camRight0) + 0.05,
+      `D aims toward the gunner's screen-right: ${dot(aim0, camRight0).toFixed(3)} -> ${dot(aim1, camRight0).toFixed(3)}`,
+    );
+    // Let the manning toast expire so the capture shows only the persistent controls row.
+    await page.waitForTimeout(4000);
     await page.screenshot({ path: `${OUT}/gunner-rear-station-${airframe}.png` });
 
     // 2. Every camera route is refused while the gun owns the view.
@@ -235,8 +267,9 @@ try {
     assert.ok(Math.abs(ai.gunYaw) > 0.02, `the visible gun aims where the AI fires: ${JSON.stringify(ai)}`);
     await page.waitForTimeout(200);
 
-    // Two composed, paused exteriors: the rear station with the gun and the AI-aimed mount on the
-    // aircraft, then the front pilot the cockpit view hides.
+    // Composed, paused closeups: the externally-scaled gun, then the whole cockpit with both crew
+    // and the gun in one frame (the earlier chase shot was too far to judge the runtime grip), then
+    // the front pilot the cockpit view hides. The world gun scale and pivot are untouched.
     await page.evaluate(() => {
       const s = window.midway;
       const w = s.world;
@@ -244,44 +277,47 @@ try {
       s.paused = true;
       w.__updateCamera ??= w.updateCamera;
       w.updateCamera = () => {};
-      const m = w.playerMesh;
-      const V = w.camera.position.constructor;
-      const Q = m.quaternion.constructor;
-      m.updateMatrixWorld(true);
-      const q = m.getWorldQuaternion(new Q());
-      const fwd = new V(0, 0, -1).applyQuaternion(q);
-      const up = new V(0, 1, 0).applyQuaternion(q);
-      const right = new V().crossVectors(fwd, up).normalize();
-      const aim = m.userData.rearGun.getWorldPosition(new V());
-      w.camera.position.copy(aim).addScaledVector(right, 2.7).addScaledVector(up, 0.5);
-      w.camera.up.set(0, 1, 0);
-      w.camera.lookAt(aim);
-      w.camera.fov = 34;
-      w.camera.updateProjectionMatrix();
-      w.camera.updateMatrixWorld();
     });
-    await page.waitForTimeout(250);
+    const pose = (spec) =>
+      page.evaluate((spec) => {
+        const w = window.midway.world;
+        const m = w.playerMesh;
+        const V = w.camera.position.constructor;
+        const Q = m.quaternion.constructor;
+        m.updateMatrixWorld(true);
+        const q = m.getWorldQuaternion(new Q());
+        const fwd = new V(0, 0, -1).applyQuaternion(q);
+        const up = new V(0, 1, 0).applyQuaternion(q);
+        const right = new V().crossVectors(fwd, up).normalize();
+        const at =
+          spec.at === "gun"
+            ? m.userData.rearGun.getWorldPosition(new V())
+            : spec.at === "crew"
+              ? m.userData.crew[0]
+                  .getObjectByName("Head")
+                  .getWorldPosition(new V())
+                  .add(m.userData.gunner.getObjectByName("Head").getWorldPosition(new V()))
+                  .multiplyScalar(0.5)
+              : m.userData.crew[0].getObjectByName("Head").getWorldPosition(new V());
+        w.camera.position
+          .copy(at)
+          .addScaledVector(fwd, spec.fwd)
+          .addScaledVector(right, spec.right)
+          .addScaledVector(up, spec.up);
+        w.camera.up.set(0, 1, 0);
+        w.camera.lookAt(at);
+        w.camera.fov = spec.fov;
+        w.camera.updateProjectionMatrix();
+        w.camera.updateMatrixWorld();
+      }, spec);
+    await pose({ at: "gun", fwd: 0, right: 2.4, up: 0.45, fov: 36 });
+    await page.waitForTimeout(200);
     await page.screenshot({ path: `${OUT}/gunner-exterior-gun-${airframe}.png` });
-    await page.evaluate(() => {
-      const s = window.midway;
-      const w = s.world;
-      const m = w.playerMesh;
-      const V = w.camera.position.constructor;
-      const Q = m.quaternion.constructor;
-      m.updateMatrixWorld(true);
-      const q = m.getWorldQuaternion(new Q());
-      const fwd = new V(0, 0, -1).applyQuaternion(q);
-      const up = new V(0, 1, 0).applyQuaternion(q);
-      const right = new V().crossVectors(fwd, up).normalize();
-      const head = m.userData.crew[0].getObjectByName("Head").getWorldPosition(new V());
-      w.camera.position.copy(head).addScaledVector(fwd, -1.8).addScaledVector(right, 1.7).addScaledVector(up, 0.95);
-      w.camera.up.set(0, 1, 0);
-      w.camera.lookAt(head);
-      w.camera.fov = 34;
-      w.camera.updateProjectionMatrix();
-      w.camera.updateMatrixWorld();
-    });
-    await page.waitForTimeout(250);
+    await pose({ at: "crew", fwd: 0.2, right: 4.2, up: 1.4, fov: 42 });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${OUT}/gunner-cockpit-closeup-${airframe}.png` });
+    await pose({ at: "pilot", fwd: -1.8, right: 1.7, up: 0.95, fov: 34 });
+    await page.waitForTimeout(200);
     await page.screenshot({ path: `${OUT}/gunner-front-pilot-${airframe}.png` });
     await page.evaluate(() => {
       const s = window.midway;
@@ -294,19 +330,32 @@ try {
   await page.goto(URL);
   await hookScene();
   await startAirborne(null);
-  await runAirframe("sbd");
+  await runAirframe("sbd", 1200, false);
 
-  // A clean reload flies the TBD through the same battery.
+  // A clean reload flies the TBD through the same battery, manning via the HUD station button.
   await page.goto(URL);
   await hookScene();
   await startAirborne("torpedo");
-  await runAirframe("tbd");
+  await runAirframe("tbd", 600, true);
 
   assert.deepEqual(errors, []);
+  // Record the adapter the frames actually rendered on, so the evidence names the hardware rather
+  // than assuming the launch recipe reached it.
+  const adapter = await page.evaluate(async () => {
+    if (!navigator.gpu) return null;
+    const a = await navigator.gpu.requestAdapter();
+    if (!a) return null;
+    const info = a.info ?? (a.requestAdapterInfo ? await a.requestAdapterInfo() : null);
+    return info
+      ? { vendor: info.vendor, architecture: info.architecture, device: info.device, description: info.description }
+      : { note: "adapter present, no info" };
+  });
+  console.log("WebGPU adapter:", JSON.stringify(adapter));
   console.log(
-    "PASS: rear gunner on both airframes — Y station swap, cameras locked, rear-ammo-only fire, " +
+    "PASS: rear gunner on both airframes — station swap by key and HUD button, cameras locked, " +
+      "briefing loadout gives TBD 600 / SBD 1200, D aims screen-right, rear-ammo-only fire, " +
       "real rear damage, course preserved, gunner hidden / pilot+gun drawn, AI gun aims. " +
-      "Captures: gunner-rear-station-*, gunner-rear-firing-*, gunner-exterior-gun-*",
+      "Captures: gunner-rear-station-*, gunner-rear-firing-*, gunner-exterior-gun-*, gunner-cockpit-closeup-*",
   );
 } catch (failure) {
   console.error("CAPTURE ERRORS", JSON.stringify(errors.slice(0, 20), null, 1));
