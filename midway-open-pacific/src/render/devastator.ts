@@ -7,7 +7,7 @@
  * SBD is untouched: `createDouglas` still owns it.
  */
 import * as T from "three";
-import { softCircleDataTexture } from "@threenative/core";
+import { mergeParts, softCircleDataTexture } from "@threenative/core";
 import { emblem } from "./assets.js";
 import { createSeatedStation, SEATED_PELVIS, type ISeatedStation } from "./aircrew.js";
 import { createCockpitInterior, getCockpitMaterials, type CockpitInterior } from "./cockpit-detail.js";
@@ -160,6 +160,10 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
       mat,
       parent,
     );
+  // Every procedural geometry here carries normal and uv already: Box, Sphere, Cylinder, Tube,
+  // Torus and Extrude geometries generate both, and `geometry()` computes normals and writes uv.
+  // So the merge preserves the authored channels with no game-side fallback, and `mergeParts`
+  // refuses loudly if a future part ever arrives without one instead of inventing a default.
   const batch = (group: T.Object3D): void => {
     const sets = new Map<T.Material, T.Mesh[]>();
     for (const c of [...group.children] as T.Mesh[])
@@ -167,32 +171,21 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
         if (!sets.has(c.material)) sets.set(c.material, []);
         sets.get(c.material)!.push(c);
       }
-    for (const [mat, children] of sets) {
+    for (const [material, children] of sets) {
       if (children.length < 3) continue;
-      const pp: number[] = [];
-      const nn: number[] = [];
-      const uu: number[] = [];
-      for (const c of children) {
+      const parts = children.map((c) => {
         c.updateMatrix();
-        const g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
-        g.applyMatrix4(c.matrix);
-        const p = g.attributes.position!;
-        const n = g.attributes.normal;
-        const u = g.attributes.uv;
-        for (let i = 0; i < p.count; i++) {
-          pp.push(p.getX(i), p.getY(i), p.getZ(i));
-          nn.push(n ? n.getX(i) : 0, n ? n.getY(i) : 1, n ? n.getZ(i) : 0);
-          uu.push(u ? u.getX(i) : 0, u ? u.getY(i) : 0);
-        }
+        return { geometry: c.geometry, matrix: c.matrix };
+      });
+      const g = mergeParts(parts, {
+        label: group.name || "devastator",
+        preserve: ["uv", "normal"],
+      });
+      for (const c of children) {
         group.remove(c);
-        g.dispose();
         c.geometry.dispose();
       }
-      const g = new T.BufferGeometry();
-      g.setAttribute("position", new T.Float32BufferAttribute(pp, 3));
-      g.setAttribute("normal", new T.Float32BufferAttribute(nn, 3));
-      g.setAttribute("uv", new T.Float32BufferAttribute(uu, 2));
-      mesh(g, mat, group, group.name + "_details");
+      mesh(g, material, group, group.name + "_details");
     }
   };
   const geometry = (p: number[], uv: number[], index: number[]): T.BufferGeometry => {

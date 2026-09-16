@@ -454,23 +454,51 @@ try {
     s.world.camera.updateMatrixWorld();
   });
 
-  // An IJN destroyer at close range, with its imported hull selected by the LOD.
+  // An IJN destroyer with its imported hull and the current game-owned LOD contract: the detailed
+  // `hullBody` group and the merged `hullLow` stand-in are siblings the camera-distance gate
+  // toggles, so exactly one is ever visible. The old assertion read `THREE.LOD.levels`, which this
+  // game stopped using; the fields below are what the renderer actually maintains.
   const ship = await page.evaluate(() => {
     const s = window.midway;
     const d = s.battle.ships.find((x) => x.kind === "destroyer" && x.team === "jp");
     if (!d) return null;
     s.__shipId = d.id;
     const mesh = s.world.meshes.get(d.id);
-    const lod = mesh?.children[0];
+    const low = mesh?.userData.hullLow;
+    const body = mesh?.userData.hullBody;
+    const geometry = low?.geometry;
     return {
       name: d.name,
       imported: !!mesh?.userData.importedShip,
-      levels: lod?.levels?.length ?? 0,
+      hasBody: !!body?.isGroup,
+      hasMerged: !!low?.isMesh,
+      mergedChannels: !!(
+        geometry?.getAttribute("position") &&
+        geometry.getAttribute("normal") &&
+        geometry.getAttribute("uv")
+      ),
+      mergedRadius: +(mesh?.userData.hullRadius ?? 0).toFixed(2),
+      toggledApart: !!body && !!low && body.visible !== low.visible,
       heading: +d.heading.toFixed(3),
     };
   });
   assert.ok(ship?.imported, `Japanese destroyers use the imported hull: ${JSON.stringify(ship)}`);
-  assert.equal(ship.levels, 2, `near and far levels: ${JSON.stringify(ship)}`);
+  assert.ok(
+    ship?.hasBody && ship?.hasMerged,
+    `the hull keeps a detailed body and a merged stand-in: ${JSON.stringify(ship)}`,
+  );
+  assert.ok(
+    ship?.mergedChannels,
+    `the merged stand-in keeps position/normal/uv: ${JSON.stringify(ship)}`,
+  );
+  assert.ok(
+    ship?.mergedRadius > 0,
+    `the merged stand-in has a measured radius: ${JSON.stringify(ship)}`,
+  );
+  assert.ok(
+    ship?.toggledApart,
+    `the distance gate shows exactly one hull level: ${JSON.stringify(ship)}`,
+  );
   // Broadside, from the ship's own port beam, so bow orientation is unmistakable in the frame.
   await shot("fleet-destroyer", () => {
     const s = window.midway;
@@ -491,7 +519,7 @@ try {
       "inventory-driven deck park on all seven carriers (correct per-team airframes, bounded aft " +
       "slots, one type leaving/returning at a time, restart keeps shared geometry); " +
       "imported Zero on nearby AI; Japanese bombers off the SBD airframe; imported IJN destroyer " +
-      "with two LOD levels; Midway atoll captured; no console or GPU errors",
+      "with a distance-gated merged hull stand-in; Midway atoll captured; no console or GPU errors",
   );
 } finally {
   await browser.close();

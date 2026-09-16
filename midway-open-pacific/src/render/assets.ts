@@ -1,5 +1,6 @@
 /** Procedural geometry and textures. No copyrighted game assets or image downloads. */
 import * as THREE from "three";
+import { mergeParts, type IMergePart } from "@threenative/core";
 
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
 
@@ -98,30 +99,34 @@ export function canvasTexture(
 /** Merge static components by material to avoid a draw call for every bolt and window. */
 export function consolidate(group: THREE.Object3D): THREE.Group {
   group.updateMatrixWorld(true);
-  const batches = new Map<string, { material: THREE.Material; positions: number[]; normals: number[]; uv: number[] }>();
+  const batches = new Map<
+    string,
+    { material: THREE.Material; parts: IMergePart[]; temps: THREE.BufferGeometry[] }
+  >();
   group.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
-    const geometry = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
-    geometry.applyMatrix4(mesh.matrixWorld);
-    const id = (mesh.material as THREE.Material).uuid;
-    let b = batches.get(id);
+    const material = mesh.material as THREE.Material;
+    let b = batches.get(material.uuid);
     if (!b) {
-      b = { material: mesh.material as THREE.Material, positions: [], normals: [], uv: [] };
-      batches.set(id, b);
+      b = { material, parts: [], temps: [] };
+      batches.set(material.uuid, b);
     }
-    b.positions.push(...Array.from(geometry.attributes.position.array as ArrayLike<number>));
-    b.normals.push(...Array.from(geometry.attributes.normal.array as ArrayLike<number>));
-    if (geometry.attributes.uv) b.uv.push(...Array.from(geometry.attributes.uv.array as ArrayLike<number>));
-    else b.uv.push(...new Float32Array(geometry.attributes.position.count * 2));
-    geometry.dispose();
+    // `mergeParts` refuses a listed channel a piece does not carry, so a missing uv is a game data
+    // decision made here on the way in rather than something the engine invents. The zero-uv copy
+    // is ours to release after the merge; `mergeParts` clones again and never touches the input.
+    let geometry = mesh.geometry;
+    if (!geometry.getAttribute("uv")) {
+      const uv = new THREE.Float32BufferAttribute(geometry.getAttribute("position").count * 2, 2);
+      geometry = mesh.geometry.clone().setAttribute("uv", uv);
+      b.temps.push(geometry);
+    }
+    b.parts.push({ geometry, matrix: mesh.matrixWorld });
   });
   const result = new THREE.Group();
   for (const b of batches.values()) {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(b.positions, 3));
-    g.setAttribute("normal", new THREE.Float32BufferAttribute(b.normals, 3));
-    g.setAttribute("uv", new THREE.Float32BufferAttribute(b.uv, 2));
+    const g = mergeParts(b.parts, { label: "consolidate", preserve: ["uv", "normal"] });
+    for (const geometry of b.temps) geometry.dispose();
     g.computeBoundingSphere();
     const m = new THREE.Mesh(g, b.material);
     m.castShadow = true;
