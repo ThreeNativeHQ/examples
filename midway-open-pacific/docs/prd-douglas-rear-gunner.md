@@ -3,7 +3,9 @@
 **Status:** implemented and visually accepted by root. Both airframes seat a front pilot and a rear
 radioman/gunner, man the approved twin gun, open the rear canopy, and share one firing path with a
 measured airframe guard and a dedicated blocked-fire cue. The first-person cockpit interior is now
-the user's supplied rear-station study (see *First-person rear station* below).
+the user's supplied rear-station study (see *First-person rear station* below). The supplied shell's
+HTML scope is finished; the per-round rear-gun report is the reconstructed `.30` one-shot
+(`gun-30.ogg`) and each airframe's starboard placard names its own type.
 **Lane:** branch `midway/douglas-rear-gunner`, base `89d2462e6e8ddfdbce9852a20efddc54cc4f73b2`.
 **Ownership:** the lane owns the seats, crew render, gun mount/aim, rear-gun sim, HUD cue and the
 captures. `@threenative/core` owns the flight model; no engine change was needed.
@@ -129,9 +131,36 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
   `screenshots/gunner-rear-station-{sbd,tbd}.png`, `gunner-rear-blocked-sbd.png` (LOW FUEL +
   AIRFRAME BLOCKS FIRE + reticle together), `gunner-rear-firing-*`, `gunner-exterior-gun-*`,
   `gunner-cockpit-closeup-*`, `gunner-front-pilot-*`.
-- **Still failing, not ours:** `check-repair.mjs` reproduces the same line-40 forward wing-gun flash
-  timeout; this lane does not touch the forward fire path, so it is recorded as a baseline failure,
-  not passed.
+- **Still failing, cause unclassified:** `check-repair.mjs` reproduces the line-40 forward wing-gun
+  muzzle-flash timeout. It is **not** baseline-proved: the baseline reproduction
+  (`/tmp/douglas-baseline-report.md`) proved only two pure-sim failures (`check-flight.mjs`,
+  `check-carrier-cycle.mjs`), not `check-repair`. It also failed before the supplied HTML
+  rear-station work landed, so it is not caused by the new HTML, but its cause is unclassified here.
+  Not passed, and not to be silenced by touching the forward pilot cockpit.
+- **Rear-gun audio (reconstruction):** `public/assets/audio/gun-30.ogg` is replaced with the audio
+  arm's cleaned one-shot — 0.180 s, mono 44.1 kHz Vorbis. `content/audio/midway-audio.json` and
+  `tools/audio-catalog.mjs` retag `gun-30` `identity: "reconstruction"` (ElevenLabs
+  `eleven_text_to_sound_v2`, 1 s request, prompt_influence 0.6) and record the raw MP3 hash, the
+  shipped OGG hash (6356 B), the decoded duration and the processing chain (40 Hz high-pass,
+  0.180 s trim, 1 ms/50 ms guard fades, −6.0 dB before encode). `node scripts/check-catalog.mjs`
+  verifies the shipped bytes against the last generation hash; `node scripts/check-audio.mjs`
+  (29 checks) confirms a `gun30` event reaches the `gun30` cue while `gun50` still reaches `gun50`,
+  with the pilot cockpit untouched. The one-shot bank (`gun30` volume `0.45`, cooldown `0.06`) and
+  falloff `900` are unchanged. **Not ear-auditioned** — this environment has no audio input, so the
+  claim is objective file inspection only (decoded true peak −3.9 dBFS, DC 0.00019, 0 saturated
+  samples), never audible likeness. Armament: SBD-3 rear 2 × .30 flexible vs nose 2 × .50 fixed
+  ([National WWII Museum](https://www.nationalww2museum.org/visit/museum-campus/us-freedom-pavilion/warbirds/douglas-sbd-dauntless));
+  TBD-1 rear 1 × .30; primary .30 AN/M2 cyclic rate **not found**, so cadence is unchanged.
+- **Rear-station placard:** `buildEquipment` now labels the starboard radio through
+  `placardAirframeLine(airframe)` — `SBD-3` for the Douglas, `TBD-1` for the Devastator — in the same
+  authored style, with no geometry, camera or look change. `scripts/check-aircraft.mjs` asserts both
+  lines and their equal length (the label wear seed is unchanged). The final
+  `node tools/capture-gunner.mjs` pass (`MIDWAY_URL=http://127.0.0.1:5312`) shows
+  `U.S. NAVY / SBD-3` and `U.S. NAVY / TBD-1` in `screenshots/gunner-rear-station-{sbd,tbd}.png`,
+  reticle, input and obstruction unchanged.
+- **Player-only cost:** the first-person rear station measures 31,366 triangles / 113 draws, drawn
+  only in the player's own rear view and allocated by no AI aircraft (asserted by `check-aircraft`).
+  No desktop, Android or iOS claim; no `--target` playtest has run.
 
 - **First-person rear station pass:** `pnpm typecheck` PASS; `node scripts/check-aircraft.mjs` PASS
   (now also asserting both airframes' FPP muzzles against `rearGunMuzzle` at neutral and angled aim,

@@ -449,7 +449,14 @@ try {
     });
     const stationPath = resolve(temporary, "rear-station.mjs");
     await writeFile(stationPath, stationOutput.outputFiles[0].text);
-    const { createRearStation } = await import(pathToFileURL(stationPath).href);
+    const { createRearStation, placardAirframeLine } = await import(pathToFileURL(stationPath).href);
+    assert.equal(placardAirframeLine("sbd"), "SBD-3", "the SBD rear placard names its own airframe");
+    assert.equal(placardAirframeLine("tbd"), "TBD-1", "the TBD rear placard names its own airframe");
+    assert.equal(
+      placardAirframeLine("sbd").length,
+      placardAirframeLine("tbd").length,
+      "both placard lines are the same length, so the label wear seed is unchanged",
+    );
     for (const [name, mesh, id, mount] of [
       ["SBD", airplane, "sbd", REAR_GUN_MOUNTS.sbd],
       ["TBD", tbd, "tbd", REAR_GUN_MOUNTS.tbd],

@@ -367,10 +367,14 @@ const voiceOf = (bus, key) => bus.musicCalls.filter((c) => c.key === key).at(-1)
   atOrigin();
   s.event({ type: "gun", weapon: "cannon20", at: { x: 0, y: 0, z: 0 } });
   s.event({ type: "gun", weapon: "gun77", at: { x: 0, y: 0, z: 0 } });
+  s.event({ type: "gun", weapon: "gun30", at: { x: 0, y: 0, z: 0 } });
+  s.event({ type: "gun", weapon: "gun50", at: { x: 0, y: 0, z: 0 } });
   atOrigin();
   const keys = bus.playAtCalls.map((c) => c.key);
   assert.ok(keys.includes("cannon20"), "a Zero cannon did not reach its cue");
   assert.ok(keys.includes("gun77"), "a Japanese MG did not reach its cue");
+  assert.ok(keys.includes("gun30"), "the rear .30 event did not reach its own cue");
+  assert.ok(keys.includes("gun50"), "the forward .50 event did not reach its own cue");
   s.event({ type: "bomb", weapon: "torpedo" });
   assert.ok(bus.playCalls.some((c) => c.key === "torpedoRelease"), "a torpedo release did not sound its latch");
 }

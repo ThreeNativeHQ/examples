@@ -876,7 +876,13 @@ function buildSeat(root: T.Object3D, M: ShellMaterials): void {
   g.scale.x = 0.78;
 }
 
-function buildEquipment(root: T.Object3D, M: ShellMaterials): void {
+/** The starboard-radio placard airframe line. Both names are five characters, so the label's
+ * wear seed and layout are unchanged between airframes. */
+export function placardAirframeLine(airframe: string): string {
+  return airframe === "tbd" ? "TBD-1" : "SBD-3";
+}
+
+function buildEquipment(root: T.Object3D, M: ShellMaterials, airframe: string): void {
   const g = group(root, "Equipment");
   const f = fasteners(g, M);
   const radio = (pos: number[], w: number, h: number, d: number, name: string): T.Group => {
@@ -909,7 +915,7 @@ function buildEquipment(root: T.Object3D, M: ShellMaterials): void {
   };
   const right = radio([0.795, 1.014, 0.245], 0.53, 0.375, 0.59, "Starboard radio case");
   right.rotation.y = -0.035;
-  label(right, ["U.S. NAVY", "TBD-1"], 0.361, 0.213, [0.011, -0.012, 0.311], { size: 92, color: "#c2c1b4", wear: 0.8 });
+  label(right, ["U.S. NAVY", placardAirframeLine(airframe)], 0.361, 0.213, [0.011, -0.012, 0.311], { size: 92, color: "#c2c1b4", wear: 0.8 });
   const aft = radio([0.766, 1.025, -0.585], 0.27, 0.273, 0.298, "Starboard auxiliary equipment");
   label(aft, ["RADIO", "CONTROL"], 0.165, 0.108, [0, 0.012, 0.157], { size: 86, color: "#bfc1ac", wear: 0.65 });
   cyl(aft, M.gunmetal!, 0.032, 0.032, 0.025, [-0.13, 0.005, 0.008], "x", 20, "Electrical connector");
@@ -1584,7 +1590,7 @@ export function createRearStation(airframe: string, gunnerEye: readonly [number,
   buildAirframe(native, materials);
   buildCanopy(native, materials);
   buildSeat(native, materials);
-  buildEquipment(native, materials);
+  buildEquipment(native, materials, airframe);
   shell.add(native);
 
   // The live camera anchor, `gunnerEye + [0,0.03,-0.20]`, matching world.ts's authored framing.
