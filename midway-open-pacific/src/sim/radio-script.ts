@@ -49,6 +49,8 @@ export const SPEECH: Record<string, ISpeechRow> = {
   R29: { text: "Scout Three to Enterprise. Lead is hit hard and losing power. I'm staying with him.", voice: "wingman", priority: 1 },
   R30: { text: "Scout Three to Enterprise. Lead is going down. Marking the position.", voice: "wingman", priority: 1 },
   R31: { text: "Scout Three. You're trailing oil from the engine. Watch your temperature.", voice: "wingman", priority: 2 },
+  R32: { text: "Scout Three. Pull up! You're going down!", voice: "wingman", priority: 1 },
+  R33: { text: "Scout Three. I'm out of ammunition. We should head back to the carrier.", voice: "wingman", priority: 2 },
   P01: { text: "General quarters. General quarters. All hands to battle stations.", voice: "pa", priority: 2 },
   P02: { text: "Flight quarters. Stand by to launch aircraft. Keep the flight deck clear.", voice: "pa", priority: 3 },
   P03: { text: "Enemy aircraft approaching. All exposed personnel take cover.", voice: "pa", priority: 1 },

@@ -200,6 +200,8 @@ export const SPEECH = [
   { id: "R29", voice: "wingman", priority: 1, text: "Scout Three to Enterprise. Lead is hit hard and losing power. I'm staying with him." },
   { id: "R30", voice: "wingman", priority: 1, text: "Scout Three to Enterprise. Lead is going down. Marking the position." },
   { id: "R31", voice: "wingman", priority: 2, text: "Scout Three. You're trailing oil from the engine. Watch your temperature." },
+  { id: "R32", voice: "wingman", priority: 1, text: "Scout Three. Pull up! You're going down!" },
+  { id: "R33", voice: "wingman", priority: 2, text: "Scout Three. I'm out of ammunition. We should head back to the carrier." },
   { id: "P01", voice: "pa", priority: 2, text: "General quarters. General quarters. All hands to battle stations." },
   { id: "P02", voice: "pa", priority: 3, text: "Flight quarters. Stand by to launch aircraft. Keep the flight deck clear." },
   { id: "P03", voice: "pa", priority: 1, text: "Enemy aircraft approaching. All exposed personnel take cover." },

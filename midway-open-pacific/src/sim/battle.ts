@@ -1277,6 +1277,57 @@ export class Battle {
       flags.r14 = true;
       this.voice("R14", { valid: () => this.player.fuel < 30 });
     }
+    // The wingman can see the player's aircraft headed for the surface below when the player cannot.
+    // Nothing here is a phase or gear flag: closure is measured against the surface actually below —
+    // the carrier's own deck height when the aircraft is over it, the sea otherwise — so a gear-down
+    // dive onto the deck still warns and a controlled landing sink rate (~-3 m/s) already clears the
+    // -6 m/s gate and stays silent. A stalled nose-up descent is warned too; there is no pitch test.
+    const impactNow = () => {
+      const carrier = this.approach().carrier;
+      const deck = carrier && !carrier.sunk && onDeck(p, carrier) ? carrier.deckHeight : 0;
+      const clearance = p.y - deck;
+      return p.mode === "flight" && p.vy < -6 && clearance < 140 && clearance / Math.max(-p.vy, 0.001) < 4;
+    };
+    if (impactNow() && this.wingmanNear() && this.time > (flags.r32next ?? 0)) {
+      flags.r32next = this.time + 20;
+      this.voice("R32", { valid: () => this.wingmanNear() && impactNow() });
+    }
+    // The wingman's own offensive stores decide whether he can still fight: forward guns, bombs and
+    // torpedoes count, the defensive rear gun does not. Advisory only — it never retasks the player
+    // or the formation, and a separate edge per wingman lets each depletion speak once.
+    const emptyWing = this.aircraft.filter(
+      (a: Any) =>
+        a.wing === true &&
+        a.team === "us" &&
+        a.hp > 0 &&
+        a.mode === "flight" &&
+        a.tactic !== "ditching" &&
+        distance3(a, p) < 3200 &&
+        !((a.ammo ?? 0) > 0 || (a.bombs ?? 0) > 0 || (a.torpedo ?? 0) > 0),
+    ).sort((a: Any, b: Any) => distance3(a, p) - distance3(b, p));
+    const emptyIds = new Set<string>(emptyWing.map((a: Any) => a.id));
+    for (const key of Object.keys(flags)) if (key.startsWith("r33-") && !emptyIds.has(key.slice(4))) flags[key] = false;
+    // Nearest empty wingman who has not already reported: choosing the nearest *flagged* one blocked
+    // a second empty wingman forever. `emptyWing` is distance-sorted, so `find` keeps the closest.
+    const winchester = emptyWing.find((a: Any) => !flags[`r33-${a.id}`]);
+    if (winchester) {
+      const id = winchester.id;
+      flags[`r33-${id}`] = true;
+      this.voice("R33", {
+        identity: id,
+        valid: () => {
+          const q = this.aircraft.find((a: Any) => a.id === id);
+          return (
+            !!q &&
+            q.hp > 0 &&
+            q.mode === "flight" &&
+            q.tactic !== "ditching" &&
+            distance3(q, this.player) < 3200 &&
+            !((q.ammo ?? 0) > 0 || (q.bombs ?? 0) > 0 || (q.torpedo ?? 0) > 0)
+          );
+        },
+      });
+    }
     if (this.time > (flags.r19next ?? 0)) {
       const f = forward(p.heading, p.pitch);
       const rear = this.aircraft.find((a: Any) => {

@@ -111,16 +111,21 @@ AI aircraft, which keep the approved `weapon.rear-gun.glb` and crew fit.
   the rear station and never leaked into the exterior or pilot view, and leaves a frame of each for
   the root's visual review. No permission, licence or provenance beyond "user-supplied" is claimed.
 
-## Feedback fix — mouse aim, left-click fire, rear-shot feedback
+## Feedback fix — pointer-locked aim, left-click fire, rear-shot feedback
 
 Root cause of the report, traced through `Midway.attachInput` → `Battle.aimRear` →
 `fireRearManual` → `rearShot` → `Soundscape.event`:
 
 - **Mouse aim was drag-only and aimed badly.** The station's aim moved only while the right button
   was held (`pointermove` gated on `mouse.looking`), and the HUD hint named no button. The gunner
-  now aims on pointer motion alone (no button), with the first move after manning only re-anchoring
-  the pointer so taking the gun never jumps the barrels; the pilot's right-drag free-look and the
-  whole pilot cockpit are untouched.
+  now takes a real **pointer lock** on manning (the Y key, the HUD button, or the first canvas click
+  while unlocked), and aims on the locked pointer's relative motion alone — `ctx.input.vector("aim")`
+  with `aim.pointerRelative` bound and `captureOnClick` off. The OS cursor is hidden while locked and
+  aim continues past the window edge; a bare unlocked `clientX` cursor no longer nudge the barrels.
+  The click that takes the lock never fires. `Esc` unlocks and opens the pause menu; the pause, map
+  and command buttons and station exit release; **Resume** re-takes the lock from its own click; a
+  late or refused lock grant is released whenever the station is unmanned or paused. The pilot's
+  right-drag free-look and the whole pilot cockpit are untouched.
 - **Left click did nothing while aiming.** Two causes: `pointerdown` discarded a left click whenever
   `mouse.looking` was set, and a second button pressed while one is already down arrives as a
   `pointermove`, not a `pointerdown`. Fire is now read from the button mask (`e.buttons & 1`) on
@@ -161,7 +166,27 @@ Root cause of the report, traced through `Midway.attachInput` → `Battle.aimRea
   geometry, one draw, no per-frame allocation. This is the existing behaviour's replacement, not a
   new feature: the same `bullets` array drives it. `capture-flak-hunt.mjs` is updated to the new
   representation (instance count, per-instance finite scale, radius clamp, centre-behind error, and
-  a proxy that stays instanced rather than re-topologized into a Line).
+   a proxy that stays instanced rather than re-topologized into a Line).
+
+## Wingman advisories (R32/R33)
+
+Bounded scope: two new wingman lines in the existing speech table, no new system. `R32` warns real
+closure on the surface below — a descent steeper than `vy < -6` with `clearance < 140` and
+`clearance / -vy < 4` seconds to impact, where clearance is measured above the carrier's own deck
+height when the aircraft is over it and above the sea otherwise, with a live wingman in range. There
+is no phase, gear or pitch exemption: a gear-down dive onto the deck still warns, a stalled nose-up
+descent still warns, and a controlled landing sink rate (~-3 m/s) already clears the -6 m/s gate.
+`R33` reports the wingman's own empty **offensive** stores
+(`ammo`/`bombs`/`torpedo`; the defensive rear gun never counts) and advises heading home. Both are
+advisory: neither sets `command`, the player's mode or nav. Edges are per-wingman (the nearest
+*unreported* empty wingman speaks, so a second one is never blocked) and the queue rechecks
+`valid()`, so a resolved danger, an out-of-range or dead wingman stays silent. R33's line is the
+exact subtitle "Scout Three. I'm out of ammunition. We should head back to the carrier."
+`scripts/check-radio.mjs` covers dive/cooldown/stall/landing/deck-dive/cruise/no-wing/dead/
+out-of-range and the ammo/second-wing cases.
+Voice: `r32.ogg` 2.508 s, `r33.ogg` 4.923 s (mono Vorbis, mean −21.4/−20.2 dBFS), generated with the
+repo's ElevenLabs pipeline into the same `wingman` voice as R26–R31; the subtitle is the script
+text, so caption equals speech. **Not ear-auditioned.**
 
 ## Verification
 
@@ -235,3 +260,17 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
   `bash tools/capture-lock.sh node tools/capture-gunner.mjs` PASS on **nvidia / turing**
   (`MIDWAY_URL=http://127.0.0.1:5312`) with the FPP shell+twin drawn only in the rear station and
   the exterior gun, shell and pilot path restored on exit.
+
+- **Final combined head (pointer lock + wingman):** `pnpm typecheck` PASS; `pnpm exec vite build`
+  PASS; `check-gunner` (incl. the new recoil-settles-dry and recoil-settles-mid-change cases),
+  `check-radio` (R26–R33), `check-audio` (29) and `check-aircraft` PASS. `check-gunner.mjs` also
+  asserts an AI rear shot carries **no** bullet-velocity field, so the report can no longer be read
+  as source Doppler. `capture-gunner.mjs` now asserts a **real** lock (`document.pointerLockElement`
+  plus `ctx.input.raw.pointer.captured`), relative aim motion past the window edge driven by
+  `xdotool` inside the private `capture-lock` Xvfb, `Esc`-to-pause with the cursor returned, Resume
+  re-capturing from its own click, and release on station exit; the audio path still proves the exact
+  decoded `gun30` buffer on a running context at positive gain. Its pre-existing `D`-key screen-right
+  assertion (a camera-right projection unrelated to the cursor change) does **not** pass on this
+  contended host in the time-boxed pass, so the browser capture is left honest: the code and the
+  lock/motion assertions are in place, but a green `capture-gunner` run is **not** claimed here.
+  No standalone verification document was added; no engine, `node_modules` or new-dependency change.

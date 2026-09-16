@@ -3266,6 +3266,52 @@
       ]
     },
     {
+      "id": "R32",
+      "slug": "r32",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three. Pull up! You're going down!",
+      "substitutions": {},
+      "file": "audio/voice/r32.ogg",
+      "generations": [
+        {
+          "date": "2026-09-16",
+          "requestId": "YtP4rbLVXummzJVctMqz",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "68d47dfbdf88cc6bb912529a92224317d6397e1b4ec0d1452cf9bf9ca08e0d1b",
+          "outputHash": "b6bee1eac42d6a7365e56d3f7f14708519ef61ab72647c35e2980240cea909a2",
+          "bytes": 31116
+        }
+      ]
+    },
+    {
+      "id": "R33",
+      "slug": "r33",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. I'm out of ammunition. We should head back to the carrier.",
+      "substitutions": {},
+      "file": "audio/voice/r33.ogg",
+      "generations": [
+        {
+          "date": "2026-09-16",
+          "requestId": "bMd2t7SDvHo7GBv9XIou",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "ba69719c778994fa366eab15a2a18783c643ac18970e708654392d932f0f4cd5",
+          "outputHash": "3affddac928b9224cf3599c8e0e26a7edfe61acb9ba48e4db68b633e1d5722c9",
+          "bytes": 39198
+        },
+        {
+          "date": "2026-09-16",
+          "requestId": "3C80biD6nnBmKA2sPHpy",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "27611646ef76f7b13fc770771addb568b2cda56b2d692167f293c67fb8f0b2d7",
+          "outputHash": "1bbe10d420feb4058269667171d40ead5cf5426165b4ae6cd10a7214615bc12a",
+          "bytes": 57641
+        }
+      ]
+    },
+    {
       "id": "P01",
       "slug": "p01",
       "voice": "pa",
