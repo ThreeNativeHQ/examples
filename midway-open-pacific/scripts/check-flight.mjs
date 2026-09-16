@@ -538,9 +538,20 @@ const diveStart = dive.player.y;
 tick(dive, 3);
 assert.ok(dive.player.y < diveStart - 30, `the wreck must actually fall (${diveStart} -> ${dive.player.y})`);
 assert.equal(dive.status, 'playing', 'still in the air, still playing');
+// The wreck settles into a downed pilot, not a defeat: a shoot-down no longer ends the battle while
+// a friendly deck can still launch a replacement. Only losing the carrier force is the loss.
+for (let i = 0; i < 60 * 60 && dive.player.mode !== 'downed'; i++) dive.step(1 / 60);
+assert.equal(dive.player.mode, 'downed', 'the crash settles into a downed pilot, not a defeat');
+assert.equal(dive.status, 'playing', 'a shoot-down must not end the battle while a deck is afloat');
+assert.ok(dive.player.y <= 0.6, `the wreck is in the water, not above it (y=${dive.player.y})`);
+for (const s of dive.ships) {
+  if (s.kind === 'carrier' && s.team === 'us') {
+    s.sunk = true;
+    s.hp = 0;
+  }
+}
 for (let i = 0; i < 60 * 60 && dive.status === 'playing'; i++) dive.step(1 / 60);
-assert.equal(dive.status, 'lost', 'the crash must end the sortie once it reaches the sea');
-assert.ok(dive.player.y <= 0.6, `the loss is declared at the surface, not above it (y=${dive.player.y})`);
+assert.equal(dive.status, 'lost', 'losing every friendly carrier is the defeat condition');
 
 // The wingman reports what he can see from his own aircraft, and only while he is there to see it.
 const chatter = airborne();
