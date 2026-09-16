@@ -65,11 +65,11 @@ try {
   await page.screenshot({ path: `${out}/start.png` });
   for (let seconds = 5; seconds <= duration; seconds += 5) {
     await page.waitForTimeout(5000);
-    // One full chase → cockpit → wide → chase cycle every 30 seconds.
+    // One full chase → cockpit → wide → overhead → chase cycle every 30 seconds.
     if (seconds % 10 === 0) {
       const before = await page.evaluate(() => window.midway.world.cameraMode);
       await page.keyboard.press("KeyC");
-      await page.waitForFunction(mode => window.midway.world.cameraMode === mode, (before + 1) % 3);
+      await page.waitForFunction(mode => window.midway.world.cameraMode === mode, (before + 1) % 4);
     }
     await sample(`${seconds}s`);
     if (seconds === 10 || seconds === 30) await page.screenshot({ path: `${out}/${seconds}s.png` });

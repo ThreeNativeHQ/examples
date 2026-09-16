@@ -491,7 +491,7 @@ export class Midway extends Scene<GameState, undefined> {
 
   private setCamera(mode: number): void {
     this.world.setCamera(mode);
-    this.hud.toast(["CHASE CAMERA", "PILOT COCKPIT — HOLD RIGHT MOUSE TO LOOK", "WIDE CHASE CAMERA"][mode]);
+    this.hud.toast(["CHASE CAMERA", "PILOT COCKPIT — HOLD RIGHT MOUSE TO LOOK", "WIDE CHASE CAMERA", "OVERHEAD ATTACK CAMERA — LOOKING DOWN ON YOUR AIRCRAFT"][mode]);
   }
 
   private goHome(): void {
@@ -601,7 +601,11 @@ export class Midway extends Scene<GameState, undefined> {
         this.hud.toast(`PITCH TRIM ${(p.trim * 57.3).toFixed(1)}°`);
         break;
       case "KeyC":
-        this.setCamera((this.world.cameraMode + 1) % 3);
+        this.setCamera((this.world.cameraMode + 1) % 4);
+        break;
+      case "KeyO":
+        // Direct jump to the overhead attack view, wherever the C cycle left off.
+        this.setCamera(3);
         break;
       case "F1":
         this.setCamera(1);
