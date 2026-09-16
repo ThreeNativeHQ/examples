@@ -331,9 +331,14 @@ claim("AC-16 tubes are finite: no launch after they are spent", () => {
   const b = play(7);
   const sub = b.ships.find((s) => s.name === "I-168");
   const target = b.ships.find((s) => s.name === "USS Enterprise");
-  // The target is made unsinkable so this measures tube endurance, never a ship's survival.
+  // The target is made unsinkable so this measures tube endurance, never a ship's survival. The
+  // boat is made unsinkable for the same reason: it attacks from periscope depth inside the U.S.
+  // screen, so the escorts' sonar now hunts and depth-charges it, and a boat sunk mid-magazine
+  // would never show the empty state this claim is about. ASW survival is proven separately.
   target.hp = 1e9;
   target.maxHp = 1e9;
+  sub.hp = 1e9;
+  sub.maxHp = 1e9;
   const scout = b.aircraft.find((a) => a.team === "jp" && a.hp > 0);
   const launches = [];
   const real = b.spawnTorpedo.bind(b);

@@ -146,6 +146,15 @@ const aim = (x, z = 0) => ({ x, z });
   const shallow = cross(3);
   assert.equal(T.sweptHit(shallow.after, start, escort, shallow.dt).hit, true, "the shallow run failed to hit the escort");
   assert.equal(T.screenIntercept(shallow.after, start, [escort], carrier, shallow.dt), "escort", "the escort did not screen the carrier");
+
+  // A run's own side never screens it: the same hull flying the run's flag is passed through, so a
+  // boat that fires from its own hull does not detonate on the tube it just left.
+  const friendly = ship({ id: "friendly", x: 0, z: 0, team: "jp" });
+  assert.equal(
+    T.screenIntercept(shallow.after, start, [friendly], carrier, shallow.dt, "jp"),
+    "carrier",
+    "the run screened against its own side",
+  );
 }
 
 // 6 — expiry at the end of the range, and the release stamp survives the whole run unchanged.

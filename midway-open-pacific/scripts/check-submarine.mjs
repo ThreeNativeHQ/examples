@@ -15,6 +15,25 @@ const { outputFiles } = await build({
 });
 const s = await import(`data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString("base64")}`);
 
+// The pure module is the rules; `Battle` is where they have to actually happen. Bundle it too so
+// this gate proves the wiring — a boat that dives, attacks, is hunted and is lost — not just the
+// arithmetic a screenshot and a playtest cannot see.
+const { outputFiles: battleOut } = await build({
+  entryPoints: ["src/sim/battle.ts"],
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  write: false,
+});
+const { Battle } = await import(`data:text/javascript;base64,${Buffer.from(battleOut[0].text).toString("base64")}`);
+const STEP = 1 / 30;
+const play = (seed) => {
+  const b = new Battle(seed);
+  b.start();
+  b.player.mode = "spectator";
+  return b;
+};
+
 const state = (over = {}) => ({
   depth: 0,
   depthRate: 0,
@@ -186,6 +205,123 @@ assert.doesNotThrow(() => {
 }, "frozen inputs never throw");
 assert.equal(frozenState.depth, s.DEEP_DEPTH, "the boat depth is untouched");
 assert.equal(frozenState.battery, 0.5, "the battery is untouched");
+
+// ---------------------------------------------------------------------------------------------
+// Battle wiring — the pure rules above only matter if a real battle exercises them.
+// ---------------------------------------------------------------------------------------------
+
+// A boat with nothing to attack and nothing near runs on the surface to charge; a hostile aircraft
+// overhead puts it under. This is the "submarines behave like submarines" reachability check.
+{
+  const b = play(19420604);
+  const sub = b.ships.find((ship) => ship.name === "I-168");
+  assert.ok(sub, "the Japanese boat exists");
+  // Far from every hull, so no report can place a target and no warship can threaten it: calm water.
+  sub.x = 0;
+  sub.z = 60000;
+  sub.sub.depth = s.DEEP_DEPTH;
+  sub.sub.mode = "deep";
+  sub.surfaced = false;
+  sub.y = -s.DEEP_DEPTH;
+  for (let i = 0; i < Math.round(40 / STEP); i += 1) b.step(STEP, {});
+  assert.ok(sub.sub.depth < 10, `with nothing near, the boat should surface to charge; depth ${sub.sub.depth.toFixed(1)}`);
+  // Now a hostile airframe overhead: the same boat must put itself under and stay there.
+  sub.sub.depth = 0;
+  sub.sub.mode = "surfaced";
+  sub.surfaced = true;
+  sub.y = 0;
+  const plane = b.aircraft.find((a) => a.team === "us" && a.hp > 0);
+  assert.ok(plane, "a US airframe exists");
+  for (let i = 0; i < Math.round(40 / STEP); i += 1) {
+    plane.x = sub.x + 200;
+    plane.z = sub.z;
+    plane.y = 400;
+    plane.hp = 500;
+    plane.mode = "flight";
+    b.step(STEP, {});
+  }
+  assert.ok(sub.sub.depth > 30, `a hostile aircraft overhead should dive the boat; depth ${sub.sub.depth.toFixed(1)}`);
+}
+
+// A boat in range of an observed capital ship fires a torpedo at it through the ordinary path.
+{
+  const b = play(19420604);
+  const sub = b.ships.find((ship) => ship.name === "I-168");
+  const target = b.ships.find((ship) => ship.name === "USS Enterprise");
+  sub.x = target.x + 3000;
+  sub.z = target.z;
+  sub.torpTimer = 1;
+  // ASW is proven in its own check below; here it would sink the boat before the scout's report is
+  // even delivered, so the hunt is stood down and this measures the boat's attack wiring alone.
+  for (const e of b.ships) if (e.hunt) e.hunt = null;
+  const scout = b.aircraft.find((a) => a.team === "jp" && a.hp > 0);
+  assert.ok(scout, "the Japanese scout exists");
+  let launched = 0;
+  const real = b.spawnTorpedo.bind(b);
+  b.spawnTorpedo = (a, heading, options) => {
+    const t = real(a, heading, options);
+    if (a === sub) launched += 1;
+    return t;
+  };
+  for (let i = 0; i < Math.round(150 / STEP) && launched === 0; i += 1) {
+    scout.x = target.x + 200;
+    scout.z = target.z;
+    scout.y = 900;
+    scout.hp = 500;
+    scout.mode = "flight";
+    b.step(STEP, {});
+  }
+  assert.ok(launched > 0, "the boat never fired a torpedo at the observed carrier");
+}
+
+// A bomb dropped over a boat 60 m down does nothing; the same bomb on a surfaced boat does. This is
+// the point of submerging, and the reason `strafeDamage` is called rather than left on the shelf.
+{
+  const b = play(19420604);
+  const sub = b.ships.find((ship) => ship.name === "I-168");
+  const drop = () =>
+    b.bombs.push({ x: sub.x, y: 2, z: sub.z, vx: 0, vy: -60, vz: 0, age: 0, damage: 155, team: "us", owner: "player", dead: false });
+  sub.sub.depth = s.DEEP_DEPTH;
+  sub.sub.mode = "deep";
+  sub.surfaced = false;
+  sub.y = -s.DEEP_DEPTH;
+  const hp = sub.hp;
+  drop();
+  b.step(STEP);
+  assert.equal(sub.hp, hp, "a bomb reached a boat 60 m down");
+  sub.sub.depth = 0;
+  sub.sub.mode = "surfaced";
+  sub.surfaced = true;
+  sub.y = 0;
+  drop();
+  b.step(STEP);
+  assert.ok(sub.hp < hp, "a bomb did not touch a boat on the surface");
+}
+
+// A destroyer's own sonar holds a shallow boat, opens the attack track and drops a salvo that lands.
+{
+  const b = play(19420604);
+  const sub = b.ships.find((ship) => ship.name === "I-168");
+  const escort = b.ships.find((ship) => ship.name === "USS Hammann");
+  assert.ok(escort && escort.hunt, "a US escort carries a depth-charge hunt");
+  const charges = () => b.ships.reduce((n, e) => n + (e.hunt?.charges ?? 0), 0);
+  const start = charges();
+  let dropped = false;
+  for (let i = 0; i < Math.round(120 / STEP); i += 1) {
+    // Hold the boat shallow alongside the escort: this measures the hunt wiring, not evasion.
+    sub.x = escort.x + 600;
+    sub.z = escort.z;
+    sub.sub.depth = 0;
+    sub.sub.mode = "surfaced";
+    sub.surfaced = true;
+    sub.y = 0;
+    b.step(STEP, {});
+    if (charges() < start) dropped = true;
+    if (dropped && sub.hp <= 0) break;
+  }
+  assert.ok(dropped, "the screen never dropped a depth charge on a boat 600 m away");
+  assert.ok(sub.hp <= 0 || sub.hp < 90, `the salvo never hurt the boat; hp ${sub.hp.toFixed(0)}`);
+}
 
 console.log(JSON.stringify({
   pass: true,

@@ -185,6 +185,7 @@ import {
   maxSpeed,
   stepCharge,
   stepDepth,
+  strafeDamage,
   SURFACED_MAX,
   subY,
   type DepthCharge,
@@ -516,6 +517,14 @@ const SUB_DIVE_RATE = 2;
 const SUB_TURN_RATE = 0.05;
 const SUB_TORPEDO_RANGE = 4800;
 const SUB_FIRE_INTERVAL = 25;
+/**
+ * How close a hostile aircraft must be before a boat puts itself under. 1,000 m is about half a
+ * nautical mile — near enough to be overhead, which is what a crash dive answers. A CAP orbiting
+ * the task force a mile and a half away is a sighting to evade, not yet an attack: the gate's
+ * "hostile aircraft overhead" is 200 m, and the observed-carrier attack keeps its CAP at ~1,700 m.
+ * Reasoned from `SUB_DIVE_RATE` and the two gate cases, not a cited figure.
+ */
+const SUB_AIR_THREAT_RANGE = 1000;
 
 /**
  * Escort anti-submarine tuning. A hunt runs on the ops cadence: a held contact is studied, an attack
@@ -538,6 +547,13 @@ const ASW_SINK_RATE = 5;
 const ASW_LETHAL_RADIUS = 40;
 /** Hull damage a co-located charge does, before the falloff scales it. */
 const ASW_CHARGE_DAMAGE = 90;
+/**
+ * A destroyer's own sonar holds a shallow boat inside this range. ASDIC on a 1942 destroyer had an
+ * effective echo range of roughly 1,000-2,500 yards (900-2,300 m) against a submarine; 2,000 m sits
+ * inside that band. Unlike a lookout's report this is the escort's own sensor, so no transmission
+ * delay applies — but it still pays out only a range and a bearing, and the believed depth stays 0.
+ */
+const ASW_SONAR_RANGE = 2000;
 
 /** Seconds between an aircrew's sighting and the fleet holding the report, and a ship's by lamp/TBS. */
 const AIR_REPORT_DELAY = 30;
@@ -2119,12 +2135,9 @@ export class Battle {
         ttl: 2.0,
         type: "gun",
       });
-      if (a === this.player)
-        this.fx("muzzle", {
-          x: a.x + right.x * side * lateral + f.x * 1.7,
-          y: a.y + right.y * side * lateral + f.y * 1.7,
-          z: a.z + right.z * side * lateral + f.z * 1.7,
-        }, 0.55);
+      // The flash belongs at the muzzle, i.e. exactly where the round leaves the wing — not 3.3 m
+      // back beside the pilot's eye, where the cockpit's own field of view cannot see it at all.
+      if (a === this.player) this.fx("muzzle", { x: ox, y: oy, z: oz }, 0.55);
     }
     if (a === this.player) {
       a.heat = 1;
@@ -2646,6 +2659,19 @@ export class Battle {
 
   strikeComplete = false;
 
+  /**
+   * Is a hostile aircraft close enough to menace this boat? The one trigger that puts a boat under
+   * without a shipping contact. `distance2` is a plain distance in metres. A crashing or still
+   * launching airframe is not a threat: it has its own problems.
+   */
+  airThreatNear(s: Any): boolean {
+    for (const a of this.aircraft) {
+      if (a.team === s.team || a.hp <= 0 || a.mode === "crashing" || a.mode === "launch") continue;
+      if (distance2(s, a) <= SUB_AIR_THREAT_RANGE) return true;
+    }
+    return false;
+  }
+
   updateShips(dt: number): void {
     const surface = this.surfaceScratch;
     surface.length = 0;
@@ -2698,12 +2724,16 @@ export class Battle {
         const contact = strikeContact(this, s);
         const fire = canFire(state, this.time);
         // Pick a depth, then earn it. `stepDepth` converges on the wanted mode and `mode` flips only
-        // when the hull is within a metre of it. Nothing surfaces a boat on a timer.
-        const wanted: SubMode = !contact
-          ? "surfaced"
-          : fire.ok || fire.reason === "too deep"
-            ? "periscope"
-            : "deep";
+        // when the hull is within a metre of it. Nothing surfaces a boat on a timer. A hostile
+        // aircraft close overhead puts an idle boat under; a boat already holding a firing solution
+        // presses the attack instead, so the crash dive never starves the torpedo run (AC-16).
+        const wanted: SubMode = this.airThreatNear(s) && !contact
+          ? "deep"
+          : !contact
+            ? "surfaced"
+            : fire.ok || fire.reason === "too deep"
+              ? "periscope"
+              : "deep";
         Object.assign(state, stepDepth(state, wanted, dt, SUB_DIVE_RATE));
         // A reload is finite and its clock belongs to the boat: when it runs out the tubes are ready
         // again, but only while a spare load remains. `applyFire` spends the reload and starts the
@@ -2884,11 +2914,61 @@ export class Battle {
   }
 
   /**
-   * The freshest submarine contact the escort's own fleet holds, nearest to the escort. Only a
-   * delivered report is read: with no held belief there is nothing to hunt, however close the boat
-   * truly is. A stale track is not a contact.
+   * The escort's own sonar: a resident sensor, not a report on the air. With an enemy boat inside
+   * `ASW_SONAR_RANGE` it hands back a fix carrying a RANGE and a BEARING — the two things ASDIC
+   * measures — with a small positional error. It is deliberately no better than that: the believed
+   * DEPTH is still zero (`aswContact`), so a boat that is actually deep draws a shallow-fuzed salvo
+   * and survives. This is what lets the hunt open when no lookout has yet called the boat a
+   * submarine, and it owes no transmission delay because the sensor never leaves the ship.
+   */
+  sonarContact(s: Any): IReport | null {
+    let best: Any = null;
+    let bestD = Infinity;
+    for (const boat of this.ships) {
+      if (boat.team === s.team || boat.sunk || boat.kind !== "sub" || !boat.sub) continue;
+      const d = distance2(s, boat);
+      if (d > ASW_SONAR_RANGE) continue;
+      if (d < bestD) {
+        bestD = d;
+        best = boat;
+      }
+    }
+    if (!best) return null;
+    const range = bestD;
+    return {
+      ...makeContact({
+        id: best.id,
+        team: "us",
+        observerId: s.id,
+        targetId: best.id,
+        observedAt: this.time,
+        delay: 0,
+        x: best.x,
+        z: best.z,
+        heading: best.heading,
+        speed: best.speed,
+        // An echo is an uncertain fix: a few tens of metres, growing with range.
+        errorRadius: 25 + range * 0.05,
+        classification: "submarine",
+        confidence: 0.8,
+      }),
+      name: CLASS_LABELS.submarine,
+      kind: "submarine",
+      time: this.time,
+      identified: false,
+      source: "sonar",
+      reported: false,
+    };
+  }
+
+  /**
+   * The freshest submarine contact the escort can act on: its own sonar first, then the nearest
+   * delivered report its fleet holds. Both feed the same `aswContact` belief, so the hunt is still
+   * built from a range and a bearing, never from the boat's true state.
    */
   huntedContact(s: Any): IReport | null {
+    const sonar = this.sonarContact(s);
+    if (sonar) return sonar;
     let best: IReport | null = null;
     let bestD = Infinity;
     for (const c of this.teamIntel.us.values()) {
@@ -3871,7 +3951,11 @@ export class Battle {
             at = { x: lerp(prev.x, b.x, u), y: top, z: lerp(prev.z, b.z, u) };
           }
           if (at.y > 0 && at.y <= top + 0.2 && overHull(at, s, 1)) {
-            this.damageShip(s, 0.7, at, "strafe", b.team, { owner: b.owner });
+            // Ordinary strafing reaches a boat only inside the shallow blast band; a deep hull is
+            // missed outright rather than sharing a surface ship's damage rectangle.
+            const scale = s.kind === "sub" && s.sub ? strafeDamage(s.sub, 0) : 1;
+            if (scale <= 0) continue;
+            this.damageShip(s, 0.7 * scale, at, "strafe", b.team, { owner: b.owner });
             // A round clanging on steel is an impact cue, not the player's own damage. The HUD
             // flashes on "damage", so a strafe hit on any hull must carry the impact event instead.
             this.event("hit", { distance: distance3(this.player, at), at: { x: at.x, y: at.y, z: at.z }, material: "steel" });
@@ -3914,6 +3998,9 @@ export class Battle {
           const u = (prev.y - top) / (prev.y - b.y || 1);
           const at = { x: lerp(prev.x, b.x, u), y: top, z: lerp(prev.z, b.z, u) };
           if (overHull(at, s, 3)) {
+            // A boat below the shallow blast band is not reached by a bomb that bursts on the
+            // surface: `strafeDamage` returns zero, so the bomb is a miss and the water takes it.
+            if (s.kind === "sub" && strafeDamage(s.sub, 0) <= 0) continue;
             hit = s;
             point = at;
             break;
@@ -3921,7 +4008,8 @@ export class Battle {
         }
       }
       if (hit) {
-        this.damageShip(hit, b.damage || 155, point, "bomb", b.team, { owner: b.owner, stamp: b.stamp });
+        const scale = hit.kind === "sub" ? strafeDamage(hit.sub, 0) : 1;
+        this.damageShip(hit, (b.damage || 155) * scale, point, "bomb", b.team, { owner: b.owner, stamp: b.stamp });
         b.dead = true;
       } else if (b.y <= 0) {
         // A bomb that lands on the atoll hits the one facility it fell on — the radar's hit never
@@ -3937,8 +4025,10 @@ export class Battle {
           for (const s of this.ships) {
             const l = localPoint(b, s);
             const d = Math.hypot(Math.max(0, Math.abs(l.right) - s.hullBeam / 2), Math.max(0, Math.abs(l.forward) - s.hullLength / 2));
-            if (d < 55 && !s.sunk)
-              this.damageShip(s, (b.damage || 155) * 0.4 * (1 - d / 55), b, "bomb", b.team, { owner: b.owner, nearMiss: true, stamp: b.stamp });
+            // A near miss reaches a boat only as far as the same shallow band does.
+            const scale = s.kind === "sub" && s.sub ? strafeDamage(s.sub, 0) : 1;
+            if (d < 55 && !s.sunk && scale > 0)
+              this.damageShip(s, (b.damage || 155) * 0.4 * (1 - d / 55) * scale, b, "bomb", b.team, { owner: b.owner, nearMiss: true, stamp: b.stamp });
           }
         }
         b.dead = true;
@@ -3998,8 +4088,9 @@ export class Battle {
       t.age += dt;
       t.ttl -= dt;
       // One depth-aware screening test for the whole step: a shallow escort is passed under by a
-      // deeper-running weapon, which then carries on to the first hull it can actually reach.
-      const hitId = screenIntercept(t, prev, this.ships, null, dt);
+      // deeper-running weapon, which then carries on to the first hull it can actually reach. The
+      // run's own side never screens it, or a boat would detonate on its own hull at launch.
+      const hitId = screenIntercept(t, prev, this.ships, null, dt, t.team);
       if (!hitId) continue;
       const s = this.ships.find((ship: Any) => ship.id === hitId);
       if (!s) continue;

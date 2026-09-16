@@ -70,6 +70,8 @@ export interface TorpedoShip {
   hullBeam: number;
   draught: number;
   sunk?: boolean;
+  /** The side that owns the hull. `screenIntercept` skips the run's own side when it is given. */
+  team?: string;
 }
 
 export interface TorpedoHit {
@@ -231,11 +233,15 @@ export function screenIntercept(
   escorts: TorpedoShip[],
   target: TorpedoShip | null,
   dt: number,
+  team?: string,
 ): string | null {
   let best: string | null = null;
   let bestT = Infinity;
   const consider = (ship: TorpedoShip | null | undefined) => {
     if (!live(ship)) return;
+    // A run never screens against its own side. Without this a boat that fires from its own hull
+    // finds itself in the sweep and detonates on the tube it just left.
+    if (team !== undefined && ship.team === team) return;
     if (run.runDepth > ship.draught) return; // runs under this hull, so it cannot screen
     const t = crossingEntry(run, prevPos, ship, dt);
     if (t !== null && t < bestT) {
