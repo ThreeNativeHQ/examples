@@ -3872,7 +3872,9 @@ export class Battle {
           }
           if (at.y > 0 && at.y <= top + 0.2 && overHull(at, s, 1)) {
             this.damageShip(s, 0.7, at, "strafe", b.team, { owner: b.owner });
-            this.event("damage", { distance: distance3(this.player, at), at: { x: at.x, y: at.y, z: at.z }, material: "steel" });
+            // A round clanging on steel is an impact cue, not the player's own damage. The HUD
+            // flashes on "damage", so a strafe hit on any hull must carry the impact event instead.
+            this.event("hit", { distance: distance3(this.player, at), at: { x: at.x, y: at.y, z: at.z }, material: "steel" });
             b.ttl = 0;
             break;
           }
