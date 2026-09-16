@@ -158,9 +158,12 @@ Standing gates live in `AGENTS.md` / `CLAUDE.md` / `docs/MIDWAY-HANDOFF.md` (`ch
   `node tools/capture-gunner.mjs` pass (`MIDWAY_URL=http://127.0.0.1:5312`) shows
   `U.S. NAVY / SBD-3` and `U.S. NAVY / TBD-1` in `screenshots/gunner-rear-station-{sbd,tbd}.png`,
   reticle, input and obstruction unchanged.
-- **Player-only cost:** the first-person rear station measures 31,366 triangles / 113 draws, drawn
-  only in the player's own rear view and allocated by no AI aircraft (asserted by `check-aircraft`).
-  No desktop, Android or iOS claim; no `--target` playtest has run.
+- **Player-only cost (measured, CPU stub):** the first-person rear station measures **317,366
+  geometry triangles** — 427,874 instance-weighted rendered triangles, since 27 `InstancedMesh` nodes
+  add 112,572 — over **113 draws** / 24 materials, drawn only in the player's own rear view and
+  allocated by no AI aircraft (asserted by `check-aircraft`). The build report's `317,366` is the
+  geometry count; a later `31,366` was a dropped-digit transcription of it. No desktop, Android or
+  iOS claim; no `--target` playtest has run.
 
 - **First-person rear station pass:** `pnpm typecheck` PASS; `node scripts/check-aircraft.mjs` PASS
   (now also asserting both airframes' FPP muzzles against `rearGunMuzzle` at neutral and angled aim,
