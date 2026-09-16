@@ -255,7 +255,6 @@ export class Midway extends Scene<GameState, undefined> {
     this.wall += dt;
     const b = this.battle;
     const inFlight = b.status === "playing" && !this.paused;
-    let speed = 1;
     if (inFlight) {
       let turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
       // Inverted pitch, as a flight-sim stick: pulling back (Down) raises the nose. The mouse
@@ -271,7 +270,12 @@ export class Midway extends Scene<GameState, undefined> {
         fire: this.keys.has("Space") || this.mouse.fire,
       };
       this.world.rear = this.keys.has("KeyV");
-      speed = (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && b.canAccelerate() ? 3 : 1;
+      // Shift is a simulation control only: it runs extra fixed steps, and never touches
+      // thrust, the camera, animation rates or audio. `canAccelerate()` gates it to level
+      // flight above 120 m, undamaged, with no enemy aircraft within 2400 m or ship within
+      // 2800 m, so it can never fast-forward a fight.
+      const speed =
+        (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && b.canAccelerate() ? 3 : 1;
       for (let i = 0; i < speed; i += 1) b.step(1 / 60, input);
       for (const e of b.events.splice(0)) {
         this.audio.event(e);
@@ -280,7 +284,7 @@ export class Midway extends Scene<GameState, undefined> {
       }
     }
     this.world.update(this.paused ? 0 : dt, this.wall, b.status === "briefing");
-    this.hud.update(dt, speed);
+    this.hud.update(dt);
     const p = b.player;
     const onShip = p.mode === "deck" || p.mode === "launch" || p.mode === "arrest" || p.mode === "service";
     const nearShip = onShip || b.ships.some((s: any) => s.team === "us" && s.kind === "carrier" && !s.sunk && distance2(s, p) < 1800 * 1800);
