@@ -536,10 +536,10 @@ export class Midway extends Scene<GameState, undefined> {
       return;
     }
     this.audio.start();
+    // The controls live in the persistent lower-centre hint; this transient line only says who has
+    // the stick, so the two rows never repeat each other.
     this.hud.toast(
-      b.player.rearAmmo > 0
-        ? "REAR GUNNER — AI PILOT · WASD/DRAG AIM · SPACE FIRE · Y PILOT"
-        : "REAR GUN EMPTY — INSPECT STATION · Y PILOT",
+      b.player.rearAmmo > 0 ? "AI PILOT HAS THE STICK" : "REAR GUN EMPTY — INSPECT STATION · Y PILOT",
     );
   }
 

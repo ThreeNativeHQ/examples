@@ -13,10 +13,12 @@ import {
 } from "./math.js";
 import { aircraftWorld, damageModifiers, initDamage, poseAxes, stepDamage } from "./damage.js";
 import {
+  REAR_GUN_MOUNTS,
   rearGunHitsOwnTail,
   rearGunMountFor,
   rearGunMuzzle,
   rearGunTailBoxFor,
+  type RearGunMount,
 } from "./gun-mount.js";
 import { torpedoEnvelope, torpedoIntercept, updateStores } from "./armament.js";
 import { AircraftFlight, DECK_HEIGHT, initFlightState, SEA_WIND, steerToward, type ISteerLimits } from "./flight.js";
@@ -575,6 +577,20 @@ export const REAR_GUN_DOT = -0.6;
 export const REAR_GUN_ELEVATION = -0.13;
 
 /**
+ * The mount a rear gun fires from. The Douglas and TBD carry the approved two-mouth asset, so their
+ * measured mount is used directly. Any other airframe that actually carries rear rounds (the Kate's
+ * Type 92, a Val's defensive gun) keeps the long-standing generic SBD-derived muzzle rather than
+ * falling silent just because it lacks the new Douglas mount; an aircraft with an empty rear rack
+ * still has none. Keyed on the loaded rounds, not the gun table, because some rear-armed types
+ * (the Val) carry their capacity outside `GUN_BATTERIES`.
+ */
+function rearMountFor(a: Any): RearGunMount | null {
+  const mount = rearGunMountFor(a.airframe);
+  if (mount) return mount;
+  return a.rearAmmo > 0 ? REAR_GUN_MOUNTS.sbd! : null;
+}
+
+/**
  * One round from the tail gun, aimed along a world-space direction. Both the AI gunner and the
  * manned station fire through this, so the muzzle, event, tracer speed, ammunition and credit can
  * never drift apart between the two callers. The muzzle is one of the approved gun's own two mouths,
@@ -583,7 +599,7 @@ export const REAR_GUN_ELEVATION = -0.13;
  * cooldown and ammo test. Returns whether a round left the gun.
  */
 function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: number): boolean {
-  const mount = rearGunMountFor(a.airframe);
+  const mount = rearMountFor(a);
   if (!mount) return false;
   const len = Math.hypot(dx, dy, dz) || 1;
   const nx = dx / len;
@@ -597,7 +613,9 @@ function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: nu
   const lz = -(nx * frame.f.x + ny * frame.f.y + nz * frame.f.z);
   const yaw = Math.atan2(lx, lz);
   const pitch = Math.asin(clamp(ly, -1, 1));
-  const barrel = (a.rearBarrel = a.rearBarrel ? 0 : 1);
+  // The candidate barrel is chosen but not committed: a refused shot (crossing the fin) must not
+  // flip the barrel, so the two mouths only alternate on rounds that actually leave the gun.
+  const barrel = a.rearBarrel ? 0 : 1;
   const mouth = rearGunMuzzle(mount, barrel, yaw, pitch);
   const local = [
     mount.pivot[0] + mouth[0],
@@ -606,6 +624,7 @@ function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: nu
   ] as const;
   const tail = rearGunTailBoxFor(a.airframe);
   if (tail && rearGunHitsOwnTail(tail, local, [lx, ly, lz])) return false;
+  a.rearBarrel = barrel;
   const muzzle = aircraftWorld(a, { x: local[0], y: local[1], z: local[2] });
   const mx = muzzle.x;
   const my = muzzle.y;
@@ -644,12 +663,22 @@ export function fireRearManual(
   fire: boolean,
   dt: number,
 ): void {
-  if (a.mode === "crashing" || !(a.rearAmmo > 0)) return;
+  if (a.mode === "crashing" || !(a.rearAmmo > 0)) {
+    a.rearBlocked = false;
+    return;
+  }
   a.rearTimer = Math.max(0, (a.rearTimer || 0) - dt);
-  if (!fire || !aim || a.rearTimer > 0) return;
+  if (!fire || !aim || a.rearTimer > 0) {
+    a.rearBlocked = false;
+    return;
+  }
   // A refused shot (the round would cross the fin) leaves the trigger free, so holding it fires the
-  // moment the aim clears rather than waiting out a cadence for a round that never left.
-  a.rearTimer = rearShot(b, a, aim.x, aim.y, aim.z, 3) ? 0.08 : 0;
+  // moment the aim clears rather than waiting out a cadence for a round that never left. `rearBlocked`
+  // is the visible cue's source: the player is looking down the barrels, so a silent refusal reads as
+  // a broken gun unless the HUD says the airframe is in the way.
+  const fired = rearShot(b, a, aim.x, aim.y, aim.z, 3);
+  a.rearBlocked = !fired;
+  a.rearTimer = fired ? 0.08 : 0;
 }
 
 export function rearGunner(b: Any, a: Any, dt: number): void {

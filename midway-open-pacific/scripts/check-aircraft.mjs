@@ -114,7 +114,7 @@ try {
   });
   const mountPath = resolve(temporary, "gun-mount.mjs");
   await writeFile(mountPath, mountOutput.outputFiles[0].text);
-  const { REAR_GUN_MOUNTS } = await import(pathToFileURL(mountPath).href);
+  const { REAR_GUN_MOUNTS, REAR_GUN_TAIL } = await import(pathToFileURL(mountPath).href);
   const testTexture = new Texture();
   const sourceMesh = loaded.scene.getObjectByName("defaultMaterial_node_18");
   sourceMesh.material.map = testTexture;
@@ -185,13 +185,51 @@ try {
       1e-6,
     `the drawn SBD gun pivot equals the fired mount: ${pivotWorld.toArray()}`,
   );
-  // The baked grip is a real hold: both hands land on the receiver at the hinge, so the man is not
-  // still resting them on his thighs (the pose the previous lane flagged).
-  for (const [side, bone] of [["left", "hand_l"], ["right", "hand_r"]]) {
-    const hand = airplane.userData.gunnerRig.root.getObjectByName(bone);
-    assert.ok(hand, `the gunner rig has its ${side} hand`);
-    const d = hand.getWorldPosition(new Vector3()).distanceTo(pivotWorld);
-    assert.ok(d < 0.6, `the ${side} hand holds the gun receiver: ${d.toFixed(3)} m from the hinge`);
+  // The fin guard is measured, not convenient. Re-read the SBD's vertical-tail meshes and assert the
+  // sim box's real bottom/top/thickness and z-span against them, so a box drawn above the barrel line
+  // to let level shots through can never come back without failing here.
+  const finBox = new Box3();
+  for (const finMesh of ["defaultMaterial_node_11", "defaultMaterial_node_10", "defaultMaterial_node_9"]) {
+    const node = airplane.getObjectByName(finMesh);
+    if (node) finBox.expandByObject(node);
+  }
+  const tail = REAR_GUN_TAIL.sbd;
+  const finChecks = [
+    ["halfWidth", finBox.max.x, tail.halfWidth],
+    ["base", finBox.min.y, tail.base],
+    ["top", finBox.max.y, tail.top],
+    ["z", finBox.min.z, tail.z],
+    ["z+reach", finBox.max.z, tail.z + tail.reach],
+  ];
+  for (const [label, measured, declared] of finChecks)
+    assert.ok(
+      Math.abs(measured - declared) < 0.03,
+      `the SBD fin guard ${label} is the measured geometry: ${measured.toFixed(3)} vs ${declared}`,
+    );
+  // The baked grip must actually hold the grips, not merely sit "near the hinge": both wrist bones
+  // are measured in the gunner rig's own local frame against the accepted grip targets at several
+  // phases of the seated clip. A rest-space drift in the graft moves the hands off the grips and this
+  // fails, where the old 60 cm hinge proximity would still pass. Targets come from the approved bake
+  // (`tools/extract-gunner-grip.mjs`), in metres of the rig root frame.
+  const GRIP_TARGETS = { hand_l: [0.28, 1.02, 0.12], hand_r: [-0.18, 1.02, 0.1] };
+  const gripRoot = airplane.userData.gunnerRig.root;
+  const gunnerRig = airplane.userData.gunnerRig;
+  const sitClip = pilotSource.animations.find((clip) => clip.name === "sit");
+  assert.ok(sitClip, "the pilot rig ships the sit clip the grip is grafted onto");
+  for (const phase of [0, 0.45, 0.9]) {
+    gunnerRig.mixer.setTime(sitClip.duration * phase);
+    gunnerRig.update(0);
+    airplane.updateMatrixWorld(true);
+    for (const [bone, target] of Object.entries(GRIP_TARGETS)) {
+      const hand = gripRoot.getObjectByName(bone);
+      assert.ok(hand, `the gunner rig has its ${bone}`);
+      const local = gripRoot.worldToLocal(hand.getWorldPosition(new Vector3()));
+      const d = local.distanceTo(new Vector3(...target));
+      assert.ok(
+        d < 0.08,
+        `${bone} holds its grip at sit phase ${phase}: ${local.toArray().map((v) => v.toFixed(3))} is ${d.toFixed(3)} m off ${target}`,
+      );
+    }
   }
   airplane.userData.gunner.visible = false;
   assert.equal(gunFittings.visible, true, "hiding the gunner leaves the seat and fittings");

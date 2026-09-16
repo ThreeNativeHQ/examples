@@ -183,12 +183,14 @@ const PILOT_SEAT: readonly [number, number, number] = [0, -0.2, -1.81];
 /**
  * The station aft of which the Douglas canopy glass is cut away, in the aircraft's own frame.
  *
- * Chosen 0.4 m behind the pilot's eye (z = -1.650) so he keeps the whole forward greenhouse while
- * the gunner at z = -0.763 stands in an open rear cockpit, matching the SBD-3's fixed forward
- * windscreen and open after station better than the supplied all-enclosing pane. The measured glass
- * runs z = -2.871…0.199, so this removes only the after third.
+ * Kept ~0.44 m behind the pilot's eye (z = -1.650) so he keeps the whole forward greenhouse while
+ * the gunner at z = -0.763 stands in an open rear cockpit. The measured frame runs z = -2.697…0.129
+ * and its transverse hoops sit at z ≈ -2.31, -1.96, -1.58, -1.21, -0.87, -0.29. The cut is placed on
+ * the **-1.21 hoop** rather than between hoops: cutting mid-span left the longitudinal rails with
+ * open, unjoined ends behind the pilot (root's SBD stub), and a cut on a hoop leaves that hoop's
+ * remains as the opening's rear lip.
  */
-const REAR_OPEN_Z = -1.25;
+const REAR_OPEN_Z = -1.21;
 
 /**
  * A clone of `mesh`'s geometry with everything aft of the plane z = `aftOf` cut away, in the

@@ -139,6 +139,51 @@ seeded.setGunner(true);
 seeded.step(1 / 60, { fire: true });
 assert.equal(seeded.player.rearAmmo, rearRoundsFor('sbd') - 1, 'a burst drains the seeded rear capacity');
 
+// 6d. Non-Douglas rear-armed types keep the generic muzzle: the Kate's single Type 92 and a Val's
+// defensive gun still fire at a target dead astern, even though neither carries the Douglas mount.
+for (const [airframe, kind, rear] of [['kate', 'torpedo', 582], ['val', 'bomber', 240]]) {
+  const force = airborne();
+  const wing = {
+    id: `ai-${airframe}`, team: 'us', kind, airframe, home: force.ships[0].id,
+    x: 0, y: 1000, z: 0, heading: 0, pitch: 0, roll: 0, speed: 95, hp: 95, maxHp: 95,
+    ammo: 350, rearAmmo: rear, rearTimer: 0, mode: 'flight', age: 0, think: 0, target: null,
+    gunTimer: 0, attackCooldown: 0, wing: true, phase: 0, vx: 0, vy: 0, vz: 0, fuel: 100, fuelCapacity: 100,
+  };
+  force.aircraft.push(wing, enemyAt(0, 1000, 200));
+  force.updateAircraft(1 / 60);
+  assert.equal(wing.rearAmmo, rear - 1, `friendly AI ${airframe.toUpperCase()} rear gun still fires`);
+}
+
+// 6e. The briefing loadout sets the airframe's own rear capacity: the TBD's 600, and the SBD's
+// 1200 on the way back. This is the path the deck select really uses (`selectLoadout`).
+const brief = new Battle();
+assert.equal(brief.selectLoadout('torpedo'), true, 'the briefing accepts the torpedo loadout');
+assert.equal(brief.player.airframe, 'tbd');
+assert.equal(brief.player.rearAmmo, 600, 'the briefing TBD starts with its 600 rear rounds');
+assert.equal(brief.selectLoadout('bomb'), true, 'the briefing accepts the bomb loadout again');
+assert.equal(brief.player.airframe, 'sbd');
+assert.equal(brief.player.rearAmmo, 1200, 'returning to the SBD restores its 1200 rear rounds');
+
+// 6f. A deck swap is never a free ammunition refill: with the carrier's ammo store empty the carried
+// rounds are capped to the new gun's capacity; with a store present exactly one unit is spent.
+const swap = new Battle();
+swap.start();
+swap.player.loadout = 'bomb';
+swap.player.airframe = 'sbd';
+swap.player.rearAmmo = 100;
+swap.home.air.stores.ammo = 0;
+swap.home.air.stores.torpedo = 5;
+assert.equal(swap.selectLoadout('torpedo'), true, 'the deck accepts the swap with no ammo store');
+assert.equal(swap.player.airframe, 'tbd');
+assert.equal(swap.player.rearAmmo, 100, 'an empty ammo store never tops the rear gun up on a swap');
+assert.equal(swap.home.air.stores.ammo, 0, 'no store was spent when none was aboard');
+swap.home.air.stores.ammo = 1;
+swap.home.air.stores.bomb = 5;
+assert.equal(swap.selectLoadout('bomb'), true, 'the deck accepts the swap with a store aboard');
+assert.equal(swap.player.airframe, 'sbd');
+assert.equal(swap.player.rearAmmo, 1200, "a store aboard loads the new airframe's full rear capacity");
+assert.equal(swap.home.air.stores.ammo, 0, 'the swap spends exactly one ammunition store');
+
 // 7. The station is left on a crash, a touchdown and a recovery.
 const crashed = airborne();
 crashed.setGunner(true);
@@ -182,7 +227,7 @@ assert.equal(cadence.player.rearAmmo, 238, 'a one-tick tap fires after the coold
 // the airframe's real attitude; the two barrels alternate without doubling the ammunition, and a
 // real round damages a target dead astern.
 const mountOutput = await build({ entryPoints: ['src/sim/gun-mount.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
-const { REAR_GUN_MOUNTS } = await import(`data:text/javascript;base64,${Buffer.from(mountOutput.outputFiles[0].text).toString('base64')}`);
+const { REAR_GUN_MOUNTS, rearGunMuzzle } = await import(`data:text/javascript;base64,${Buffer.from(mountOutput.outputFiles[0].text).toString('base64')}`);
 const mount = REAR_GUN_MOUNTS.sbd;
 const rear = airborne();
 rear.player.rearAmmo = 240;
@@ -190,6 +235,9 @@ rear.player.ammo = 1400;
 tick(rear, 1.5, { turn: 1 });
 assert.ok(Math.abs(rear.player.roll) > 0.3, 'the firing aircraft is actually banked');
 rear.setGunner(true);
+// A non-zero station aim, so the muzzle is checked after its own yaw and pitch, not only at rest.
+rear.player.gunnerYaw = 0.5;
+rear.player.gunnerPitch = 0.2;
 rear.step(1 / 60, { fire: true });
 const first = rear.bullets.find((b) => b.owner === 'player');
 assert.ok(first, 'a banked rear gunner still fires');
@@ -198,7 +246,7 @@ const ua = { x: 2 * (q.x * q.y - q.z * q.w), y: 1 - 2 * (q.x * q.x + q.z * q.z),
 const fa = { x: -2 * (q.x * q.z + q.y * q.w), y: -2 * (q.y * q.z - q.x * q.w), z: -(1 - 2 * (q.x * q.x + q.y * q.y)) };
 const ra = { x: 1 - 2 * (q.y * q.y + q.z * q.z), y: 2 * (q.x * q.y + q.z * q.w), z: 2 * (q.x * q.z - q.y * q.w) };
 const localMuzzle = (barrel) => {
-  const m = mount.mouths[barrel];
+  const m = rearGunMuzzle(mount, barrel, rear.player.gunnerYaw, rear.player.gunnerPitch);
   return { x: mount.pivot[0] + m[0], y: mount.pivot[1] + m[1], z: mount.pivot[2] + m[2] };
 };
 const worldOf = (p) => ({
@@ -231,20 +279,26 @@ const hp = behind.hp;
 for (let i = 0; i < 40 && behind.hp >= hp; i += 1) rear.step(1 / 60, {});
 assert.ok(behind.hp < hp, 'a real rear-gun round damaged the target, not just the ammo counter');
 
-// 10b. A round that would cross the aircraft's own fin is refused, so the gun never fires through
-// its own tail; levelling the aircraft clears the same shot.
+// 10b. The measured fin is a thin slab the two barrels straddle: a dead-astern level shot clears it,
+// but a round yawed toward the centreline enters the fin and is refused. A refused shot spends no
+// round and never flips the barrel, so the two mouths only alternate on rounds that actually leave.
 const guarded = airborne();
 guarded.setGunner(true);
-guarded.player.gunnerYaw = 0;
-guarded.player.gunnerPitch = 0.25;
+guarded.player.rearBarrel = 1; // the next round leaves the port mouth at x = -0.091
+guarded.player.gunnerYaw = 5 * (Math.PI / 180); // yawed toward the centreline, into the fin band
+guarded.player.gunnerPitch = 0;
 guarded.player.rearTimer = 0;
 guarded.player.rearAmmo = 240;
 guarded.step(1 / 60, { fire: true });
-assert.equal(guarded.player.rearAmmo, 240, 'a shot into the fin is refused');
-guarded.player.gunnerPitch = -0.1;
+assert.equal(guarded.player.rearAmmo, 240, 'a round yawed into the fin is refused');
+assert.equal(guarded.player.rearBarrel, 1, 'a refused shot never flips the barrel');
+assert.equal(guarded.bullets.filter((b) => b.owner === 'player').length, 0, 'a refused shot fires no round');
+// The same trigger, aimed straight aft, straddles the thin fin and fires at once.
+guarded.player.gunnerYaw = 0;
 guarded.player.rearTimer = 0;
 guarded.step(1 / 60, { fire: true });
-assert.equal(guarded.player.rearAmmo, 239, 'a level shot clear of the fin fires');
+assert.equal(guarded.player.rearAmmo, 239, 'a dead-astern shot clears the straddled fin');
+assert.equal(guarded.player.rearBarrel, 0, 'only the clearing shot flips the barrel');
 
 // 11. The visual pivot's Euler mapping agrees with the sim aim, so the sight and barrel cannot drift.
 const pivot = airborne();

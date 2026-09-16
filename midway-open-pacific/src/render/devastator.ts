@@ -576,11 +576,9 @@ function buildModel(detail: "hero" | "ai"): DevastatorModel {
     if (!ai) for (let i = 0; i < 5; i++) rod([-2.93 + i * 0.1, 0.55, side * 0.43], [-2.93 + i * 0.1, 0.61, side * 0.43], 0.01, M.steel!, cockpit);
   }
   box([0.3, 0.3, 0.48], [0.17, 0.48, 0], M.black!, cockpit);
-  if (!ai) {
-    rod([0.82, 0.61, 0], [1.15, 0.8, 0], 0.035, M.dark!, cockpit);
-    rod([1.05, 0.8, 0], [1.75, 0.85, 0], 0.027, M.dark!, cockpit, 0.018, 12);
-    box([0.26, 0.1, 0.09], [1.0, 0.78, 0], M.dark!, cockpit);
-  }
+  // No legacy rear gun is drawn here: the approved twin-mount asset (`createSeatedStation`'s
+  // `gun: true`) is the one rear weapon on the airframe. The old rod pedestal, barrel and magazine
+  // that used to sit under it are removed so two guns never overlap in the rear station.
   batch(cockpit);
 
   const canopyStations: Station[] = [

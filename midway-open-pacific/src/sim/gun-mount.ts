@@ -51,8 +51,9 @@ export function rearGunMountFor(airframe: string | undefined): RearGunMount | nu
 /**
  * One muzzle tip in the airframe frame, after the gun's own yaw and pitch. `R = Ry(yaw)·Rx(-pitch)`
  * is exactly the pivot rotation the renderer applies (`rearGunPivotEuler`), so the drawn barrel and
- * the fired round leave the same mouth. Angles are the station's: yaw positive to the gunner's
- * right, pitch positive upward.
+ * the fired round leave the same mouth. Angles are the airframe's: positive yaw swings the muzzle to
+ * the aircraft's starboard (+X), which is the gunner's left because he faces aft; the manned
+ * station's input is mapped to his own screen-right, not to +X. Pitch positive is upward.
  */
 export function rearGunMuzzle(
   mount: RearGunMount,
@@ -72,27 +73,36 @@ export function rearGunMuzzle(
 }
 
 /**
- * The fin box a rear-gun round must not pass through, in the airframe frame. A **simple, shared,
- * geometry-derived silhouette guard**: centred on the sim's own tail damage datum (`damage.ts`
- * ZONE_POSITIONS.tail`) and sized to the fin mast rather than the whole tailplane. It is a coarse
- * approximation of the tail, deliberately conservative, not a claim the gun is otherwise clear.
+ * The fin box a rear-gun round must not pass through, in the airframe frame. The bounds are the
+ * **measured** vertical-tail extents of each shipped airframe, not a convenience offset:
+ *
+ * - SBD: `aircraft.douglas-sbd3.glb`'s fin and rudder meshes, transformed by `createDouglas`
+ *   (span 12.66 m, +Y 0.35). The fin slab is only ±0.04 m thick; the two barrels sit at x = ±0.091,
+ *   so a dead-astern level round **straddles the fin and is genuinely clear**. The guard only
+ *   refuses a round yawed toward the centreline that enters that thin band.
+ * - TBD: `devastator.ts`'s `vertical_stabilizer`/`rudder` (fin extrude depth 0.12, bevel 0.025 →
+ *   half-thickness 0.085), so its barrels also straddle the fin.
+ *
+ * The bottom is the fin's real root, not a line drawn above the barrel to let level shots through.
  */
 export interface RearGunTailBox {
-  /** Aft extent of the fin's leading edge. */
+  /** Forward extent of the fin's leading edge, from the airframe origin. */
   z: number;
-  /** Muzzle-to-box depth tested for an intersection. */
+  /** Aft reach of the box (to the rudder's trailing edge) past `z`. */
   reach: number;
-  /** Half the fin's thickness along X. */
+  /** Half the fin's measured thickness along X. */
   halfWidth: number;
-  /** Bottom of the fin slab: just above the barrel line, so a level or depressed shot is clear. */
+  /** Measured bottom of the fin slab. */
   base: number;
-  /** Fin top above the aircraft origin. */
+  /** Measured top of the fin. */
   top: number;
 }
 
 export const REAR_GUN_TAIL: Readonly<Record<string, RearGunTailBox>> = Object.freeze({
-  sbd: { z: 3.4, reach: 1.5, halfWidth: 0.2, base: 0.98, top: 2.4 },
-  tbd: { z: 4.6, reach: 1.6, halfWidth: 0.2, base: 1.19, top: 2.6 },
+  // SBD fin+rudder: x ±0.04, y 0.47–2.31, z 1.18–4.94 (GLB words, createDouglas frame).
+  sbd: { z: 1.18, reach: 3.76, halfWidth: 0.04, base: 0.47, top: 2.31 },
+  // TBD fin+rudder: half-thickness 0.085, y 0.10–2.66, z 3.33–5.55 (devastator.ts, -PI/2 yaw frame).
+  tbd: { z: 3.33, reach: 2.22, halfWidth: 0.085, base: 0.1, top: 2.66 },
 });
 
 /** The fin box for an airframe, or null where none is recorded. */

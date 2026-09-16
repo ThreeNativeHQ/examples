@@ -939,8 +939,8 @@ export class Battle {
       return false;
     }
     if (p.loadout === id) return true;
+    const air = this.home?.air;
     if (this.status === "playing") {
-      const air = this.home?.air;
       const family = storeFamilyOf(LOADOUTS[id].airframe);
       if (!air || (air.stores[family] ?? 0) < 1) {
         this.event("notice", { text: `NO ${family === "torpedo" ? "TORPEDOES" : "BOMBS"} ABOARD — LOADOUT UNCHANGED` });
@@ -954,9 +954,24 @@ export class Battle {
         air.stores[returned] = (air.stores[returned] ?? 0) + 1;
       }
     }
+    const carriedRear = p.rearAmmo ?? 0;
+    const beforeAirframe = p.airframe;
     const ok = applyLoadout(p, id);
-    if (ok) this.playerFlight.setAirframe(p.airframe);
-    return ok;
+    if (!ok) return false;
+    // A swap to a different airframe loads that aircraft's own gun battery, and on deck that load
+    // comes out of the same finite ammunition store the rearm uses. With the store empty the rounds
+    // already carried are capped to the new gun's capacity, so a deck swap is never a free top-up.
+    if (this.status === "playing" && beforeAirframe !== p.airframe) {
+      const rear = rearRoundsFor(p.airframe);
+      if (rear > 0 && air && (air.stores.ammo ?? 0) >= 1) {
+        air.stores.ammo -= 1;
+        p.rearAmmo = rear;
+      } else {
+        p.rearAmmo = Math.min(carriedRear, rear);
+      }
+    }
+    this.playerFlight.setAirframe(p.airframe);
+    return true;
   }
 
   toggleGear(): void {

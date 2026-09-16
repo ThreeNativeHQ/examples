@@ -38,6 +38,11 @@ export const LOADOUTS: Record<string, ILoadout> = Object.freeze({
 export function applyLoadout(p: Any, id: string): boolean {
   const load = LOADOUTS[id];
   if (!load) return false;
+  // A different airframe is a different aircraft and brings its own rear-gun capacity (the SBD's
+  // 1200, the TBD's 600). Applying the same loadout — a deck rearm — leaves every ammunition
+  // counter alone, so the carrier's finite stores stay the only refill and a rearm cannot top up
+  // the rear gun for free.
+  const airframeChanged = p.airframe !== load.airframe;
   Object.assign(p, {
     loadout: id,
     airframe: load.airframe,
@@ -45,6 +50,7 @@ export function applyLoadout(p: Any, id: string): boolean {
     bombs: load.bombs,
     torpedo: load.torpedo,
   });
+  if (airframeChanged) p.rearAmmo = rearRoundsFor(load.airframe);
   if (id === "torpedo") {
     p.brakes = false;
     p.brakePos = 0;

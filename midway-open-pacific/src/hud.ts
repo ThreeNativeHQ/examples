@@ -215,6 +215,9 @@ export class Hud {
       else if (p.ias < 39) warning = "LOW AIRSPEED — UNLOAD WING";
       else if (p.hp < 25) warning = "AIRFRAME CRITICAL";
       else if (p.fuel < 15) warning = "LOW FUEL";
+      // The rear gun refuses a round that would cross the aircraft's own tail. The player is looking
+      // down the barrels, so without this cue the refusal reads as a jammed gun.
+      else if (p.gunner === true && p.rearBlocked === true) warning = "AIRFRAME BLOCKS FIRE";
     }
     $("warning").textContent = warning;
     const recent = b.radio.filter((r: any) => b.time - r.time < 23).slice(0, 2);
