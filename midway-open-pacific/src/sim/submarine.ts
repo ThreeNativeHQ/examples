@@ -36,7 +36,16 @@ export const SURFACE_DEPTH = 0;
 export const PERISCOPE_DEPTH = 13;
 export const DEEP_DEPTH = 60;
 
+/**
+ * 9.8 m/s ≈ 19.0 kn: one gameplay value for both boats, between the cited designed figures — I-168
+ * 23 kn (11.83 m/s) and Nautilus 17 kn (8.75 m/s), `docs/reference-dimensions.md` §§9-10 — not a trial
+ * figure for either. Both boats share it so the behaviour layer has one surfaced limit to enforce.
+ */
 export const SURFACED_MAX = 9.8;
+/**
+ * 4.1 m/s ≈ 8.0 kn: Nautilus's 8 kn submerged (4.12 m/s, DANFS) and I-168's 8.2 kn (4.22 m/s),
+ * `docs/reference-dimensions.md` §§9-10, rounded to one shared gameplay value.
+ */
 export const SUBMERGED_MAX = 4.1;
 /** A flat battery still leaves steerage way, but no useful attack speed. */
 export const CRAWL_SPEED = 1.2;

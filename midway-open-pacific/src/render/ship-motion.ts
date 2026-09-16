@@ -102,8 +102,8 @@ const DRAUGHT_DEFAULT = 4.6;
  *   A hull cannot float with its keel above the waterline, so until the depth passes the draught the
  *   boat simply floats (`motion.y` lifts `s.y` back to the surface), and every metre past it sinks
  *   the waterline by a metre. That is what makes periscope depth put the periscope — and nothing
- *   more — at the surface: I-168's keel-to-periscope is the 13.5 m `catalog.ts` measures, so 14 m of
- *   keel depth leaves 0.5 m of it showing.
+  *   more — at the surface: I-168's keel-to-masthead is the 13.5 m `catalog.ts` measures, so the 13 m
+  *   `PERISCOPE_DEPTH` leaves 0.5 m of it showing.
  * - **The swell fades with depth.** `wavePose` runs on `submergence(depth)` of the surface motion,
  *   so a surfaced boat rides the swell, a periscope bobs at 39 % of it, and a deep boat is still.
  * - **Attitude is the path angle.** A hull points along the water it is travelling through, so a
