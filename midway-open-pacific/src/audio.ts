@@ -310,7 +310,16 @@ export class Soundscape {
       Object.entries({ ...CUE_FILES, ...SPEECH_FILES }).map(async ([key, path]) => [key, await assets.audio(path)] as const),
     );
     const buffers = new Map<string, AudioBuffer>();
-    for (const result of entries) if (result.status === "fulfilled") buffers.set(result.value[0], result.value[1]);
+    const failed: string[] = [];
+    const names = Object.keys({ ...CUE_FILES, ...SPEECH_FILES });
+    entries.forEach((result, index) => {
+      if (result.status === "fulfilled") buffers.set(result.value[0], result.value[1]);
+      else failed.push(`${names[index]}: ${String((result as PromiseRejectedResult).reason).slice(0, 90)}`);
+    });
+    // Reported only when something failed: the doc comment promised a missing file is reported
+    // once, and a per-boot "140 loaded" line is noise the gates had to ignore.
+    if (failed.length > 0)
+      console.warn(`Audio: ${failed.length} packaged cue(s) failed to load; those cues stay silent: ${failed.slice(0, 12).join("; ")}`);
     return buffers;
   }
 

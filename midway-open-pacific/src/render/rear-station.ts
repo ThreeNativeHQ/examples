@@ -55,7 +55,7 @@ function tex(
   draw: (c: CanvasRenderingContext2D, w: number, h: number) => void,
   srgb = true,
   repeat = 1,
-): T.CanvasTexture | null {
+): T.Texture | null {
   if (!canCanvas()) return null;
   const t = canvasTexture(w, h, draw);
   t.colorSpace = srgb ? T.SRGBColorSpace : T.NoColorSpace;
@@ -399,7 +399,7 @@ function mergeStatic(root: T.Group): void {
 
 type ShellMaterials = Record<string, T.Material> & { glass: T.Material };
 
-function normalFromHeight(c: HTMLCanvasElement, strength = 1.8): T.CanvasTexture | null {
+function normalFromHeight(c: HTMLCanvasElement, strength = 1.8): T.Texture | null {
   const s = c.width;
   const h = c.height;
   const ctx = c.getContext("2d", { willReadFrequently: true })!;
@@ -991,7 +991,7 @@ function srgb(t: T.Texture): T.Texture {
   return t;
 }
 
-function surfaceMap(kind: "paint" | "steel" | "brass", seed: number): T.CanvasTexture | null {
+function surfaceMap(kind: "paint" | "steel" | "brass", seed: number): T.Texture | null {
   if (!canCanvas()) return null;
   const rand = rng(seed);
   const base = kind === "paint" ? [91, 96, 66] : kind === "brass" ? [148, 116, 64] : [67, 72, 77];
@@ -1041,7 +1041,7 @@ function makeGunMaterials(): GunMaterials {
   const paintMap = surfaceMap("paint", 81);
   const brassMap = surfaceMap("brass", 37);
   const standard = (props: T.MeshStandardMaterialParameters): T.MeshStandardMaterial => new T.MeshStandardMaterial(props);
-  const mk = (map: T.CanvasTexture | null, props: T.MeshStandardMaterialParameters): T.MeshStandardMaterial => {
+  const mk = (map: T.Texture | null, props: T.MeshStandardMaterialParameters): T.MeshStandardMaterial => {
     if (!map) return standard(props);
     return standard({ ...props, map, bumpMap: map });
   };
@@ -1051,7 +1051,7 @@ function makeGunMaterials(): GunMaterials {
   const steel = mk(steelMap, { metalness: 0.84, roughness: 0.38, bumpScale: 0.0035, envMapIntensity: 1.25, color: 0xd0dae4 });
   const paint = mk(paintMap, { metalness: 0.58, roughness: 0.6, bumpScale: 0.002, envMapIntensity: 0.75, color: 0xffffff });
   const brass = mk(brassMap, { metalness: 0.72, roughness: 0.52, envMapIntensity: 0.8, color: 0xc9b98f });
-  const textures = [steelMap, paintMap, brassMap].filter((t): t is T.CanvasTexture => t !== null).map(srgb);
+  const textures = [steelMap, paintMap, brassMap].filter((t): t is T.Texture => t !== null).map(srgb);
   return {
     steel,
     paint,

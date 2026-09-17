@@ -1,0 +1,17 @@
+{
+  "name": "midway-native-cockpit",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    { "kind": "input", "label": "throttle", "press": "KeyW", "holdTicks": 900, "release": true },
+    { "kind": "input", "label": "rotate", "press": "ArrowDown", "holdTicks": 60, "release": true },
+    { "kind": "wait", "label": "climb", "waitTicks": 300, "release": true },
+    { "kind": "input", "label": "cockpit", "press": "F1", "holdTicks": 4, "release": true },
+    { "kind": "wait", "label": "look", "waitTicks": 180, "release": true, "screenshot": "native-cockpit.png" }
+  ],
+  "assert": {
+    "resources": [
+      { "id": "state", "path": "airborne", "atSteps": [{ "label": "climb", "equals": true }] }
+    ]
+  }
+}

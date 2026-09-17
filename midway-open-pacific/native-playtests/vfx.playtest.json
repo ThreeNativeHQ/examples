@@ -1,0 +1,18 @@
+{
+  "name": "midway-native-vfx",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    { "kind": "input", "label": "throttle", "press": "KeyW", "holdTicks": 900, "release": true },
+    { "kind": "input", "label": "rotate", "press": "ArrowDown", "holdTicks": 60, "release": true },
+    { "kind": "wait", "label": "climb", "waitTicks": 300, "release": true },
+    { "kind": "input", "label": "guns", "press": "Space", "holdTicks": 240, "release": true, "screenshot": "native-vfx.png" }
+  ],
+  "assert": {
+    "resources": [
+      { "id": "state", "path": "airborne", "atSteps": [{ "label": "climb", "equals": true }] },
+      { "id": "state", "path": "muzzle", "changed": true },
+      { "id": "state", "path": "particles", "changed": true }
+    ]
+  }
+}

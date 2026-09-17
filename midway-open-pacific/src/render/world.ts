@@ -325,6 +325,8 @@ export class WorldView {
   cameraMode = 0;
   rear = false;
   followBomb = false;
+  /** True while the pilot view is the one being drawn. Read by the UI shell. */
+  cockpitView = false;
   snap = true;
   quality = "balanced";
   wallTime = 0;
@@ -1103,7 +1105,9 @@ export class WorldView {
     if (this.playerMesh.userData.cockpitInterior) this.playerMesh.userData.cockpitInterior.visible = cockpit;
     if (this.playerMesh.userData.cockpitShell)
       for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit && !gunnerView;
-    document.body.classList.toggle("cockpit-view", cockpit);
+    // The look of the page is the shell's business, not the renderer's: `Midway` publishes this
+    // through `shell.cockpitView`, so the native build has no DOM call to make.
+    this.cockpitView = cockpit;
     if (this.snap || briefing || cockpit || gunnerView) {
       this.camera.position.copy(this.targetCamera);
       this.snap = false;

@@ -1,0 +1,19 @@
+{
+  "name": "midway-native-bomb-impact",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    { "kind": "input", "label": "throttle", "press": "KeyW", "holdTicks": 900, "release": true },
+    { "kind": "input", "label": "rotate", "press": "ArrowDown", "holdTicks": 60, "release": true },
+    { "kind": "wait", "label": "climb", "waitTicks": 600, "release": true },
+    { "kind": "input", "label": "release", "press": "KeyB", "holdTicks": 8, "release": true, "screenshot": "native-bomb-release.png" },
+    { "kind": "wait", "label": "impact", "waitTicks": 300, "release": true, "screenshot": "native-bomb-impact.png" }
+  ],
+  "assert": {
+    "resources": [
+      { "id": "state", "path": "airborne", "atSteps": [{ "label": "climb", "equals": true }] },
+      { "id": "state", "path": "splashes", "changed": true },
+      { "id": "state", "path": "particles", "changed": true }
+    ]
+  }
+}

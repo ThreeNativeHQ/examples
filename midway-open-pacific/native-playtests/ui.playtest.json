@@ -1,0 +1,17 @@
+{
+  "name": "midway-native-ui",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    { "label": "ui-ready", "waitTicks": 300 },
+    { "kind": "input", "label": "throttle", "press": "KeyW", "holdTicks": 180, "release": true },
+    { "label": "rolling", "waitTicks": 300 }
+  ],
+  "assert": {
+    "resources": [
+      { "id": "state", "path": "uiReady", "atSteps": [{ "label": "ui-ready", "equals": true }] },
+      { "id": "state", "path": "ias", "changed": true },
+      { "id": "state", "path": "throttle", "changed": true }
+    ]
+  }
+}
