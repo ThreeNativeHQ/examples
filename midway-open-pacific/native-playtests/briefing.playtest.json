@@ -1,0 +1,17 @@
+{
+  "name": "midway-native-briefing",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    { "label": "briefing", "waitTicks": 420, "screenshot": "native-briefing.png" },
+    { "pointerPosition": { "x": 0.149, "y": 0.831, "buttons": 1 }, "release": true, "waitTicks": 30 },
+    { "label": "take-deck", "waitForResource": { "id": "state", "path": "ui.screens.flight", "equals": true }, "timeoutMs": 60000 },
+    { "label": "on-deck", "waitTicks": 180, "screenshot": "native-deck.png" }
+  ],
+  "assert": {
+    "resources": [
+      { "id": "state", "path": "uiReady", "atSteps": [{ "label": "briefing", "equals": true }] },
+      { "id": "state", "path": "status", "atSteps": [{ "label": "briefing", "equals": "briefing" }, { "label": "on-deck", "equals": "playing" }] }
+    ]
+  }
+}

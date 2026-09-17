@@ -5,6 +5,7 @@
  * DOM mounting, and the desktop build fails TN_NATIVE_WEB_ONLY_UI if it is not.
  */
 import { Hud } from "../hud.js";
+import type { IBattleView, IViewState } from "./hud-input.js";
 import type { IHud, ILoadoutView, IShell, Intent, ScreenName } from "./port.js";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
@@ -120,7 +121,7 @@ class DomShell implements IShell {
     }
   }
 
-  hud(battle: unknown, view: unknown): IHud {
+  hud(battle: IBattleView, view: IViewState): IHud {
     // The framework appends its canvas last, which would leave the HUD's own 2D canvas as the
     // page's first one — and the playtest runner reads `document.querySelector("canvas")` to
     // decide which renderer drew the frame. Moving it to the front keeps that answer honest and
@@ -128,7 +129,7 @@ class DomShell implements IShell {
     const world = document.querySelector("canvas:not([id])");
     if (world) document.body.prepend(world);
     this.view = new Hud(battle, view);
-    return this.view as unknown as IHud;
+    return this.view;
   }
 
   screen(name: ScreenName, visible: boolean): void {
@@ -181,7 +182,7 @@ class DomShell implements IShell {
 /** One shell per page: a hot update re-runs `src/main.ts`, and a second one would double every click. */
 let installed: DomShell | undefined;
 
-export function createDomShell(): IShell {
+export function createDomShell(): IShell & { dispose(): void } {
   installed?.dispose();
   installed = new DomShell();
   return installed;

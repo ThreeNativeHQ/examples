@@ -1,443 +1,317 @@
 # Midway on the native desktop target — parity report
 
-**Date:** 2026-09-16
+**Date:** 2026-09-17
 **Lane:** `.worktrees/native-port` (branch `feat/native-port`, off `develop` @ `6cbad3e`)
 **Drafts:** [game #6](https://github.com/ThreeNativeHQ/examples/pull/6),
-[engine #273](https://github.com/ThreeNativeHQ/threenative/pull/273). Neither is ready to merge.
-**Runtime:** locally built `packages/runtime-native/build/tn-linux/mystral`, passed to the build via
-`THREENATIVE_RUNTIME_BINARY`. Host: Linux, NVIDIA RTX 2080, Vulkan/Dawn, WebGPU.
+[engine #273](https://github.com/ThreeNativeHQ/threenative/pull/273). Both are updated and open;
+neither is claimed merge-ready. Merge is held pending full green CI on the current head.
+**Final artifact:** `dist-native/midway-open-pacific`, SHA-256
+`6f29f1f8d6178a2b3d25e7f3aa47e19cbffdddd5376e5d627d9e6c775c7ded5a`, 329,859,845 bytes. Its embedded
+host prefix (first 127,706,336 bytes) is SHA-256
+`a329e5cf5c30753754e4ba60d4b818a36aec5fa6ea1d642a74f70e4e4d3f3dd2`, an exact byte copy of the
+preserved production runtime `/home/joao/.cache/midway-native-parity-fgODHg/runtime-a329/mystral`
+(sidecar `mystral-tools` kept beside it). Build it with the supported CLI override and normal
+preflight:
 
-Midway now builds and runs on the desktop native target from one command. This records what was
-broken, what was fixed, and the remaining gaps. This lane is still work in progress.
+```sh
+THREENATIVE_RUNTIME_BINARY=/home/joao/.cache/midway-native-parity-fgODHg/runtime-a329/mystral \
+  pnpm build:desktop
+```
+
+The primary engine checkout's diagnostic `packages/runtime-native/build/tn-linux/mystral` must **not**
+be used. The earlier UI baseline artifact `021f2d5a` embedded runtime
+`973f480c33754a835637a0a6580ce762aa51304bf77676414eeb120bc458a848` (runtime `973f`) and is still the
+source of the performance and visible-water evidence below. Host: Linux, NVIDIA RTX 2080, Vulkan/Dawn,
+WebGPU.
+
+This records the current behaviour on the desktop native target, the evidence for it, and what is
+still open. It is not a chronology: superseded plans, options and dead-end investigations are gone.
+Ephemeral evidence lives in `/tmp/midway-muse.fgODHg/` and
+`/home/joao/.cache/midway-native-parity-fgODHg/`; both can be wiped.
 
 ---
 
-## Status
+## Status (current)
 
 | # | Issue | Where | Status |
 |---|-------|-------|--------|
-| 1 | Native build refused: DOM in the game bundle | game | **fixed** |
-| 2 | WebP assets rejected for every tarball consumer | engine | **fixed** |
-| 3 | Native UI overlay untestable (no compositing manager) | engine | **partly fixed** |
-| 4 | 2D canvas shim missing `createRadialGradient`, `clip`, `setLineDash`, `lineJoin` | engine | **fixed** |
-| 5 | Cockpit renders white | game | **fixed** |
-| 6 | React HUD never appeared on native | game | **verified: minimal React HUD visible; native UI gate passes** |
-| 7 | Gunshots make no sound on native | engine | **absolute scheduling fixed; PCM regression passes; in-game audio still unverified** |
-| 8 | Explosions reportedly missing on native | unresolved | **real bomb-drop gate fails: splash event recorded, particles absent at sample** |
+| 1 | Native build refused: DOM in the game bundle | game | **fixed** — UI sits behind an `IShell`/`IHud` seam |
+| 2 | WebP assets rejected for every tarball consumer | engine | **fixed** — fail-closed decoder probe |
+| 3 | Native UI overlay untestable (no compositing manager) | engine | **fixed** — stock helper, COMPOSITE+SHAPE, SHAPE `Unsorted` |
+| 4 | 2D canvas shim missing radial gradient / clip / dash / join | engine | **fixed** — real Skia pixels |
+| 5 | Cockpit renders white | game | **fixed** — capability-based texture loader |
+| 6 | React HUD / web UI never appeared on native | game | **partly verified** — HUD/chooser on 11 native scenarios; final OS-composited briefing/dropdown/Recon selection proven; debrief/restart still open |
+| 7 | Gunshots make no sound on native | engine | **fixed** — absolute scheduling; in-game PCM presence proved, exact latency not |
+| 8 | Water/explosion effect presence | game | **verified** — final artifact: three clean explosion runs (impact, effect-specific counters); visible water burst proven on the `021` baseline |
+| 9 | Intermittent WebGPU sampler-vs-texture `binding 7` | engine | **fixed** — one-binding WGSL decision mirroring `490f`; final artifact shows zero validation errors across 11 runs; paired engine filter flip RED→GREEN |
+
+**Final parity: the final artifact's 11 native scenarios all pass, and an OS-composited pass proved
+the briefing, dropdown and Recon selection.** The OS pass did **not** reach a debrief or restart, so
+the final recovery/debrief/restart UI remains **open**; the composited debrief/restart frames below
+are historical `021` evidence. Do not call an effect fixed or missing from a particle/effect counter:
+the counter can be structurally incapable of changing (see #8).
 
 ---
 
-## Slice: finish native parity (2026-09-16, in progress)
+## UI parity with the web build (verified)
 
-Bounded fix + performance slice. Acceptance criteria, each a native run under
-`tools/capture-lock.sh` unless stated:
+The user's acceptance is "native behaves like web". The web UI is the reference and is reused
+whole: `index.html` markup, `src/style.css`, `src/hud.ts` and `src/ui/dom.ts` are the *same* files on
+both targets. `src/ui/main.tsx` mounts the published `index.html` body into the native web view
+inside `<UiLayer>` and installs the same `createDomShell()`; the game reaches it only through
+typed, JSON-safe published state (`src/ui/bridge.ts` → `src/ui/state.ts`) and returns the very
+`Intent` values `dom.ts` already emits. **No second HUD and no redesign** — the markup and CSS are
+shared; a screen added to the briefing reuses them on both targets, though new screens may still need
+new typed handlers.
 
-- [ ] **#7** A one-shot cue fired at t > 0 is audible at *that* time on native: `audio_graph_test`
-      proves `start(when=currentTime)` sounds immediately (red before the fix), and a native
-      capture shows the gun event's source leaves the active-source set instead of piling up.
-- [x] **#6** A native capture of the running HUD shows non-blank pixels (crop distinct from sky).
-- [ ] **#8** `native-playtests/explosion.playtest.json` actually releases a weapon, observes a
-      hit, and asserts a *weapon-specific* effect — the assertion fails if the effect is absent.
-- [ ] **#3** `TN_UI_OVERLAY:{"attached":true}` on a fresh Xvfb with COMPOSITE and no manager, and
-      a captured root frame shows the overlay blended over the game.
-- [ ] **Perf** `threenative-playtest perf --executable dist-native/midway-open-pacific` reports
-      steady windows (startup discarded) for deck, air and combat, plus a
-      native V8 CPU profile naming hot functions. The engine's `profile-production.mjs` profiles
-      its template, not Midway; do not use that trace as evidence for this game.
-- [ ] Gates green: game `pnpm typecheck`, `node scripts/check-*.mjs` in scope, native + web
-      launch playtests; engine `pnpm typecheck && pnpm lint && pnpm test` (touched packages).
-- [ ] Temporary probes (`TN_FIRE`, `TN_GUN_EVENT`) removed.
+**Native `ui-parity` scenario is green** (`native-playtests/ui-parity.playtest.json`): the runner's
+native injected input (`input.pointer`) selects the aircraft (torpedo loadout) and takes the deck,
+`KeyQ` opens the command overlay, an injected pointer orders cover, and the map opens and closes.
+Six asserted state resources, zero runtime diagnostics, 610 frames. On the final artifact all 11
+native scenarios pass serially (ui-parity, explosion ×3, briefing, cockpit, launch, vfx, ui,
+chooser, boot), each with `consoleErrors 0`. This is injected WebView input with state assertions,
+not OS-level XTEST. Evidence: `/home/joao/.cache/midway-native-parity-fgODHg/final-native-scenarios/`
+(final artifact `6f29f1f8`), plus the earlier
+`ui-pointer-fixed/ui-parity-green.json` (runtime `973f`, game `77010d65`).
 
-### Latest verification and remaining work
+**Regressions are guarded without a browser** by `scripts/check-hud-transport.mjs`. It drives the
+scene's *real* terminal transition (`Midway.update` on a debrief-status battle through the bridge)
+and its real `restartToBriefing()`, and covers coalescing, event replay, session reset and the
+cumulative-elapsed timing contract:
 
-Tested game checkpoint: `0f344ac`. Engine snapshot: `7c17ff95e` on
-`fix/midway-native-parity`, retained in the engine's `.worktrees/midway-native-parity`.
+- HUD time is a **cumulative total of live seconds** (`elapsed`), not a per-publish `updateDt`. The
+  web view applies only the increase since its last apply, so an event publish repeating the total
+  adds nothing and several tick publishes coalesced into one flush still carry the whole interval
+  exactly once. Rationale and the RED/GREEN evidence byte-for-byte:
+  `/tmp/midway-muse.fgODHg/hud-time-fix-result.txt`.
+- `hitSeq` stamps a hit as an event (never a level cleared after publish); a session id resets
+  per-HUD memory so a replaced HUD's first toast/debrief is not dropped behind the old counters.
+- The published state is JSON-safe: `undefined` is stripped, or the native sampler rejects the
+  state and every native playtest dies the moment the HUD snapshot lands.
 
-- Native `ui`, `launch`, `cockpit` and `vfx` scenarios pass. The cockpit image was inspected:
-  olive frame and dark dashboard are visible. The React UI is only telemetry and a key legend;
-  web briefing, map and debrief parity is not implemented. Logs: `/tmp/midway-native-target-gates.5FJunX/`.
-- Native `explosion` fails: airborne and splash-event checks pass, but live particles are `0 → 0`.
-  `artifacts/playtest/native-bomb-impact.png.png` shows no visible splash. Timing/camera versus
-  missing rendering is unresolved; do not weaken the assertion or call this fixed.
-- The rebuilt native `threenative-audio-graph-test` passes with `SDL_AUDIODRIVER=dummy`, including
-  `absolute-start=1`. This proves PCM scheduling after the clock advances, not audible gunfire
-  in the running game. Log: `/tmp/midway-audio-graph-test.log`.
-- Web build and launch pass; game typecheck and the other recorded pure gates pass. Flight gate
-  `scripts/check-flight.mjs:521` fails ordered-wing recovery in all five seeds. Engine typecheck
-  and lint pass; full tests fail: three archive tests lack `zip`, the Android WebP source-contract
-  check rejects the new diagnostic, and the Canvas2D script hash contract needs updating.
-- Compositor review remains open: selection ownership, foreign-window destruction races,
-  redirection before the first pump and stale background pixels need resolution and proof.
-  Decoder-probe review also found an unremoved temporary directory and an Android fallback that
-  consults a host executable rather than proving the Android runtime's capabilities.
+**Interaction proof and remaining seams.**
 
-Native performance was measured on private Xvfb, FIFO, 1280×720, 4× MSAA; these are not physical
-desktop FPS. Unprofiled deck windows after startup: **15.04 / 14.99 FPS**, frame p95
-**30.10 / 30.03 ms**, GPU **6.44 / 6.46 ms**, median host presentation **39.099 ms**. Both 60 FPS
-and 16.7 ms gates fail. Log: `/tmp/midway-native-baseline.lFDZZa/probe.log`.
-An actual V8 `--prof` run is in `/tmp/midway-native-initial-profile.m4J7ZL/`; preliminary JS hot
-functions include `updateMatrixWorld`, `multiplyMatrices`, animation `_update` and scene `#visit`.
-Its decoder reports a V8 version mismatch, and the profile includes startup. Flight/combat
-performance, sustained memory growth and an optimization with measured benefit remain unverified.
-
-The cheap implementation provider repeatedly returned no response, including a minimal health
-probe. The latest retry was stopped without a model substitution; remaining fixes are parked,
-not complete. No credit-exhaustion diagnostic was returned. Delivery is limited to draft review;
-this lane is not ready to merge or release.
-
-## 1. Native build refused — DOM in the game bundle (fixed)
-
-`threenative build --target desktop` bundles from `nativeEntry: src/game.ts`, then text-scans the
-bundle and refuses any DOM UI:
-
-```
-TN_NATIVE_WEB_ONLY_UI: desktop bundle contains document.getElementById.
-```
-
-The chain was `game.ts → scenes/Midway.ts → hud.ts`, and `hud.ts` is 959 lines of
-`document.getElementById` driving the hand-written markup in `index.html`. The gate is correct:
-native runs the game in its own JS engine, and the DOM belongs to the UI layer only.
-
-**Fix.** The HUD now sits behind a seam:
-
-- `src/ui/port.ts` — `IShell` / `IHud` / `Intent`, plus `nullShell`. Imports no DOM.
-- `src/ui/dom.ts` — the real DOM shell. Imported from `src/main.ts` only.
-- `src/scenes/Midway.ts` — DOM-free; reads input from `ctx.input`, emits/consumes `Intent`s.
-- `src/render/world.ts` — publishes `cockpitView` instead of touching `document.body`.
-
-An earlier attempt at this exists on the unmerged branch `feat/e3-native` (13 Sep, 62 commits
-behind). This lane re-applied the approach to current `develop` rather than merging it.
-
-Native input was verified end to end, not assumed:
-
-```
-TN_PROBE:{"keys":["KeyW"],"status":"playing","mode":"deck","throttle":0.43,"speed":19.0}
-TN_PROBE:{"keys":["KeyW"],"status":"playing","mode":"deck","throttle":1.00,"speed":35.9}
-```
-
-`native-playtests/launch.playtest.json` passes: IAS 19 → 55 m/s, altitude 22 → 55 m, airborne true.
+- **Visible debrief/restart proven on `021f2d5a`.** The normal recon route selected Recon through
+  real OS input, started airborne, found/reported two carriers, returned with H and L, caught a wire,
+  and displayed **Objective achieved — recovered** after 287.4 simulated seconds. Root inspected
+  the composited `native-recon-proof/07-debrief.png`. A real click at `(494,520)` on **New Deck Sortie**
+  returned to playing/deck servicing and hid the debrief; `08-restarted.png` was inspected too.
+  Total wall time was 151.9 seconds including startup. No simulation state was injected.
+  The earlier immediate-return route fails identically on web and native (accepted LSO assist,
+  then bolter/downed); it is a shared route outcome, not a native input defect. Evidence is under
+  `/home/joao/.cache/midway-native-parity-fgODHg/{native-recon-proof,recovery-web-pair}/`.
+- Artifact `021f2d5` supplied the recon/debrief proof above. The final artifact `6f29f1f8` carries the
+  HUD cache fix and the removed briefing Enter shortcut (the sample embed is byte-identical to the
+  earlier `a560`, only the host prefix changed). Its OS-composited recon attempt (1280×720) proved
+  the full **briefing**, a real OS dropdown open with the briefing preserved behind it, OS **Recon
+  selection** ("Scout and report"), then airborne start and objective "achieved" with 2 carriers
+  reported, stopping at pre-L. It reached **no debrief and no New Deck Sortie restart**, so those
+  frames remain `021` evidence and the final debrief/restart is still **open** (see the OS KeyL
+  bullet below). The injected scenario set separately proves `briefing` moves briefing→playing on an
+  injected Take Deck pointer, while `chooser` asserts visibility only — **no Take Deck click** is
+  claimed there.
+- A `<select>` popup cannot be opened by the runner's injected events even when they reach the page,
+  so the assignment dropdown was checked with real XTEST instead. Opening and selecting Recon work;
+  the first capture also showed the briefing disappearing behind it. The engine now ignores only
+  the temporary `NotifyGrab` focus event; real focus loss, including `NotifyWhileGrabbed`, still
+  hides the overlay. Nine Rust tests pass. Root inspected the rebuilt native popup and Recon
+  selection frames in `native-popup-focus/` on the `021` lineage: the full briefing stays visible.
+  Selection alone would have missed this defect. On the final artifact the OS-composited capture
+  reproduced the OS dropdown open with the full briefing preserved behind it and OS Recon selection:
+  `/home/joao/.cache/midway-native-parity-fgODHg/{final-composited-proof,final-recon-os-proof}/`.
+- **Final OS KeyL, real XTEST.** On `6f29f1f8` a real OS XTEST keydown/keyup `l` hold at the first
+  READY was delivered and **acknowledged** — `lsoAck` true, radio prepends `R21`, LSO "Final approach
+  assist engaged" — where the earlier bridged KeyL (`input.keyDown`) got no ack. So the assist engages
+  from a real OS key. The no-ack difference sits in the bridge input-delivery path **in this
+  harness**, and the hold length differed (2 vs 6 ticks) with one observation each, so an earlier
+  tap-length suspicion is **unproven**, not a proven bridge bug. The follow loop then ran 100
+  simulated seconds with no terminal: state still `playing`/`flight`, phase `groove` mid go-around,
+  no debrief and no **New Deck Sortie** restart. That may be the harness follow-window cap rather
+  than an inability to land; it is **open**, not a failure. Evidence:
+  `/tmp/midway-muse.fgODHg/final-recon-os-proof-result.txt`.
+- The runner's pointer bug — pointer-down at the UI element but pointer-up at `(0, 0)` — is fixed by
+  preserving the last point, including a cross-step bare release. It is shared by desktop and
+  Android; the follow-up in `09d188100` also preserves explicit zero-mask releases and held gestures
+  across wait steps. All 126 targeted checks pass. Engine CI run `09` was all green on a **previous**
+  head; it is not the current commit and does not authorise a merge — see the gate counts below.
 
 ---
 
-## 2. WebP assets rejected for every tarball consumer (engine, fixed)
+## Root causes kept
 
-`packages/runtime-native/scripts/asset-preflight.mjs` could only determine WebP support by reading a
-runtime **source checkout** (`third_party/webp/libwebp-*`). Installed from the published tarball —
-the supported path — it fell through to:
+**#1 DOM-free game bundle.** The native builder bundles from `src/game.ts` and refuses any
+`document.getElementById` (`TN_NATIVE_WEB_ONLY_UI`). The HUD now runs behind `src/ui/port.ts`
+(`IShell`/`IHud`/`Intent`, imports no DOM); `src/ui/dom.ts` is the real DOM shell installed only by
+the web/native web-view entry; `src/scenes/Midway.ts` is DOM-free. Ground truth, not assumption:
+`window` and `document` exist on native but `Image` does not (`TN_GLOBALS`).
 
-```
-TN_NATIVE_ASSET_UNSUPPORTED: 19 assets cannot be decoded by the desktop target.
-  ... is not a runtime source checkout, and a prebuilt desktop release does not declare
-      which decoders it was built with
-```
+**#2 WebP preflight.** `asset-preflight.mjs` could only detect WebP from a runtime *source
+checkout*, so an installed tarball release that reports `WebP format support: YES` was rejected as
+"cannot tell ⇒ unsupported". The fix asks the shipped binary the question it already answers at boot
+(`canvas.toDataURL("image/webp")`, `--no-sdl`, bounded 30 s, no display inherited): a **valid
+explicit receipt** confirms support, while a missing, errored or malformed probe returns `undefined`
+and the caller keeps its refusal. The selected runtime binary is authoritative: fail-closed and
+bounded, with no foreign-host fallback.
 
-The runtime itself reports `[Mystral] WebP format support: YES`. So a release built *with* libwebp
-was rejecting the WebP-packed GLBs the documented `gltf-transform webp` pipeline produces. This is
-the same hardcoded staleness the file's own header warns about, pointing the other way: it treated
-"I cannot tell" as "unsupported".
+**#3 Compositor and SHAPE.** The engine ships a stock compositor helper: private Xvfb with
+`COMPOSITE+SHAPE` on PATH, borrowing `xcompmgr`/`picom`/`compton`; no compositor is shipped and the
+old 358-line `xcompmin.c` prototype is removed. CI installs `xcompmgr`; `doctor` names the choices.
+The `XShapeCombineRectangles` `BadMatch` (request_code 129, minor 1) was arbitrary DOM rectangles
+declared `YSorted` when they are `Unsorted`; a real native unsorted-overlapping-regions probe went
+RED then GREEN, with 7 Rust tests. The game UI now passes. There is deliberately **no fallback that
+ignores X errors**.
 
-**Fix.** `probePrebuiltDecoders()` asks the shipped binary the question it already answers at boot
-(`canvas.toDataURL("image/webp")`, from `src/runtime-scripts/image-support-init.js`), run under
-`--no-sdl` with no display, ~0.6 s, cached per executable. A probe that cannot run returns
-`undefined` and the caller keeps its refusal — the probe can never *grant* support.
+**#4 Canvas 2D.** `createRadialGradient`, `clip`, `setLineDash` and `lineJoin` were implemented in
+C++ on the existing Skia backend and verified in actual pixels, not by method presence alone.
 
-Wired into both the desktop and Android prebuilt branches. Three tests added in
-`packages/runtime-native/tests/desktop-assets.test.mjs`; 11 pass there, 27 across both preflight
-suites.
+**#5 White cockpit.** `cockpit-detail.ts` gated every texture load behind
+`typeof window !== "undefined" && typeof Image !== "undefined"`; native has no `Image`, so the
+guard skipped all loads and `pbr()`'s map-as-colour materials fell back to white. The loader is now
+chosen by capability (`fetch` + `createImageBitmap`), with `flipY` handled at decode. The only site
+with that pattern.
 
----
+**#7 Audio.** Native treated Web Audio's absolute `when` as a relative delay; Three.js supplies
+`currentTime + delay`, so the clock was added twice. The engine now schedules at
+`max(when, currentTime)`, proven by a rebuilt PCM regression. In-game, an SDL3 *disk* driver
+captured the real output bus: a global matched filter on `gun-50.ogg` gives an absolute correlation
+magnitude of **0.321** on the firing run versus **0.044** on the no-fire control, after the context
+clock is running. That is **waveform presence only**; the correlation offset is fitted, so it makes
+no timing or audible-speaker claim. The diagnostic detail in
+`/tmp/midway-muse.fgODHg/effects-audio-result.txt` includes superseded visible/timing claims and is
+**not** authoritative proof.
 
-## 3. Native UI overlay untestable (engine, partly fixed)
+**#8 Water/explosion.** The old `state.particles changed` assertion was wrong: a water burst uses
+`WaterEffects`, which returns before smoke/glow (`particles.ts:188-190`), so that counter could
+never move. The scenario now asserts effect-specific resources. On a real release: ordnance `3→2`,
+splashes `0→1`, `waterAccepted 0→1`, `waterRejected 0`. **The water burst is now visually proven**
+on artifact `021f2d5a`: an overhead attack view with dive brakes kept the bomb impact in frame.
+Root inspected `water-visual-proof/frame-0538.png` before impact and `frame-0550.png` /
+`frame-0570.png` showing the new white spray at the impact point. The accepted impact occurred at
+bomb age 541 ticks, with the aircraft still flying at 383.5 m. No carrier wake is present there.
+Earlier captures missed the burst: the first overhead attempt projected impact below the 720 px
+frame, while bomb-follow and rear-gunner attempts also failed to frame it. Counters alone were
+insufficient; no rendering change was needed for this final framing check. On the final artifact
+`6f29f1f8` the explosion scenario passed three independent serial runs, each with the same
+effect-specific counters (ordnance `3→2`, splashes `0→1`, `waterAccepted 0→1`, `waterRejected 0`);
+those are counter-level, so the visible-burst frames above remain the `021` visual evidence.
 
-The desktop runtime refuses to attach its UI web view when no compositing manager owns
-`_NET_WM_CM_S0`:
-
-```
-TN_UI_OVERLAY:{"attached":false,"reason":"no compositing manager is running, so nothing would blend the overlay"}
-```
-
-The playtest runner provisions a private Xvfb (`packages/playtest/src/runner/captureEnvironment.ts`)
-with neither the COMPOSITE/SHAPE extensions nor a compositing manager. Consequence: **the starter
-template's own shipped `native-playtests/react-hud.playtest.json` fails on a freshly scaffolded
-project**, with a confusing `uiReady` mismatch rather than a named cause. Reproduced on a clean
-`create-threenative --template starter`.
-
-**Fixed part.** Xvfb now starts with `+extension COMPOSITE +extension SHAPE`, in both
-`captureEnvironment.ts` and `packages/runtime-native/scripts/xvfb.sh`. 12 tests pass in
-`capture-environment.spec.ts`.
-
-**Still open.** Extensions alone are not enough — a compositing manager must also run. Verified by
-hand: with the engine's own `native/ui-overlay/tools/xcompmin.c` compiled and running on the virtual
-display, the same binary reports `TN_UI_OVERLAY:{"attached":true}`.
-
-`xcompmin.c` is **not** in the runtime-native package `files` list, so a consumer cannot compile it.
-Three options, none chosen yet:
-
-1. Ship a compiled `xcompmin` in `prebuilt/<key>/` (needs a release).
-2. Have the playtest runner compile it on demand (needs `cc` + X11 headers on the user's machine).
-3. Have the desktop runtime self-redirect when COMPOSITE is present but no manager is (C++; fixes it
-   for every consumer in test *and* production, no new dependency).
-
-Option 3 looks right. Not attempted.
-
-This does not affect a real desktop session, which has a compositor.
-
----
-
-## 4. 2D canvas shim gaps (engine, fixed)
-
-Probed against the shipped runtime:
-
-```
-missing methods:    createRadialGradient, clip, setLineDash, createPattern, roundRect
-missing properties: globalCompositeOperation, lineJoin, filter, shadowBlur
-```
-
-`createLinearGradient` was implemented; radial was not. Any draw touching a radial gradient threw
-(`c.createRadialGradient is not a function`), which took the whole scene build down until the game
-added a fallback.
-
-**Fix.** Skia was already the backend and supports all of these. Implemented:
-
-- `createRadialGradient` — Skia's two-point conical gradient, which is exactly what the canvas spec
-  describes. `CanvasGradient` gained `r0`, `r1`, `radial`
-  (`include/mystral/canvas/canvas2d.h`, `src/canvas/canvas2d.cpp`, `src/canvas/canvas2d_bindings.cpp`).
-  Degenerate handling differs for radial: concentric circles of *different* radii are the ordinary
-  case and must still draw.
-- `setLineDash` / `getLineDash` — `SkDashPathEffect`, odd-length patterns doubled per spec.
-- `clip()` — `SkCanvas::clipPath`, scoped by the existing `save()`/`restore()` pairing.
-- `lineJoin` — `SkPaint::setStrokeJoin`, mirroring the existing `lineCap` plumbing.
-
-Verified against the rebuilt runtime:
-
-```
-TN_RADIAL:{"centre":[249,249],"edge":[0,0],"dash":[4,4],"join":"round"}
-```
-
-Centre opaque, edge transparent — a real ramp, not a uniform fill.
-
-`createPattern`, `roundRect`, `globalCompositeOperation`, `filter` and `shadowBlur` remain
-unimplemented. Midway uses none of them.
+**#9 Intermittent binding 7.** A shader sampler versus layout texture validation error at
+`CreateRenderPipeline`, `@group(1) @binding(7)`, reproduced in 2 of 5 older runs and again in the
+latest sparse run. The named pipeline is the **Placard `label-instruments`** group. C++ diagnostics
+captured the exact mismatch: nine shader bindings versus eight layout entries, with the first
+sampler omitted from the layout and all later indices shifted. Three's WGSL builder decided sampler
+inclusion twice from mutable texture properties. The owned Three patch (`490f9054`, the same change
+in the root, `core` and template consumers) now emits declarations from the binding already created.
+Two deterministic WGSL-filter-change regressions fail before the patch and pass after it. On the
+final artifact a native pipeline census saw 69 `TN_PIPELINE_EVENT`s / 51 unique programs, all
+`created`, with checkpoint `present=55 requested=69 emitted=69 outstanding=0` and **zero validation
+errors** in every one of the 11 runs; the diagnostic `/tmp` markers are gone. Native pipeline labels
+are retained as a **permanent** diagnosis aid (C++ only; no TEMP instrumentation). Three clean runs
+are consistent with the fix but are not by themselves causal — that comes from the paired engine
+filter-flip RED/GREEN tests.
 
 ---
 
-## 5. Cockpit renders white (game, fixed)
+## Gates and performance (current numbers)
 
-The whole cockpit interior rendered white and fully metallic on native; correct on web.
+- **Engine:** engine CI run `09` was all green (5485 pass / 0 fail / 5 skip, 454 files pass / 1 skip,
+  typecheck, lint, budgets, build, docs; 767 pre-existing lint warnings) but on the **previous** head,
+  not the current one, so it does not authorise a merge. The current head is `b0925694`, pushed. A
+  fresh full `pnpm test` now **PASSes, exit 0** — 454 files passed / 1 skipped (455), 5492 passed /
+  5 skipped (5497), temp-dir guard clean. The one browser spec that failed the prior full run passed
+  alone (19 passed, exit 0); that failure **did not recur** and no cause is attributed to it, so it
+  is *not* called "unrelated browser" as a proven cause. `pnpm budgets` **PASSes** after the stale
+  generated native-coverage report was refreshed — that stale report was the only reason the earlier
+  budget check failed. New CI is 24 checks green with no failures and more pending.
+- **Test isolation (fixed; full gate green):** `packages/runtime-native/tests/gpu/fetch.test.ts`
+  recursed into and deleted the shared `runtimeNativeRoot/.test-tmp`, which
+  `tests/webtransport/webtransport.test.ts` nested inside; under parallel vitest that deleted the
+  WebTransport fixture before the native loader read it. Both files now create a private suite dir
+  through the existing `test-support/temp-dir.ts` `makeTempDirSync` helper — **+7/-3 across the two
+  runtime-native fixture files** (the earlier `+9/-6` was stale), no production/Rust/C++ change. The
+  focused race pair is green (36 passed / 4 skipped), the temp-dir guard passes, and the awaited
+  full `pnpm test` is the PASS above. Exact detail:
+  `/tmp/midway-muse.fgODHg/test-isolation-fix-result.txt`.
+- **Capture framing:** a root capture of 1600×900 against a 1280×720 window produced the grey border
+  — a resolution mismatch, not a layout bug; matched size fills the frame. Resize at 1024×600 and
+  1440×810 was accepted earlier. **GPU screenshots omit the WebView overlay**; UI proof needs an
+  actual OS-composited capture. That capture ran on `6f29f1f8` at 1280×720 and proved the briefing,
+  dropdown and Recon selection; it did not reach a debrief/restart, so that part is **open**.
 
-**Root cause.** `src/render/cockpit-detail.ts:53` gated every cockpit texture load behind a browser
-sniff:
+The UI-enabled baseline artifact `021f2d5a` was measured twice on private Xvfb at 1280×720, FIFO,
+4× MSAA: once without profiling and once with V8 profiling. The following values are from the
+unprofiled run. Each row uses two complete 300-frame windows entirely inside its phase; p95 columns
+are averages of the windows' p95 values, not pooled percentiles.
 
-```ts
-if (typeof window !== "undefined" && typeof Image !== "undefined") {
-```
+| Phase | FPS | Processing p95 | Presented interval p95 | GPU mean |
+|---|---:|---:|---:|---:|
+| Deck | 13.08 | 30.9 ms | 84.6 ms | 11.4 ms |
+| Flight | 14.63 | 26.0 ms | 75.0 ms | 8.4 ms |
+| Weapon use / nearby combat | 14.01 | 35.0 ms | 78.5 ms | 6.4 ms |
 
-The native runtime's actual globals:
+These are **virtual-display measurements, not physical-desktop FPS**. The combat window includes
+ammunition running out; it is not continuous player gunfire. Composited frames confirm the deck,
+airborne and firing states. This `021` baseline is the **only** performance measurement: the final
+artifact was not profiled, and no final FPS or optimization benefit is claimed.
 
-```
-TN_GLOBALS:{"window":true,"Image":false,"document":true,"fetch":true,
-            "createImageBitmap":true,"ImageBitmap":true,"HTMLImageElement":false}
-```
+Correctly aligned V8 windows identify scene transforms/traversal and animation among the largest
+named JS costs: `updateMatrixWorld` accounts for 7.6% / 14.1% / 11.4% of samples across the three
+phases; GC is 1.7% / 0.9% / 1.0%. Roughly 38–41% remains in the unsymbolized native binary.
+Host plus WebKit peak RSS/PSS was **3,936/3,745 MiB** unprofiled and **4,004/3,810 MiB** profiled.
+RSS rose roughly 420–460 MiB during the run. This does not establish or rule out a leak.
 
-`window` and `document` exist, but **`Image` does not** — so the guard skipped all texture loading.
-And `pbr()` in that file carries no `color`: colour comes entirely from the basecolor **map**, with
-`roughness: 1, metalness: 1` acting as map multipliers. With no map, every material fell back to
-`MeshStandardMaterial`'s white, fully rough, fully metallic default.
-
-Red → green, same probe both sides:
-
-```
-before   Interior green primer   color=ffffff  map=no    rough=1  metal=1
-after    Interior green primer   color=ffffff  map=yes   rough=1  metal=1
-```
-
-**Fix.** Select the loader by capability, not by browser. Native has `fetch` + `createImageBitmap`,
-which is exactly what THREE's `ImageBitmapLoader` uses, so the loader is chosen accordingly and the
-texture gets `flipY = false` (an `ImageBitmap` ignores `texture.flipY`; the flip happens at decode
-via `imageOrientation: "flipY"`). Confirmed visually: olive-green interior, dark instrument panel,
-readable dial faces, blue attitude indicator — matching the web capture.
-
-This was the only site in the codebase with that pattern (`grep "typeof Image\|typeof window"`).
-
-### Related, kept
-
-`canvasTexture()` in `src/render/assets.ts` now returns a 1×1 white `DataTexture` instead of
-throwing when a target has no 2D canvas, or when a draw throws on an unimplemented method. Return
-types widened `CanvasTexture` → `Texture` in `assets.ts`, `model-damage.ts`, `rear-station.ts`.
-`createAttitudeFace()` in `cockpit-detail.ts` degrades to the painted dial face rather than
-crashing. With the fixed runtime, zero textures take these paths (instrumented: 0 fallbacks).
-
----
-
-## 6. React HUD never appeared on native (verified for the minimal HUD)
-
-The overlay attached (`TN_UI_OVERLAY:{"attached":true}`) but drew nothing.
-
-`Midway.publish()` called `ctx.state.set(...)` but never `ctx.state.flush()`. `set` only stages the
-patch; the UI channel receives nothing until flushed. The web view attaches, subscribes, and waits
-forever for a first snapshot — so `useUiState()` stays `undefined` and the HUD returned `null`:
-an overlay that is present and permanently blank.
-
-**Fix applied:** `ctx.state.flush()` after each publish, and `NativeHud` now renders
-`SCOUT TWO · AWAITING TELEMETRY` before the first snapshot instead of nothing — a HUD that draws no
-pixels is indistinguishable from an overlay that failed to attach, which is what hid this.
-
-There was a second cause: `src/ui/main.tsx` rendered `NativeHud` without `UiLayer`, so `useUiState`
-threw `TN_UI_LAYER_MISSING`. Wrapping it in `UiLayer` fixes that error. The running HUD was inspected
-at `/tmp/midway-ofinish/boot1/root.png`, and the desktop `ui` scenario passes.
-
-Supporting work: `src/ui/main.tsx` + `src/ui/NativeHud.tsx` (React, reads published state only),
-`ui.renderer` set back to `"web"` so native composites the overlay. Published `GameState` is now
-`{status, mode, altitude, ias, throttle, airborne, particles}`.
-
----
-
-## 7. Gunshots make no sound on native (engine fix; game audio proof pending)
-
-**Current finding:** native `AudioBufferSourceNode.start/stop` treated Web Audio's absolute `when`
-as a relative delay. Three.js supplies `currentTime + delay`, so the old code effectively added
-the clock twice. The engine now schedules at `max(when, currentTime)`. The rebuilt PCM regression
-passes after the clock advances. The investigation below predates this finding.
-
-**Symptom (user, on the real desktop):** engine and sea are audible; pressing Space produces no
-gunfire sound.
-
-### Established by measurement
-
-| Fact | Evidence |
-|---|---|
-| Space reaches the sim | `TN_FIRE:{"keys":["Space"],"fire":true,...}` |
-| The guns actually fire | `ammo` 1362 → 1350 → 1338 → 1326 → 1314 |
-| The audio event is emitted | `TN_GUN_EVENT` ×48, `{"type":"gun","weapon":"gun50"}` |
-| Audio is not muted | `muted:false` |
-| Every sound file decodes | `TN_AUDIO_LOAD:{"loaded":140,"failedCount":0,"failed":[]}` |
-| The AudioContext clock runs | `TN_CLOCK:{"samples":[0,0,0.0697,...,0.6037],"advanced":true}` |
-| Web Audio exists on native | `AudioContext:true, createPanner:function, createGain:function` |
-
-### Hypotheses disproven
-
-1. *No Web Audio on native* — false. An early probe used `--no-sdl`, which disables audio; the
-   user's own report (engine and sea audible) contradicted it. **Do not probe audio with `--no-sdl`.**
-2. *Positional audio missing* — `createPanner` works. Note `PannerNode` and `createStereoPanner` are
-   undefined globally and `listener.positionX` is absent (only the deprecated `setPosition` exists),
-   but THREE falls back to `setPosition`, and gun events carry no `at` anyway.
-3. *The gun buffer failed to decode* — all 140 buffers load. Note `Soundscape.load`
-   (`src/audio.ts:305`) silently drops rejected decodes; instrumentation was added to prove this.
-4. *The cooldown clock is frozen* — `#play` returns early when
-   `now - lastAt < tune.cooldown`, with `now = bus.listener.context.currentTime`. A frozen clock
-   would allow exactly one shot then silence, which fits the symptom perfectly — but the clock
-   advances.
-
-### Where it must be
-
-Execution reaches `Soundscape.event()` with a valid unmuted gun event and a loaded buffer. The event
-has no `at`, so it takes the **non-positional** path:
-
-```
-event()  →  #cueFor(e)  →  #play(cue, attenuation, lane, ownVolume)   [src/audio.ts:506]
-                              →  this.bus.play(buffer, {...})          [@threenative/core AudioBus]
-```
-
-Engine and sea — the sounds that *do* work — are continuous loops via `syncEmitters()` →
-`bus.playAt(buffer, source, {loop: true, ...})`. **The two paths differ: `bus.play()` vs
-`bus.playAt()`.** The leading hypothesis is therefore that `AudioBus.play()` — the non-positional
-one-shot — does not produce output on native, while `playAt()` does.
-
-### Original next step (superseded by the scheduling finding)
-
-One instrumented run: log immediately before `this.bus.play(...)` in `#play` (`src/audio.ts:515`) to
-confirm the line is reached rather than short-circuited by `#cueFor` returning nothing, a missing
-`ONE_SHOT[key]` entry, or `attenuation <= 0.01`. If it is reached, the fault is inside
-`@threenative/core`'s `AudioBus.play` on native and the fix is engine-side.
-
----
-
-## 8. Explosions reportedly missing on native (bomb-drop gate now fails)
-
-**Current result:** the scenario now really releases a bomb and observes a splash event, but the
-live-particle assertion fails and the impact frame has no visible splash. Root cause is unresolved.
-The initial investigation below explains why the older scenario was not evidence:
-
-- Particles do render natively — tracers are visible in `native-vfx.png`, and the published live
-  particle count changes while firing.
-- The explosion path does **not** use the 2D canvas: `water-effects.ts` builds its own
-  `cloudTexture()` as a `DataTexture`, and `particles.ts` is pure TSL (`mx_noise_float`,
-  `MeshBasicNodeMaterial`). So issue 4's fix does not touch it either way.
-- `native-playtests/explosion.playtest.json` was written but never released a weapon — the aircraft
-  flew level over open sea and no blast occurred, so there is no failing case to work from.
-
-**Needed:** how the explosion was triggered — bomb on a ship, an aircraft shot down, or the player's
-own crash. `tools/capture-crash.mjs` already drives a crash on web and would be the model for a
-native equivalent.
+Launch to the first 300-frame budget report took 56.2/54.2 seconds; this is **not first-frame or
+click-response latency**. The initial analysis accidentally dropped `launch pid=…` and selected
+windows 54 seconds early; the corrected parser and decoded ranges are in
+`/tmp/midway-muse.fgODHg/perf/`, with the results in `profile-021-result.txt` in its parent directory.
 
 ---
 
 ## Reproducing this state
 
 ```sh
-cd .worktrees/native-port/midway-open-pacific
+cd /home/joao/projects/threenative/sandbox/.worktrees/native-port/midway-open-pacific
 
-# Build against the locally fixed runtime (issue 4 is C++; it is not in any released prebuilt).
-THREENATIVE_RUNTIME_BINARY=/home/joao/projects/threenative/threenative-engine/packages/runtime-native/build/tn-linux/mystral \
+# Build against a verified runtime. Pin the absolute path to the chosen content-hashed runtime;
+# never the primary engine checkout's diagnostic build. The supported production runtime is
+# a329e5cf5c30753754e4ba60d4b818a36aec5fa6ea1d642a74f70e4e4d3f3dd2 (runtime `a329`):
+THREENATIVE_RUNTIME_BINARY=/home/joao/.cache/midway-native-parity-fgODHg/runtime-a329/mystral \
   pnpm build:desktop
 
-# Native gates
+# Native UI gate — the injected input/page proof. ui-parity.playtest.json is the scenario that works.
 bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/cli.js \
-  --scenario native-playtests/launch.playtest.json --target desktop \
-  --executable dist-native/midway-open-pacific --timeout 240000
+  --scenario native-playtests/ui-parity.playtest.json --target desktop \
+  --executable dist-native/midway-open-pacific --timeout 600000
 
-# Web must stay green
+# Web must stay green.
 pnpm typecheck
 bash tools/capture-lock.sh node node_modules/@threenative/playtest/dist/runner/cli.js \
   --scenario playtests/launch.playtest.json --url http://127.0.0.1:5311 \
   --browser-recipe webgpu --headed --timeout 90000
 ```
 
-Current results: typecheck clean; native launch passes; web launch passes; cockpit matches web.
-
-New scenarios in this lane: `native-playtests/{boot,launch,vfx,cockpit,explosion}.playtest.json`.
+Content-hashed artifacts: never trust a version or timestamp; rebuild against a new runtime hash.
+Native scenarios in this lane: `native-playtests/{boot,launch,vfx,cockpit,ui,ui-parity,briefing,chooser,explosion}.playtest.json`.
+(`recovery.playtest.json` was removed once the recon/recovery route was covered by the scenarios
+above and is not part of the final set.)
 
 ---
 
-## Cleanup owed before this lane merges
+## Delivery and cleanup
 
-Both task checkouts remain because their draft work is unmerged and incomplete:
+Both draft PRs are updated, unmerged and **not merge-ready**. The primary engine checkout is
+**clean on `develop`**; the only working-tree change in the primary game checkout is the user's
+`style.css` plus its 7-file set, deliberately left undisturbed. A squash to `develop` is authorised
+only **after real proof and green CI on the current head**: the native scenario suite and the local
+full engine gate are green, but CI on `b0925694` is still running (24 checks green, more pending) and
+the final debrief/restart UI is still open, so **merge is held** and none is claimed. Cleanup of the
+lane's worktrees is **not yet done** and will follow once the draft work lands.
 
-| Retained checkout | Size |
-|---|---|
-| `/home/joao/projects/threenative/sandbox/.worktrees/native-port` | 2.4 GiB |
-| `/home/joao/projects/threenative/threenative-engine/.worktrees/midway-native-parity` | 1015 MiB |
+There is **no temporary native instrumentation owed out**: `rg` over the tree confirms `TN_FIRE`,
+`TN_GUN_EVENT` and `TN_AUDIO_LOAD` are absent. Native pipeline labels are a permanent engine
+diagnosis aid (C++ only), not temporary.
 
-The game checkout also retains the untracked `composited.ppm` debug capture. The original engine
-checkout's pre-existing changes were preserved. The isolated engine checkout now has its own
-dependencies and a successful full workspace build; its required pre-push checks passed without
-a bypass. This does not change the five failures from the full test suite reported above.
-
-Temporary instrumentation is still in the tree and must come out:
-
-- `src/scenes/Midway.ts` — the `TN_FIRE` probe.
-- `src/audio.ts` — the `TN_GUN_EVENT` probe and the `TN_AUDIO_LOAD` logging.
-
-The `TN_AUDIO_LOAD` reporting is arguably worth keeping in some form: `Soundscape.load` currently
-discards failed decodes in silence, and its own doc comment claims a missing file is "reported once".
-It is not.
-
-## Engine changes made outside this repo
-
-The original engine checkout retains its uncommitted work. A source snapshot is checkpointed at
-`7c17ff95e` in `/home/joao/projects/threenative/threenative-engine/.worktrees/midway-native-parity`:
-
-- `packages/runtime-native/scripts/asset-preflight.mjs` — decoder probe (issue 2)
-- `packages/runtime-native/tests/desktop-assets.test.mjs` — 3 tests for it
-- `packages/playtest/src/runner/captureEnvironment.ts` — Xvfb COMPOSITE/SHAPE (issue 3)
-- `packages/runtime-native/scripts/xvfb.sh` — same
-- `include/mystral/canvas/canvas2d.h`, `src/canvas/canvas2d.cpp`,
-  `src/canvas/canvas2d_bindings.cpp`, `src/runtime-scripts/canvas2d-properties.js` — canvas gaps (issue 4)
-- `native/ui-overlay/src/{argb,abi}.rs` — compositor prototype, review findings unresolved (issue 3)
-- `src/audio/audio_context.cpp`, `tests/audio_graph_test.cpp` — absolute scheduling (issue 7)
-
-Issue 4 is C++: it reaches other machines only via a new prebuilt runtime release. Until then a
-build must pass `THREENATIVE_RUNTIME_BINARY`, or the cockpit regresses to white on any other
-machine.
-
-Staged tarball for issue 2: `.packages/threenative-runtime-native-0.3.2-decoderprobe-780fae08e012.tgz`.
+Engine-side changes made outside this repo (squash candidates for #273) include the fail-closed
+decoder probe, Xvfb `COMPOSITE+SHAPE`, the SHAPE `Unsorted` fix, the canvas 2D methods, absolute
+audio scheduling, the pointer last-point fix, the popup `NotifyGrab` focus fix, the sampler
+one-binding WGSL change (`490f`), and the runtime-native test-fixture isolation fix.

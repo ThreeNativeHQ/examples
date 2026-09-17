@@ -3,17 +3,40 @@
   "schemaVersion": 1,
   "target": "desktop",
   "steps": [
+    { "label": "briefing", "waitTicks": 420, "release": true },
+    { "pointerPosition": { "x": 0.149, "y": 0.831, "buttons": 1 }, "release": true, "waitTicks": 30 },
+    { "label": "take-deck", "waitForResource": { "id": "state", "path": "ui.screens.flight", "equals": true }, "timeoutMs": 60000 },
     { "kind": "input", "label": "throttle", "press": "KeyW", "holdTicks": 900, "release": true },
     { "kind": "input", "label": "rotate", "press": "ArrowDown", "holdTicks": 60, "release": true },
-    { "kind": "wait", "label": "climb", "waitTicks": 600, "release": true },
+    { "kind": "wait", "label": "climb", "waitTicks": 420, "release": true },
     { "kind": "input", "label": "release", "press": "KeyB", "holdTicks": 8, "release": true, "screenshot": "native-bomb-release.png" },
-    { "kind": "wait", "label": "impact", "waitTicks": 300, "release": true, "screenshot": "native-bomb-impact.png" }
+    { "kind": "input", "label": "rear-station", "press": "KeyY", "holdTicks": 4, "release": true, "screenshot": "native-splash-before.png" },
+    { "kind": "wait", "label": "splash-01", "waitTicks": 10, "release": true, "screenshot": "native-splash-01.png" },
+    { "kind": "wait", "label": "splash-02", "waitTicks": 10, "release": true, "screenshot": "native-splash-02.png" },
+    { "kind": "wait", "label": "splash-03", "waitTicks": 10, "release": true, "screenshot": "native-splash-03.png" },
+    { "kind": "wait", "label": "splash-04", "waitTicks": 10, "release": true, "screenshot": "native-splash-04.png" },
+    { "kind": "wait", "label": "splash-05", "waitTicks": 10, "release": true, "screenshot": "native-splash-05.png" },
+    { "kind": "wait", "label": "splash-06", "waitTicks": 10, "release": true, "screenshot": "native-splash-06.png" },
+    { "kind": "wait", "label": "splash-07", "waitTicks": 10, "release": true, "screenshot": "native-splash-07.png" },
+    { "kind": "wait", "label": "splash-08", "waitTicks": 10, "release": true, "screenshot": "native-splash-08.png" },
+    { "kind": "wait", "label": "splash-09", "waitTicks": 10, "release": true, "screenshot": "native-splash-09.png" },
+    { "kind": "wait", "label": "splash-10", "waitTicks": 10, "release": true, "screenshot": "native-splash-10.png" },
+    { "kind": "wait", "label": "splash-11", "waitTicks": 10, "release": true, "screenshot": "native-splash-11.png" },
+    { "kind": "wait", "label": "splash-12", "waitTicks": 10, "release": true, "screenshot": "native-splash-12.png" },
+    { "kind": "wait", "label": "splash-13", "waitTicks": 10, "release": true, "screenshot": "native-splash-13.png" },
+    { "kind": "wait", "label": "splash-14", "waitTicks": 10, "release": true, "screenshot": "native-splash-14.png" },
+    { "kind": "wait", "label": "splash-15", "waitTicks": 10, "release": true, "screenshot": "native-splash-15.png" },
+    { "kind": "wait", "label": "splash-16", "waitTicks": 10, "release": true, "screenshot": "native-splash-16.png" },
+    { "kind": "wait", "label": "splash-17", "waitTicks": 10, "release": true, "screenshot": "native-splash-17.png" },
+    { "kind": "wait", "label": "splash-18", "waitTicks": 10, "release": true, "screenshot": "native-splash-18.png" }
   ],
   "assert": {
     "resources": [
       { "id": "state", "path": "airborne", "atSteps": [{ "label": "climb", "equals": true }] },
+      { "id": "state", "path": "ordnance", "changed": true },
       { "id": "state", "path": "splashes", "changed": true },
-      { "id": "state", "path": "particles", "changed": true }
+      { "id": "state", "path": "waterAccepted", "changed": true },
+      { "id": "state", "path": "waterRejected", "atSteps": [{ "label": "splash-18", "equals": 0 }] }
     ]
   }
 }

@@ -6,10 +6,12 @@
  * real shell from `src/main.ts`; a native build keeps `nullShell` and runs the simulation with no
  * UI, so the scene, the flight model and the world render identically on both.
  */
+import type { IBattleView, IViewState } from "./hud-input.js";
+
 
 /** What `Midway` needs of a HUD. `Hud` in `src/hud.ts` satisfies it; so does `NullHud`. */
 export interface IHud {
-  b: any;
+  b: IBattleView;
   mapOpen: boolean;
   hitFlash: number;
   lastRadio: string;
@@ -61,7 +63,7 @@ export type Intent =
   | { kind: "suspend" };
 
 export interface IShell {
-  hud(battle: unknown, view: unknown): IHud;
+  hud(battle: IBattleView, view: IViewState): IHud;
   screen(name: ScreenName, visible: boolean): void;
   /** Show exactly this modal overlay, or none. */
   overlay(id: string | null): void;
@@ -72,7 +74,7 @@ export interface IShell {
 }
 
 export class NullHud implements IHud {
-  b: any;
+  declare b: IBattleView;
   mapOpen = false;
   hitFlash = 0;
   lastRadio = "";

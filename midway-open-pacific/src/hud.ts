@@ -1,8 +1,9 @@
 /** The battle's DOM and 2D-canvas heads-up display, ported from the standalone build. */
 import type { IReport } from "./sim/battle.js";
+import type { IBattleView, IViewState } from "./ui/hud-input.js";
 import { damageSummary } from "./sim/damage.js";
 import { torpedoEnvelope, torpedoIntercept } from "./sim/armament.js";
-import { attitudeAxes } from "./sim/flight.js";
+import { axesOf } from "./sim/flight.js";
 import { ASSIGNMENTS, objectiveText, outcomeText, type Assignment } from "./sim/sortie.js";
 import { angleDelta, bearing, bombImpact, clamp, contactEstimate, distance2, distance3, forward } from "./sim/math.js";
 import { PING_SECONDS } from "./sim/rescue.js";
@@ -32,8 +33,8 @@ export function viewCameraLabel(mode: number): string {
 }
 
 export class Hud {
-  b: any;
-  view: any;
+  b: IBattleView;
+  view: IViewState;
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   lastRadio = "";
@@ -59,7 +60,7 @@ export class Hud {
   private fpsTick = 0;
   private fpsLines: string[] = [];
 
-  constructor(battle: any, view: any) {
+  constructor(battle: IBattleView, view: IViewState) {
     this.b = battle;
     this.view = view;
     this.canvas = $("hud-canvas") as HTMLCanvasElement;
@@ -145,7 +146,7 @@ export class Hud {
     $("flight-label").textContent = speed > 1 ? "TRANSIT 3×" : `${p.loadout === "torpedo" ? "TBD" : "SBD"} / ${b.command.toUpperCase()}`;
     const nav = b.navigationPoint;
     const dist = distance2(p, nav);
-    const designated = b.contacts.get(b.target);
+    const designated = b.contacts.get(b.target ?? "");
     // The contact line already gives its course and range, so the nav line only speaks when it
     // is steering somewhere else: home, or a search sector with nothing designated.
     $("nav-detail").textContent =
@@ -155,7 +156,7 @@ export class Hud {
       if (designated) {
         const e = contactEstimate(designated, b.time);
         const ship = b.ships.find((s: any) => s.id === designated.id);
-        const state = e.age < 2 ? (ship.sunk ? "SINKING" : `DECK ${ship.deck < 0.35 ? "OUT" : "ACTIVE"}${ship.fire > 0.3 ? " / BURNING" : ""}`) : `${Math.floor(e.age)}s OLD · ${Math.round(e.confidence * 100)}%`;
+        const state = e.age < 2 && ship ? (ship.sunk ? "SINKING" : `DECK ${ship.deck < 0.35 ? "OUT" : "ACTIVE"}${ship.fire > 0.3 ? " / BURNING" : ""}`) : `${Math.floor(e.age)}s OLD · ${Math.round(e.confidence * 100)}%`;
         contactLine.textContent = `◈ ${designated.name.toUpperCase()} ${heading(bearing(p, e))}° / ${(distance2(p, e) / 1000).toFixed(1)} KM · ${state}`;
       } else contactLine.textContent = "";
     }
@@ -288,12 +289,12 @@ export class Hud {
   updateDownedPanel(): void {
     const downed = this.b.player.mode === "downed";
     const status = downed ? this.b.replacementStatus() : null;
-    const key = downed ? `${status.available}|${status.carrier}|${status.reason}|${status.last}` : "";
+    const key = status ? `${status.available}|${status.carrier}|${status.reason}|${status.last}` : "";
     if (key === this.lastDowned) return;
     this.lastDowned = key;
     const panel = $("downed");
     panel.classList.toggle("hidden", !downed);
-    if (!downed) return;
+    if (!status) return;
     $("downed-title").textContent = status.available ? "Take another aircraft." : "No aircraft ready.";
     $("downed-reason").textContent = `${status.last} ${status.reason}`;
     const button = $("take-aircraft") as HTMLButtonElement;
@@ -475,7 +476,7 @@ export class Hud {
         c.fillStyle = "#edf1d9";
         c.fillRect(rx - 1, ry - 1, 2, 2);
       }
-      const f = p.attitude ? attitudeAxes(p).f : forward(p.heading, p.pitch);
+      const f = axesOf(p).f;
       const aim = this.view.project({ x: p.x + f.x * 1600, y: p.y + f.y * 1600, z: p.z + f.z * 1600 });
       if (aim.visible) {
         c.strokeStyle = "rgba(234,239,218,.8)";
@@ -526,7 +527,7 @@ export class Hud {
         }
       }
       if (p.torpedo > 0) {
-        const target = this.b.contacts.get(this.b.target);
+        const target = this.b.contacts.get(this.b.target ?? "");
         if (target && this.b.time - target.time < 3) {
           const lead = torpedoIntercept(p, target);
           const pt = this.view.project({ ...lead, y: 4 });
@@ -565,7 +566,7 @@ export class Hud {
           c.fillText(`${a.kind === "fighter" ? "ZERO" : a.kind === "torpedo" ? "KATE" : "VAL"} · ${Math.round(d)} M`, pt.x, pt.y - 22);
         }
       }
-      const contact = this.b.contacts.get(this.b.target);
+      const contact = this.b.contacts.get(this.b.target ?? "");
       if (contact && this.b.time - contact.time < 3) {
         const pt = this.view.project({ ...contact, y: 22 });
         if (pt.visible) {

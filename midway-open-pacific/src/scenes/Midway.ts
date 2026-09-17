@@ -14,6 +14,7 @@ import { loadImportedFleet, loadImportedHulls } from "../render/imported-fleet.j
 import { loadDeckCrew } from "../render/deck-crew.js";
 import { WorldView } from "../render/world.js";
 import { nullShell, shell, type IHud, type Intent } from "../ui/port.js";
+import type { IHudSnapshot, IUiSnapshot } from "../ui/state.js";
 import { Soundscape } from "../audio.js";
 
 /**
@@ -23,6 +24,9 @@ import { Soundscape } from "../audio.js";
  * read — a native HUD, or a playtest asserting that the aircraft actually left the deck.
  */
 export type GameState = {
+  /** The native web view mirrors these into the real HUD markup; the web build owns its own DOM. */
+  ui?: IUiSnapshot;
+  hud?: IHudSnapshot;
   status: string;
   mode: string;
   altitude: number;
@@ -37,8 +41,20 @@ export type GameState = {
   muzzle: number;
   /** Water-impact bursts actually rendered: the effect a released bomb's miss produces. */
   splashes: number;
+  /**
+   * Existing `WaterEffects` counters, exposed read-only so a native effects gate can prove the
+   * whitewater solver accepted an impact rather than only that the request was queued.
+   */
+  waterAccepted: number;
+  waterRejected: number;
   /** Bombs left on the rack, so a release test proves a weapon actually left the aircraft. */
   ordnance: number;
+  /**
+   * `battle.approach().ready` — the single assisted-final gate `finalReady` that `assistRecovery`
+   * and the HUD's "READY FOR L" cue both read. Exposed read-only so a scenario can time the real
+   * KeyL press from the game's own gate instead of guessing a duration.
+   */
+  recoveryReady: boolean;
   /**
    * The UI layer has a peer and has rendered at least once.
    *
@@ -81,7 +97,10 @@ export class Midway extends Scene<GameState, undefined> {
     explosions: 0,
     muzzle: 0,
     splashes: 0,
+    waterAccepted: 0,
+    waterRejected: 0,
     ordnance: 0,
+    recoveryReady: false,
     uiReady: false,
   };
 
@@ -463,8 +482,19 @@ export class Midway extends Scene<GameState, undefined> {
       this.wasCaptured = false;
       this.ctx.input.releaseMouse();
       this.clearInput();
+      // The hud channel's `debrief()` un-hides #debrief in the web view, but the native entry
+      // re-applies `ui.screens` on every published ui snapshot. Without this the published
+      // `screens.debrief` never leaves the false `begin()` set, so the first later snapshot hides
+      // the dialog again — the debrief exists in the simulation and never on screen. Same
+      // derivation hideOverlays uses, so both agree.
+      this.syncDebriefScreen();
       this.hud.debrief();
     }
+  }
+
+  /** The one place `ui.screens.debrief` is derived from the battle, for the terminal states. */
+  private syncDebriefScreen(): void {
+    shell.screen("debrief", ["lost", "won", "debrief"].includes(this.battle.status));
   }
 
   /** Aim from the lock only; the lock's own loss is handled before the controls, in update(). */
@@ -498,7 +528,10 @@ export class Midway extends Scene<GameState, undefined> {
       explosions: this.world.particles.counts.explosion ?? 0,
       muzzle: this.world.particles.counts.muzzle ?? 0,
       splashes: this.world.particles.counts.splash ?? 0,
+      waterAccepted: this.world.ripples.effects.accepted,
+      waterRejected: this.world.ripples.effects.rejected,
       ordnance: p.bombs ?? 0,
+      recoveryReady: this.battle.approach().ready,
     });
     // `set` only stages the patch; the UI channel receives nothing until it is flushed. Without
     // this the native web view attaches, subscribes, and then waits forever for a first snapshot
@@ -517,7 +550,7 @@ export class Midway extends Scene<GameState, undefined> {
 
   private hideOverlays(): void {
     shell.overlay(null);
-    shell.screen("debrief", ["lost", "won", "debrief"].includes(this.battle.status));
+    this.syncDebriefScreen();
     this.overlay = null;
     this.hud.mapOpen = false;
     this.paused = false;

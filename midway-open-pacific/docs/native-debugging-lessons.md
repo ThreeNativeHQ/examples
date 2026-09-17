@@ -1,0 +1,159 @@
+# Native debugging lessons — Midway Open Pacific
+
+Reusable runbook for native parity work on this port. Durable issues and evidence live in
+[docs/native-parity-bugs.md](native-parity-bugs.md); `/tmp/midway-muse.fgODHg/` and
+`/home/joao/.cache/midway-native-parity-fgODHg/` are ephemeral. This is not a chronology.
+
+## Does native playtest work? Yes, with limits
+
+This investigation proves the Linux desktop target; it does not qualify Android or iOS.
+The playtest CLI runs against `--target desktop` and drives a real SDL/WebKit binary, making real
+native runtime assertions and GPU-frame checks (frames rendered, game state changed, overlay attach
+reported). UI parity uses injected pointer and key events; pointer hits on UI are forwarded to
+the WebView script. These are separate from OS-level XTEST: the `ui-parity.playtest.json` scenario
+selects and launches an aircraft, orders a wing command and opens/closes the map under those
+injected events with zero runtime diagnostics, asserted on state. On the final artifact `6f29f1f8`
+this whole set ran as **11 serialized scenarios, every one `pass:true` with `consoleErrors 0`**
+(ui-parity: 610 frames, 6/6 state asserts under the **injected page pointer, not an OS pointer**;
+explosion ×3; briefing moved briefing→playing on an injected Take Deck pointer; chooser asserted
+visibility only — **no click**; boot/cockpit/launch/vfx/ui too). Actual OS window routing and
+`<select>` popups are a separate question, answered only by an OS-composited capture driven by real
+XTEST input — not by this runner path. That capture ran on the final artifact and proved the full
+1280×720 briefing, a real OS dropdown open with the briefing preserved, and OS Recon selection; it
+did not reach a debrief/restart (see below).
+
+A native recon run on the earlier `021f2d5a` artifact proved the complete route: select Recon through
+the real OS popup, start airborne, find/report a carrier, return with the existing assists, recover,
+show the visible debrief, and click **New Deck Sortie** back to deck servicing. It took 287.4
+simulated seconds and 151.9 wall seconds including startup. That popup capture also exposed a
+separate defect: opening it hid the briefing. The engine now distinguishes a temporary keyboard grab
+from real focus loss, and rebuilt native popup frames kept the full briefing visible; selection
+success alone would have missed that visual failure. On the final artifact the popup verdict
+repeated (dropdown open, briefing preserved, Recon selected), and a **real OS XTEST KeyL** was
+delivered and **acknowledged** (`lsoAck` true, R21 and LSO "Final approach assist engaged") where an
+earlier **bridged** KeyL got no ack. That proves the assist engages from a real OS key and puts the
+no-ack difference in the bridge input-delivery path *in this harness*; it does **not** prove a bridge
+bug, since hold length differed (2 vs 6 ticks) with one observation each. Recovery then reached no
+terminal within the 100 s follow window (state `playing`/`flight`, phase `groove`), so the final
+**debrief/restart remains open** — possibly a harness window cap, not shown to be a landing failure.
+Not generic "native broken", and not a proven bridge root cause.
+
+What it cannot prove on its own:
+
+- The OS-composited WebView layer. A GPU framebuffer screenshot omits the overlay; an OS-composited
+  root capture is required for anything visual in the HUD.
+- Real OS pointer/resize routing and `<select>` popups: an injected event, even one that reaches the
+  page, cannot open a popup. Only a separate OS-composited root capture driven by real XTEST input
+  answers these; no runner scenario is claimed to open a select popup.
+- Long-horizon outcomes on a wall-clock deadline: `waitForResource` advances **one fixed tick per
+  mailbox round-trip**, so a 1-tick wait loop can exhaust the whole 120 s wall budget after only a
+  few thousand simulation ticks. Batched stepping reached the landing gate where the earlier wait
+  timed out. A matched web run reproduced the subsequent failed landing with the same pre-landing
+  position and LSO acknowledgement, so that route does not establish a native-only defect.
+  Record simulated time, action acknowledgement
+  and the final outcome; reaching an intermediate gate is insufficient proof. Use large tick chunks
+  for transit (`holdTicks`/`waitTicks`), then finer state checks near the gate.
+- A completed run is not a passing interaction. Assert the outcome state, then look at the frame.
+- A destroyed aircraft does not guarantee a debrief. With friendly decks available, the current
+  game can enter its downed/replacement flow; choose a route that actually reaches the screen being
+  tested instead of relying on older crash documentation.
+
+## Acceptance is separate checks
+
+Do not collapse these into one verdict:
+
+- Boot + render: process starts and a frame is produced.
+- Overlay ready: native WebKit overlay attaches and reports ready.
+- Click: an injected pointer event reaches a UI element.
+- Acknowledgement: the game **acknowledged** the order (LSO/radio, or a persistent toast for a
+  refusal), not merely received the input.
+- Game state: the action actually changed simulation state.
+- Visual: an OS-composited capture visibly shows it.
+
+## Known facts (measured)
+
+- GPU framebuffer screenshots omit the native WebKit overlay; they are not UI proof. Root captures
+  were 1600×900 against a 1280×720 window — the grey padding was that mismatch, not layout.
+- `xcompmgr` is the stock compositor; the engine owns private `COMPOSITE+SHAPE` Xvfb setup and
+  borrows `xcompmgr`/`picom`/`compton` from PATH. The SHAPE `BadMatch` came from arbitrary DOM
+  rectangles declared `YSorted` when they are `Unsorted`; a native unsorted-overlap probe reproduces
+  it, and the game UI now passes. Keep platform fixes in the engine.
+- The intermittent shader error (`@group(1) @binding(7)`, `Placard label-instruments`) required
+  capturing both WGSL and layout entries: the shader had one extra sampler, and Three's builder made
+  the sampler-inclusion decision twice. The patch (`490f9054`, same change at root/`core`/template)
+  now emits declarations from the binding already created; a paired WGSL-filter-change test flips
+  RED→GREEN. The final artifact's 11 native runs show 69 pipeline events / 51 programs all created,
+  `present=55 requested=69 emitted=69 outstanding=0`, and zero validation errors. Keep the native
+  pipeline label as permanent C++-only diagnosis.
+- A water burst uses `WaterEffects`, not the smoke/glow particle path, so a particle counter is
+  structurally incapable of proving it; assert effect-specific resources, and never read presence
+  from a counter alone. Check actual projected pixel bounds when framing: the HUD's `visible`
+  flag allows an off-screen margin, so it was true for an impact below the captured image. The final
+  artifact passed the explosion scenario three times on counters; the visible spray remains `021`
+  visual evidence.
+- Runtime identity: rebuild against a content-hashed runtime and packs; never trust version or
+  timestamp, never patch `node_modules/`. The supported runtime path is
+  `/home/joao/.cache/midway-native-parity-fgODHg/runtime-a329/mystral` (embedded host prefix
+  `a329e5cf…` in the final artifact). The native binary packs its own assets — never raw-run a
+  foreign-cwd `game.js`.
+
+## Recipe
+
+```sh
+# Run from the game checkout:
+# /home/joao/projects/threenative/sandbox/.worktrees/native-port/midway-open-pacific
+# Ensure a compositor (xcompmgr, picom or compton) is installed and on PATH first.
+bash tools/capture-lock.sh \
+  node node_modules/@threenative/playtest/dist/runner/cli.js \
+  --scenario native-playtests/ui-parity.playtest.json --target desktop \
+  --executable dist-native/midway-open-pacific --timeout 600000
+```
+
+Confirm the scenario path exists first (native scenarios live only in `native-playtests/`). Every
+browser and native launch goes through `tools/capture-lock.sh` — no `xvfb-run`, no visible desktop.
+
+## Next time — ranked improvements
+
+1. **Assert acknowledgement, not delivery.** Require the action ack (LSO/radio) *and* a terminal
+   outcome (`recovered`/`restartPlaying`), and read the **persistent HUD toast** for a refusal — the
+   refusal is a notice→toast, so a radio-only check can never fire. A key that is delivered and
+   pumped but not acknowledged is not a pass.
+2. **Never treat `driver.ok`/`runner.ok:true` as scenario acceptance.** `ok` means the harness
+   finished; acceptance needs the outcome flags (`osKeyLRefused`, `terminalDebrief`, `recovered`).
+3. **An overlay-aware capture** that composites the WebKit layer, not just the GPU framebuffer, so
+   debrief/restart/map are provable visually instead of inferred from state.
+4. **A scenario driver that batches simulation ticks** for long transits, replacing the 1-tick
+   `waitForResource` loop, and follows past the current 100 s cap, so a recovery reaches its gate.
+5. **Readiness and failure evidence:** retain native stdout/stderr even when mailbox attachment
+   times out; assert pointer outcomes and resize behaviour so "attached" never means "interactive".
+6. **A one-command reproducer** emitting the exact runtime hash, pack hashes, GPU, display and window
+   geometry, so a run is reproducible without archaeology.
+7. **Preflight that fails fast** when no compositor is on PATH, printing the exact install command.
+
+## Method discipline
+
+- Tiny probe first, one variable at a time. Compare embedded paths and bytes before blaming a new
+  host binary: `package-desktop.mjs --assets` takes the `public` root. Passing `public/assets`
+  stripped the `assets/` prefix and produced an invalid probe. Also inspect complete native binding
+  fields; a splash counter alone does not prove visibility.
+- Compare the same controls in the real web scene: match seed, assignment, loadout and input defaults.
+  Confirm acknowledgement, not merely delivery: the LSO radio for a landing assist **and** the
+  persistent HUD toast for a refusal (a radio-only check misses the refusal; `battle.ts:4455` →
+  `Midway.ts:395` → `hud.ts:82`). Record simulated time separately from wall time; batch transit
+  ticks and check more finely near a gate.
+- Reproduce at normal verbosity; `MYSTRAL_DEBUG` can perturb timing. Add regression tests only after
+  real proof, with actual outcomes. Exercise shared consumers too: the focused pointer tests missed
+  the generated shooter's explicit button-mask release and an older click-test expectation.
+- Profile with `TN_V8_FLAGS="--prof --no-logfile-per-isolate --logfile=/absolute/path/v8.log"`, then
+  `node --prof-process --range=<cutoff>, /absolute/path/v8.log`. Pick the cutoff from your own tick
+  histogram, not a copied 33000 ms; discard startup. Preserve launch timestamps even when their log
+  lines carry extra fields, align the clocks, and exclude windows crossing phase boundaries. Never
+  report Xvfb FPS as physical-desktop FPS.
+- Check `df -h /tmp` before long captures: this host's `/tmp` is a separate 32 GB tmpfs that filled
+  mid-debugging. Serialise with the wrapper's actual file lock — a PID in the lock file can be stale
+  and `pgrep -f` can match its own polling shell and wait forever.
+
+## Next action (<2 min)
+
+Confirm a compositor (`xcompmgr`/`picom`/`compton`) is on PATH, then run the native UI smoke with the
+recipe above.
