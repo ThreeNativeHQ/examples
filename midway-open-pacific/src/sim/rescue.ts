@@ -16,6 +16,39 @@ export interface Survivors extends ISurvivorGroup {
   fromShipId: string;
 }
 
+/**
+ * An aircraft that went into the sea, as a fading position the minimap marks. `Battle` owns the
+ * list and mutates `age`; this module owns only the record, the age step and the side colour, so
+ * the same ping logic cannot drift between the simulation and the HUD.
+ */
+export interface WreckMarker {
+  x: number;
+  z: number;
+  /** `us` is a friendly aircraft, anything else the enemy. */
+  team: string;
+  /** Seconds since impact; the HUD fades the ping out as this approaches `PING_SECONDS`. */
+  age: number;
+}
+
+/** How long a sea-impact ping stays on the minimap before it fades out. */
+export const PING_SECONDS = 20;
+
+/** A fresh ping at an aircraft's sea-impact position. */
+export function wreckMarker(x: number, z: number, team: string): WreckMarker {
+  return { x, z, team, age: 0 };
+}
+
+/** Age every ping and drop the ones that have faded, so a long battle cannot fill the minimap. */
+export function stepWrecks(wrecks: WreckMarker[], dt: number): WreckMarker[] {
+  if (!(dt > 0) || wrecks.length === 0) return wrecks;
+  const kept: WreckMarker[] = [];
+  for (const w of wrecks) {
+    w.age += dt;
+    if (w.age < PING_SECONDS) kept.push(w);
+  }
+  return kept;
+}
+
 export type RescuePhase = "approaching" | "recovering" | "done" | "aborted";
 
 /**

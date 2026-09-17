@@ -5,6 +5,7 @@ import { torpedoEnvelope, torpedoIntercept } from "./sim/armament.js";
 import { attitudeAxes } from "./sim/flight.js";
 import { ASSIGNMENTS, objectiveText, outcomeText, type Assignment } from "./sim/sortie.js";
 import { angleDelta, bearing, bombImpact, clamp, contactEstimate, distance2, distance3, forward } from "./sim/math.js";
+import { PING_SECONDS } from "./sim/rescue.js";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 /** Optional element: the approach, wing and reserve lines are additive, never required markup. */
@@ -252,7 +253,7 @@ export class Hud {
         const a = b.approach();
         const r = b.returnReserve();
         cueLine.textContent = a.carrier
-          ? `${a.phase.toUpperCase()} · ${knots(a.speed)} KT AIRSPEED · ${feetPerMinute(a.descent)} FT/MIN · ${a.cues.join(" · ")} · ${r.available ? `RESERVE ${clock(Math.max(0, r.spare))} (EST)` : "RESERVE UNKNOWN"}`
+          ? `${a.phase.toUpperCase()} · ${a.corrections.join(" · ")} · ${knots(a.speed)} KT AIRSPEED · ${feetPerMinute(a.descent)} FT/MIN · ${a.cues.join(" · ")} · ${r.available ? `RESERVE ${clock(Math.max(0, r.spare))} (EST)` : "RESERVE UNKNOWN"}`
           : "NO AVAILABLE DECK";
       } else cueLine.textContent = "";
     }
@@ -773,7 +774,27 @@ export class Hud {
       c.fillStyle = a.team === "us" ? "#8ebbbb" : "#df9872";
       c.fillRect(q.x - 2, q.y - 2, 4, 4);
     }
+    for (const w of this.b.wrecks) this.ping(c, pt(w), w.team, w.age, 7);
     this.shipIcon(c, R, R, p.heading, "plane", 12, "#f0e2c1");
+    c.restore();
+  }
+
+  /**
+   * A sea-impact ping: a hollow ring that fades and expands as it ages. Blue is an allied aircraft,
+   * orange an enemy one. Drawn on both the radar and the tactical map from the simulation's own
+   * `Battle.wrecks` records, so the two views can never disagree about who went in where.
+   */
+  ping(c: CanvasRenderingContext2D, a: { x: number; y: number }, team: string, age: number, size: number): void {
+    const t = clamp(age / PING_SECONDS, 0, 1);
+    c.save();
+    c.globalAlpha = 1 - t;
+    c.strokeStyle = team === "us" ? "#6fb4f0" : "#f0a04a";
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.arc(a.x, a.y, size + t * 8, 0, Math.PI * 2);
+    c.stroke();
+    c.fillStyle = c.strokeStyle;
+    c.fillRect(a.x - 1.5, a.y - 1.5, 3, 3);
     c.restore();
   }
 
@@ -870,6 +891,7 @@ export class Hud {
       const p = pt(a);
       this.shipIcon(c, p.x, p.y, a.heading, "plane", 4, a.team === "us" ? "#73aba9" : "#c99a77");
     }
+    for (const w of b.wrecks) this.ping(c, pt(w), w.team, w.age, 8);
     for (const contact of b.contacts.values()) {
       const e = contactEstimate(contact, b.time);
       const a = pt(e);

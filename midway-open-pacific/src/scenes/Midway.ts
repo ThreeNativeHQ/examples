@@ -219,7 +219,10 @@ export class Midway extends Scene<GameState, undefined> {
   private intent(intent: Intent): void {
     switch (intent.kind) {
       case "begin":
-        this.begin(intent.airborne, intent.fresh);
+        // A fresh deck start taken from the debrief continues the operation from the carrier
+        // rather than resetting the battle (upstream af5caac, where the DOM button did this).
+        if (!intent.airborne && intent.fresh && this.battle.status === "debrief") this.continueOnDeck();
+        else this.begin(intent.airborne, intent.fresh);
         break;
       case "briefing":
         this.restartToBriefing();
@@ -690,6 +693,21 @@ export class Midway extends Scene<GameState, undefined> {
     this.audio.event({ type: "engineStart", airframe: this.battle.player.airframe });
     this.updateLoadoutUI();
     this.hud.toast("NEW AIRCRAFT ON DECK — HOLD W TO LAUNCH");
+  }
+
+  /**
+   * The debrief's deck action. A short sortie's after-action report ends the sortie, not the war:
+   * this resumes the same battle on the deck, where the service the recovery started finishes and
+   * re-arms the aircraft. A lost or won mission uses the button to start a fresh operation instead.
+   */
+  private continueOnDeck(): void {
+    if (!this.battle.continueAfterRecovery()) return;
+    this.ended = false;
+    this.hideOverlays();
+    this.world.snap = true;
+    this.world.followBomb = false;
+    this.updateLoadoutUI();
+    this.hud.toast("BACK ON DECK — REFUELLED AND REARMED, HOLD W TO LAUNCH AGAIN");
   }
 
   private designateTarget(id: string): void {

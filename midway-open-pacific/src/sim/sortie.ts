@@ -58,7 +58,7 @@ export const ASSIGNMENTS: Record<Assignment, { name: string; brief: string }> = 
   },
   operation: {
     name: "OPEN PACIFIC",
-    brief: "Neutralize all four enemy flight decks, then recover to complete the operation.",
+    brief: "Sink every enemy ship in the area, then recover to complete the operation.",
   },
   surface: {
     name: "SURFACE STRIKE",
@@ -328,7 +328,7 @@ export function feasibleSupportDuties(world: ISupportWorld, now: number): Suppor
 
 /** One line of assignment status for the mission panel and the map. */
 export function objectiveText(s: ISortie): string {
-  if (s.assignment === "operation") return "Neutralize all four enemy flight decks.";
+  if (s.assignment === "operation") return "Sink every enemy ship in the area.";
   if (s.objective === "achieved") return "Objective complete — recover aboard a friendly carrier.";
   if (s.objective === "unavailable") return "No eligible target remains. Return and report.";
   if (s.assignment === "recon") return "Transmit one fresh carrier contact with R.";

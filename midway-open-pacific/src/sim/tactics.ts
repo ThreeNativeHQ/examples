@@ -601,6 +601,17 @@ function rearMountFor(a: Any): RearGunMount | null {
 }
 
 /**
+ * Half-width of the Douglas' own-hull sector at a given (negative) gun pitch, in radians. Linear
+ * between the two measured depressions and closing to zero at level; below the measured floor it
+ * holds the deepest measured width plus the same conservative margin the flat clamp carried.
+ */
+function sbdBlockedYaw(pitch: number): number {
+  if (pitch <= -0.13) return 0.5;
+  if (pitch <= -0.08) return 0.05 + ((-0.08 - pitch) / 0.05) * 0.4;
+  return Math.max(0, ((-0.01 - pitch) / 0.07) * 0.05);
+}
+
+/**
  * One round from the tail gun, aimed along a world-space direction. Both the AI gunner and the
  * manned station fire through this, so the muzzle, event, tracer speed, ammunition and credit can
  * never drift apart between the two callers. The muzzle is one of the approved gun's own two mouths,
@@ -626,22 +637,35 @@ function rearShot(b: Any, a: Any, dx: number, dy: number, dz: number, spread: nu
   // The Douglas alone: its thin fin guard below does not cover the fuselage and horizontal tail a
   // depressed central shot passes through. Measured against the exported airframe mesh (parent BVH
   // grid, both mouths): pitch −0.13 hits the hull to |yaw| ≤ 0.45, and −0.08 to |yaw| ≤ 0.05, while
-  // the TBD stays clear. The SBD below-level central sector is refused conservatively.
-  // ponytail: |yaw| ≤ 0.50 also blocks some genuinely clear downward rays; fit a hull envelope only
-  // if play shows this too restrictive. No runtime mesh physics.
-  // The −0.01 rad floor keeps a level shot (whose computed pitch carries ~1e-15 of noise) clear.
-  if (a.airframe === "sbd" && pitch < -0.01 && Math.abs(yaw) <= 0.5) return false;
+  // the TBD stays clear. The −0.01 rad floor keeps a level shot (whose computed pitch carries
+  // ~1e-15 of noise) clear.
+  //
+  // This used to refuse the whole below-level sector to |yaw| ≤ 0.50 at any depression, which is
+  // far wider than what was measured: the gunner acquired a fighter sitting astern and a few
+  // degrees low, then had every round refused and never fired. The blocked half-width now walks
+  // the two measured points and closes to nothing at level, so only the rays that actually cross
+  // the hull are refused. No runtime mesh physics.
+  if (a.airframe === "sbd" && pitch < -0.01 && Math.abs(yaw) <= sbdBlockedYaw(pitch)) return false;
   // The candidate barrel is chosen but not committed: a refused shot (crossing the fin) must not
   // flip the barrel, so the two mouths only alternate on rounds that actually leave the gun.
-  const barrel = a.rearBarrel ? 0 : 1;
-  const mouth = rearGunMuzzle(mount, barrel, yaw, pitch);
-  const local = [
-    mount.pivot[0] + mouth[0],
-    mount.pivot[1] + mouth[1],
-    mount.pivot[2] + mouth[2],
-  ] as const;
+  //
+  // The two mouths straddle the fin 18 cm apart, so a bearing that sends one barrel's round through
+  // the 8 cm slab leaves the other one clear. Refusing on the first candidate alone deadlocked the
+  // gun: the blocked barrel was never flipped, so it was re-chosen and re-refused every tick and
+  // the gunner sat silent with a fighter six degrees off his centreline. Offer the other mouth
+  // before giving the shot up; only a bearing that fouls both is actually refused.
+  const mouthLocal = (i: number) => {
+    const m = rearGunMuzzle(mount, i, yaw, pitch);
+    return [mount.pivot[0] + m[0], mount.pivot[1] + m[1], mount.pivot[2] + m[2]] as const;
+  };
   const tail = rearGunTailBoxFor(a.airframe);
-  if (tail && rearGunHitsOwnTail(tail, local, [lx, ly, lz])) return false;
+  let barrel = a.rearBarrel ? 0 : 1;
+  let local = mouthLocal(barrel);
+  if (tail && rearGunHitsOwnTail(tail, local, [lx, ly, lz])) {
+    barrel = barrel ? 0 : 1;
+    local = mouthLocal(barrel);
+    if (rearGunHitsOwnTail(tail, local, [lx, ly, lz])) return false;
+  }
   a.rearBarrel = barrel;
   const muzzle = aircraftWorld(a, { x: local[0], y: local[1], z: local[2] });
   const mx = muzzle.x;
@@ -786,9 +810,12 @@ export function rearGunner(b: Any, a: Any, dt: number): void {
     if (d2 >= 422500 || d2 <= 625) continue;
     const dd = Math.hypot(dx, dy, dz);
     if ((dx * fx + dy * fy + dz * fz) / dd < REAR_GUN_DOT && (dx * ux + dy * uy + dz * uz) / dd > REAR_GUN_ELEVATION) {
-      t = e;
-      d = dd;
-      break;
+      // The nearest foe in the cone, not the first one the array happens to hold: taking the first
+      // let the gunner plink at a contact 600 m out while a fighter closed to gun range astern.
+      if (!t || dd < d) {
+        t = e;
+        d = dd;
+      }
     }
   }
   if (!t) return;
