@@ -15,7 +15,8 @@
     "test": "vite build && threenative-playtest --scenario \"playtests/*.playtest.json\" --browser-recipe webgpu --headed --server-command \"pnpm dev --host 127.0.0.1 --port $PORT --strictPort\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "verify:audio": "node scripts/check-audio.mjs",
-    "verify": "pnpm typecheck && pnpm verify:audio"
+    "verify:hud": "node scripts/check-hud-transport.mjs",
+    "verify": "pnpm typecheck && pnpm verify:audio && pnpm verify:hud"
   },
   "dependencies": {
     "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-core-0.3.2-5670959c56ac.tgz",
