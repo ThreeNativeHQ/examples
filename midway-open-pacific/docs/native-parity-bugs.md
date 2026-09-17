@@ -6,7 +6,7 @@
 `THREENATIVE_RUNTIME_BINARY`. Host: Linux, NVIDIA RTX 2080, Vulkan/Dawn, WebGPU.
 
 Midway now builds and runs on the desktop native target from one command. This records what was
-broken, what was fixed, and the one issue still open.
+broken, what was fixed, and the remaining gaps. This lane is still work in progress.
 
 ---
 
@@ -19,9 +19,9 @@ broken, what was fixed, and the one issue still open.
 | 3 | Native UI overlay untestable (no compositing manager) | engine | **partly fixed** |
 | 4 | 2D canvas shim missing `createRadialGradient`, `clip`, `setLineDash`, `lineJoin` | engine | **fixed** |
 | 5 | Cockpit renders white | game | **fixed** |
-| 6 | React HUD never appeared on native | game | **fix applied, unverified** |
-| 7 | Gunshots make no sound on native | unknown | **OPEN** |
-| 8 | Explosions reportedly missing on native | unknown | **not reproduced** |
+| 6 | React HUD never appeared on native | game | **verified: minimal React HUD visible; native UI gate passes** |
+| 7 | Gunshots make no sound on native | engine | **absolute scheduling fixed; PCM regression passes; in-game audio still unverified** |
+| 8 | Explosions reportedly missing on native | unresolved | **real bomb-drop gate fails: splash event recorded, particles absent at sample** |
 
 ---
 
@@ -33,18 +33,55 @@ Bounded fix + performance slice. Acceptance criteria, each a native run under
 - [ ] **#7** A one-shot cue fired at t > 0 is audible at *that* time on native: `audio_graph_test`
       proves `start(when=currentTime)` sounds immediately (red before the fix), and a native
       capture shows the gun event's source leaves the active-source set instead of piling up.
-- [ ] **#6** A native capture of the running HUD shows non-blank pixels (crop distinct from sky).
+- [x] **#6** A native capture of the running HUD shows non-blank pixels (crop distinct from sky).
 - [ ] **#8** `native-playtests/explosion.playtest.json` actually releases a weapon, observes a
-      hit, and asserts a *weapon-specific* effect — the assertion fails if the blast returns.
+      hit, and asserts a *weapon-specific* effect — the assertion fails if the effect is absent.
 - [ ] **#3** `TN_UI_OVERLAY:{"attached":true}` on a fresh Xvfb with COMPOSITE and no manager, and
       a captured root frame shows the overlay blended over the game.
 - [ ] **Perf** `threenative-playtest perf --executable dist-native/midway-open-pacific` reports
       steady windows (startup discarded) for deck, air and combat, plus a
-      `profile-production.mjs` trace naming hot functions; raw artifacts under
-      `artifacts/native-parity/`.
+      native V8 CPU profile naming hot functions. The engine's `profile-production.mjs` profiles
+      its template, not Midway; do not use that trace as evidence for this game.
 - [ ] Gates green: game `pnpm typecheck`, `node scripts/check-*.mjs` in scope, native + web
       launch playtests; engine `pnpm typecheck && pnpm lint && pnpm test` (touched packages).
 - [ ] Temporary probes (`TN_FIRE`, `TN_GUN_EVENT`) removed.
+
+### Latest verification and remaining work
+
+Tested game checkpoint: `0f344ac`. Engine snapshot: `7c17ff95e` on
+`fix/midway-native-parity`, retained in the engine's `.worktrees/midway-native-parity`.
+
+- Native `ui`, `launch`, `cockpit` and `vfx` scenarios pass. The cockpit image was inspected:
+  olive frame and dark dashboard are visible. The React UI is only telemetry and a key legend;
+  web briefing, map and debrief parity is not implemented. Logs: `/tmp/midway-native-target-gates.5FJunX/`.
+- Native `explosion` fails: airborne and splash-event checks pass, but live particles are `0 → 0`.
+  `artifacts/playtest/native-bomb-impact.png.png` shows no visible splash. Timing/camera versus
+  missing rendering is unresolved; do not weaken the assertion or call this fixed.
+- The rebuilt native `threenative-audio-graph-test` passes with `SDL_AUDIODRIVER=dummy`, including
+  `absolute-start=1`. This proves PCM scheduling after the clock advances, not audible gunfire
+  in the running game. Log: `/tmp/midway-audio-graph-test.log`.
+- Web build and launch pass; game typecheck and the other recorded pure gates pass. Flight gate
+  `scripts/check-flight.mjs:521` fails ordered-wing recovery in all five seeds. Engine typecheck
+  and lint pass; full tests fail: three archive tests lack `zip`, the Android WebP source-contract
+  check rejects the new diagnostic, and the Canvas2D script hash contract needs updating.
+- Compositor review remains open: selection ownership, foreign-window destruction races,
+  redirection before the first pump and stale background pixels need resolution and proof.
+  Decoder-probe review also found an unremoved temporary directory and an Android fallback that
+  consults a host executable rather than proving the Android runtime's capabilities.
+
+Native performance was measured on private Xvfb, FIFO, 1280×720, 4× MSAA; these are not physical
+desktop FPS. Unprofiled deck windows after startup: **15.04 / 14.99 FPS**, frame p95
+**30.10 / 30.03 ms**, GPU **6.44 / 6.46 ms**, median host presentation **39.099 ms**. Both 60 FPS
+and 16.7 ms gates fail. Log: `/tmp/midway-native-baseline.lFDZZa/probe.log`.
+An actual V8 `--prof` run is in `/tmp/midway-native-initial-profile.m4J7ZL/`; preliminary JS hot
+functions include `updateMatrixWorld`, `multiplyMatrices`, animation `_update` and scene `#visit`.
+Its decoder reports a V8 version mismatch, and the profile includes startup. Flight/combat
+performance, sustained memory growth and an optimization with measured benefit remain unverified.
+
+The cheap implementation provider repeatedly returned no response, including a minimal health
+probe. The latest retry was stopped without a model substitution; remaining fixes are parked,
+not complete. No credit-exhaustion diagnostic was returned. Delivery is limited to draft review;
+this lane is not ready to merge or release.
 
 ## 1. Native build refused — DOM in the game bundle (fixed)
 
@@ -230,7 +267,7 @@ crashing. With the fixed runtime, zero textures take these paths (instrumented: 
 
 ---
 
-## 6. React HUD never appeared on native (fix applied, unverified)
+## 6. React HUD never appeared on native (verified for the minimal HUD)
 
 The overlay attached (`TN_UI_OVERLAY:{"attached":true}`) but drew nothing.
 
@@ -243,7 +280,9 @@ an overlay that is present and permanently blank.
 `SCOUT TWO · AWAITING TELEMETRY` before the first snapshot instead of nothing — a HUD that draws no
 pixels is indistinguishable from an overlay that failed to attach, which is what hid this.
 
-**Not yet verified on screen.** Needs a capture or a look at the running window.
+There was a second cause: `src/ui/main.tsx` rendered `NativeHud` without `UiLayer`, so `useUiState`
+threw `TN_UI_LAYER_MISSING`. Wrapping it in `UiLayer` fixes that error. The running HUD was inspected
+at `/tmp/midway-ofinish/boot1/root.png`, and the desktop `ui` scenario passes.
 
 Supporting work: `src/ui/main.tsx` + `src/ui/NativeHud.tsx` (React, reads published state only),
 `ui.renderer` set back to `"web"` so native composites the overlay. Published `GameState` is now
@@ -251,7 +290,12 @@ Supporting work: `src/ui/main.tsx` + `src/ui/NativeHud.tsx` (React, reads publis
 
 ---
 
-## 7. Gunshots make no sound on native (OPEN)
+## 7. Gunshots make no sound on native (engine fix; game audio proof pending)
+
+**Current finding:** native `AudioBufferSourceNode.start/stop` treated Web Audio's absolute `when`
+as a relative delay. Three.js supplies `currentTime + delay`, so the old code effectively added
+the clock twice. The engine now schedules at `max(when, currentTime)`. The rebuilt PCM regression
+passes after the clock advances. The investigation below predates this finding.
 
 **Symptom (user, on the real desktop):** engine and sea are audible; pressing Space produces no
 gunfire sound.
@@ -297,7 +341,7 @@ Engine and sea — the sounds that *do* work — are continuous loops via `syncE
 `bus.playAt()`.** The leading hypothesis is therefore that `AudioBus.play()` — the non-positional
 one-shot — does not produce output on native, while `playAt()` does.
 
-### Next step
+### Original next step (superseded by the scheduling finding)
 
 One instrumented run: log immediately before `this.bus.play(...)` in `#play` (`src/audio.ts:515`) to
 confirm the line is reached rather than short-circuited by `#cueFor` returning nothing, a missing
@@ -306,9 +350,11 @@ confirm the line is reached rather than short-circuited by `#cueFor` returning n
 
 ---
 
-## 8. Explosions reportedly missing on native (not reproduced)
+## 8. Explosions reportedly missing on native (bomb-drop gate now fails)
 
-**Not reproduced, therefore not diagnosed.** What is established:
+**Current result:** the scenario now really releases a bomb and observes a splash event, but the
+live-particle assertion fails and the impact frame has no visible splash. Root cause is unresolved.
+The initial investigation below explains why the older scenario was not evidence:
 
 - Particles do render natively — tracers are visible in `native-vfx.png`, and the published live
   particle count changes while firing.
@@ -364,7 +410,8 @@ It is not.
 
 ## Engine changes made outside this repo
 
-In `/home/joao/projects/threenative/threenative-engine`, uncommitted:
+The original engine checkout retains its uncommitted work. A source snapshot is checkpointed at
+`7c17ff95e` in `/home/joao/projects/threenative/threenative-engine/.worktrees/midway-native-parity`:
 
 - `packages/runtime-native/scripts/asset-preflight.mjs` — decoder probe (issue 2)
 - `packages/runtime-native/tests/desktop-assets.test.mjs` — 3 tests for it
@@ -372,6 +419,8 @@ In `/home/joao/projects/threenative/threenative-engine`, uncommitted:
 - `packages/runtime-native/scripts/xvfb.sh` — same
 - `include/mystral/canvas/canvas2d.h`, `src/canvas/canvas2d.cpp`,
   `src/canvas/canvas2d_bindings.cpp`, `src/runtime-scripts/canvas2d-properties.js` — canvas gaps (issue 4)
+- `native/ui-overlay/src/{argb,abi}.rs` — compositor prototype, review findings unresolved (issue 3)
+- `src/audio/audio_context.cpp`, `tests/audio_graph_test.cpp` — absolute scheduling (issue 7)
 
 Issue 4 is C++: it reaches other machines only via a new prebuilt runtime release. Until then a
 build must pass `THREENATIVE_RUNTIME_BINARY`, or the cockpit regresses to white on any other
