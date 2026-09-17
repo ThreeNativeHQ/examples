@@ -153,7 +153,7 @@ export class Midway extends Scene<GameState, undefined> {
       "close-map": () => this.resume(),
       "close-command": () => this.resume(),
       resume: () => this.resume(),
-      "restart-deck": () => this.begin(false, true),
+      "restart-deck": () => (this.battle.status === "debrief" ? this.continueOnDeck() : this.begin(false, true)),
       "restart-air": () => this.begin(true, true),
       "restart-pause": () => this.restartToBriefing(),
       "map-home": () => {
@@ -653,6 +653,21 @@ export class Midway extends Scene<GameState, undefined> {
     this.audio.event({ type: "engineStart", airframe: this.battle.player.airframe });
     this.updateLoadoutUI();
     this.hud.toast("NEW AIRCRAFT ON DECK — HOLD W TO LAUNCH");
+  }
+
+  /**
+   * The debrief's deck action. A short sortie's after-action report ends the sortie, not the war:
+   * this resumes the same battle on the deck, where the service the recovery started finishes and
+   * re-arms the aircraft. A lost or won mission uses the button to start a fresh operation instead.
+   */
+  private continueOnDeck(): void {
+    if (!this.battle.continueAfterRecovery()) return;
+    this.ended = false;
+    this.hideOverlays();
+    this.world.snap = true;
+    this.world.followBomb = false;
+    this.updateLoadoutUI();
+    this.hud.toast("BACK ON DECK — REFUELLED AND REARMED, HOLD W TO LAUNCH AGAIN");
   }
 
   private designateTarget(id: string): void {

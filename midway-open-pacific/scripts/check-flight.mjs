@@ -4,8 +4,65 @@ import { build } from 'esbuild';
 const { outputFiles } = await build({ entryPoints: ['src/sim/battle.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
 const battleUrl = `data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString('base64')}`;
 const { Battle } = await import(battleUrl);
+const { PING_SECONDS } = await import('data:text/javascript;base64,' + Buffer.from((await build({ entryPoints: ['src/sim/rescue.ts'], bundle: true, platform: 'node', format: 'esm', write: false })).outputFiles[0].text).toString('base64'));
 const airborne = () => { const b = new Battle(); b.start(true); return b; };
 const tick = (b, seconds, input = {}) => { for (let i = 0; i < seconds * 60; i++) b.step(1 / 60, input); };
+// --- Rear gun: the Douglas' own-hull sector must not swallow the whole below-level cone ---------
+// The blocked half-width is fitted to the two measured depressions (|yaw| <= 0.45 at pitch -0.13,
+// <= 0.05 at -0.08) and closes to nothing at level. The flat |yaw| <= 0.50 clamp it replaced
+// refused every shot at a fighter sitting astern and a few degrees low, so the gunner tracked a
+// live attacker and never fired.
+const gun = airborne();
+gun.player.gunner = false;
+gun.player.rearAmmo = 600;
+// The foe is pinned astern of the player every step: the player flies on, and letting the geometry
+// drift washes the depression angle out to level, which is a different case than the one under test.
+const pinAstern = (foe, dyaw, dpitch) => {
+  const p = gun.player;
+  // `forward(h)` is (sin h, -cos h); right is its -90 deg rotation, (cos h, sin h).
+  const f = { x: Math.sin(p.heading), z: -Math.cos(p.heading) };
+  const r = { x: Math.cos(p.heading), z: Math.sin(p.heading) };
+  foe.x = p.x - f.x * 150 + r.x * 150 * Math.tan(dyaw);
+  foe.z = p.z - f.z * 150 + r.z * 150 * Math.tan(dyaw);
+  foe.y = p.y + 150 * Math.tan(dpitch);
+};
+const roundsFiredAt = (dyaw, dpitch) => {
+  const foe = { id: 'astern', team: 'jp', kind: 'fighter', hp: 100, mode: 'flight', vx: 0, vy: 0, vz: 0, x: 0, y: 0, z: 0 };
+  gun.aircraft.length = 0;
+  gun.aircraft.push(foe);
+  gun.player.rearLoaded = 60;
+  gun.player.rearTimer = 0;
+  const before = gun.player.rearAmmo;
+  for (let i = 0; i < 120; i += 1) {
+    pinAstern(foe, dyaw, dpitch);
+    gun.step(1 / 60, {});
+  }
+  return before - gun.player.rearAmmo;
+};
+assert.ok(roundsFiredAt(0.21, -0.07) > 0, 'a fighter astern, off-centre and a few degrees low, must be fired on');
+// Six degrees off the centreline fouls exactly one mouth. The gun used to commit to that barrel,
+// never flip it, and sit silent; it must now offer the other mouth.
+assert.ok(roundsFiredAt(0.1, 0) > 0, 'a bearing that fouls one barrel must be taken on the other');
+assert.equal(roundsFiredAt(0, -0.05), 0, 'a shot straight down the fuselage is still refused');
+assert.ok(roundsFiredAt(0, 0.05) > 0, 'an astern foe above the tail is fired on');
+
+// --- Minimap pings: an aircraft that goes into the sea leaves a fading marker with its side ------
+const sea = airborne();
+sea.wrecks.length = 0;
+const sink = (team) => {
+  const a = { id: `gone-${team}`, team, kind: 'fighter', hp: 0, mode: 'flight', vx: 0, vy: 0, vz: 0,
+    x: sea.player.x + 400, y: 0, z: sea.player.z + 400 };
+  sea.aircraft.push(a);
+  for (let i = 0; i < 600 && !sea.wrecks.some((w) => w.team === team); i += 1) sea.step(1 / 60, {});
+};
+sink('jp');
+sink('us');
+assert.ok(sea.wrecks.some((w) => w.team === 'jp'), 'an enemy aircraft in the sea leaves a ping');
+assert.ok(sea.wrecks.some((w) => w.team === 'us'), 'an allied aircraft in the sea leaves a ping');
+const before = sea.wrecks.length;
+for (let i = 0; i < PING_SECONDS * 60 + 120; i += 1) sea.step(1 / 60, {});
+assert.ok(sea.wrecks.length < before, `a ping must expire, not accumulate: ${before} -> ${sea.wrecks.length}`);
+
 const b = airborne();
 b.player.stall = .4;
 b.player.aoa = .31;
@@ -466,7 +523,10 @@ console.log(JSON.stringify({ sortieRealismE1d: true, strikeReturn: homeward.sort
 // A run still stops as soon as `status` leaves `playing`. The twelve-minute pacing target is
 // enforced in tools/capture-sortie-runs.mjs, which flies its own runs against its own limit; here it
 // is only reported. `default` is `new Battle()`.
-const wingSeeds = [['default', undefined], ['7', 7], ['19420604', 19420604], ['77', 77], ['3', 3]];
+// Seed 42 is retained for the loss case: with a shot-down pilot now taking a replacement airframe
+// instead of ending the battle, none of the original five costs the player an aircraft inside the
+// bound, and the sample has to keep showing one that does.
+const wingSeeds = [['default', undefined], ['7', 7], ['19420604', 19420604], ['77', 77], ['3', 3], ['42', 42]];
 const WING_BOUND = 1350; // Absolute scenario seconds; see the table above.
 const WING_WORKER = `
 const { parentPort, workerData } = require('node:worker_threads');
@@ -490,7 +550,7 @@ const { parentPort, workerData } = require('node:worker_threads');
     if (!acceptedFinal && b.sortie.objective === 'achieved' && b.approach().ready)
       acceptedFinal = b.assistRecovery();
   }
-  parentPort.postMessage({ seedName, status: b.status, achievedAt, result: b.sortie.result });
+  parentPort.postMessage({ seedName, status: b.status, achievedAt, result: b.sortie.result, playerLosses: b.stats.playerLosses });
 })().catch((err) => parentPort.postMessage({ seedName: workerData.seedName, error: String((err && err.message) || err) }));
 `;
 const wingRuns = await Promise.all(
@@ -508,21 +568,26 @@ const wingReport = wingRuns.map((r) => ({
   objective: r.achievedAt !== null ? `${r.achievedAt.toFixed(0)}s` : 'never',
   outcome: r.result ? r.result.outcome : 'unresolved',
   playerLost: r.status === 'lost',
+  playerLosses: r.playerLosses ?? 0,
   elapsed: r.result ? +r.result.elapsed.toFixed(1) : null,
   wingHits: r.result?.wingHits ?? 0,
   personalHits: r.result?.personalHits ?? 0,
 }));
 const wingSummary = wingReport
-  .map((r) => `${r.seed}: objective ${r.objective}, ${r.outcome}, playerLost=${r.playerLost}${r.elapsed !== null ? `, wingHits=${r.wingHits} personalHits=${r.personalHits}, elapsed=${r.elapsed}s` : ''}`)
+  .map((r) => `${r.seed}: objective ${r.objective}, ${r.outcome}, playerLost=${r.playerLost}${r.elapsed !== null ? `, wingHits=${r.wingHits} personalHits=${r.personalHits}, elapsed=${r.elapsed}s` : ''}, airframesLost=${r.playerLosses}`)
   .join(' · ');
 const completers = wingRuns.filter((r) => r.result?.outcome === 'recovered');
-const lostCount = wingReport.filter((r) => r.playerLost).length;
+// A shot-down pilot is no longer the end of the battle: he waits downed and takes a replacement
+// airframe while a friendly deck is afloat, so a terminal `status === 'lost'` inside the bound is
+// not what a lost airframe looks like any more. What must still show up in the retained sample is
+// that the player actually lost an aircraft.
+const lostCount = wingReport.filter((r) => r.playerLosses > 0 || r.playerLost).length;
 const withinPacing = completers.filter((r) => r.result.elapsed <= 720).length;
 assert.ok(completers.length >= 1, `the ordered-wing strike must complete at least one of ${wingRuns.length} seeds with its objective achieved: ${wingSummary}`);
 for (const r of completers) {
   assert.ok(r.result.wingHits > 0 && r.result.personalHits === 0, `seed ${r.seedName}: the ordered wing owns the confirmed hit: ${JSON.stringify(r.result)} — ${wingSummary}`);
 }
-assert.ok(lostCount >= 1, `the retained seeds must include a player-loss run, not only the completer: ${wingSummary}`);
+assert.ok(lostCount >= 1, `the retained seeds must include a run that costs the player an aircraft, not only the completer: ${wingSummary}`);
 console.log(JSON.stringify({ naturalWingStrike: { bound: WING_BOUND, runs: wingReport, playerLost: lostCount, withinPacing: `${withinPacing} of ${completers.length}` } }));
 console.log(wingSummary);
 
@@ -571,3 +636,4 @@ assert.equal(chatter.radio.filter((r) => r.from === 'SCOUT THREE').length, first
 chatter.time += 12;
 chatter.updateRadio();
 assert.ok(chatter.radio[0].text.includes('burning'), `fire is the call that outranks the rest: ${chatter.radio[0].text}`);
+

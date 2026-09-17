@@ -1214,9 +1214,9 @@
       "loop": false,
       "identity": "reconstruction",
       "conditional": false,
-      "prompt": "A single round fired from an aircraft-mounted thirty-caliber Browning machine gun, extremely close and dry, one hard metallic report and a short crisp mechanical action clatter immediately decaying to near silence, rifle-caliber snap not a heavy cannon boom, no echo, no wind, no aircraft engine, no shell impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack a",
+      "prompt": "A single round fired from an aircraft-mounted thirty-caliber Browning machine gun, extremely close and dry, one hard metallic report and a short crisp mechanical action clatter immediately decaying to near silence, rifle-caliber snap not a heavy cannon boom, no echo, no wind, no aircraft engine, no shell impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack a Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
       "request": {
-        "text": "A single round fired from an aircraft-mounted thirty-caliber Browning machine gun, extremely close and dry, one hard metallic report and a short crisp mechanical action clatter immediately decaying to near silence, rifle-caliber snap not a heavy cannon boom, no echo, no wind, no aircraft engine, no shell impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack a",
+        "text": "A single round fired from an aircraft-mounted thirty-caliber Browning machine gun, extremely close and dry, one hard metallic report and a short crisp mechanical action clatter immediately decaying to near silence, rifle-caliber snap not a heavy cannon boom, no echo, no wind, no aircraft engine, no shell impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack a Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack and natural decay.",
         "model_id": "eleven_text_to_sound_v2",
         "duration_seconds": 1,
         "prompt_influence": 0.6,
@@ -3262,6 +3262,120 @@
           "sourceHash": "58ae4aa02c76e39976394ce186836f774880296fae7267c8ff4e3d3c458a5a24",
           "outputHash": "2f7c4da0d7b77ede357c2f0845d6e1d274563c6c02b4f3c07238e29f69077553",
           "bytes": 52578
+        }
+      ]
+    },
+    {
+      "id": "R32",
+      "slug": "r32",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three. Bandit on your tail and you're not turning into him. Break now.",
+      "substitutions": {},
+      "file": "audio/voice/r32.ogg",
+      "generations": [
+        {
+          "date": "2026-09-17",
+          "requestId": "zX2tAm0TxNH3KDEwR9kr",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "c13eb873004a5cc067467c4b08130c54468c33e421f3911e09d5ef0fd15d9681",
+          "outputHash": "8e19a0d5e2afcd4ec328be94ee7b7cabd8b977beb29f4a45092cd8a409786d96",
+          "bytes": 65921
+        }
+      ]
+    },
+    {
+      "id": "R33",
+      "slug": "r33",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three. You're low. Pull out. Pull out!",
+      "substitutions": {},
+      "file": "audio/voice/r33.ogg",
+      "generations": [
+        {
+          "date": "2026-09-17",
+          "requestId": "DBJWir98pxolMEcXShH4",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "100132189553a8b7531e710eb0846a03a58a050b37c92f3cb9517fd6efb74db3",
+          "outputHash": "cce4168792f3a78b151c8b4b37391800c2245cd82998bd65c01afe117ed16332",
+          "bytes": 41672
+        }
+      ]
+    },
+    {
+      "id": "R34",
+      "slug": "r34",
+      "voice": "wingman",
+      "priority": 3,
+      "text": "Scout Three. That target is already being worked over. Pick another or follow me in.",
+      "substitutions": {},
+      "file": "audio/voice/r34.ogg",
+      "generations": [
+        {
+          "date": "2026-09-17",
+          "requestId": "HsKR7HM6jikl8eHiWwhg",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "54d413bf2a64201f099f302e8123b367976db324d7caa69dcf3b49f39b056eb4",
+          "outputHash": "838c86cfdd797f24c30afa21da77b5a7c34025d3f260ec2f529da568fcd861ab",
+          "bytes": 69589
+        }
+      ]
+    },
+    {
+      "id": "R35",
+      "slug": "r35",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. There's a ship ahead with its guns up. Do not overfly her.",
+      "substitutions": {},
+      "file": "audio/voice/r35.ogg",
+      "generations": [
+        {
+          "date": "2026-09-17",
+          "requestId": "jG1iU68IpWKGSx0fwSMN",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "c2ee61926bd76c83c7f4838f5307d39d1690ad5ddc03b84a13c9dad144e148bf",
+          "outputHash": "0113f94b8cd824d9657d1a96b66612ff9418956204c11743c5ce3feb16190412",
+          "bytes": 68921
+        }
+      ]
+    },
+    {
+      "id": "R36",
+      "slug": "r36",
+      "voice": "wingman",
+      "priority": 2,
+      "text": "Scout Three. You're down to fumes. Break off and head for home.",
+      "substitutions": {},
+      "file": "audio/voice/r36.ogg",
+      "generations": [
+        {
+          "date": "2026-09-17",
+          "requestId": "JIZR2YcAGd6uGX5KrY3d",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "56eafe9cf9271795935187827279257ac0b587fc0ff22e9caf0c4650231bc57b",
+          "outputHash": "39f212d64dfe837c149b96dea00d8db983c092ffe365c49fdb731a5f6541286a",
+          "bytes": 52868
+        }
+      ]
+    },
+    {
+      "id": "R37",
+      "slug": "r37",
+      "voice": "wingman",
+      "priority": 1,
+      "text": "Scout Three. Your tank's been hit. You're losing fuel. Get her home.",
+      "substitutions": {},
+      "file": "audio/voice/r37.ogg",
+      "generations": [
+        {
+          "date": "2026-09-17",
+          "requestId": "3X4NGcyM1QYJjuFz8nJb",
+          "voiceId": "dLhShFKQhTRqVtb7JD37",
+          "sourceHash": "c72c219bc1bb485f9a9ff46c445ff0695f536dd28f963712918abc4ce902f35a",
+          "outputHash": "b7a4b18e3e102d48930e57083f7316799ce9da37cb4e8b666073ed0ffe39af92",
+          "bytes": 51043
         }
       ]
     },

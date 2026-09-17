@@ -212,7 +212,12 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
   aa11: { volume: 0.55, cooldown: 0.08 },
   aa20: { volume: 0.5, cooldown: 0.07 },
   aa25: { volume: 0.5, cooldown: 0.07 },
-  flakAirburst: { volume: 0.7, cooldown: 0.08 },
+  // A heavy-AA volley bursts several rounds within the same frame, and the cue cooldown is what
+  // decides how many of them the pilot hears. Measured at 0.08 s with three bursts 100 m off the
+  // wing: one sounded and two were swallowed, so every salvo collapsed to a single pop and flak
+  // read as silent. 0.02 s still caps a runaway at 50 voices a second but lets a volley sound
+  // like a volley.
+  flakAirburst: { volume: 0.7, cooldown: 0.02 },
   bombShackle: { volume: 0.55, cooldown: 0.15 },
   torpedoRelease: { volume: 0.55, cooldown: 0.15 },
   bombDeck: { volume: 0.85, cooldown: 0.05 },
