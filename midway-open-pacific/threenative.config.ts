@@ -38,6 +38,9 @@ const config: IThreeNativeConfig = {
     // and reports it in `TN_PROJECTION.cull`.
     minimumProjectedPixels: 2,
   },
+  // Two surfaces, one game. The web build draws the full DOM HUD in index.html through
+  // src/ui/dom.ts; a native target composites src/ui/main.tsx in the platform's own web view,
+  // reading the state the scene publishes. Neither one runs inside the game bundle.
   ui: { renderer: "web" },
 };
 

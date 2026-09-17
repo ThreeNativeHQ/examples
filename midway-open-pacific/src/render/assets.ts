@@ -85,14 +85,34 @@ export function canvasTexture(
   w: number,
   h: number,
   draw: (c: CanvasRenderingContext2D, w: number, h: number) => void,
-): THREE.CanvasTexture {
+): THREE.Texture {
+  // A target with no 2D canvas gets a flat white pixel: the material keeps its own colour and the
+  // model is untextured, rather than the whole build throwing while it draws a decal.
+  if (typeof document === "undefined" || typeof document.createElement !== "function") return flatTexture();
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
-  draw(c.getContext("2d") as CanvasRenderingContext2D, w, h);
+  const ctx = c.getContext("2d");
+  if (ctx === null) return flatTexture();
+  // The native 2D shim implements the common path but not every method (createRadialGradient,
+  // setLineDash); a draw that throws on a missing one falls back to the flat pixel instead of
+  // taking the build down.
+  try {
+    draw(ctx, w, h);
+  } catch {
+    return flatTexture();
+  }
   const tx = new THREE.CanvasTexture(c);
   tx.colorSpace = THREE.SRGBColorSpace;
   tx.anisotropy = 4;
+  return tx;
+}
+
+/** The stand-in a target without a 2D canvas gets: one opaque white texel. */
+function flatTexture(): THREE.Texture {
+  const tx = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+  tx.colorSpace = THREE.SRGBColorSpace;
+  tx.needsUpdate = true;
   return tx;
 }
 
@@ -136,7 +156,7 @@ export function consolidate(group: THREE.Object3D): THREE.Group {
   return result;
 }
 
-function roundel(team: string): THREE.CanvasTexture {
+function roundel(team: string): THREE.Texture {
   return canvasTexture(128, 128, (c) => {
     c.fillStyle = team === "us" ? "#193446" : "#eee5cf";
     c.beginPath();
@@ -224,7 +244,7 @@ export function makeCrew(): THREE.Group {
   return group;
 }
 
-export function smokeTexture(): THREE.CanvasTexture {
+export function smokeTexture(): THREE.Texture {
   return canvasTexture(128, 128, (c) => {
     const g = c.createRadialGradient(64, 64, 0, 64, 64, 62);
     g.addColorStop(0, "rgba(255,255,255,.9)");
@@ -236,7 +256,7 @@ export function smokeTexture(): THREE.CanvasTexture {
   });
 }
 
-export function cloudTexture(): THREE.CanvasTexture {
+export function cloudTexture(): THREE.Texture {
   return canvasTexture(512, 256, (c) => {
     for (let i = 0; i < 33; i += 1) {
       const x = 80 + (Math.sin(i * 2.1) + 1) * 170;
@@ -252,7 +272,7 @@ export function cloudTexture(): THREE.CanvasTexture {
   });
 }
 
-export function wakeTexture(): THREE.CanvasTexture {
+export function wakeTexture(): THREE.Texture {
   return canvasTexture(256, 512, (c) => {
     for (let i = 0; i < 110; i += 1) {
       const y = i * 4.5;

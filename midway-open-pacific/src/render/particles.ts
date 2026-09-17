@@ -137,6 +137,9 @@ export class CombatParticles {
   smokeBatch = batch(3600, false);
   glowBatch = batch(1600, true);
   seen = new Set<string>();
+  /** Effect bursts actually rendered, keyed by event type. A playtest reads this to prove a
+   *  weapon's impact reached the screen rather than merely that the simulation ran. */
+  counts: Record<string, number> = {};
   emitters = new Map<string, { carry: number; previous: IParticle; time: number }>();
   lastTime = 0;
   scene: T.Scene;
@@ -155,6 +158,7 @@ export class CombatParticles {
   }
 
   burst(e: any): void {
+    this.counts[e.type] = (this.counts[e.type] ?? 0) + 1;
     const water = e.type === "splash";
     const flak = e.type === "flak";
     const hit = e.type === "hit";
@@ -371,6 +375,7 @@ export class CombatParticles {
     this.smoke.clear();
     this.glow.clear();
     this.seen.clear();
+    this.counts = {};
     this.emitters.clear();
     this.lastTime = 0;
     this.smokeBatch.geometry.instanceCount = 0;

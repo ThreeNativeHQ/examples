@@ -15,9 +15,21 @@ import {
 } from "@threenative/core";
 import type { IAircraftAirframe, IFlightControls, IFlightModifiers, IFlightState } from "@threenative/core";
 import { damageModifiers } from "./damage.js";
-import { angleDelta, bearing, clamp, distance2 } from "./math.js";
+import { angleDelta, bearing, clamp, distance2, forward } from "./math.js";
 
 export { airDensity, aircraftMass, attitudeAxes, gearClearance, setAttitude };
+
+/**
+ * The airframe's axes, from its quaternion when it has one and from heading/pitch when it does not.
+ * The cast is the narrowing `attitudeAxes` does not declare: it reads `attitude` and nothing else,
+ * so anything carrying one can ask — including the HUD's snapshot of the player, which is not a
+ * whole `IFlightState`.
+ */
+export function axesOf(p: { attitude?: IFlightState["attitude"]; heading: number; pitch: number }): ReturnType<typeof attitudeAxes> {
+  return p.attitude
+    ? attitudeAxes(p as IFlightState)
+    : { f: forward(p.heading, p.pitch), u: { x: 0, y: 1, z: 0 }, r: { x: 1, y: 0, z: 0 } };
+}
 
 /** Sea-level wind the whole battle shares. */
 export const SEA_WIND = Object.freeze({ x: 1.2, y: 0, z: 11 });

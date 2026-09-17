@@ -2,9 +2,10 @@
 import * as T from "three";
 import { shipClass } from "../sim/catalog.js";
 import { REAR_RELOAD_SECONDS } from "../sim/armament.js";
-import { attitudeAxes } from "../sim/flight.js";
+import { axesOf } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { addFloats, ellipsoid, mat, wakeTexture } from "./assets.js";
+import type { IViewSnapshot } from "../ui/hud-input.js";
 import { type CarrierModelId, createCarrier, createIjnCarrier, createMitchell, shipModelFor } from "./imported-ships.js";
 import { createAirframe, createDouglas, animateDouglas, animateImportedAirframe, disposeAirframe, spinPropeller } from "./imported-aircraft.js";
 import { airframeLod } from "./airframe-lod.js";
@@ -325,6 +326,8 @@ export class WorldView {
   cameraMode = 0;
   rear = false;
   followBomb = false;
+  /** True while the pilot view is the one being drawn. Read by the UI shell. */
+  cockpitView = false;
   snap = true;
   quality = "balanced";
   wallTime = 0;
@@ -368,6 +371,7 @@ export class WorldView {
   private orbit = new T.Vector3();
   private orbitAxis = new T.Vector3();
   private tmp = new T.Vector3();
+  private clip = new T.Matrix4();
   private look = new T.Vector3();
   private targetCamera = new T.Vector3();
   /** Composed-local-matrix freeze for static nodes, and the verification switch that reverses it. */
@@ -712,6 +716,24 @@ export class WorldView {
     this.setAirframe();
   }
 
+  /**
+   * The camera, for a HUD that is not in this process.
+   *
+   * A native target draws the HUD in the web view, which has no scene graph to project through, so
+   * it gets the one matrix `project` applies and the viewport it lands in. Read from the live
+   * camera each time it is asked for, which is once per published snapshot.
+   */
+  viewSnapshot(): IViewSnapshot {
+    this.clip.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    return {
+      cameraMode: this.cameraMode,
+      followBomb: this.followBomb,
+      height: this.host.viewport.size.height,
+      matrix: [...this.clip.elements],
+      width: this.host.viewport.size.width,
+    };
+  }
+
   project(p: any): { x: number; y: number; visible: boolean; depth: number } {
     const v = this.tmp.set(p.x, p.y || 0, p.z).project(this.camera);
     // The cached viewport size, not `clientWidth`/`clientHeight`: reading those after the HUD's own
@@ -925,7 +947,7 @@ export class WorldView {
 
   updateCamera(dt: number, briefing: boolean, time: number): void {
     const p = this.battle.player;
-    const axes = p.attitude ? attitudeAxes(p) : { f: forward(p.heading, p.pitch), u: { x: 0, y: 1, z: 0 }, r: { x: 1, y: 0, z: 0 } };
+    const axes = axesOf(p);
     const f = axes.f;
     const u = axes.u;
     // The rear-gun station is a camera the player can leave: remember the view they came from and
@@ -1103,7 +1125,9 @@ export class WorldView {
     if (this.playerMesh.userData.cockpitInterior) this.playerMesh.userData.cockpitInterior.visible = cockpit;
     if (this.playerMesh.userData.cockpitShell)
       for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit && !gunnerView;
-    document.body.classList.toggle("cockpit-view", cockpit);
+    // The look of the page is the shell's business, not the renderer's: `Midway` publishes this
+    // through `shell.cockpitView`, so the native build has no DOM call to make.
+    this.cockpitView = cockpit;
     if (this.snap || briefing || cockpit || gunnerView) {
       this.camera.position.copy(this.targetCamera);
       this.snap = false;
