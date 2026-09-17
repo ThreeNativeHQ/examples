@@ -273,7 +273,7 @@ windows 54 seconds early; the corrected parser and decoded ranges are in
 ## Reproducing this state
 
 ```sh
-cd /home/joao/projects/threenative/sandbox/.worktrees/native-port/midway-open-pacific
+cd /home/joao/projects/threenative/sandbox/midway-open-pacific
 
 # Build against a verified runtime. Pin the absolute path to the chosen content-hashed runtime;
 # never the primary engine checkout's diagnostic build. The supported production runtime is

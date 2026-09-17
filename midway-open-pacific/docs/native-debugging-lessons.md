@@ -106,7 +106,7 @@ Do not collapse these into one verdict:
 
 ```sh
 # Run from the game checkout:
-# /home/joao/projects/threenative/sandbox/.worktrees/native-port/midway-open-pacific
+# /home/joao/projects/threenative/sandbox/midway-open-pacific
 # Ensure a compositor (xcompmgr, picom or compton) is installed and on PATH first.
 bash tools/capture-lock.sh \
   node node_modules/@threenative/playtest/dist/runner/cli.js \
