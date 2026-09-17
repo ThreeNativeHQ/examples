@@ -2,6 +2,8 @@
 
 **Date:** 2026-09-16
 **Lane:** `.worktrees/native-port` (branch `feat/native-port`, off `develop` @ `6cbad3e`)
+**Drafts:** [game #6](https://github.com/ThreeNativeHQ/examples/pull/6),
+[engine #273](https://github.com/ThreeNativeHQ/threenative/pull/273). Neither is ready to merge.
 **Runtime:** locally built `packages/runtime-native/build/tn-linux/mystral`, passed to the build via
 `THREENATIVE_RUNTIME_BINARY`. Host: Linux, NVIDIA RTX 2080, Vulkan/Dawn, WebGPU.
 
@@ -398,6 +400,18 @@ New scenarios in this lane: `native-playtests/{boot,launch,vfx,cockpit,explosion
 ---
 
 ## Cleanup owed before this lane merges
+
+Both task checkouts remain because their draft work is unmerged and incomplete:
+
+| Retained checkout | Size |
+|---|---|
+| `/home/joao/projects/threenative/sandbox/.worktrees/native-port` | 2.4 GiB |
+| `/home/joao/projects/threenative/threenative-engine/.worktrees/midway-native-parity` | 1015 MiB |
+
+The game checkout also retains the untracked `composited.ppm` debug capture. The original engine
+checkout's pre-existing changes were preserved. The isolated engine checkout now has its own
+dependencies and a successful full workspace build; its required pre-push checks passed without
+a bypass. This does not change the five failures from the full test suite reported above.
 
 Temporary instrumentation is still in the tree and must come out:
 
