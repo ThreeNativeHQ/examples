@@ -19,8 +19,7 @@ explosion ×3; briefing moved briefing→playing on an injected Take Deck pointe
 visibility only — **no click**; boot/cockpit/launch/vfx/ui too). Actual OS window routing and
 `<select>` popups are a separate question, answered only by an OS-composited capture driven by real
 XTEST input — not by this runner path. That capture ran on the final artifact and proved the full
-1280×720 briefing, a real OS dropdown open with the briefing preserved, and OS Recon selection; it
-did not reach a debrief/restart (see below).
+1280×720 route through the debrief and New Deck Sortie restart (see below).
 
 A native recon run on the earlier `021f2d5a` artifact proved the complete route: select Recon through
 the real OS popup, start airborne, find/report a carrier, return with the existing assists, recover,
@@ -29,14 +28,17 @@ simulated seconds and 151.9 wall seconds including startup. That popup capture a
 separate defect: opening it hid the briefing. The engine now distinguishes a temporary keyboard grab
 from real focus loss, and rebuilt native popup frames kept the full briefing visible; selection
 success alone would have missed that visual failure. On the final artifact the popup verdict
-repeated (dropdown open, briefing preserved, Recon selected), and a **real OS XTEST KeyL** was
-delivered and **acknowledged** (`lsoAck` true, R21 and LSO "Final approach assist engaged") where an
-earlier **bridged** KeyL got no ack. That proves the assist engages from a real OS key and puts the
-no-ack difference in the bridge input-delivery path *in this harness*; it does **not** prove a bridge
-bug, since hold length differed (2 vs 6 ticks) with one observation each. Recovery then reached no
-terminal within the 100 s follow window (state `playing`/`flight`, phase `groove`), so the final
-**debrief/restart remains open** — possibly a harness window cap, not shown to be a landing failure.
-Not generic "native broken", and not a proven bridge root cause.
+repeated (dropdown open, briefing preserved, Recon selected). A corrected **ack-barrier** capture
+with real OS XTEST T/R/H/L then proved the whole route on the original mission timing: T/R/H acked
+within one poll (R/H at 28.4 sim s), first READY at 265.0, L acked at 265.1 (`lsoAck`, R21 and LSO
+"Final approach assist engaged"), assisted recovery to the debrief at 287.7 sim s (wall 154.3 s), and
+a real OS click on **New Deck Sortie** (494,520) back to deck servicing. An earlier bridged-KeyL run
+that showed no ack is a **single observation with a different hold (2 vs 6 ticks)**: a 2-tick snapshot
+can be stale (state publishes every 6 ticks) and a later 100 s radio window can roll the ack off, so
+the cause stays **unproven** — it does not establish what happened to the old key, and no cause in the
+input path is claimed. No bridge or production change was made, and the physical-window 720 check did
+not itself recover, so the follow window was not shown to be the cause. Do not enshrine harness
+mistakes as production bugs.
 
 What it cannot prove on its own:
 
@@ -47,12 +49,15 @@ What it cannot prove on its own:
   answers these; no runner scenario is claimed to open a select popup.
 - Long-horizon outcomes on a wall-clock deadline: `waitForResource` advances **one fixed tick per
   mailbox round-trip**, so a 1-tick wait loop can exhaust the whole 120 s wall budget after only a
-  few thousand simulation ticks. Batched stepping reached the landing gate where the earlier wait
-  timed out. A matched web run reproduced the subsequent failed landing with the same pre-landing
-  position and LSO acknowledgement, so that route does not establish a native-only defect.
-  Record simulated time, action acknowledgement
-  and the final outcome; reaching an intermediate gate is insufficient proof. Use large tick chunks
-  for transit (`holdTicks`/`waitTicks`), then finer state checks near the gate.
+  few thousand simulation ticks. Use **ack barriers**: assert the fresh domain acknowledgement
+  (`ackTicks`, `lsoAck`) before large transit batches, because state publishes only every 6 ticks and
+  a 1–2 tick snapshot can be stale. The **immediate-return route** has a matched web pair — same
+  pre-landing position and LSO acknowledgement, same failure on both targets — so that is a shared
+  route outcome. A separate **recon web control was not equivalent** (objective at 28.3 s on web vs
+  38.3 s on native, and the **native home command fired 10 s later**), so it neither proves nor rules
+  out a native defect. The corrected real-OS run on the same game, defaults and no injected setup did
+  recover. Record simulated time, the acknowledgement and the final outcome; reaching an intermediate
+  gate is insufficient proof.
 - A completed run is not a passing interaction. Assert the outcome state, then look at the frame.
 - A destroyed aircraft does not guarantee a debrief. With friendly decks available, the current
   game can enter its downed/replacement flow; choose a route that actually reaches the screen being
@@ -114,21 +119,19 @@ browser and native launch goes through `tools/capture-lock.sh` — no `xvfb-run`
 
 ## Next time — ranked improvements
 
-1. **Assert acknowledgement, not delivery.** Require the action ack (LSO/radio) *and* a terminal
-   outcome (`recovered`/`restartPlaying`), and read the **persistent HUD toast** for a refusal — the
-   refusal is a notice→toast, so a radio-only check can never fire. A key that is delivered and
-   pumped but not acknowledged is not a pass.
-2. **Never treat `driver.ok`/`runner.ok:true` as scenario acceptance.** `ok` means the harness
-   finished; acceptance needs the outcome flags (`osKeyLRefused`, `terminalDebrief`, `recovered`).
+1. **Wait for a fresh command ack, then batch transit.** Assert the fresh domain acknowledgement
+   (`ackTicks`, `lsoAck`) before large `holdTicks`/`waitTicks` batches, and read the **persistent HUD
+   toast** (`hud.toastText`, not `hud.toast`) for a refusal — a radio-only check can miss it. State
+   publishes only every 6 ticks, so a 1–2 tick snapshot can be stale and a later sample can have rolled
+   the ack off.
+2. **Assert the real terminal outcome, and keep readiness/error evidence.** An ad hoc driver’s `ok` flag
+   may mean only that it finished; assert debrief, recovery, restart, and absence of refusal. Retain native
+   stdout/stderr even when mailbox attachment times out, so "attached" never means "interactive".
 3. **An overlay-aware capture** that composites the WebKit layer, not just the GPU framebuffer, so
    debrief/restart/map are provable visually instead of inferred from state.
-4. **A scenario driver that batches simulation ticks** for long transits, replacing the 1-tick
-   `waitForResource` loop, and follows past the current 100 s cap, so a recovery reaches its gate.
-5. **Readiness and failure evidence:** retain native stdout/stderr even when mailbox attachment
-   times out; assert pointer outcomes and resize behaviour so "attached" never means "interactive".
-6. **A one-command reproducer** emitting the exact runtime hash, pack hashes, GPU, display and window
+4. **A one-command reproducer** emitting the exact runtime hash, pack hashes, GPU, display and window
    geometry, so a run is reproducible without archaeology.
-7. **Preflight that fails fast** when no compositor is on PATH, printing the exact install command.
+5. **Preflight that fails fast** when no compositor is on PATH, printing the exact install command.
 
 ## Method discipline
 
@@ -139,8 +142,10 @@ browser and native launch goes through `tools/capture-lock.sh` — no `xvfb-run`
 - Compare the same controls in the real web scene: match seed, assignment, loadout and input defaults.
   Confirm acknowledgement, not merely delivery: the LSO radio for a landing assist **and** the
   persistent HUD toast for a refusal (a radio-only check misses the refusal; `battle.ts:4455` →
-  `Midway.ts:395` → `hud.ts:82`). Record simulated time separately from wall time; batch transit
-  ticks and check more finely near a gate.
+  `Midway.ts:395` → `hud.ts:82`). Read the field name from the actual DTO — the refusal toast is
+  `hud.toastText`, not `hud.toast`; a wrong-field lookup silently reads `null`, so pin it with a small
+  fixture that fails on the wrong name before a run. Record simulated time separately from wall time;
+  batch transit ticks and check more finely near a gate.
 - Reproduce at normal verbosity; `MYSTRAL_DEBUG` can perturb timing. Add regression tests only after
   real proof, with actual outcomes. Exercise shared consumers too: the focused pointer tests missed
   the generated shooter's explicit button-mask release and an older click-test expectation.

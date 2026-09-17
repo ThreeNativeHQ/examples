@@ -2,9 +2,8 @@
 
 **Date:** 2026-09-17
 **Lane:** `.worktrees/native-port` (branch `feat/native-port`, off `develop` @ `6cbad3e`)
-**Drafts:** [game #6](https://github.com/ThreeNativeHQ/examples/pull/6),
-[engine #273](https://github.com/ThreeNativeHQ/threenative/pull/273). Both are updated and open;
-neither is claimed merge-ready. Merge is held pending full green CI on the current head.
+**PRs:** [game #6](https://github.com/ThreeNativeHQ/examples/pull/6),
+[engine #273](https://github.com/ThreeNativeHQ/threenative/pull/273). These PRs record the current CI results and merge commits.
 **Final artifact:** `dist-native/midway-open-pacific`, SHA-256
 `6f29f1f8d6178a2b3d25e7f3aa47e19cbffdddd5376e5d627d9e6c775c7ded5a`, 329,859,845 bytes. Its embedded
 host prefix (first 127,706,336 bytes) is SHA-256
@@ -40,16 +39,18 @@ Ephemeral evidence lives in `/tmp/midway-muse.fgODHg/` and
 | 3 | Native UI overlay untestable (no compositing manager) | engine | **fixed** — stock helper, COMPOSITE+SHAPE, SHAPE `Unsorted` |
 | 4 | 2D canvas shim missing radial gradient / clip / dash / join | engine | **fixed** — real Skia pixels |
 | 5 | Cockpit renders white | game | **fixed** — capability-based texture loader |
-| 6 | React HUD / web UI never appeared on native | game | **partly verified** — HUD/chooser on 11 native scenarios; final OS-composited briefing/dropdown/Recon selection proven; debrief/restart still open |
+| 6 | React HUD / web UI never appeared on native | game | **verified** — full native route on the final artifact: OS T/R/H/L ack barriers, assisted recovery to the debrief and a real OS New Deck Sortie restart |
 | 7 | Gunshots make no sound on native | engine | **fixed** — absolute scheduling; in-game PCM presence proved, exact latency not |
 | 8 | Water/explosion effect presence | game | **verified** — final artifact: three clean explosion runs (impact, effect-specific counters); visible water burst proven on the `021` baseline |
 | 9 | Intermittent WebGPU sampler-vs-texture `binding 7` | engine | **fixed** — one-binding WGSL decision mirroring `490f`; final artifact shows zero validation errors across 11 runs; paired engine filter flip RED→GREEN |
 
-**Final parity: the final artifact's 11 native scenarios all pass, and an OS-composited pass proved
-the briefing, dropdown and Recon selection.** The OS pass did **not** reach a debrief or restart, so
-the final recovery/debrief/restart UI remains **open**; the composited debrief/restart frames below
-are historical `021` evidence. Do not call an effect fixed or missing from a particle/effect counter:
-the counter can be structurally incapable of changing (see #8).
+**Final parity: the listed native parity checks pass on the final artifact** — the 11 native
+scenarios pass and the OS-composited route proved briefing, dropdown, Recon selection, OS T/R/H/L
+acks, assisted recovery to the debrief (287.7 sim s) and the New Deck Sortie restart. Only CI/delivery
+gates remain. The fresh `6f29` frames are the current proof; the earlier `021` proof frames and the
+performance profile below are clearly labelled historical baseline. Do not call an effect fixed
+or missing from a particle/effect counter: the counter can be structurally incapable of changing
+(see #8).
 
 ---
 
@@ -97,19 +98,21 @@ cumulative-elapsed timing contract:
   the composited `native-recon-proof/07-debrief.png`. A real click at `(494,520)` on **New Deck Sortie**
   returned to playing/deck servicing and hid the debrief; `08-restarted.png` was inspected too.
   Total wall time was 151.9 seconds including startup. No simulation state was injected.
-  The earlier immediate-return route fails identically on web and native (accepted LSO assist,
-  then bolter/downed); it is a shared route outcome, not a native input defect. Evidence is under
+  The immediate-return route has an accepted **matched pair**: a web run (`recovery-web-pair`)
+  reproduced its pre-landing position and LSO acknowledgement, then failed the same way on both web
+  and native — a shared route outcome, not a native input defect. Evidence:
   `/home/joao/.cache/midway-native-parity-fgODHg/{native-recon-proof,recovery-web-pair}/`.
-- Artifact `021f2d5` supplied the recon/debrief proof above. The final artifact `6f29f1f8` carries the
-  HUD cache fix and the removed briefing Enter shortcut (the sample embed is byte-identical to the
-  earlier `a560`, only the host prefix changed). Its OS-composited recon attempt (1280×720) proved
-  the full **briefing**, a real OS dropdown open with the briefing preserved behind it, OS **Recon
-  selection** ("Scout and report"), then airborne start and objective "achieved" with 2 carriers
-  reported, stopping at pre-L. It reached **no debrief and no New Deck Sortie restart**, so those
-  frames remain `021` evidence and the final debrief/restart is still **open** (see the OS KeyL
-  bullet below). The injected scenario set separately proves `briefing` moves briefing→playing on an
-  injected Take Deck pointer, while `chooser` asserts visibility only — **no Take Deck click** is
-  claimed there.
+- Artifact `021f2d5` supplied the earlier recon/debrief proof. The final artifact `6f29f1f8` carries
+  the HUD cache fix and the removed briefing Enter shortcut (the sample embed is byte-identical to the
+  earlier `a560`, only the host prefix changed). Its corrected OS-composited run proved the whole
+  route at 1280×720 on the original mission timing: full **briefing**, a real OS dropdown open with
+  the briefing preserved behind it, OS **Recon selection** ("Scout and report"), T/R/H acked within
+  one poll (R/H at 28.4 sim s), first READY at 265.0, L acked at 265.1, assisted recovery to
+  "Objective achieved — recovered" at **287.7 sim s** (wall 154.3 s), and a real OS click on **New
+  Deck Sortie** (494,520) back to deck servicing. Frames:
+  `/home/joao/.cache/midway-native-parity-fgODHg/native-os-ack-fixed-proof/{07-debrief,08-restarted}.png`.
+  The injected scenario set separately proves `briefing` moves briefing→playing on an injected Take
+  Deck pointer, while `chooser` asserts visibility only — **no Take Deck click** is claimed there.
 - A `<select>` popup cannot be opened by the runner's injected events even when they reach the page,
   so the assignment dropdown was checked with real XTEST instead. Opening and selecting Recon work;
   the first capture also showed the briefing disappearing behind it. The engine now ignores only
@@ -118,17 +121,18 @@ cumulative-elapsed timing contract:
   selection frames in `native-popup-focus/` on the `021` lineage: the full briefing stays visible.
   Selection alone would have missed this defect. On the final artifact the OS-composited capture
   reproduced the OS dropdown open with the full briefing preserved behind it and OS Recon selection:
-  `/home/joao/.cache/midway-native-parity-fgODHg/{final-composited-proof,final-recon-os-proof}/`.
-- **Final OS KeyL, real XTEST.** On `6f29f1f8` a real OS XTEST keydown/keyup `l` hold at the first
-  READY was delivered and **acknowledged** — `lsoAck` true, radio prepends `R21`, LSO "Final approach
-  assist engaged" — where the earlier bridged KeyL (`input.keyDown`) got no ack. So the assist engages
-  from a real OS key. The no-ack difference sits in the bridge input-delivery path **in this
-  harness**, and the hold length differed (2 vs 6 ticks) with one observation each, so an earlier
-  tap-length suspicion is **unproven**, not a proven bridge bug. The follow loop then ran 100
-  simulated seconds with no terminal: state still `playing`/`flight`, phase `groove` mid go-around,
-  no debrief and no **New Deck Sortie** restart. That may be the harness follow-window cap rather
-  than an inability to land; it is **open**, not a failure. Evidence:
-  `/tmp/midway-muse.fgODHg/final-recon-os-proof-result.txt`.
+  `/home/joao/.cache/midway-native-parity-fgODHg/{final-composited-proof,final-recon-os-proof,native-os-ack-fixed-proof}/`.
+- **Final OS ack barriers (T/R/H/L), real XTEST.** On `6f29f1f8` the corrected harness used real OS
+  XTEST keys with an acknowledgement barrier before each large batch: T/R/H acked within one poll
+  (R/H at 28.4 sim s), first READY at 265.0, L acked at 265.1 (`lsoAck`, radio `R21`, LSO "Final
+  approach assist engaged"), then the assisted final recovered to the debrief at 287.7 sim s and a
+  real OS **New Deck Sortie** click restarted to deck servicing. An earlier immediate observation of a
+  bridged KeyL without an ack is one observation with a different hold (2 vs 6 ticks); state publishes
+  only every 6 ticks, so a 2-tick snapshot can be stale and a later 100 s radio sample can roll the ack
+  off. That leaves the cause **unproven** — it does not establish what happened to the old key, and no
+  cause in the input path is claimed. No bridge or production change was made, and the physical-window
+  720 check did not itself recover, so the follow window was not the cause. Evidence:
+  `/tmp/midway-muse.fgODHg/native-os-ack-fixed-result.txt`.
 - The runner's pointer bug — pointer-down at the UI element but pointer-up at `(0, 0)` — is fixed by
   preserving the last point, including a cross-step bare release. It is shared by desktop and
   Android; the follow-up in `09d188100` also preserves explicit zero-mask releases and held gestures
@@ -168,7 +172,8 @@ C++ on the existing Skia backend and verified in actual pixels, not by method pr
 `typeof window !== "undefined" && typeof Image !== "undefined"`; native has no `Image`, so the
 guard skipped all loads and `pbr()`'s map-as-colour materials fell back to white. The loader is now
 chosen by capability (`fetch` + `createImageBitmap`), with `flipY` handled at decode. The only site
-with that pattern.
+with that pattern. Root viewed the final native cockpit frames: textures render rather than white and
+the instruments read correctly.
 
 **#7 Audio.** Native treated Web Audio's absolute `when` as a relative delay; Three.js supplies
 `currentTime + delay`, so the clock was added twice. The engine now schedules at
@@ -214,15 +219,13 @@ filter-flip RED/GREEN tests.
 
 ## Gates and performance (current numbers)
 
-- **Engine:** engine CI run `09` was all green (5485 pass / 0 fail / 5 skip, 454 files pass / 1 skip,
-  typecheck, lint, budgets, build, docs; 767 pre-existing lint warnings) but on the **previous** head,
-  not the current one, so it does not authorise a merge. The current head is `b0925694`, pushed. A
-  fresh full `pnpm test` now **PASSes, exit 0** — 454 files passed / 1 skipped (455), 5492 passed /
-  5 skipped (5497), temp-dir guard clean. The one browser spec that failed the prior full run passed
-  alone (19 passed, exit 0); that failure **did not recur** and no cause is attributed to it, so it
-  is *not* called "unrelated browser" as a proven cause. `pnpm budgets` **PASSes** after the stale
-  generated native-coverage report was refreshed — that stale report was the only reason the earlier
-  budget check failed. New CI is 24 checks green with no failures and more pending.
+- **Engine:** source head `b0925694`. Fresh full `pnpm test`: **5,492 passed / 5 skipped**,
+  454 files passed / 1 skipped, exit 0; temporary-directory guard clean. Typecheck, lint, budgets
+  and the native production build pass. An earlier browser-test failure did not recur in its
+  isolated 19-test run or the fresh full suite; its cause was not established.
+  The generated native-coverage digest was refreshed after the C++ change.
+  [CI for this head](https://github.com/ThreeNativeHQ/threenative/actions/runs/35212649736) records
+  the remote checks; the linked PR records the merge verdict.
 - **Test isolation (fixed; full gate green):** `packages/runtime-native/tests/gpu/fetch.test.ts`
   recursed into and deleted the shared `runtimeNativeRoot/.test-tmp`, which
   `tests/webtransport/webtransport.test.ts` nested inside; under parallel vitest that deleted the
@@ -235,8 +238,8 @@ filter-flip RED/GREEN tests.
 - **Capture framing:** a root capture of 1600×900 against a 1280×720 window produced the grey border
   — a resolution mismatch, not a layout bug; matched size fills the frame. Resize at 1024×600 and
   1440×810 was accepted earlier. **GPU screenshots omit the WebView overlay**; UI proof needs an
-  actual OS-composited capture. That capture ran on `6f29f1f8` at 1280×720 and proved the briefing,
-  dropdown and Recon selection; it did not reach a debrief/restart, so that part is **open**.
+  actual OS-composited capture. That capture ran on `6f29f1f8` at 1280×720 and proved the full route
+  through the debrief and New Deck Sortie restart (see above), with every frame correctly fit.
 
 The UI-enabled baseline artifact `021f2d5a` was measured twice on private Xvfb at 1280×720, FIFO,
 4× MSAA: once without profiling and once with V8 profiling. The following values are from the
@@ -299,13 +302,11 @@ above and is not part of the final set.)
 
 ## Delivery and cleanup
 
-Both draft PRs are updated, unmerged and **not merge-ready**. The primary engine checkout is
-**clean on `develop`**; the only working-tree change in the primary game checkout is the user's
-`style.css` plus its 7-file set, deliberately left undisturbed. A squash to `develop` is authorised
-only **after real proof and green CI on the current head**: the native scenario suite and the local
-full engine gate are green, but CI on `b0925694` is still running (24 checks green, more pending) and
-the final debrief/restart UI is still open, so **merge is held** and none is claimed. Cleanup of the
-lane's worktrees is **not yet done** and will follow once the draft work lands.
+The linked PRs are the delivery record. Squash to `develop` requires the native proof above and
+green CI on the final head. The verified binary/UI and runtime are preserved outside the task
+worktrees in `/home/joao/.cache/midway-native-parity-fgODHg/`; unique local evidence was also copied
+and hash-checked before cleanup. The user's primary-checkout `style.css` changes — one file, seven
+added lines — are preserved. No deployment or release was requested.
 
 There is **no temporary native instrumentation owed out**: `rg` over the tree confirms `TN_FIRE`,
 `TN_GUN_EVENT` and `TN_AUDIO_LOAD` are absent. Native pipeline labels are a permanent engine
