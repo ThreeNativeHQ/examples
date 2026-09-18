@@ -26,7 +26,7 @@ import type {
   IViewSnapshot,
   IViewState,
 } from "./hud-input.js";
-import type { IHud, ILoadoutView, ScreenName } from "./port.js";
+import type { IHud, ILoadingView, ILoadoutView, ScreenName } from "./port.js";
 
 export type { IViewSnapshot };
 
@@ -36,6 +36,8 @@ export interface IUiSnapshot {
   overlay: string | null;
   cockpit: boolean;
   loadout: ILoadoutView;
+  /** How the launch is going, so a native web view shows the same bar as the web build. */
+  loading: ILoadingView;
   assignment: { id: string; brief: string };
 }
 

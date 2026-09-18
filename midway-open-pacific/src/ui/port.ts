@@ -43,6 +43,18 @@ export interface ILoadoutView {
   readonly deckNotice?: string;
 }
 
+/**
+ * What the loading layer shows. `label` is the asset actually being loaded, from the engine's own
+ * in-flight ledger — a bar with no name on it cannot tell "still working" from "stuck".
+ * `failure` is a launch the engine reported as stalled or device-lost; it replaces the bar.
+ */
+export interface ILoadingView {
+  /** 0..1, monotonic: `ctx.startup.progress`. */
+  readonly progress: number;
+  readonly label: string;
+  readonly failure?: string;
+}
+
 /** Everything the player can ask for that the shell itself must not decide. */
 export type Intent =
   | { kind: "begin"; airborne: boolean; fresh: boolean }
@@ -65,6 +77,8 @@ export type Intent =
 export interface IShell {
   hud(battle: IBattleView, view: IViewState): IHud;
   screen(name: ScreenName, visible: boolean): void;
+  /** How the launch is going, while the loading layer is up. */
+  loading(view: ILoadingView): void;
   /** Show exactly this modal overlay, or none. */
   overlay(id: string | null): void;
   loadout(view: ILoadoutView): void;
@@ -94,6 +108,7 @@ export class NullHud implements IHud {
 export const nullShell: IShell = {
   hud: () => new NullHud(),
   screen: () => {},
+  loading: () => {},
   overlay: () => {},
   loadout: () => {},
   assignment: () => {},

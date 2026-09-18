@@ -1,4 +1,4 @@
-import { Scene } from "@threenative/core";
+import { Scene, onLaunchFailure } from "@threenative/core";
 import { AudioBus } from "@threenative/core";
 import { Vector3 } from "three";
 import type { ICtx } from "@threenative/core";
@@ -148,21 +148,61 @@ export class Midway extends Scene<GameState, undefined> {
   private camPos = new Vector3();
   private nextAlbatross = 0;
   private cleanups: Array<() => void> = [];
+  private stopReporting: () => void = () => {};
+
+  /**
+   * Keep the loading layer honest while the launch runs: the engine's own byte-weighted
+   * `startup.progress` drives the bar, and its in-flight ledger names the file being loaded. A
+   * launch the engine gives up on (stalled, or a lost GPU device) replaces both with the message
+   * and the copy button — a loading screen that hangs with no text is a bug report nobody can file.
+   *
+   * On a timer rather than per frame on purpose: this launch renders about one frame a second
+   * while the models decode, and a per-frame pump would update the bar exactly that often.
+   */
+  private reportLaunch(ctx: ICtx<GameState, undefined>): () => void {
+    let failure: string | undefined;
+    const offFailure = onLaunchFailure((reported) => {
+      failure = reported.message;
+    });
+    const publish = (): void => {
+      const [loading] = ctx.assets.progress.pending;
+      shell.loading({
+        ...(failure === undefined ? {} : { failure }),
+        label: failure !== undefined ? "The launch stopped." : (loading ?? "Preparing the Pacific theatre…"),
+        progress: ctx.startup.progress,
+      });
+    };
+    publish();
+    const timer = setInterval(publish, 250);
+    return () => {
+      clearInterval(timer);
+      offFailure();
+    };
+  }
 
   async load(ctx: ICtx<GameState, undefined>): Promise<void> {
+    const stopReporting = this.reportLaunch(ctx);
+    const timed = async <R>(label: string, work: Promise<R>): Promise<R> => {
+      const began = performance.now();
+      const value = await work;
+      console.log(`TN_LOAD_STEP:{"label":"${label}","ms":${(performance.now() - began).toFixed(1)}}`);
+      return value;
+    };
     const [, , , , , , buffers] = await Promise.all([
-      loadImportedAircraft(ctx),
-      loadImportedShips(ctx),
-      loadImportedFleet(ctx),
+      timed("aircraft", loadImportedAircraft(ctx)),
+      timed("ships", loadImportedShips(ctx)),
+      timed("fleet", loadImportedFleet(ctx)),
       // The imported hulls the fleet is built from — Yorktown, the three Japanese carriers, the
       // cruisers, destroyers and submarines. Their sizes come from src/sim/catalog.ts, which
       // `Battle` has already read; this only brings in the geometry to draw them with.
-      loadImportedHulls(ctx),
-      loadDeckCrew(ctx),
-      loadEnvironment(ctx),
-      Soundscape.load(ctx.assets),
+      timed("hulls", loadImportedHulls(ctx)),
+      timed("deck-crew", loadDeckCrew(ctx)),
+      timed("environment", loadEnvironment(ctx)),
+      timed("audio", Soundscape.load(ctx.assets)),
     ]);
     this.audioBuffers = buffers;
+    this.stopReporting = stopReporting;
+    console.log(`TN_LOAD_STEP:{"label":"scene-load-total","ms":${performance.now().toFixed(1)}}`);
     // Keep the opaque loading layer up until the first update has built the world and placed the
     // camera; hiding it here showed a few frames of an unlit, half-built scene.
   }
@@ -203,7 +243,10 @@ export class Midway extends Scene<GameState, undefined> {
     this.updateLoadoutUI();
     this.updateAssignmentUI();
     shell.screen("flight", false);
+    console.log(`TN_LOAD_STEP:{"label":"enter","ms":${performance.now().toFixed(1)}}`);
     void ctx.startup.whenReady().then(() => {
+      this.stopReporting();
+      console.log(`TN_LOAD_STEP:{"label":"ready","ms":${performance.now().toFixed(1)}}`);
       this.started = true;
       shell.screen("loading", false);
       if (this.battle.status === "briefing") {

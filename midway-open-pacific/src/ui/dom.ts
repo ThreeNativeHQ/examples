@@ -6,7 +6,7 @@
  */
 import { Hud } from "../hud.js";
 import type { IBattleView, IViewState } from "./hud-input.js";
-import type { IHud, ILoadoutView, IShell, Intent, ScreenName } from "./port.js";
+import type { IHud, ILoadingView, ILoadoutView, IShell, Intent, ScreenName } from "./port.js";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const $$ = (id: string) => document.getElementById(id);
@@ -19,6 +19,32 @@ const SCREENS: Record<ScreenName, string> = {
 };
 const OVERLAYS = ["pause-overlay", "map-overlay", "command-overlay"];
 /** Keys the game flies with. The browser's own Space, Tab and arrow behaviour would steal them. */
+/**
+ * `navigator.clipboard` is missing on an insecure origin and rejects when the page is not focused,
+ * which is exactly the state a failed launch leaves it in; the selection path is the fallback
+ * every browser and the native web view still honour.
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    /* falls through */
+  }
+  try {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.cssText = "position:fixed;top:-1000px;opacity:0";
+    document.body.append(area);
+    area.select();
+    const copied = document.execCommand("copy");
+    area.remove();
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
 const CLAIMED = new Set(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab", "F1", "F2", "F3"]);
 
 class DomShell implements IShell {
@@ -134,6 +160,33 @@ class DomShell implements IShell {
 
   screen(name: ScreenName, visible: boolean): void {
     $(SCREENS[name]).classList.toggle("hidden", !visible);
+  }
+
+  /**
+   * The launch, as the player sees it: a bar that moves with the bytes and the name of the file
+   * being loaded. A failure replaces both — with the message and a button that copies it, because
+   * the first thing anyone is asked for is the text, and it cannot be selected over a canvas.
+   */
+  loading(view: ILoadingView): void {
+    const bar = $$("load-bar");
+    if (bar) bar.style.width = `${Math.round(Math.max(0, Math.min(1, view.progress)) * 100)}%`;
+    const status = $$("load-status");
+    if (status) status.textContent = `${Math.round(view.progress * 100)}% — ${view.label}`;
+    const failure = $$("load-failure");
+    if (!failure) return;
+    failure.classList.toggle("hidden", view.failure === undefined);
+    if (view.failure === undefined) return;
+    const text = $$("load-failure-text");
+    if (text) text.textContent = view.failure;
+    const copy = $$("load-copy") as HTMLButtonElement | null;
+    if (copy && copy.dataset.wired !== "1") {
+      copy.dataset.wired = "1";
+      copy.addEventListener("click", () => {
+        void copyToClipboard($("load-failure-text").textContent ?? "").then((ok) => {
+          copy.textContent = ok ? "COPIED" : "PRESS CTRL+C";
+        });
+      });
+    }
   }
 
   overlay(id: string | null): void {

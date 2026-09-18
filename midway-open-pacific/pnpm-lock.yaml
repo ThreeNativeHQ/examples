@@ -973,7 +973,7 @@ packages:
     version: 0.3.2
 
   '@threenative/core@file:../.packages/threenative-core-0.3.2.tgz':
-    resolution: {integrity: sha512-EgjE4lSPwnWETPY7MuXFhG7zVXun9y0zwl/cZB/+lM0FcUaHbC2F+Rb4IZP10gzxtAJf2Ngpjlk9/JogXwIWAA==, tarball: file:../.packages/threenative-core-0.3.2.tgz}
+    resolution: {integrity: sha512-yVgk6S5kKA5S4ZiLgYJ9Od/X61e4oAEn5WosThzvRNfs8X+6UBfO5SdMtYrHyFRzld3rbUBvIGOFpJjX0rYlaA==, tarball: file:../.packages/threenative-core-0.3.2.tgz}
     version: 0.3.2
     peerDependencies:
       '@threenative/playtest': '>=0.3.2 <0.4.0'

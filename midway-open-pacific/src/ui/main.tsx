@@ -72,6 +72,7 @@ function NativeUi(): null {
     for (const [name, visible] of Object.entries(ui.screens)) installed.screen(name as ScreenName, visible);
     installed.overlay(ui.overlay);
     installed.loadout(ui.loadout);
+    installed.loading(ui.loading);
     installed.assignment(ui.assignment.id, ui.assignment.brief);
     installed.cockpitView(ui.cockpit);
     markInteractive();

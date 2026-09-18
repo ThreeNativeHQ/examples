@@ -154,6 +154,7 @@ export function createUiBridge(publish: (patch: IUiPatch) => void): IUiBridge {
   const snapshot: IUiSnapshot = {
     assignment: { brief: "", id: "strike" },
     cockpit: false,
+    loading: { label: "Preparing the Pacific theatre…", progress: 0 },
     loadout: { deckEnabled: false, deckNote: "", id: "bomb", name: "", note: "", tagRole: "", tagTitle: "" },
     overlay: null,
     screens: { briefing: false, debrief: false, flight: false, loading: true },
@@ -180,6 +181,18 @@ export function createUiBridge(publish: (patch: IUiPatch) => void): IUiBridge {
         const hud = new BridgeHud(view, (snap) => publish({ hud: snap }), ++sessions);
         hud.b = battle;
         return hud;
+      },
+      loading(view) {
+        if (
+          snapshot.loading.progress === view.progress &&
+          snapshot.loading.label === view.label &&
+          snapshot.loading.failure === view.failure
+        )
+          return;
+        snapshot.loading = view.failure === undefined
+          ? { label: view.label, progress: view.progress }
+          : { failure: view.failure, label: view.label, progress: view.progress };
+        push();
       },
       loadout(view: ILoadoutView) {
         // An absent refusal must be absent, not `undefined`: `JSON.stringify` drops an undefined
