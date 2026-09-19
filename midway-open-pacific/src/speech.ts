@@ -106,9 +106,13 @@ export class SpeechQueue {
     // of "Flight quarters" and then a different sentence. Half a second costs an urgent warning
     // nothing and is the difference between a cut and a phrase.
     const started = this.#current === null ? Infinity : now - this.#current.startedAt;
+    // A priority-1 call is the one the player has to act on *now* — a fighter behind them, the
+    // aircraft burning — and it takes over whatever is being said, immediately. Everything else
+    // waits out the grace.
+    const mayCut = started >= MIN_AUDIBLE || cue.priority === 1;
     const urgent =
       this.#current !== null &&
-      started >= MIN_AUDIBLE &&
+      mayCut &&
       (cue.priority < this.#current.cue.priority ||
         (cue.channel === "intercom" && this.#current.cue.channel !== "intercom"));
     if (urgent) {

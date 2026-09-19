@@ -37,6 +37,26 @@ const AUDIO_DIR = resolve(root, "public/assets/audio");
 const MP3_DIR = resolve(root, "content/audio/mp3");
 const BASE = "https://api.elevenlabs.io/v1";
 
+/**
+ * How hard a line is delivered, by how urgent it is.
+ *
+ * One flat setting for every line is what made the cast sound like a reader rather than a crew:
+ * `stability: 0.6, style: 0.15` is the setting you choose when you want a narrator to sound the
+ * same in every take, and it holds a man watching torpedo planes come in at exactly the same
+ * temperature as a man announcing flight quarters. Stability is how much the model smooths the
+ * reading toward neutral, so urgency comes from lowering it and letting style carry the delivery.
+ *
+ * Priority 1 is the immediate call — enemy overhead, lead going down. 2 is tactical. 3 is routine
+ * shipboard traffic, which should still sound like a person and not a machine.
+ */
+function deliveryFor(row) {
+  const similarity_boost = 0.75;
+  const use_speaker_boost = true;
+  if (row.priority === 1) return { stability: 0.28, similarity_boost, style: 0.75, use_speaker_boost };
+  if (row.priority === 2) return { stability: 0.4, similarity_boost, style: 0.55, use_speaker_boost };
+  return { stability: 0.5, similarity_boost, style: 0.35, use_speaker_boost };
+}
+
 /** Ambient beds keep their stereo width; every positional emitter is downmixed to mono. */
 const STEREO_BEDS = new Set(["ocean-wind"]);
 
@@ -164,7 +184,7 @@ async function generateSpeech(manifest, only) {
     const { bytes, requestId } = await post(`/text-to-speech/${voiceId}?output_format=${OUTPUT_FORMAT}`, {
       text: row.text,
       model_id: TTS_MODEL,
-      voice_settings: { stability: 0.6, similarity_boost: 0.75, style: 0.15, use_speaker_boost: true },
+      voice_settings: deliveryFor(row),
     });
     if (bytes.length < 1000) throw new Error(`${row.slug}: response was ${bytes.length} bytes, not audio`);
     const mp3Path = resolve(MP3_DIR, `${row.slug}.mp3`);
