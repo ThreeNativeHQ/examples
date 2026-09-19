@@ -117,3 +117,11 @@ host-gap baselines this project quotes keep their meaning.
 This checkout is pinned to `threenative-playtest-0.3.2-midway-40eb05c5c726.tgz`; on the same binary
 the same command now prints `fps suppressed: … private-xvfb …` and `FAIL TN_PERF_VIRTUAL_DISPLAY`,
 exit 1.
+
+Follow-up (`c798bd21f`): `TN_FRAME_HITCH` turned out to carry **two different payloads under one
+name** — the native host's 300-frame window, and core's own `{gapMs,uptimeMs,wallClock}` line for a
+single present gap. The reader assumed the first, so this project's native launch log printed
+`hitch windows (post-launch, 3): worst NaN ms` and blamed an older host for fields that were never in
+the line, while discarding three real gaps of 2.1–3.0 s. Both series are now read as what they
+measured; the same log reads `present gaps (3): worst 3000.140 ms at uptime 10178 ms`. This checkout
+is pinned to `threenative-playtest-0.3.2-midway-0de31f7cbe77.tgz`, verified against that log.
