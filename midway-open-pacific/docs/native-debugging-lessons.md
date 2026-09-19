@@ -162,3 +162,41 @@ browser and native launch goes through `tools/capture-lock.sh` — no `xvfb-run`
 
 Confirm a compositor (`xcompmgr`/`picom`/`compton`) is on PATH, then run the native UI smoke with the
 recipe above.
+
+## The host binary is not the package (2026-09-19)
+
+`pnpm build:desktop` embeds the host from
+`node_modules/@threenative/runtime-native/prebuilt/<platform>-<arch>/threenative-runtime`, and that
+file is **downloaded from the release**, not shipped inside the tarball. On this machine the
+published `runtime-native-v0.3.2` asset is a host older than the engine it is installed beside: the
+binary answers `Mystral Native Runtime v0.3.0` to its own `--version`, while `install-status.json`
+next to it says 0.3.2. Nothing in the package metadata reveals it, and `pnpm install` is happy.
+
+A game built with that host starts, renders and plays — `boot` passes with 660 frames — but its UI
+never composites: every scenario that clicks the overlay dies at
+`waitForResource state.ui.screens.flight` with `frames 0`. Measured on one game bundle, only the
+host changed:
+
+| host embedded | boot | launch | cockpit | ui | native-select |
+| --- | --- | --- | --- | --- | --- |
+| published prebuilt (v0.3.0) | PASS | FAIL | FAIL | FAIL | FAIL |
+| a host at the engine's version (v0.3.2) | PASS | PASS, 2011 frames | PASS, 1895 | PASS, 931 | — |
+
+`native-select` was not re-run against the good host in this session; the three that were are
+enough to show the failure is the host, not one scenario.
+
+So name the host explicitly when the published one is stale:
+
+```sh
+THREENATIVE_RUNTIME_BINARY=/home/joao/projects/threenative/threenative-engine/packages/runtime-native/build/tn-linux/mystral \
+  pnpm build:desktop
+```
+
+or put that binary at the prebuilt path and build normally. Note the trap this creates: the
+`dist-native/midway-open-pacific` artifact in the tree is only as good as the host the last build
+embedded, and a plain `pnpm build:desktop` re-embeds the stale one.
+
+The engine's `threenative doctor` now refuses the stale host — `✗ native runtime: unavailable — the
+linux-x64 host reports runtime v0.3.0, older than the installed engine 0.3.2`, exit 1 — where the
+same command previously printed `✓ native runtime: available (linux-x64)`. Engine commit
+`6571c4ed5`; the red-green is in `packages/create-threenative/__tests__/doctor.spec.ts`.

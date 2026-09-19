@@ -76,3 +76,25 @@ The environment record copies the options' own fields once, at construction. `ai
 are references and stay live, but replacing a field on the options object afterwards is no longer
 observed — Midway already rebuilds its model when the airframe or the deck changes, so nothing here
 does that.
+
+## 2026-09-19 — The published native host is older than the package that ships it
+
+`pnpm build:desktop` embeds `node_modules/@threenative/runtime-native/prebuilt/linux-x64/threenative-runtime`,
+which the tarball does not contain: the install hook downloads it from the release. That published
+asset answers `Mystral Native Runtime v0.3.0` while its own `install-status.json` says 0.3.2, and the
+engine's doctor read that metadata and reported `✓ native runtime: available (linux-x64)`.
+
+The result is a desktop binary that boots, plays and cannot be clicked: `boot` passes with 660
+frames, while `launch`, `cockpit`, `ui` (web target equivalents all pass) and `native-select` all die
+at `waitForResource state.ui.screens.flight` with `frames 0` — the injected pointer reaches a UI that
+never composited. Rebuilt against a host at the engine's version, the same game bundle passes
+`launch` (2011 frames), `cockpit` (1895) and `ui` (931) with zero diagnostics.
+
+Engine side: doctor now runs the installed host's own `--version` and fails when the reported runtime
+is older than the newest of the installed engine and runtime packages, when the host names no
+version, or when what it names cannot be compared (`6571c4ed5`, spec covers all four shapes). On this
+project that flips `✓ available (linux-x64)`, exit 0, to `✗ … the linux-x64 host reports runtime
+v0.3.0, older than the installed engine 0.3.2`, exit 1 — and a host at 0.3.2 stays green.
+
+Reproduce a good artifact with `THREENATIVE_RUNTIME_BINARY=<engine>/packages/runtime-native/build/tn-linux/mystral pnpm build:desktop`;
+the runbook entry is in `docs/native-debugging-lessons.md`.
