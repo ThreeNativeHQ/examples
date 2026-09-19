@@ -133,6 +133,19 @@ iterations, so its `fps` is the loop's cadence: `perf --file <this log> --min-fp
 counts (`a85959e71`), and this checkout is pinned to
 `threenative-playtest-0.3.2-midway-b7784c158a85.tgz`, verified against that log.
 
+**And the rate itself is measurable now** (`8db1fd632`). The host exposes the counter it already keeps
+(`__tnPresentedCount`) and core's frame budget reads it, so a window reports the display's own frames
+beside the loop's cadence. On this project's native launch, rebuilt from both:
+
+| window | fps (loop) | presents | presentedFps |
+| --- | ---: | ---: | ---: |
+| 1, the launch | 51.28 | 115 | **13.42** |
+| 2-5, spinning at the briefing | 1449-25000 | 0 | absent |
+
+The `13.42` is the honest answer to "how fast is this game on this target" — the number the 60 Hz
+presentation cap and the skipped frames imply. The four spinning windows carry no rate at all rather
+than a zero dressed as one: the reader prints `0.00` and names them.
+
 That reader also joins the host's own stall report (`TN_SLOW_PHASE`), so the same command says
 what the gaps *were* — `imageDecodeDrain 2965.129 ms, animationFrames 473.653 ms` for the first,
 `animationFrames 2040.518 ms` for the second — while refusing to name the `pollEvents` watcher that
