@@ -137,3 +137,47 @@ PASSes with a 3.5x margin. The engine's `finalStateSha256` is bit-identical acro
 nothing about the flight model's behaviour changed. The engine half of the step is now 2.5–3 µs per
 aircraft per step; the 8.7 µs at the top of the range is game-side AI, gunnery and weapon work —
 see `FRICTION.md`, 2026-09-19.
+
+## Re-measured on 2026-09-19: the absolute GPU target fails again, and it is the sea
+
+One approved 60-second sample, `MIDWAY_CROWD=1` (68/68 active), 1920×1080, pixelRatio 1, the same
+`nvidia/turing` adapter and the same instrument:
+
+| | recorded after the range gates | re-measured 2026-09-19 |
+| --- | --- | --- |
+| GPU p50 | 12.33 / 12.49 ms | 7.98 ms |
+| GPU p95 | 13.79 / 14.30 ms | **17.00 ms** |
+| GPU p99 / worst | 14.58 ms | 18.19 / 18.68 ms |
+| fixed-step CPU p95 | 1.30 ms | 1.40 ms |
+| distribution | one cluster | two modes again: a 8 ms mode and a 17 ms mode |
+
+So the two modes came back and the absolute target (`gpuP95 < 16.7 ms`) is **not met** on this tree.
+The fixed-step half is comfortable — 1.40 ms against the 4 ms ceiling, *after* the flight-step fixes
+in `FRICTION.md` (2026-09-19), which took it from 4.293 ms.
+
+Layer ablation, 15-second attribution runs on the same fixture and adapter, one layer hidden each
+(these are non-qualifying by construction — they are what `MIDWAY_HIDE` exists for):
+
+| hidden | GPU p50 | GPU p95 |
+| --- | --- | --- |
+| nothing (the 60 s run above) | 7.98 ms | 17.00 ms |
+| sea | 7.62 ms | **9.17 ms** |
+| ships | 7.48 ms | 14.42 ms |
+| sky | 8.05 ms | 15.79 ms |
+| crew | 7.90 ms | 16.89 ms |
+
+Hiding the sea collapses the p95 and barely moves the p50 — the same signature the earlier section
+found and the same conclusion: the second mode is the ocean surface's fill cost, and the four range
+gates that flattened it are no longer doing so on this tree. Ships and sky each carry a slice of the
+tail; deck crew carries none. (Ablation runs sample 15 s, not the approved 60, so read the rows
+against each other and not against the 60-second line.)
+
+One thing this is **not**: the engine's adaptive resolution scaler is not asleep. It holds scale 1
+here because this sample's cheap mode is ~8 ms, and its declared signal is the mean presented frame
+rate rather than a GPU tail — a bimodal distribution with a healthy mean is invisible to it by
+design (`packages/core/src/resolution-scaler.ts`, `RESOLUTION_SCALER.targetFpsFraction`). The gate
+that fails is AC-23's p95, and the scaler has never claimed to gate on that.
+
+Next step belongs to the ocean material, not the framework: attribute the 8 ms sea mode the way the
+earlier section did (wake loop, foam noise, viewport reads, sky samples) and re-check the range
+gates against the swell-softening change in `4404e62`.
