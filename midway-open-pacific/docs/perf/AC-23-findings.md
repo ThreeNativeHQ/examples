@@ -112,3 +112,28 @@ That is honest and expected: the baseline at `c13e184` did not draw the eleven i
 cruiser scouts, or anything else this PRD adds. The workload fields match — same adapter, resolution,
 seed, population envelope — but the *content* grew, and the criterion asks for both halves. So AC-23
 is not met: the absolute target passes and the ≤10% comparison does not.
+
+## The node-level CPU gate after the flight-step fixes (2026-09-19)
+
+AC-23's fixed-step half is measured twice here: in the browser capture above (1.30 ms p95 at the
+crowd68 fixture), and in `scripts/check-ai-flight-cost.mjs`, which grows a real battle to the
+68-aircraft ceiling through `Battle.launch` and times `Battle.step` itself. The node gate was the
+one failing, at **4.293 ms p95** against the 4 ms ceiling, with the marginal cost per aircraft
+rising from 17.6 to 30.9 µs between ten and sixty-eight aircraft.
+
+That cost was the engine's: `flightForces` built its 18-field result with an object spread, which
+V8 cannot create from a boilerplate, and `FlightModel.stepDeck` spread the whole environment on
+every call (`@threenative/core` `b04b9d3a1`, `302780021`). Written out and stepped from one record
+per model, the same gate reads:
+
+| population | mean before | mean after | p95 before | p95 after |
+| --- | --- | --- | --- | --- |
+| 1 | 0.217 ms | 0.154 ms | 0.313 ms | 0.224 ms |
+| 10 | 0.375 ms | 0.183 ms | 0.582 ms | 0.274 ms |
+| 68 (cap) | 2.154 ms | 0.694 ms | 4.293 ms | 1.156 ms |
+
+Marginal cost at the top of the range falls 30.9 → 8.7 µs per aircraft per step, and the gate
+PASSes with a 3.5x margin. The engine's `finalStateSha256` is bit-identical across both fixes, so
+nothing about the flight model's behaviour changed. The engine half of the step is now 2.5–3 µs per
+aircraft per step; the 8.7 µs at the top of the range is game-side AI, gunnery and weapon work —
+see `FRICTION.md`, 2026-09-19.

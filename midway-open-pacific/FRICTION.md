@@ -26,3 +26,53 @@ so automatic projection stays engaged. Packing is now once per outer draw (prepa
 versus once per fixed update in the legacy path. No architecture rewrite: one registration site, the
 existing step/emission code unchanged.
 
+
+## 2026-09-19 — Two object spreads in the engine's flight step, 18x the step cost
+
+`@threenative/core` built objects with spreads in the one path every aircraft runs every fixed
+step, and a spread is not the same cost as a written-out literal: V8 cannot use the boilerplate it
+gives a fixed literal, and goes through `CopyDataProperties` property by property.
+
+1. `flightForces` returned `{ ...coeff, airspeed, alpha, … }` — built twice per aircraft per step.
+2. `FlightModel.step`, `stepDeck` and `forces` each passed `{ ...this.environment, modifiers }` to
+   the free functions, allocating a whole environment on every call.
+
+Found by profiling the game rather than reading it. A V8 CPU profile of
+`node scripts/check-ai-flight-cost.mjs` put **34% of all sampled CPU in `flightForces`** and, after
+that was fixed, the **single hottest line of the entire fixed step was the spread inside
+`FlightModel.stepDeck`** — above every line of the physics it feeds. GC was another 11% of the
+first profile. Three cheaper explanations were measured and rejected: `Math.hypot` in the same hot
+path is worth 1.09x here (unlike `ripple-field`, where the same substitution was 6.4x); an inlined
+coefficient writer plus scratch vectors is worth 1.07x; and removing the remaining per-call
+temporaries (the `coeff` record, the axis vectors) is worth 1.07x — none of them worth the public
+surface or the duplication they would cost.
+
+Engine harness, `scripts/check-flight-cost.ts`, 32 aircraft, 600 timed ticks, three runs a side:
+
+| | mean step | p95 | `finalStateSha256` |
+| --- | --- | --- | --- |
+| as shipped | 0.805–0.824 ms | 1.95–2.15 ms | `bde0e51b5700123a…` |
+| forces literal written out | 0.089–0.094 ms | 0.14–0.18 ms | `bde0e51b5700123a…` |
+| + one step environment per model | 0.044–0.048 ms | 0.05–0.06 ms | `bde0e51b5700123a…` |
+
+This game's own AC-23 CPU gate, `node scripts/check-ai-flight-cost.mjs`, 68 airborne:
+
+| | mean at cap | p95 at 68 | verdict |
+| --- | --- | --- | --- |
+| before | 2.154 ms | 4.293 ms | FAIL, over the 4 ms ceiling |
+| forces literal written out | 0.785–0.832 ms | 1.24–1.37 ms | PASS |
+| + one step environment per model | 0.669–0.698 ms | 1.07–1.22 ms | PASS |
+
+Red-green, both sides: the game's gate above fails before and passes after, and the engine's
+`pnpm exec tsx scripts/check-flight-cost.ts --max-mean-ms 0.35` exits 1 (mean 0.8347 ms) before and
+0 (mean 0.0848 ms, then 0.0448 ms) after. The `finalStateSha256` is identical at every step, so the
+physics did not move — only the cost. `check-flight.mjs` still passes (six seeds, objective 987 s
+recovered), and `pnpm exec vitest run packages/core/__tests__` is 1443 tests green.
+
+Engine commits `b04b9d3a1` and `302780021`; this checkout is pinned to
+`threenative-core-0.3.2-midway-8799d277e548.tgz`.
+
+The environment record copies the options' own fields once, at construction. `airframe` and `wind`
+are references and stay live, but replacing a field on the options object afterwards is no longer
+observed — Midway already rebuilds its model when the airframe or the deck changes, so nothing here
+does that.
