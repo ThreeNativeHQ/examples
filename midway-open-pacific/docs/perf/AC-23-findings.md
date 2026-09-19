@@ -199,3 +199,25 @@ the tell is the CPU series, which needs no GPU to be wrong:
 The fixed-step number is the honest one: it is pure JavaScript on a contended CPU, so a 5.2× rise
 there says the rest of the row is contention and not a change. **No in-game conclusion is drawn from
 this run**; the sea's p95 mode stands as recorded, and the next pass needs the machine to itself.
+
+## The ceiling is marginal, and the machine decides (2026-09-19)
+
+A later run on the same tree, with the machine at load average 16 rather than 32, reads:
+
+| | quiet machine | load 32 | **load 16** |
+| --- | ---: | ---: | ---: |
+| GPU p50 | 7.98 ms | 8.31 ms | **7.80 ms** |
+| GPU p95 | 17.00 ms | 18.14 ms | **16.42 ms — ok** |
+| GPU p99 / worst | 18.19 / 18.68 ms | 18.20 / 18.20 ms | 19.48 / 19.76 ms |
+| fixed-step CPU p95 | 1.40 ms | 7.28 ms | 1.80 ms |
+| `renderCpu` p50 / worst | 1.70 / 9.40 ms | 6.95 / 27.40 ms | 3.40 / **197.90 ms** |
+
+So the absolute gate is **marginal rather than clearly failed**: 16.42 ms passes, 17.00–18.14 ms fails,
+and what moves between them is the machine, not the game — the fixed-step series (pure JavaScript)
+tracks the load exactly, and the GPU series follows it because a contended main thread queues frames
+into the GPU. The p99 (19.48) and the worst (19.76) are over the ceiling on every run including this
+one, so the tail is real and the sea's fill owns it; the *median* has ~8.9 ms of headroom.
+
+**What this changes:** the case for rewriting the ocean is weaker than a single 17.00 ms reading
+suggested. Before any material change, this gate needs a run on a machine with nothing else on it —
+recorded here so the next reader does not mistake a contended run for the game's number.

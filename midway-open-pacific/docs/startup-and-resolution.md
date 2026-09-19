@@ -288,3 +288,19 @@ local.
   (`74bf6791e`, engine). One launch of this game is 172 settles; the longest was a model at 7.7 s
   from its own request on a machine at load ≈ 20, which is queue time rather than parse time. The
   seam is what makes the next pass possible; it has not been read on a quiet machine yet.
+
+## The asset leg is a band, not one slow file (2026-09-19)
+
+With the engine's opt-in per-asset trace (`globalThis.__TN_ASSET_TRACE__ = true`, `74bf6791e`) one
+launch reports **172 settles**, and they land in a band: the last twelve (three speech clips, then the
+atoll, the torpedo, the Douglas, the director, Kaga, Soryu, the pilot, the Nautilus, the Hornet) all
+report 2.27–2.38 s *from their own request*. Nothing stands out, because nothing is slow on its own —
+they are all in flight at once and the leg's 3.3 s is bandwidth and main-thread parse work, not one
+asset.
+
+That kills the obvious fix (defer the heavy file) and leaves the structural one: **the briefing needs
+none of it.** It is a DOM screen with a loadout list; the world is only needed when the player takes
+the deck. Showing the briefing first and loading the world behind it would put the intro screen on
+screen in about a second, with the deck button gated on readiness — a launch-sequence change, not a
+micro-optimisation, and it is the next thing worth doing here. Best flow measured on this tree so
+far: **6129 ms** to the intro screen (assets 3313, `enter()` 1288, warm-up 1492, `ready` → intro 36).
