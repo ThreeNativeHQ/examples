@@ -181,3 +181,21 @@ that fails is AC-23's p95, and the scaler has never claimed to gate on that.
 Next step belongs to the ocean material, not the framework: attribute the 8 ms sea mode the way the
 earlier section did (wake loop, foam noise, viewport reads, sky samples) and re-check the range
 gates against the swell-softening change in `4404e62`.
+
+## A contended re-measurement, recorded so it is not compared (2026-09-19)
+
+The in-game numbers were re-taken after the launch-flow work to confirm nothing moved. They cannot be
+compared with anything above, and the reason is in the same record: the machine was at load average
+**32** from other work (two headless Chromium shells at 356 % and 273 % CPU, three node servers), and
+the tell is the CPU series, which needs no GPU to be wrong:
+
+| | quiet machine (recorded above) | this run (load 32) |
+| --- | ---: | ---: |
+| fixed-step CPU p95 | 1.40 ms | **7.28 ms** |
+| `renderCpu` p50 | 1.70 ms | **6.95 ms** |
+| `updateRenderCpu` p50 | 10.00 ms | **38.80 ms** |
+| GPU p50 / p95 | 7.98 / 17.00 ms | 8.31 / 18.14 ms |
+
+The fixed-step number is the honest one: it is pure JavaScript on a contended CPU, so a 5.2× rise
+there says the rest of the row is contention and not a change. **No in-game conclusion is drawn from
+this run**; the sea's p95 mode stands as recorded, and the next pass needs the machine to itself.
