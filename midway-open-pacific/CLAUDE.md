@@ -234,6 +234,9 @@ pnpm typecheck
 pnpm exec vite build
 node scripts/check-flight.mjs
 node scripts/check-aircraft.mjs
+# The rear gun's own geometry: which mouth fires, and what refuses a shot (the Douglas hull guard).
+# It was not in this list, and it had drifted a behaviour change behind a stale assertion.
+node scripts/check-gunner.mjs
 # The engine's flight model is this game's hot loop: 68 airborne against AC-23's 4 ms p95 ceiling.
 # It read 4.293 ms before the core flight-step fixes and 1.1-1.3 ms after — see FRICTION.md.
 node scripts/check-ai-flight-cost.mjs

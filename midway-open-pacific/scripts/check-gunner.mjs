@@ -279,22 +279,43 @@ const hp = behind.hp;
 for (let i = 0; i < 40 && behind.hp >= hp; i += 1) rear.step(1 / 60, {});
 assert.ok(behind.hp < hp, 'a real rear-gun round damaged the target, not just the ammo counter');
 
-// 10b. The measured fin is a thin slab the two barrels straddle: a dead-astern level shot clears it,
-// but a round yawed toward the centreline enters the fin and is refused. A refused shot spends no
-// round and never flips the barrel, so the two mouths only alternate on rounds that actually leave.
+// 10b. Two rules hold the tail gun's own geometry, and they are different rules. The measured fin is
+// a thin slab the two mouths straddle, so a bearing that sends one mouth's round into it fires from
+// the *other* — refusing on the first candidate alone deadlocked the gun, because the blocked barrel
+// was never flipped and was re-chosen every tick. Only a bearing that fouls both is refused, and for
+// these airframes that never happens: what actually refuses a shot is the Douglas' own hull guard,
+// which owns the depressed sector its thin fin slab does not cover.
+const straddle = airborne();
+straddle.setGunner(true);
+straddle.player.rearBarrel = 1; // the next candidate is the port mouth at x = -0.091
+straddle.player.gunnerYaw = 5 * (Math.PI / 180); // into the fin band for that mouth
+straddle.player.gunnerPitch = 0;
+straddle.player.rearTimer = 0;
+straddle.player.rearAmmo = 240;
+straddle.step(1 / 60, { fire: true });
+assert.equal(straddle.player.rearAmmo, 239, 'a bearing that blocks one mouth fires from the other');
+assert.equal(straddle.player.rearBarrel, 1, 'the blocked candidate never becomes the firing barrel');
+assert.equal(
+  straddle.bullets.filter((b) => b.owner === 'player').length,
+  1,
+  'exactly one round left the clear mouth',
+);
+
+// The refusal, where it lives: depressed into the fuselage and tail, inside the measured sector.
 const guarded = airborne();
 guarded.setGunner(true);
-guarded.player.rearBarrel = 1; // the next round leaves the port mouth at x = -0.091
-guarded.player.gunnerYaw = 5 * (Math.PI / 180); // yawed toward the centreline, into the fin band
-guarded.player.gunnerPitch = 0;
+guarded.player.rearBarrel = 1;
+guarded.player.gunnerYaw = 2 * (Math.PI / 180);
+guarded.player.gunnerPitch = -6 * (Math.PI / 180);
 guarded.player.rearTimer = 0;
 guarded.player.rearAmmo = 240;
 guarded.step(1 / 60, { fire: true });
-assert.equal(guarded.player.rearAmmo, 240, 'a round yawed into the fin is refused');
+assert.equal(guarded.player.rearAmmo, 240, 'a round depressed into the hull is refused');
 assert.equal(guarded.player.rearBarrel, 1, 'a refused shot never flips the barrel');
 assert.equal(guarded.bullets.filter((b) => b.owner === 'player').length, 0, 'a refused shot fires no round');
 // The same trigger, aimed straight aft, straddles the thin fin and fires at once.
 guarded.player.gunnerYaw = 0;
+guarded.player.gunnerPitch = 0;
 guarded.player.rearTimer = 0;
 guarded.step(1 / 60, { fire: true });
 assert.equal(guarded.player.rearAmmo, 239, 'a dead-astern shot clears the straddled fin');
