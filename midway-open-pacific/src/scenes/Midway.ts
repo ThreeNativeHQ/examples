@@ -284,7 +284,12 @@ export class Midway extends Scene<GameState, undefined> {
       // trades a one-second stall for a minute of launch. Unawaited on purpose: the briefing is
       // idle time, the compile yields, and a player who presses on before it finishes is no worse
       // off than they were without it.
-      void this.world.warmUpViews();
+      // Deferred past a task boundary on purpose: the briefing was just made visible, and the
+      // warm-up's first act is a synchronous build (the rear station, ~1 s of procedural texture
+      // and geometry) that would otherwise land between `screen("briefing", true)` and the
+      // browser's next chance to paint it. Measured: 2.7 s between this handler and the intro
+      // screen appearing, for work the player never sees.
+      setTimeout(() => void this.world.warmUpViews(), 0);
     });
   }
 

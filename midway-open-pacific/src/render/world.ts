@@ -575,20 +575,39 @@ export class WorldView {
     this.playerMesh.userData.airframe = type;
     this.builtAirframes.set(type, this.playerMesh);
     addDamageVisuals(this.playerMesh);
-    // The player's own first-person rear station, built here and nowhere else: an AI aircraft never
-    // allocates one. It reads the same published eye the gunner camera uses, so shell and camera
-    // share one anchor.
-    const rearEye = this.playerMesh.userData.gunnerEye as T.Vector3 | undefined;
-    if (rearEye) {
-      const station = createRearStation(type, [rearEye.x, rearEye.y, rearEye.z]);
-      if (station) {
-        this.playerMesh.add(station.group);
-        this.playerMesh.userData.rearStation = station;
-      }
-    }
+    // The player's own first-person rear station is **not** built here. It is 0.9-1.6 s of
+    // procedural texture and geometry work (measured by a launch profile: `rear-station.ts` plus
+    // the attribute conversion it drives), it is only visible while the gun owns the view, and the
+    // launch is exactly where a second is worth the most. `ensureRearStation` builds it on first
+    // need — the briefing's idle time via `warmUpViews`, or a switch to the gun before that.
+    this.playerMesh.userData.rearStation = undefined;
     this.scene.add(this.playerMesh);
     this.freezeStatic(this.playerMesh);
     this.snap = true;
+  }
+
+  /**
+   * Build the player's own rear station, once, on first need.
+   *
+   * Returns `undefined` for an airframe with no gunner eye and for one whose station cannot be
+   * built; `userData.rearStation` records the answer either way, so a station-less airframe is not
+   * asked twice. The same published eye the gunner camera uses anchors shell and camera together.
+   */
+  ensureRearStation(): RearStation | undefined {
+    const mesh = this.playerMesh;
+    if (!mesh) return undefined;
+    const built = mesh.userData.rearStation as RearStation | null | undefined;
+    if (built !== undefined) return built ?? undefined;
+    const type = mesh.userData.airframe as string | undefined;
+    const eye = mesh.userData.gunnerEye as T.Vector3 | undefined;
+    if (type === undefined || eye === undefined) {
+      mesh.userData.rearStation = null;
+      return undefined;
+    }
+    const station = createRearStation(type, [eye.x, eye.y, eye.z]) ?? null;
+    mesh.userData.rearStation = station;
+    if (station) mesh.add(station.group);
+    return station ?? undefined;
   }
 
   /**
@@ -627,9 +646,16 @@ export class WorldView {
       | { cockpitInterior?: T.Object3D; cockpitShell?: T.Object3D[]; crew?: T.Object3D[] }
       | undefined;
     if (!data) return;
-    const roots = [data.cockpitInterior, ...(data.cockpitShell ?? []), ...(data.crew ?? [])].filter(
-      (root): root is T.Object3D => root !== undefined,
-    );
+    // The rear station is built here rather than at load: its own construction is the single
+    // largest main-thread cost the launch had after the assets, and the briefing is idle.
+    const station = this.ensureRearStation();
+    const roots = [
+      data.cockpitInterior,
+      ...(data.cockpitShell ?? []),
+      ...(data.crew ?? []),
+      station?.shell,
+      station?.pivot,
+    ].filter((root): root is T.Object3D => root !== undefined);
     for (const root of roots) {
       const hidden: T.Object3D[] = [];
       root.traverse((object) => {
@@ -1126,7 +1152,7 @@ export class WorldView {
     }
     // The player's first-person rear station: shell and visible twin gun show only while the gun
     // owns the view, and the gun pivot rides the same sim euler the rounds leave from.
-    const rearStation = this.playerMesh.userData.rearStation as RearStation | undefined;
+    const rearStation = gunnerView ? this.ensureRearStation() : (this.playerMesh.userData.rearStation as RearStation | null | undefined) ?? undefined;
     if (rearStation) {
       rearStation.shell.visible = gunnerView;
       rearStation.pivot.visible = gunnerView;
