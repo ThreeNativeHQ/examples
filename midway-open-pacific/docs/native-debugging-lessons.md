@@ -200,3 +200,23 @@ The engine's `threenative doctor` now refuses the stale host — `✗ native run
 linux-x64 host reports runtime v0.3.0, older than the installed engine 0.3.2`, exit 1 — where the
 same command previously printed `✓ native runtime: available (linux-x64)`. Engine commit
 `6571c4ed5`; the red-green is in `packages/create-threenative/__tests__/doctor.spec.ts`.
+
+### The whole native battery on a matching host (2026-09-19)
+
+All ten scenarios pass, `exit 0`, with the host at the engine's version:
+
+| scenario | frames | | scenario | frames |
+| --- | ---: | --- | --- | ---: |
+| boot | 660 | | bomb-impact | 2023 |
+| briefing | 631 | | crash-vfx | 2472 |
+| chooser | 2400 | | audio-sweep | 6631 |
+| ui-parity | 850 | | speech-once | 2892 |
+| vfx | 1951 | | replacement-speech | 3073 |
+
+**This closes the open audio finding from `83461f6`** ("`speech:p01` played 0 times: no spoken line
+reaches the bus at all in a run that launches off the deck"). It was the host: that scenario's first
+steps are a pointer click on the briefing and a wait for `ui.screens.flight`, and on the stale host
+it never took the deck, so nothing was ever spoken. On a matching host the assertion reads
+`{"cue":"speech:p01","observed":1,"maxPlays":1}` — and `audio-sweep` proves the gap rule on native
+too: `speech:p01` and `speech:p02` each played once, 736 ms apart, where the old behaviour cut a line
+250 ms in.
