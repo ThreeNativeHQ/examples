@@ -150,7 +150,9 @@ export class SpeechQueue {
     const buffer = this.#buffers.get(`speech:${entry.cue.slug}`);
     this.#lastAt.set(entry.dedup, now);
     if (!buffer) return; // missing clip: silent, caption already in the log
-    const voice = this.#bus.play(buffer, { volume: entry.cue.channel === "intercom" ? 0.95 : 0.8, lowpassHz: entry.cue.channel === "pa" ? 9000 : 3200 });
+    // The cue label is what `audioRuntimeSnapshot().cues` counts, so a scenario can assert that a
+    // one-shot call sounded once. It changes nothing about the sound.
+    const voice = this.#bus.play(buffer, { cue: `speech:${entry.cue.slug}`, volume: entry.cue.channel === "intercom" ? 0.95 : 0.8, lowpassHz: entry.cue.channel === "pa" ? 9000 : 3200 });
     this.#current = { cue: entry.cue, dedup: entry.dedup, voice, startedAt: now, endsAt: now + (buffer.duration || 4) };
     this.spoken += 1;
   }
