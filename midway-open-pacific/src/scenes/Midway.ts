@@ -37,6 +37,10 @@ export type GameState = {
   particles: number;
   /** Why the airframe was lost, so a scenario can tell the loss paths apart. */
   crashReason: string;
+  /** Lines the speech queue actually started; zero with radio lines present is a silent voice path. */
+  spoken: number;
+  /** Lines the radio script wrote, spoken or not. */
+  radioLines: number;
   /** Explosion bursts actually rendered. A native regression that drops the blast shows here. */
   explosions: number;
   /** Muzzle-flash bursts actually rendered, so a gun test proves the flash, not just the shot. */
@@ -93,6 +97,8 @@ export class Midway extends Scene<GameState, undefined> {
     mode: "deck",
     altitude: 0,
     crashReason: "",
+    spoken: 0,
+    radioLines: 0,
     ias: 0,
     throttle: 0,
     airborne: false,
@@ -587,6 +593,8 @@ export class Midway extends Scene<GameState, undefined> {
       particles: this.world.particles.smoke.items.length + this.world.particles.glow.items.length,
       explosions: this.world.particles.counts.explosion ?? 0,
       crashReason: String(this.battle.crashReason ?? ""),
+      spoken: this.audio.spokenLines,
+      radioLines: this.battle.radio.length,
       muzzle: this.world.particles.counts.muzzle ?? 0,
       splashes: this.world.particles.counts.splash ?? 0,
       waterAccepted: this.world.ripples.effects.accepted,

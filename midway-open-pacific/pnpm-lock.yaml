@@ -973,7 +973,7 @@ packages:
     version: 0.3.2
 
   '@threenative/core@file:../.packages/threenative-core-0.3.2.tgz':
-    resolution: {integrity: sha512-ude0OxusioYqAUfK+ei4Eow6/rrlq/W29Bdv/shXivcKg7Fc1sQd9r11sOIxIwb+hgqWeUzeo30cS7qMkrZZXg==, tarball: file:../.packages/threenative-core-0.3.2.tgz}
+    resolution: {integrity: sha512-X2jHhs40t7+CzC4twqnWSP4Ja8RCvwxMaBKYc/SKsBK20GurK4NsvBi6/uoON9EZ2ztiKTspfzuvLX7chyt/TA==, tarball: file:../.packages/threenative-core-0.3.2.tgz}
     version: 0.3.2
     peerDependencies:
       '@threenative/playtest': '>=0.3.2 <0.4.0'
@@ -995,7 +995,7 @@ packages:
       three: '>=0.185.0 <0.186.0'
 
   '@threenative/playtest@file:../.packages/threenative-playtest-0.3.2.tgz':
-    resolution: {integrity: sha512-29JDZB3gyaG6gzXVSol9qVUUo1CWWmDiTmuBIHCt76zRZIbn7U7zXU+NYqu/QaxlwE4ARrAp97b0FViaZm0WTw==, tarball: file:../.packages/threenative-playtest-0.3.2.tgz}
+    resolution: {integrity: sha512-sM9zNrlsyohyYSdWFVHC1FK1099y5zZMjz7pT0cdPfzCShahoXS6oLK0LKGGkzaU8bjY8XTz5UCnTqy2jvp3rQ==, tarball: file:../.packages/threenative-playtest-0.3.2.tgz}
     version: 0.3.2
     hasBin: true
     peerDependencies:

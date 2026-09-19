@@ -357,6 +357,11 @@ export class Soundscape {
   }
 
   /** True while a spoken line sounds; the scene ducks effects under it. */
+  /** Lines the queue has started; a scenario reads it to tell "not requested" from "not audible". */
+  get spokenLines(): number {
+    return this.speech.spoken;
+  }
+
   get speaking(): boolean {
     return this.speech.speaking;
   }
