@@ -98,3 +98,22 @@ v0.3.0, older than the installed engine 0.3.2`, exit 1 — and a host at 0.3.2 s
 
 Reproduce a good artifact with `THREENATIVE_RUNTIME_BINARY=<engine>/packages/runtime-native/build/tn-linux/mystral pnpm build:desktop`;
 the runbook entry is in `docs/native-debugging-lessons.md`.
+
+## 2026-09-19 — `perf` printed a frame rate the run could not vouch for
+
+`threenative-playtest perf --executable` spawned the desktop host in whatever `DISPLAY` it inherited —
+here the capture lock's private Xvfb — and printed the fps column anyway. On this build that column
+read **1123.60** and **20000.00** fps, `frame p50 0.0 ms`, and a `--min-fps 55` bound **passed,
+exit 0**. The same package's `trace` refuses to print a frame rate from a private Xvfb for a reason
+it measured: without vsync the present wait lands inside the update phase, so the number is wrong
+rather than missing (13.3 fps there against 57.7 on the real display, one build).
+
+Engine side (`5ea4b9c76`): `perf --executable` now decides its display like every other lane, prints
+no frame rate when the operator did not ask for the host display, says why, and refuses `--min-fps`
+with `TN_PERF_VIRTUAL_DISPLAY` (exit 1). `--allow-virtual-display` accepts it explicitly.
+`--max-frame-p95` is untouched, and `--file` / `--logcat` sources are unchanged, so the phase and
+host-gap baselines this project quotes keep their meaning.
+
+This checkout is pinned to `threenative-playtest-0.3.2-midway-40eb05c5c726.tgz`; on the same binary
+the same command now prints `fps suppressed: … private-xvfb …` and `FAIL TN_PERF_VIRTUAL_DISPLAY`,
+exit 1.
