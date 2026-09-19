@@ -123,5 +123,11 @@ name** — the native host's 300-frame window, and core's own `{gapMs,uptimeMs,w
 single present gap. The reader assumed the first, so this project's native launch log printed
 `hitch windows (post-launch, 3): worst NaN ms` and blamed an older host for fields that were never in
 the line, while discarding three real gaps of 2.1–3.0 s. Both series are now read as what they
-measured; the same log reads `present gaps (3): worst 3000.140 ms at uptime 10178 ms`. This checkout
-is pinned to `threenative-playtest-0.3.2-midway-0de31f7cbe77.tgz`, verified against that log.
+measured; the same log reads `present gaps (3): worst 3000.140 ms at uptime 10178 ms`.
+
+That reader now also joins the host's own stall report (`TN_SLOW_PHASE`), so the same command says
+what the gaps *were* — `imageDecodeDrain 2965.129 ms, animationFrames 473.653 ms` for the first,
+`animationFrames 2040.518 ms` for the second — while refusing to name the `pollEvents` watcher that
+merely brackets the iteration. This is PRD-394's launch story on the native target, from one command
+instead of two greps. Commit `bc4cf759d`; this checkout is pinned to
+`threenative-playtest-0.3.2-midway-caf9f195d53f.tgz`, verified against that log.
