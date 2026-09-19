@@ -267,6 +267,24 @@ Both fixes are in `d901f20`:
 - `warmUpViews` is deferred past a task boundary after the briefing is made visible, so the screen
   the player is waiting for paints before the compile takes the thread.
 
-Still in front of the player, from the same profile: the asset leg (4.6 s — parse and decode, not
-bytes fetched), `enter()`'s remaining 1.7 s, and the warm-up's 1.6 s. None of those is waiting on
-I/O: the bundle is local.
+Two later runs on the same machine (still loaded by other work) read **7252 ms** and **7105 ms** to
+the intro screen, with the legs at assets 3.8–4.0 s, `enter()` 1.5 s, warm-up 1.7 s, and
+`ready` → intro **26–29 ms**.
+
+Still in front of the player: the asset leg (3.8–4.0 s — parse and decode, not bytes fetched),
+`enter()`'s remaining 1.5 s, and the warm-up's 1.7 s. None of those is waiting on I/O: the bundle is
+local.
+
+### Two leads measured and dropped
+
+- **De-indexing before `mergeParts`** (`airframe-lod.ts`): the game de-indexes every part and the
+  engine's `flatten` de-indexes again, which looks like duplicated work. Benchmarked on an
+  airframe-sized merge (260,000 triangles across six parts, one geometry-shaped part each):
+  **85.6 ms → 91.1 ms**, a wash. Both paths de-index exactly once — the game's copy expands, the
+  engine's clone does not — so the redundancy is real and the cost is not. Reverted.
+- **Which asset is slow**: the game logs group totals ("ships 3.4 s") and the engine's progress
+  ledger is byte-weighted, so neither can name a file. The engine now has
+  `globalThis.__TN_ASSET_TRACE__ = true` → `TN_ASSET:{"kind","path","ms","bytes"}` per settle
+  (`74bf6791e`, engine). One launch of this game is 172 settles; the longest was a model at 7.7 s
+  from its own request on a machine at load ≈ 20, which is queue time rather than parse time. The
+  seam is what makes the next pass possible; it has not been read on a quiet machine yet.
