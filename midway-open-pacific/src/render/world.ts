@@ -542,21 +542,38 @@ export class WorldView {
     this.setAirframe();
   }
 
+  /**
+   * The player airframes that have been built this session, by type.
+   *
+   * A switch used to dispose the aircraft and build the other one from scratch, which threw away
+   * every pipeline WebGPU had compiled for it: picking the torpedo loadout and then the bomb
+   * loadout paid the same multi-second compile twice, and every time after that. Both airframes
+   * are two aircraft of geometry — cheap next to the fleet already resident — so the one being
+   * left is detached and kept, and coming back to it is a `scene.add`.
+   */
+  private readonly builtAirframes = new Map<string, T.Group>();
+
   setAirframe(): void {
     const type = this.battle.player.airframe || "sbd";
     if (this.playerMesh?.userData.airframe === type) return;
     if (this.playerMesh) {
       this.playerMesh.removeFromParent();
       this.forgetFrozen(this.playerMesh);
-      if (this.playerMesh.userData.devastator) disposeDevastator(this.playerMesh);
-      else if (this.playerMesh.userData.importedAircraft) disposeAirframe(this.playerMesh);
-      this.disposeModel(this.playerMesh);
+    }
+    const built = this.builtAirframes.get(type);
+    if (built) {
+      this.playerMesh = built;
+      this.scene.add(this.playerMesh);
+      this.freezeStatic(this.playerMesh);
+      this.snap = true;
+      return;
     }
     // The player's Devastator is the imported TBD-1, driven by its own shipped clips; the SBD
     // keeps the Douglas constructor, and the procedural Dauntless is gone from the player's seat.
     this.playerMesh =
       type === "sbd" ? createDouglas(true) : createAirframe("tbd1", "hero", true);
     this.playerMesh.userData.airframe = type;
+    this.builtAirframes.set(type, this.playerMesh);
     addDamageVisuals(this.playerMesh);
     // The player's own first-person rear station, built here and nowhere else: an AI aircraft never
     // allocates one. It reads the same published eye the gunner camera uses, so shell and camera
@@ -595,11 +612,17 @@ export class WorldView {
    * its own compile and put back immediately. Revealing the whole scene instead also drags in the
    * reflector's depth target and fails bind-group validation.
    */
+  /** Airframes whose views are already compiled; warming one twice buys nothing and costs seconds. */
+  private readonly warmedAirframes = new Set<string>();
+
   async warmUpViews(): Promise<void> {
     const renderer = this.renderer as unknown as {
       compileAsync?: (object: T.Object3D, camera: T.Camera, scene: T.Object3D) => Promise<void>;
     };
     if (typeof renderer.compileAsync !== "function") return;
+    const airframe = this.playerMesh?.userData.airframe as string | undefined;
+    if (airframe !== undefined && this.warmedAirframes.has(airframe)) return;
+    if (airframe !== undefined) this.warmedAirframes.add(airframe);
     const data = this.playerMesh?.userData as
       | { cockpitInterior?: T.Object3D; cockpitShell?: T.Object3D[]; crew?: T.Object3D[] }
       | undefined;

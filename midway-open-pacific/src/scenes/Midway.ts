@@ -159,16 +159,30 @@ export class Midway extends Scene<GameState, undefined> {
    * On a timer rather than per frame on purpose: this launch renders about one frame a second
    * while the models decode, and a per-frame pump would update the bar exactly that often.
    */
+  /**
+   * What the launch is doing right now, in the player's words.
+   *
+   * Naming the outstanding asset is only right while there is one. Measured on this desktop: every
+   * asset settles 5.6 s in and the world is not ready until 24 s, so a label that only ever names
+   * an asset spends three quarters of the launch showing the last file that happened to be in
+   * flight — which is exactly how "68% — weapon.torpedo.glb" reads as frozen.
+   */
+  private launchLabel(ctx: ICtx<GameState, undefined>): string {
+    const [loading] = ctx.assets.progress.pending;
+    if (loading !== undefined) return loading;
+    if (!ctx.startup.compileSettled) return "Compiling shaders for the Pacific…";
+    return "Warming up the first frames…";
+  }
+
   private reportLaunch(ctx: ICtx<GameState, undefined>): () => void {
     let failure: string | undefined;
     const offFailure = onLaunchFailure((reported) => {
       failure = reported.message;
     });
     const publish = (): void => {
-      const [loading] = ctx.assets.progress.pending;
       shell.loading({
         ...(failure === undefined ? {} : { failure }),
-        label: failure !== undefined ? "The launch stopped." : (loading ?? "Preparing the Pacific theatre…"),
+        label: failure === undefined ? this.launchLabel(ctx) : "The launch stopped.",
         progress: ctx.startup.progress,
       });
     };
