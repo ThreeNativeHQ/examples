@@ -241,6 +241,9 @@ pnpm typecheck
 pnpm exec vite build
 node scripts/check-flight.mjs
 node scripts/check-aircraft.mjs
+# The engine's flight model is this game's hot loop: 68 airborne against AC-23's 4 ms p95 ceiling.
+# It read 4.293 ms before the core flight-step fixes and 1.1-1.3 ms after — see FRICTION.md.
+node scripts/check-ai-flight-cost.mjs
 node scripts/check-audio.mjs
 node scripts/check-intel.mjs
 node scripts/check-naval.mjs
