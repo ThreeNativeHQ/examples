@@ -2949,7 +2949,7 @@ export class Battle {
     if (this.status !== "playing" || p.mode === "downed" || p.mode === "wreck") return;
     this.stats.playerLosses += 1;
     this.crashReason = reason;
-    this.goDownedOrLose(reason);
+    this.goDownedOrLose(reason, true);
   }
 
   /**
@@ -2958,8 +2958,22 @@ export class Battle {
    * loss to `lose`. A no-friendly-carrier condition is a defeat either way, so the global check in
    * `step` and this call can never disagree — they both read `friendlyCarrierAfloat`.
    */
-  private goDownedOrLose(reason: string): void {
+  private goDownedOrLose(reason: string, impact = false): void {
     const p = this.player;
+    // A loss with no fall to animate still happened somewhere: the aircraft ditched in the sea, or
+    // hit the deck. `updateCrash` draws and sounds its own impact when the wreck meets the water,
+    // and every other route into here drew nothing at all — fly into the Pacific and the aircraft
+    // simply stopped existing, with no splash, no blast and no smoke. Measured by
+    // `native-playtests/crash-vfx.playtest.json`: 0 particles and 0 explosions on a ditch before
+    // this, 44 and 1 after. Same effects as the crash impact, at the place it happened.
+    if (impact) {
+      const sea = (p.y ?? 0) <= 2;
+      if (sea) this.fx("splash", { ...p, y: 0 }, 3);
+      this.fx("explosion", { ...p, y: Math.max(p.y ?? 0, 1) }, 1.6);
+      this.event("explosion", { distance: 0, at: { x: p.x, y: p.y ?? 0, z: p.z }, material: "air" });
+      if (sea)
+        this.event("splash", { distance: 0, at: { x: p.x, y: 0, z: p.z }, fragments: true });
+    }
     p.hp = 0;
     p.engineCut = true;
     p.throttle = 0;
