@@ -220,3 +220,45 @@ it never took the deck, so nothing was ever spoken. On a matching host the asser
 `{"cue":"speech:p01","observed":1,"maxPlays":1}` — and `audio-sweep` proves the gap rule on native
 too: `speech:p01` and `speech:p02` each played once, 736 ms apart, where the old behaviour cut a line
 250 ms in.
+
+### Android on this host: attempted, blocked before the game (2026-09-19)
+
+`pnpm build:android` from the packaged install stops at the prebuilt fetch:
+
+```text
+Android prebuilt 'android-x86_64-v8' expected from
+  https://github.com/ThreeNativeHQ/threenative/releases/download/runtime-native-v0.3.2/prebuilt-lock.json:
+  No prebuilt release asset is recorded for 'android-x86_64-v8'.
+```
+
+The published lock carries exactly two keys — `linux-x64`, `linux-x64-tools` — so every other
+platform the package advertises (`android-*`, `win32-x64`, `ios-simulator-arm64`) has no released
+asset. That is the release being narrower than the package, not the build being wrong:
+`install-prebuilt.mjs` fails closed and names the missing key.
+
+Pointing the packager at a source checkout gets further and stops on the V8 receipt:
+
+```sh
+THREENATIVE_RUNTIME_SOURCE=<engine>/packages/runtime-native \
+  pnpm exec threenative build --target android --allow-source-build
+# Execution failed for task ':app:verifyV8Dependency':
+# Android V8 build receipt is missing: .../third_party/v8-android/build-receipt.json
+```
+
+`node scripts/download-deps.mjs --android` (in the runtime package) provisions that receipt and needs
+the NDK selected explicitly:
+
+```text
+Failed to provision v8-android: Android V8 requires NDK 28.2.13676358; install it with
+sdkmanager "ndk;28.2.13676358" and select that NDK with ANDROID_NDK_HOME
+```
+
+NDK 28.2.13676358 is present at `~/Android/Sdk/ndk/28.2.13676358` on this host, so that step is
+`ANDROID_NDK_HOME=... node scripts/download-deps.mjs --android` — and it then **builds V8 from
+source** (`scripts/build-android-v8.mjs`, gn/ninja), which is the one step not attempted here.
+
+The emulator is not the problem: `threenative_api35` booted in 23 s and `adb devices` lists
+`emulator-5554` (API 35, x86_64).
+
+So the flight-step fixes stay proven on web and on the **desktop** target (ten native scenarios
+green) and **not** on Android or iOS.
