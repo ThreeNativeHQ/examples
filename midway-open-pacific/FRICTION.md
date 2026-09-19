@@ -125,7 +125,15 @@ single present gap. The reader assumed the first, so this project's native launc
 the line, while discarding three real gaps of 2.1–3.0 s. Both series are now read as what they
 measured; the same log reads `present gaps (3): worst 3000.140 ms at uptime 10178 ms`.
 
-That reader now also joins the host's own stall report (`TN_SLOW_PHASE`), so the same command says
+**And that log cannot print a frame rate at all.** The host's own counter —
+`TN_PRESENTS_TICK:{"frames":1740,"presents":133,"capHz":60}` — says 7.6% of loop frames reached the
+display, because the presentation cap paces the present and never the loop. Core's budget counts loop
+iterations, so its `fps` is the loop's cadence: `perf --file <this log> --min-fps 55` used to print
+2272.73 / 2631.58 / 1960.78 / 6666.67 and PASS. The reader now refuses that, quoting the host's
+counts (`a85959e71`), and this checkout is pinned to
+`threenative-playtest-0.3.2-midway-b7784c158a85.tgz`, verified against that log.
+
+That reader also joins the host's own stall report (`TN_SLOW_PHASE`), so the same command says
 what the gaps *were* — `imageDecodeDrain 2965.129 ms, animationFrames 473.653 ms` for the first,
 `animationFrames 2040.518 ms` for the second — while refusing to name the `pollEvents` watcher that
 merely brackets the iteration. This is PRD-394's launch story on the native target, from one command
