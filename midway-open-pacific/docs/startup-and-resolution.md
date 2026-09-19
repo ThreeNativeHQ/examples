@@ -241,3 +241,32 @@ bytes and call structure:
 - `cruiser.mogami.glb` is marked used on the strength of the code path
   (`imported-ships.ts:117` → `imported-fleet.ts:294` → `world.ts:97` → `battle.ts:819`); no runtime
   trace was taken.
+
+---
+
+## The launch flow, leg by leg (2026-09-19)
+
+A CDP CPU profile from before navigation to the intro screen, with self time bucketed by the game's
+own `TN_LOAD_STEP` marks, so each leg is attributed rather than pooled. One run, 1280×720, WebGPU
+(`nvidia/turing`), machine load ≈ 21 from other work — the legs below are compared within a run,
+which is why the two fixes are quoted as leg deltas and not as totals.
+
+| leg | before | after | what is in it |
+| --- | ---: | ---: | --- |
+| page → scene loaded | 5072 ms | 4598 ms | three's GLTF parse (hottest lines `GLTFLoader:1743`, `:1613`), `createImageBitmap`, 146 Ogg decodes, HDR |
+| scene loaded → `enter()` | 3141 ms | **1731 ms** | the rear station (924 ms of procedural texture + geometry, plus ~650 ms of attribute conversion it drives), ocean hash, scene assembly |
+| `enter()` → `ready` | 2366 ms | **1575 ms** | texture uploads (`_copyImageToTexture` 219 ms), TSL node builds (102 ms), world matrices, bone binding |
+| `ready` → intro screen | 2.8 s | **25 ms** | the warm-up, which used to run between the briefing being shown and its first paint |
+| **to the intro screen** | **11.0 s** | **7.9 s** | |
+
+Both fixes are in `d901f20`:
+
+- The rear station is built on first need (`ensureRearStation`), not in `buildPlayerAirframe`. It is
+  only visible while the gun owns the view, and its own code was the largest single main-thread cost
+  the launch had after the assets.
+- `warmUpViews` is deferred past a task boundary after the briefing is made visible, so the screen
+  the player is waiting for paints before the compile takes the thread.
+
+Still in front of the player, from the same profile: the asset leg (4.6 s — parse and decode, not
+bytes fetched), `enter()`'s remaining 1.7 s, and the warm-up's 1.6 s. None of those is waiting on
+I/O: the bundle is local.
