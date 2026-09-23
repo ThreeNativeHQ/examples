@@ -266,6 +266,14 @@ export class Midway extends Scene<GameState, undefined> {
     this.updateLoadoutUI();
     this.updateAssignmentUI();
     shell.screen("flight", false);
+    // The fleet warm-up — every hull compiled and one hidden render over the shadow and mirrored
+    // passes — runs behind the loading screen now, not behind the briefing: the engine's readiness
+    // gate waits on it, so the pipelines the first minutes of flight need exist before the world is
+    // shown. The player's own view subtrees stay on the briefing's idle time (their compile is tens
+    // of seconds on a loaded host, and holding it would put that in front of the world).
+    const startup = ctx.startup as { hold?: (label: string, work: Promise<unknown>, budgetMs?: number) => void };
+    const held = typeof startup.hold === "function";
+    if (held) startup.hold!("midway-warm-passes", Promise.resolve().then(() => this.world.warmUpViews()), 45000);
     console.log(`TN_LOAD_STEP:{"label":"enter","ms":${performance.now().toFixed(1)}}`);
     void ctx.startup.whenReady().then(() => {
       this.stopReporting();
@@ -277,19 +285,14 @@ export class Midway extends Scene<GameState, undefined> {
         if (shell === nullShell) this.begin(false);
         else shell.screen("briefing", true);
       }
-      // Compile the unseen views now, while the briefing is up and the player is reading it —
-      // never on the way to the briefing. Precompiling these subtrees is genuinely expensive
-      // (measured in tens of seconds on this scene, whether through the engine's whole-scene
-      // `warmUpScene` or a targeted `compileAsync`), so putting it in front of the loading gate
-      // trades a one-second stall for a minute of launch. Unawaited on purpose: the briefing is
-      // idle time, the compile yields, and a player who presses on before it finishes is no worse
-      // off than they were without it.
-      // Deferred past a task boundary on purpose: the briefing was just made visible, and the
-      // warm-up's first act is a synchronous build (the rear station, ~1 s of procedural texture
-      // and geometry) that would otherwise land between `screen("briefing", true)` and the
-      // browser's next chance to paint it. Measured: 2.7 s between this handler and the intro
-      // screen appearing, for work the player never sees.
-      setTimeout(() => void this.world.warmUpViews(), 0);
+      // Without a startup hold the whole warm-up is scheduled here; with one the gate above
+      // already ran the fleet half and the player-view half is chained off it. Deferred past a
+      // task boundary on purpose: the briefing was just made visible, and the player-view warm-up
+      // opens with a synchronous build (the rear station, ~1 s of procedural texture and geometry)
+      // that would otherwise land between `screen("briefing", true)` and the browser's next chance
+      // to paint it. Measured: 2.7 s between this handler and the intro screen appearing, for work
+      // the player never sees.
+      if (!held) setTimeout(() => void this.world.warmUpViews(), 0);
     });
   }
 
