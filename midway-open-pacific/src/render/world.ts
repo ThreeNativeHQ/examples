@@ -254,13 +254,59 @@ function markReflected(root: T.Object3D): void {
 const MOVING_NODE = /threenativepivot|cockpit controls|propeller|aileron|rudder|flap|elevator|gear|wingport|wingstarboard|canopy|torpedo|hook|wheel|crew|gunner/i;
 
 /**
- * Every mesh of `root` a static caster can include.
+ * The nodes one parked airframe's animator actually writes while it sits on the deck.
  *
- * These are the surfaces a carrier's shadow proxy may bake: a caster that neither is, nor sits
- * under, a `MOVING_NODE` and is not skinned. A mesh that is or rides a mover keeps its own
- * `castShadow` and goes on casting live; only the meshes this returns are merged and switched off.
+ * `spinParked` turns the propeller every frame through the airframe's own published handle, and the
+ * ported Devastator's animator also eases its arresting hook down as the park settles. The Douglas
+ * mixer holds its surfaces and flaps at rest and its gear legs at the fixed down pose, so a mesh
+ * under those nodes never moves while parked. That is the whole narrowing: the parked parts a
+ * `MOVING_NODE` match used to keep casting per-part — ailerons, flaps, gear, wheels, canopy — are
+ * static, and only the propeller (and the Devastator hook) goes on moving.
  */
-function staticMeshes(root: T.Object3D): T.Mesh[] {
+function parkedMovingRoots(root: T.Object3D): Set<T.Object3D> {
+  const roots = new Set<T.Object3D>();
+  // The stores are visibility-toggled by the same animators (`torpedo.visible = …`), so a merge
+  // would freeze one on: a parked Devastator would draw the torpedo its animator hides.
+  for (const handle of [
+    root.userData.propeller,
+    root.userData.arrestingHook,
+    root.userData.torpedoLoad,
+    root.userData.load,
+  ]) {
+    if (handle instanceof T.Object3D) handle.traverse((node) => roots.add(node));
+  }
+  return roots;
+}
+
+/**
+ * The hull's own moving set: every node a later animator may write, matched by name.
+ *
+ * A hull publishes no animator handle the way an airframe does, so `MOVING_NODE` is the only record
+ * of what may move; the elevator `update` drives is a `mesh` child and is never in this set.
+ */
+function hullMovingRoots(root: T.Object3D): Set<T.Object3D> {
+  const roots = new Set<T.Object3D>();
+  root.traverse((node) => {
+    if (MOVING_NODE.test(node.name)) roots.add(node);
+  });
+  return roots;
+}
+
+/** True when `node` is one of `roots` or sits under one. */
+function underMovingRoots(node: T.Object3D, roots: Set<T.Object3D>): boolean {
+  for (let o: T.Object3D | null = node; o; o = o.parent) if (roots.has(o)) return true;
+  return false;
+}
+
+/**
+ * Every mesh of `root` a static shadow proxy may include.
+ *
+ * These are the surfaces a carrier may bake: a mesh that neither is, nor sits under, one of
+ * `moving`, and is not skinned. A mesh that is or rides a mover keeps its own `castShadow` and goes
+ * on casting live; only the meshes this returns are merged and switched off. A caller that must not
+ * start a shadow from a mesh that never cast one filters on `castShadow` itself.
+ */
+function staticMeshes(root: T.Object3D, moving: Set<T.Object3D>): T.Mesh[] {
   const out: T.Mesh[] = [];
   root.traverse((node) => {
     const mesh = node as T.Mesh;
@@ -268,14 +314,19 @@ function staticMeshes(root: T.Object3D): T.Mesh[] {
     // A skinned mesh's vertices are its bind pose, not what the mixer draws, exactly as in the
     // airframe stand-in: it is never a static caster.
     if ((mesh as T.SkinnedMesh).isSkinnedMesh === true) return;
-    // A mesh the model never draws a shadow from — open canopy glass, say — must not start casting
-    // one just because it was merged in.
-    if (!mesh.castShadow) return;
-    for (let o: T.Object3D | null = node; o; o = o.parent) if (MOVING_NODE.test(o.name)) return;
+    if (underMovingRoots(node, moving)) return;
     if (!(mesh.geometry as T.BufferGeometry | undefined)?.getAttribute("position")) return;
     out.push(mesh);
   });
   return out;
+}
+
+/** Mark every caster a mover keeps, so a capture can report movers apart from the carrier's own. */
+function markShadowMovers(root: T.Object3D, moving: Set<T.Object3D>): void {
+  root.traverse((node) => {
+    const mesh = node as T.Mesh;
+    if (mesh.isMesh && mesh.castShadow && underMovingRoots(mesh, moving)) mesh.userData.shadowMover = true;
+  });
 }
 
 /**
@@ -288,15 +339,17 @@ function staticMeshes(root: T.Object3D): T.Mesh[] {
  */
 const shadowMergeCache = new Map<string, T.BufferGeometry | null>();
 
-function shadowMerge(root: T.Object3D, key: string): T.BufferGeometry | null {
+function shadowMerge(root: T.Object3D, key: string, moving: Set<T.Object3D>): T.BufferGeometry | null {
   const cached = shadowMergeCache.get(key);
   if (cached !== undefined) return cached;
   root.updateMatrixWorld(true);
   const toLocal = root.matrixWorld.clone().invert();
-  const parts = staticMeshes(root).map((mesh) => ({
-    geometry: mesh.geometry as T.BufferGeometry,
-    matrix: new T.Matrix4().multiplyMatrices(toLocal, mesh.matrixWorld),
-  }));
+  const parts = staticMeshes(root, moving)
+    .filter((mesh) => mesh.castShadow)
+    .map((mesh) => ({
+      geometry: mesh.geometry as T.BufferGeometry,
+      matrix: new T.Matrix4().multiplyMatrices(toLocal, mesh.matrixWorld),
+    }));
   let merged: T.BufferGeometry | null = null;
   if (parts.length) {
     try {
@@ -445,6 +498,13 @@ export class WorldView {
   /** Composed-local-matrix freeze for static nodes, and the verification switch that reverses it. */
   freezeStatics = true;
   private frozen = new Set<T.Object3D>();
+  /**
+   * Every mesh whose shadow the carrier proxy took over, with its parent and the root frame the
+   * proxy was baked in. Verification only: a drift probe rebuilds each one's root-relative matrix
+   * from the live parent and its local matrix.
+   */
+  staticSources: { root: T.Object3D; parent: T.Object3D; mesh: T.Object3D }[] = [];
+  private staticDrift: Map<T.Object3D, number[]> | null = null;
   /**
    * The one material every carrier shadow proxy draws with. The shadow pass overrides it with its
    * own depth material and reads only `side`, so `DoubleSide` reproduces what the hornet hull's own
@@ -768,6 +828,38 @@ export class WorldView {
         // anyway. Never let warming a camera angle stop the game starting.
       } finally {
         for (const object of hidden) object.visible = false;
+      }
+    }
+    // The compile above warms only the player's own roots, so the fleet's textures are still
+    // uploaded the first time a carrier draws — after `#start-air`, mid-flight. `initTexture` takes
+    // the same `Textures.updateTexture` path a first render does, so every texture the non-aircraft
+    // meshes reference is resident before the player looks at it, and no upload lands in a sample.
+    const initTexture =
+      typeof (renderer as unknown as { initTexture?: unknown }).initTexture === "function"
+        ? (renderer as unknown as { initTexture: (texture: T.Texture) => void }).initTexture.bind(renderer)
+        : null;
+    if (initTexture) {
+      const warmed = new Set<T.Texture>();
+      for (const [id, root] of this.meshes) {
+        if (id.startsWith("air-")) continue;
+        root.traverse((object) => {
+          const mesh = object as T.Mesh;
+          if (!mesh.isMesh) return;
+          for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+            if (!material) continue;
+            for (const value of Object.values(material)) {
+              if (value instanceof T.Texture && !warmed.has(value)) {
+                warmed.add(value);
+                try {
+                  initTexture(value);
+                } catch {
+                  // A texture the backend will not take yet still uploads on first render; a warm-up
+                  // must never stop the game starting.
+                }
+              }
+            }
+          }
+        });
       }
     }
   }
@@ -1411,12 +1503,13 @@ export class WorldView {
    *
    * Every static mesh under a carrier — the full-detail hull, the parked deck load and the
    * decorative B-25 — stops casting shadows itself, and this proxy casts in their place. A mesh
-   * that is, or sits under, a `MOVING_NODE` is never merged and never switched off: a parked
-   * aircraft's windmilling propeller, a control surface and a gear leg go on casting live, which is
-   * why the proxy is a merge of static surfaces rather than the whole-aircraft stand-in. The hull's
-   * static merge is cached by `hullKey`, and each parked type's by its model name, so the three
-   * Yorktown-class carriers share one geometry per model instead of one per ship. `receiveShadow`
-   * is left exactly as it was.
+   * that is, or sits under, a mover is never merged and never switched off: the hull's `MOVING_NODE`
+   * matches, a parked aircraft's windmilling propeller and the Devastator hook go on casting live.
+   * The parked control surfaces and gear the `MOVING_NODE` match used to keep are static now, which
+   * is why the proxy is a merge of static surfaces rather than the whole-aircraft stand-in. The
+   * hull's static merge is cached by `hullKey`, and each parked type's by its model name, so the
+   * three Yorktown-class carriers share one geometry per model instead of one per ship.
+   * `receiveShadow` is left exactly as it was.
    */
   private addShadowProxy(mesh: T.Group, detailed: T.Group, hullKey: string): void {
     const parked = (mesh.userData.parked ?? []) as T.Group[];
@@ -1438,25 +1531,80 @@ export class WorldView {
     // not baked into its own shadow.
     const body = mesh.userData.hullBody as T.Object3D | undefined;
     if (body) {
-      const hull = shadowMerge(body, `${hullKey}:shadow`);
+      const moving = hullMovingRoots(body);
+      const hull = shadowMerge(body, `${hullKey}:shadow`, moving);
       if (hull) {
         const hullProxy = new T.Mesh(hull, this.shadowProxyMaterial);
         hullProxy.castShadow = true;
         hullProxy.receiveShadow = false;
         mesh.userData.shadowProxyHull = hullProxy;
         proxy.add(hullProxy);
-        for (const part of staticMeshes(body)) part.castShadow = false;
+        this.consumeStatic(body, moving);
+        markShadowMovers(body, moving);
       }
     }
     for (const root of [...parked, ...decor]) {
-      const geometry = shadowMerge(root, root.name || `${root.type}#${root.id}`);
+      const moving = parkedMovingRoots(root);
+      const geometry = shadowMerge(root, root.name || `${root.type}#${root.id}`, moving);
       if (!geometry) continue;
       piece(geometry, root);
-      for (const part of staticMeshes(root)) part.castShadow = false;
+      this.consumeStatic(root, moving);
+      markShadowMovers(root, moving);
     }
     proxy.traverse((o) => o.layers.set(SHADOW_PROXY_LAYER));
     detailed.add(proxy);
     mesh.userData.shadowProxy = proxy;
+  }
+
+  /**
+   * Stop `root`'s static casters casting, and record them for the drift probe.
+   *
+   * The proxy casts in their place, so each mesh it replaces is kept — with the parent that stays in
+   * the graph — for `sampleStaticDrift` to prove it never moved. This is the one place the merged
+   * proxy consumes a part, and the one place the check reads.
+   */
+  private consumeStatic(root: T.Object3D, moving: Set<T.Object3D>): void {
+    for (const part of staticMeshes(root, moving)) {
+      if (!part.castShadow) continue;
+      part.castShadow = false;
+      if (part.parent) this.staticSources.push({ root, parent: part.parent, mesh: part });
+    }
+  }
+
+  /**
+   * Sample the consumed static meshes' root-relative matrices and return how many moved.
+   *
+   * Verification only. The relative matrix is rebuilt from the live parent —
+   * `inv(root) * parent.matrixWorld * mesh.matrix` — and compared to the first sample. The deck tool
+   * calls this over sixty frames; a non-zero count means the static predicate mis-classed a mover
+   * and the proxy would bake motion into its shadow.
+   */
+  sampleStaticDrift(): number {
+    const inv = new T.Matrix4();
+    const rel = new T.Matrix4();
+    const sample = (record: { root: T.Object3D; parent: T.Object3D; mesh: T.Object3D }): number[] => {
+      inv.copy(record.root.matrixWorld).invert();
+      rel.multiplyMatrices(record.parent.matrixWorld, record.mesh.matrix).premultiply(inv);
+      return rel.elements;
+    };
+    if (!this.staticDrift) {
+      this.staticDrift = new Map();
+      for (const record of this.staticSources) this.staticDrift.set(record.mesh, [...sample(record)]);
+      return 0;
+    }
+    let moved = 0;
+    for (const record of this.staticSources) {
+      const baseline = this.staticDrift.get(record.mesh);
+      if (!baseline) continue;
+      const now = sample(record);
+      for (let i = 0; i < 16; i++) {
+        if (Math.abs(now[i]! - baseline[i]!) > 1e-6) {
+          moved += 1;
+          break;
+        }
+      }
+    }
+    return moved;
   }
 
   /**

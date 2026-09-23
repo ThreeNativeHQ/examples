@@ -118,6 +118,19 @@ try {
       : `warm-up resolved at ${warmUp.resolvedAt.toFixed(1)} ms (page clock); the wait began ${warmUp.waitedMs.toFixed(1)} ms before it`,
   );
 
+  // The engine's adaptive scaler walks the drawing buffer down on a contended host, and the game's
+  // canvas is a direct child of `body` (src/ui/dom.ts) with no CSS size, so the next resize reads
+  // the buffer back through `clientWidth` and the surface collapses to 3x3 — a window that reports
+  // almost every draw culled. Pin the scale at the baseline's 1.0 for the measurement; it changes
+  // nothing the game ships and is reported in each window's `surface.resolutionScale`.
+  await page.evaluate(() => {
+    const renderer = window.midway.world.host?.renderer;
+    if (typeof renderer?.setResolutionScale !== "function") return;
+    const original = renderer.setResolutionScale.bind(renderer);
+    renderer.setResolutionScale = (scale, source) => original(1, "pinned");
+    original(1, "pinned");
+  });
+
   // The deck start: the player aboard the home carrier, its full park and crew on screen.
   await page.evaluate(() => window.midway.begin(false));
 
@@ -202,6 +215,7 @@ try {
         for (const x of roots) if (x.root?.userData?.shadowProxy && o === x.root.userData.shadowProxy) tag = "proxy";
       if (tag === "part") {
         if (object.isSkinnedMesh) tag = "moving";
+        else if (object.userData.shadowMover) tag = "moving";
         else
           for (let o = object; o; o = o.parent)
             if (o === w.crew?.group || o === w.playerMesh) { tag = "moving"; break; }
@@ -261,6 +275,43 @@ try {
   // Warm-up, then four complete windows. The first windows after the cursor can straddle setup or
   // the tail of the compile, so the last two are taken and both are reported.
   await page.waitForTimeout(WARMUP * 1000);
+
+  // The static predicate's own proof: every mesh the proxy and the main-pass merge consumed must
+  // hold its pose relative to its aircraft/hull root. The world rebuilds each one's relative matrix
+  // from the parent that stays in the graph, so any animator write on a mesh the merge baked shows
+  // up here. Sixty frames is about a second — long enough for a settled animator to drift.
+  const drift = await page.evaluate(
+    (frames) =>
+      new Promise((resolve) => {
+        const w = window.midway.world;
+        if (typeof w.sampleStaticDrift !== "function") {
+          resolve({ available: false });
+          return;
+        }
+        let worst = 0;
+        let last = 0;
+        let samples = 0;
+        const step = () => {
+          last = w.sampleStaticDrift();
+          if (last > worst) worst = last;
+          samples += 1;
+          if (samples < frames) requestAnimationFrame(step);
+          else resolve({ available: true, worst, last, samples, total: w.staticSources.length });
+        };
+        requestAnimationFrame(step);
+      }),
+    60,
+  );
+  if (drift.available) {
+    console.log(
+      `static-source drift over ${drift.samples} frames: ${drift.worst} of ${drift.total} consumed meshes changed (must be 0)`,
+    );
+    if (drift.worst !== 0)
+      throw new Error(
+        `static-source drift: ${drift.worst} of ${drift.total} meshes the merge consumed moved — a mover was baked as static`,
+      );
+  }
+
   const wanted = 4;
   const needed = budgetCursor + wanted;
   const deadline = Date.now() + 240000;
@@ -295,7 +346,7 @@ try {
       frames: w.frames,
       fps: w.fps,
       surface: w.surface
-        ? { width: w.surface.drawingBufferWidth, height: w.surface.drawingBufferHeight }
+        ? { width: w.surface.drawingBufferWidth, height: w.surface.drawingBufferHeight, scale: w.surface.resolutionScale }
         : null,
       passes,
       totalDrawsMean: +totalDraws.toFixed(1),
@@ -327,7 +378,7 @@ try {
       .map((k) => `${k} ${w.passes[k].drawsMean}d/${w.passes[k].trianglesMean}t`)
       .join("  ");
     console.log(
-      `window ${i + 1}: ${w.frames} frames, ${w.fps} fps, surface ${w.surface ? `${w.surface.width}x${w.surface.height}` : "unavailable"}\n` +
+      `window ${i + 1}: ${w.frames} frames, ${w.fps} fps, surface ${w.surface ? `${w.surface.width}x${w.surface.height} scale ${w.surface.scale}` : "unavailable"}\n` +
         `  passes ${pass || "unavailable: no pass recorder"}\n` +
         `  total ${w.totalDrawsMean} draws, ${w.totalTrianglesMean} triangles\n` +
         `  gpu p50/p95 ${w.gpuP50 ?? "n/a"}/${w.gpuP95 ?? "n/a"} ms, render cpu p50/p95 ${w.renderCpuP50}/${w.renderCpuP95} ms`,
@@ -378,7 +429,8 @@ try {
         console.log(
           `    ${c.name}${c.home ? " (home)" : ""}: shadow ${shadow.toFixed(1)} ` +
             `(own ${own.toFixed(1)} = parts ${at("shadow", "part").toFixed(1)} + proxy ${at("shadow", "proxy").toFixed(1)}; movers ${at("shadow", "moving").toFixed(1)})  ` +
-            `reflection ${pass("reflection").toFixed(1)}  main ${pass("main").toFixed(1)}`,
+            `reflection ${pass("reflection").toFixed(1)}  main ${pass("main").toFixed(1)} ` +
+            `(own ${(at("main", "part") + at("main", "proxy")).toFixed(1)}; movers ${at("main", "moving").toFixed(1)})`,
         );
       }
     });
@@ -398,6 +450,27 @@ try {
     const proxyPass = (p) =>
       deckCount.carriers.reduce((a, c) => a + ((lastSums.get(`${c.id}|${p}|proxy`) ?? 0) / lastFrames), 0);
     console.log(`AC-4 US-carrier own shadow submissions (parts + proxy): ${ownSum.map((v) => v.toFixed(1)).join(" / ")}`);
+    // The AC-5 line: the home carrier's own static main submissions, apart from the player aircraft
+    // and crew that ride it. The merge is judged on the geometry it merged.
+    const mainOwnSum = deckCount.windows.map((win) => {
+      const frames = Math.max(1, win.frames);
+      const sums = new Map(win.sums);
+      return deckCount.carriers.reduce(
+        (a, c) => a + ((sums.get(`${c.id}|main|part`) ?? 0) + (sums.get(`${c.id}|main|proxy`) ?? 0)) / frames,
+        0,
+      );
+    });
+    const mainTotalSum = deckCount.windows.map((win) => {
+      const frames = Math.max(1, win.frames);
+      const sums = new Map(win.sums);
+      return deckCount.carriers.reduce(
+        (a, c) =>
+          a + ((sums.get(`${c.id}|main|part`) ?? 0) + (sums.get(`${c.id}|main|proxy`) ?? 0) + (sums.get(`${c.id}|main|moving`) ?? 0)) / frames,
+        0,
+      );
+    });
+    console.log(`AC-5 US-carrier own main submissions (parts + proxy): ${mainOwnSum.map((v) => v.toFixed(1)).join(" / ")}`);
+    console.log(`AC-5 US-carrier total main submissions (own + movers): ${mainTotalSum.map((v) => v.toFixed(1)).join(" / ")}`);
     console.log(
       `proxy submissions by pass (last window): shadow ${proxyPass("shadow").toFixed(1)}, ` +
         `main ${proxyPass("main").toFixed(1)}, reflection ${proxyPass("reflection").toFixed(1)}`,
