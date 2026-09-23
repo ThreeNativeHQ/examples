@@ -718,6 +718,22 @@ try {
     `software adapter, the figure would be meaningless: ${JSON.stringify(adapter)}`,
   );
 
+  // The briefing compiles the three unseen views and uploads their textures through `compileAsync`
+  // (`warmUpViews`), deliberately unawaited by the game. Sampling before it settles folds up to
+  // ~30% of the CPU's texture work into a "steady state" figure, so the sample starts only once it
+  // has resolved, and when it resolved is reported.
+  const warmUp = await page.evaluate(async () => {
+    const w = window.midway.world;
+    const started = performance.now();
+    while (w.warmUpDone === null || w.warmUpDone === undefined)
+      await new Promise((r) => setTimeout(r, 20));
+    const resolvedAt = await w.warmUpDone;
+    return { resolvedAt, waitedMs: performance.now() - started };
+  });
+  console.log(
+    `warm-up resolved at ${warmUp.resolvedAt.toFixed(1)} ms (page clock); the wait began ${warmUp.waitedMs.toFixed(1)} ms before it`,
+  );
+
   // Airborne start puts the battle in progress: aircraft aloft, AI flying, ships under way.
   await page.click("#start-air");
   const seconds = async (n) => {
@@ -830,14 +846,36 @@ try {
     }, IMPACT_PERIOD);
 
   // MIDWAY_HIDE names a layer to switch off, so the cost of one can be attributed rather than
-  // guessed at. It changes what is measured; a run that uses it is non-qualifying.
+  // guessed at. It changes what is measured; a run that uses it is non-qualifying. `World.update`
+  // rewrites `visible` on every ship every frame, so a one-shot hide is silently undone (it read
+  // the same draws as stock); the chosen ids are re-hidden after each update instead.
   if (process.env.MIDWAY_HIDE)
     await page.evaluate((what) => {
       const w = window.midway.world;
+      const hidden = new Set();
       if (what === "sea") w.sea.visible = false;
-      if (what === "ships") for (const [id, m] of w.meshes) if (!id.startsWith("air-")) m.visible = false;
+      if (what === "ships") for (const id of w.meshes.keys()) if (!id.startsWith("air-")) hidden.add(id);
+      // The three Yorktown-class US carriers are the ships drawn from `hornet.glb` (world.ts
+      // CARRIER_MODEL, keyed by team and kind here). Hiding the root mesh hides the hull, its deck
+      // park, its decor and its crew with it.
+      if (what === "us-carriers")
+        for (const s of w.battle.ships) if (s.team === "us" && s.kind === "carrier") hidden.add(s.id);
       if (what === "crew") w.crew.group.visible = false;
       if (what === "sky") w.scene.background = null;
+      if (hidden.size) {
+        const apply = () => {
+          for (const id of hidden) {
+            const m = w.meshes.get(id);
+            if (m) m.visible = false;
+          }
+        };
+        const orig = w.update;
+        w.update = function (...args) {
+          orig.apply(this, args);
+          apply();
+        };
+        apply();
+      }
     }, process.env.MIDWAY_HIDE);
 
   // MIDWAY_RATIO shrinks the render target while the window stays the same size, which separates
@@ -1246,6 +1284,7 @@ try {
     // instead, which `compareWorkload` requires be identical on both sides.
     requiredAircraft: WORKLOAD ? 0 : REQUIRED_AIRCRAFT,
     hidden: process.env.MIDWAY_HIDE || null,
+    warmUpResolvedAtMs: +warmUp.resolvedAt.toFixed(1),
     workload:
       WORKLOAD === "cockpit" ? "cockpit-flight"
       : WORKLOAD === "water-impact" ? "water-impact-fixture"

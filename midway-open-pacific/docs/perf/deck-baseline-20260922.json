@@ -1,0 +1,88 @@
+{
+  "tool": "capture-deck-perf",
+  "schema": 1,
+  "at": "2026-09-23T02:09:27.146Z",
+  "adapter": {
+    "vendor": "nvidia",
+    "architecture": "turing",
+    "device": "",
+    "description": ""
+  },
+  "url": "http://localhost:5341",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "hidden": null,
+  "warmUpResolvedAtMs": 28415.6,
+  "windows": [
+    {
+      "frames": 300,
+      "fps": 11.34,
+      "surface": {
+        "width": 1920,
+        "height": 1080
+      },
+      "passes": {
+        "main": {
+          "frames": 300,
+          "drawsMean": 135.4,
+          "drawsP50": 135,
+          "trianglesMean": 803805
+        },
+        "shadow": {
+          "frames": 300,
+          "drawsMean": 357,
+          "drawsP50": 357,
+          "trianglesMean": 913747
+        },
+        "reflection": {
+          "frames": 300,
+          "drawsMean": 58,
+          "drawsP50": 58,
+          "trianglesMean": 383491
+        }
+      },
+      "totalDrawsMean": 550.4,
+      "totalTrianglesMean": 2101043,
+      "gpuP50": 7.96,
+      "gpuP95": 10.17,
+      "renderCpuP50": 11.2,
+      "renderCpuP95": 13.4
+    },
+    {
+      "frames": 300,
+      "fps": 11.32,
+      "surface": {
+        "width": 1920,
+        "height": 1080
+      },
+      "passes": {
+        "main": {
+          "frames": 300,
+          "drawsMean": 136.2,
+          "drawsP50": 136,
+          "trianglesMean": 816277
+        },
+        "shadow": {
+          "frames": 300,
+          "drawsMean": 357,
+          "drawsP50": 357,
+          "trianglesMean": 913747
+        },
+        "reflection": {
+          "frames": 300,
+          "drawsMean": 58,
+          "drawsP50": 58,
+          "trianglesMean": 383491
+        }
+      },
+      "totalDrawsMean": 551.2,
+      "totalTrianglesMean": 2113515,
+      "gpuP50": 8.06,
+      "gpuP95": 23.32,
+      "renderCpuP50": 10.7,
+      "renderCpuP95": 13.7
+    }
+  ]
+}
