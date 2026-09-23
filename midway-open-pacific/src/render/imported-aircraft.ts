@@ -418,6 +418,9 @@ export function createDouglas(withCockpit = false): T.Group {
     }),
   );
   root.userData.importedAircraft = true;
+  // Every Douglas is a Douglas, whether it came through the AI wrapper or the player's own seat:
+  // this flag is what selects `animateDouglas` and `resetAirframeAnimation`, so it belongs here.
+  root.userData.douglas = true;
   // Exposed for symmetry with every other airframe, but animateDouglas owns it: the mixer writes
   // this pivot's quaternion from propeller.spin every frame, so spinPropeller cannot move it.
   root.userData.propeller = propellerPivot;

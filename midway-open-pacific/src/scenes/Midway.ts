@@ -125,7 +125,14 @@ export class Midway extends Scene<GameState, undefined> {
   private crashCam = false;
   started = false;
   /** Last tick's simulation-step time, for the slow-tick line. */
-  private tickTimes = { step: 0 };
+  private tickTimes = { step: 0, world: 0 };
+  /**
+   * Fixed-step time accumulated since the last drawn frame, handed to the once-per-frame
+   * `WorldView.update`. The battle and the HUD still step per fixed tick; the render-side world
+   * animation only needs the total time the frame covered, and running it once per frame is what
+   * keeps a catch-up frame (up to five ticks) from updating the whole scene five times.
+   */
+  private worldDt = 0;
   private publishTick = 0;
   private mouseState = { fire: false, looking: false, lockClick: false, lx: 0, ly: 0 };
   /**
@@ -236,6 +243,20 @@ export class Midway extends Scene<GameState, undefined> {
     this.ctx = ctx;
     this.battle = new Battle();
     this.world = new WorldView({ scene: ctx.scene, camera: ctx.camera as T.PerspectiveCamera, renderer: ctx.renderer, viewport: ctx.viewport, add: (object) => ctx.add(object) }, this.battle);
+    // The render-side world updates once per DRAWN frame, not once per fixed tick. `battle.step`
+    // and every event consumer still run per tick; the world's own animation, placement and camera
+    // read the accumulated fixed time here, so a catch-up frame that steps five times still
+    // positions and animates the scene once. Registered before the particle packing and the matrix
+    // walk below, which both read the camera and transforms this leaves behind.
+    this.cleanups.push(
+      ctx.beforeRender(() => {
+        const began = performance.now();
+        this.world.update(this.paused ? 0 : this.worldDt, this.wall, this.battle.status === "briefing");
+        this.worldDt = 0;
+        this.tickTimes.world = performance.now() - began;
+        shell.cockpitView(this.world.cockpitView);
+      }),
+    );
     // The combat particle buffers are repacked for the camera once per actual world draw. The
     // engine's own beforeRender phase keeps the packing off the particle meshes: an own mesh
     // onBeforeRender marks the whole scene un-batchable at the full roster.
@@ -478,9 +499,7 @@ export class Midway extends Scene<GameState, undefined> {
         if (e.type === "damage") this.hud.hitFlash = 1;
       }
     }
-    const worldStart = performance.now();
-    this.world.update(this.paused ? 0 : dt, this.wall, b.status === "briefing");
-    shell.cockpitView(this.world.cockpitView);
+    if (!this.paused) this.worldDt += dt;
     const hudStart = performance.now();
     this.hud.update(dt);
     const hudEnd = performance.now();
@@ -510,18 +529,25 @@ export class Midway extends Scene<GameState, undefined> {
       dt,
     );
     // A tick over 20 ms names its heaviest part: the fixed step can run up to five ticks in one
-    // drawn frame, so one slow part here is what turns into a visible hitch. Silent otherwise.
+    // drawn frame, so one slow part here is what turns into a visible hitch. Silent otherwise. The
+    // world now updates once per drawn frame, so its breakdown is the last frame's, not this tick's.
     const tickMs = performance.now() - tickStart;
-    if (tickMs > 20)
+    if (tickMs > 20) {
+      const world: Record<string, number> = { ms: +this.tickTimes.world.toFixed(1) };
+      for (const [k, v] of Object.entries(this.world.updateTimes)) world[k] = +v.toFixed(1);
       console.log(
         `TN_MIDWAY_SLOW_TICK:${JSON.stringify({
           ms: +tickMs.toFixed(1),
+          bt: +b.time.toFixed(2),
+          mode: p.mode,
+          status: b.status,
           step: +this.tickTimes.step.toFixed(1),
-          world: +(hudStart - worldStart).toFixed(1),
+          world,
           hud: +(hudEnd - hudStart).toFixed(1),
           after: +(performance.now() - hudEnd).toFixed(1),
         })}`,
       );
+    }
     // Continuous world loops follow the scene: a burning hull hisses where it is, the atoll surf
     // only exists near the atoll. Passing the full set each frame makes a stopped loop impossible.
     const emitters: Array<{ id: string; key: string; source: unknown; volume: number }> = [];

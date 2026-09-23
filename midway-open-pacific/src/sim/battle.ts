@@ -586,7 +586,7 @@ const REAR_GUN_PITCH_RATE = 1.0;
  * airframe. A carrier search leg is flown by the dive bomber the ship carries — the cruiser
  * floatplanes are a separate, unbuilt airframe and are deliberately not faked here.
  */
-const ROLE_AIRFRAMES: Readonly<Record<string, Readonly<Record<string, string>>>> = Object.freeze({
+export const ROLE_AIRFRAMES: Readonly<Record<string, Readonly<Record<string, string>>>> = Object.freeze({
   fighter: { us: "wildcat", jp: "zero" },
   bomber: { us: "sbd", jp: "val" },
   torpedo: { us: "tbd", jp: "kate" },

@@ -2,6 +2,7 @@
 import * as T from "three";
 import { mergeParts } from "@threenative/core";
 import { shipClass } from "../sim/catalog.js";
+import { ROLE_AIRFRAMES } from "../sim/battle.js";
 import { REAR_RELOAD_SECONDS } from "../sim/armament.js";
 import { axesOf } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
@@ -479,6 +480,11 @@ export class WorldView {
   followBomb = false;
   /** True while the pilot view is the one being drawn. Read by the UI shell. */
   cockpitView = false;
+  /**
+   * Attribution only: milliseconds each block of the most recent `update` took, so a slow fixed
+   * tick can name its heaviest render-side part. Filled every update, read only when logging.
+   */
+  readonly updateTimes: Record<string, number> = {};
   snap = true;
   quality = "balanced";
   wallTime = 0;
@@ -741,6 +747,22 @@ export class WorldView {
   /** How many released clones of one type are kept before they are disposed. */
   private static readonly AIRCRAFT_POOL_MAX = 16;
 
+  /**
+   * How many first-time aircraft builds one drawn frame may do.
+   *
+   * A pooled clone is always taken; this rations only the expensive constructor. Measured on the
+   * natural airborne start, one Douglas SBD clone costs ~9.5 ms and the wave needs ten of them at
+   * once, so the old unrationed build was a ~100 ms stall. One per frame spreads it invisibly: the
+   * aircraft are far from the player at the fast-forwarded start, and a few frames late is a
+   * fraction of a second.
+   */
+  private static readonly FRESH_BUILDS_PER_FRAME = 1;
+
+  /** Whether a released clone of this aircraft's type is waiting in the pool. */
+  private hasPooledAircraft(a: { airframe?: string; kind?: string }): boolean {
+    return (this.aircraftPool.get(`${a.airframe}:${a.kind}`)?.length ?? 0) > 0;
+  }
+
   setAirframe(): void {
     const type = this.battle.player.airframe || "sbd";
     if (this.playerMesh?.userData.airframe === type) return;
@@ -830,6 +852,7 @@ export class WorldView {
   warmUpDone: Promise<number> | null = null;
 
   warmUpViews(): Promise<void> {
+    this.warmAnimators();
     const passes = this.runWarmPasses();
     // The player-view half is chained off the held half but deferred past a task boundary, so the
     // briefing the gate just revealed paints before the rear station's synchronous build takes the
@@ -841,6 +864,31 @@ export class WorldView {
   }
 
   private warmPassesDone = false;
+
+  /**
+   * First-use animation state, warmed before the first drawn frame.
+   *
+   * An `AnimationPlayer`'s first `update(dt > 0)` measures each clip's stride once, and the deck
+   * party, every parked aircraft and the player's own rig each pay that on the frame they first
+   * animate — measured at 119 ms, 27 ms and 20 ms respectively in one tick. Running them here,
+   * behind the loading screen, keeps it off a drawn frame. `dt = 1/60` rather than 0 because the
+   * stride pass returns early for a zero dt and would leave the cost for the first real frame.
+   */
+  private warmAnimators(): void {
+    this.crew?.update(1 / 60, 0);
+    for (const m of this.meshes.values())
+      for (const a of (m.userData.parked ?? []) as T.Group[]) spinParked(a, 1 / 60);
+    if (!this.playerMesh) return;
+    this.warmAircraftAnimator(this.playerMesh);
+  }
+
+  /** The one animator an airframe's own flags select, at warm-up time. */
+  private warmAircraftAnimator(m: T.Group): void {
+    if (m.userData.devastator) animateDevastator(m, {}, 1 / 60);
+    else if (m.userData.douglas) animateDouglas(m, {}, 1 / 60);
+    else if (m.userData.animatedAirframe) animateImportedAirframe(m, {}, 1 / 60);
+    else if (m.userData.propeller) spinPropeller(m, 0.12, 1 / 60);
+  }
 
   /**
    * The held warm-up: every fleet hull compiled, then one hidden render over the shadow and
@@ -1014,14 +1062,20 @@ export class WorldView {
       move(m, origin.x + (slot % 5 - 2) * 150, origin.z + (Math.floor(slot / 5) - 1) * 200);
       slot += 1;
     }
-    // One aircraft of every type an AI flight draws. Aircraft are not on the water's reflected
-    // layer, so these are left off it exactly as the live ones are; they exist for the shadow
-    // variants of each airframe's materials.
+    // One aircraft of every type an AI flight draws, taken from the battle's own role table so a
+    // new role or airframe cannot leave a key unpooled. A level Kate is the bomber kind, exactly as
+    // `Battle.launch` derives it; the island's Catalina recon is not in the role table and is named
+    // here. Aircraft are not on the water's reflected layer, so these are left off it exactly as the
+    // live ones are; they exist for the shadow variants of each airframe's materials.
     const reps = [
-      { team: "us", kind: "fighter", airframe: "wildcat" },
-      { team: "jp", kind: "fighter", airframe: "zero" },
-      { team: "jp", kind: "bomber", airframe: "kate" },
-      { team: "us", kind: "torpedo", airframe: "tbd" },
+      ...Object.entries(ROLE_AIRFRAMES).flatMap(([role, byTeam]) =>
+        Object.entries(byTeam).map(([team, airframe]) => ({
+          team,
+          kind: role === "level" ? "bomber" : role,
+          airframe,
+        })),
+      ),
+      { team: "us", kind: "recon", airframe: "catalina" },
     ];
     const built: T.Group[] = [];
     for (const [i, spec] of reps.entries()) {
@@ -1030,6 +1084,9 @@ export class WorldView {
       m.visible = true;
       m.updateMatrixWorld(true);
       this.scene.add(m);
+      // Its first animate measures the airframe's clips; a pooled clone that takes this mesh must
+      // not inherit that cost on the frame it first flies.
+      this.warmAircraftAnimator(m);
       built.push(m);
     }
     const camera = new T.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.camera.near, this.camera.far);
@@ -1248,6 +1305,7 @@ export class WorldView {
   update(dt: number, wallTime: number, briefing = false): void {
     const b = this.battle;
     const p = b.player;
+    let t = performance.now();
     this.setAirframe();
     this.wallTime = wallTime;
     const time = briefing ? wallTime : b.time;
@@ -1256,9 +1314,13 @@ export class WorldView {
     // aircraft gates, because both are the same camera's projection.
     const focalPx = (this.host.viewport.size.height * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360);
     const hullPixels = mergedHullPixels();
+    this.updateTimes.setup = performance.now() - t;
+    t = performance.now();
+    let shipMotionMs = 0, shipScoutMs = 0, shipScarMs = 0, shipParkMs = 0, shipDecorMs = 0;
     for (const s of b.ships) {
       const m = this.meshes.get(s.id);
       if (!m) continue;
+      let s0 = performance.now();
       // A submarine carries its own pose: the sim's keel depth becomes a waterline offset, the
       // swell fades with depth, and the dive angle comes from the sim's own `depthRate`. A surface
       // hull is unchanged. A wreck takes no pose — it is going down, not riding anything.
@@ -1289,16 +1351,22 @@ export class WorldView {
         const hullProxy = m.userData.shadowProxyHull as T.Object3D | undefined;
         if (hullProxy) hullProxy.visible = !merged;
       }
+      const d = distance2(s, p);
+      shipMotionMs += performance.now() - s0;
       // The scouts this hull carries, each drawn where its own state puts it. Aboard and alongside
       // are on the ship and ride her motion; the airborne states are over the sector the simulation
       // is searching, at the same `SCOUT_ALTITUDE` the observation sweep files reports from. A lost
       // scout is not drawn, because it is not there.
+      s0 = performance.now();
       if (s.scouts?.length) this.placeScouts(s, m as T.Object3D);
-      const d = distance2(s, p);
+      shipScoutMs += performance.now() - s0;
       // The park is a visual LOD: it is worth drawing while the camera is close, wherever the
       // player is, exactly as the hull's own LOD range is read from the camera. A carrier a
       // player never approaches keeps its park out of the draw.
+      s0 = performance.now();
       updateShipScars(m, s, d, this.quality);
+      shipScarMs += performance.now() - s0;
+      s0 = performance.now();
       for (const a of (m.userData.parked ?? []) as T.Group[]) {
         const type = a.userData.simAirframe as string;
         // The park is the ready line: an airframe with none ready is below in the hangar, so its
@@ -1311,15 +1379,25 @@ export class WorldView {
         // Turning over on the spot, waiting for the flag. One airframe, one animator.
         spinParked(a, dt);
       }
+      shipParkMs += performance.now() - s0;
+      s0 = performance.now();
       // Decorative deck dressing follows the same visual LOD with no inventory tie.
       for (const d of (m.userData.decor ?? []) as T.Group[]) {
         d.visible = camD < 1900;
         const decorProxy = d.userData.shadowProxyMesh as T.Object3D | undefined;
         if (decorProxy) decorProxy.visible = d.visible;
       }
+      shipDecorMs += performance.now() - s0;
       if (m.userData.elevator) (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
 
     }
+    this.updateTimes["ships:motion"] = shipMotionMs;
+    this.updateTimes["ships:scouts"] = shipScoutMs;
+    this.updateTimes["ships:scars"] = shipScarMs;
+    this.updateTimes["ships:parked"] = shipParkMs;
+    this.updateTimes["ships:decor"] = shipDecorMs;
+    this.updateTimes.ships = performance.now() - t;
+    t = performance.now();
     // The deck party works the launch spot, so it is anchored where the aircraft was standing and
     // does not taxi away with it once the deck run starts. The party stays visible for the whole
     // deck run — stood clear at the deck edge, not under the aircraft — and only leaves with the
@@ -1346,7 +1424,15 @@ export class WorldView {
       this.crew.group.position.set(0, home?.deckHeight ?? 0, this.crewAnchor);
       this.crew.update(dt, rolling ? 1 : 0);
     }
+    this.updateTimes.crew = performance.now() - t;
+    t = performance.now();
     const live = new Set<string>();
+    let airBuildMs = 0, airAnimMs = 0, airCleanMs = 0;
+    // A wave of launches arrives in one frame (the airborne start fast-forwards thirty seconds of
+    // them), and building every fresh clone in that frame is what a 110-190 ms hitch was. A clone
+    // that is already pooled costs nothing and is always taken; only a first-time construction is
+    // rationed, so the wave pops in over a few frames instead of stalling one.
+    let freshBuilds = WorldView.FRESH_BUILDS_PER_FRAME;
     let detailed = 0;
     const camPos = this.camera.position;
     const mergedPixels = mergedAirframePixels();
@@ -1355,16 +1441,28 @@ export class WorldView {
       const range = distance2(a, p);
       let m = this.meshes.get(a.id) as T.Group | undefined;
       const want = this.wantsDetail(a, range, m?.userData.detailed === true, detailed);
-      if (m && (m.userData.detailed === true) !== want) {
-        this.scene.remove(m);
-        this.releaseAircraft(m);
-        this.meshes.delete(a.id);
-        m = undefined;
-      }
-      if (!m) {
+      // The loan is a budget flag, not a level of detail: both levels draw the same real airframe
+      // and the merged stand-in is chosen by the pixel gate below, not by the loan. Rebuilding the
+      // mesh on every range crossing re-ran the airframe's geometry builders (`makeDevastator`'s
+      // latheX and gperforatedJacket, the Douglas rig) in mid-flight; flipping the flag is the same
+      // picture with no construction at all.
+      if (m) m.userData.detailed = want;
+      else {
+        const pooled = this.hasPooledAircraft(a);
+        // No clone to reuse and this frame's one fresh build is spent: leave the aircraft out of
+        // the draw this frame and take it on the next, so a launch wave never stalls a frame. A
+        // deferred aircraft that wants the loan still counts against the cap, or the loan slips to
+        // more aircraft than the ten `wantsDetail` allows.
+        if (!pooled && freshBuilds <= 0) {
+          if (want) detailed += 1;
+          continue;
+        }
+        const b0 = performance.now();
         m = this.buildAircraft(a, want);
         this.scene.add(m);
         this.meshes.set(a.id, m);
+        airBuildMs += performance.now() - b0;
+        if (!pooled) freshBuilds -= 1;
       }
       if (m.userData.detailed) detailed += 1;
       m.position.set(a.x, a.y, a.z);
@@ -1387,6 +1485,7 @@ export class WorldView {
         (m.userData.low as T.Object3D).visible = merged;
       }
       if (!merged) {
+        const a0 = performance.now();
         const gearDown = (a.mode === "launch" && a.age < 4) || (a.mode === "rtb" && a.y < 80);
         if (m.userData.devastator) {
           animateDevastator(m, { rpm: a.engineCut ? 0.1 : 0.82, gearPos: gearDown ? 1 : 0, torpedo: a.torpedo ?? 0 }, dt);
@@ -1404,14 +1503,22 @@ export class WorldView {
         if (load) load.visible = a.bombs > 0;
         if (m.userData.torpedoLoad) (m.userData.torpedoLoad as T.Object3D).visible = a.torpedo > 0;
         updateDamageVisuals(m, a);
+        airAnimMs += performance.now() - a0;
       }
       m.visible = range < FAR_AIRCRAFT;
     }
+    const c0 = performance.now();
     for (const [id, m] of this.meshes) if (id.startsWith("air-") && !live.has(id)) {
       this.scene.remove(m);
       this.releaseAircraft(m);
       this.meshes.delete(id);
     }
+    airCleanMs = performance.now() - c0;
+    this.updateTimes["aircraft:build"] = airBuildMs;
+    this.updateTimes["aircraft:anim"] = airAnimMs;
+    this.updateTimes["aircraft:clean"] = airCleanMs;
+    this.updateTimes.aircraft = performance.now() - t;
+    t = performance.now();
     // While the wheels are down the aircraft rides the carrier: parent it to the ship mesh and
     // place it in the ship's own frame, so it inherits the hull's bob and stays on the deck.
     const homeShip = b.home;
@@ -1428,14 +1535,22 @@ export class WorldView {
       if (p.attitude) this.playerMesh.quaternion.set(p.attitude.x, p.attitude.y, p.attitude.z, p.attitude.w);
       else this.playerMesh.rotation.set(p.pitch, -p.heading, p.roll, "YXZ");
     }
+    const pl0 = performance.now();
     if (this.playerMesh.userData.devastator) animateDevastator(this.playerMesh, p, dt);
     else if (this.playerMesh.userData.animatedAirframe) animateImportedAirframe(this.playerMesh, p, dt);
     else animateDouglas(this.playerMesh, p, dt);
+    this.updateTimes["player:anim"] = performance.now() - pl0;
+    const pl1 = performance.now();
     updateDamageVisuals(this.playerMesh, p);
+    this.updateTimes["player:damage"] = performance.now() - pl1;
     // The wreck is under the splash from the moment it hits: the airframe goes with the impact,
     // not two seconds later when the report opens.
     this.playerMesh.visible = b.status !== "lost" && p.mode !== "wreck" && p.mode !== "downed";
+    this.updateTimes.player = performance.now() - t;
+    t = performance.now();
     this.updateProjectiles();
+    this.updateTimes.projectiles = performance.now() - t;
+    t = performance.now();
     this.updateCamera(dt, briefing, time);
     // The eye below the surface is in a different medium: the dawn sky behind a submerged hull
     // reads as a hole punched through the sea. Tint the background and thicken the fog while the
@@ -1452,13 +1567,22 @@ export class WorldView {
         this.scene.fog = this.surfaceFog;
       }
     }
+    this.updateTimes.camera = performance.now() - t;
+    t = performance.now();
     this.ripples.update(b, this.camera.position, dt);
+    this.updateTimes.ripples = performance.now() - t;
+    t = performance.now();
     this.particles.update(b, this.camera.position);
+    this.updateTimes.particles = performance.now() - t;
+    t = performance.now();
     this.ocean.update(this.camera.position, time, b.ships);
+    this.updateTimes.ocean = performance.now() - t;
+    t = performance.now();
     // Keep the shadow camera's mask carrying the proxy bit even if the main camera's mask moves.
     this.sun.shadow.camera.layers.mask = this.camera.layers.mask | (1 << SHADOW_PROXY_LAYER);
     this.sun.position.copy(this.sunDir).multiplyScalar(500).add(this.playerMesh.getWorldPosition(this.tmp));
     this.sun.target.position.copy(this.playerMesh.getWorldPosition(this.tmp));
+    this.updateTimes.sun = performance.now() - t;
   }
 
   updateCamera(dt: number, briefing: boolean, time: number): void {
