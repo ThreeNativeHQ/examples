@@ -8,11 +8,11 @@ import { distance2, forward, localPoint } from "../sim/math.js";
 import { addFloats, ellipsoid, mat, wakeTexture } from "./assets.js";
 import type { IViewSnapshot } from "../ui/hud-input.js";
 import { type CarrierModelId, createCarrier, createIjnCarrier, createMitchell, shipModelFor } from "./imported-ships.js";
-import { createAirframe, createDouglas, animateDouglas, animateImportedAirframe, disposeAirframe, spinPropeller } from "./imported-aircraft.js";
+import { createAirframe, createDouglas, animateDouglas, animateImportedAirframe, disposeAirframe, resetAirframeAnimation, spinPropeller } from "./imported-aircraft.js";
 import { airframeLod } from "./airframe-lod.js";
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
-import { animateDevastator, disposeDevastator } from "./devastator.js";
+import { animateDevastator, disposeDevastator, resetDevastatorAnimation } from "./devastator.js";
 import { createRearStation, type RearStation } from "./rear-station.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScars } from "./model-damage.js";
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
@@ -697,6 +697,20 @@ export class WorldView {
    */
   private readonly builtAirframes = new Map<string, T.Group>();
 
+  /**
+   * Released aircraft clones, by `airframe:kind`, waiting to be reset and drawn again.
+   *
+   * Crossing the detail range used to clone and `setFromObject` a fresh airframe and dispose the
+   * old one, so a machine weaving across 1100/1500 m rebuilt synchronously every time. A released
+   * clone is kept here instead, and the next aircraft of the same type takes it: the geometry,
+   * materials, merged stand-in and damage decals are all reusable, so the crossing is a flag and a
+   * re-add. Bounded per type; past the cap the oldest is disposed as before.
+   */
+  private readonly aircraftPool = new Map<string, T.Group[]>();
+
+  /** How many released clones of one type are kept before they are disposed. */
+  private static readonly AIRCRAFT_POOL_MAX = 16;
+
   setAirframe(): void {
     const type = this.battle.player.airframe || "sbd";
     if (this.playerMesh?.userData.airframe === type) return;
@@ -786,12 +800,73 @@ export class WorldView {
   warmUpDone: Promise<number> | null = null;
 
   warmUpViews(): Promise<void> {
-    const done = this.runWarmUpViews().then(() => performance.now());
-    this.warmUpDone = done;
-    return done.then(() => undefined);
+    const passes = this.runWarmPasses();
+    // The player-view half is chained off the held half but deferred past a task boundary, so the
+    // briefing the gate just revealed paints before the rear station's synchronous build takes the
+    // thread. `warmUpDone` still resolves only once both halves have settled.
+    this.warmUpDone = passes
+      .then(() => new Promise<void>((resolve) => setTimeout(() => resolve(this.runWarmViews()), 0)))
+      .then(() => performance.now());
+    return passes;
   }
 
-  private async runWarmUpViews(): Promise<void> {
+  private warmPassesDone = false;
+
+  /**
+   * The held warm-up: every fleet hull compiled, then one hidden render over the shadow and
+   * mirrored passes. `ctx.startup.hold` waits on this, so it settles behind the loading screen.
+   *
+   * The player's own view subtrees are a separate, unheld task — their compile is tens of seconds
+   * on a loaded host, and holding it would put that in front of the world the player is waiting
+   * for. It runs on the briefing's idle time exactly as it always has.
+   */
+  private async runWarmPasses(): Promise<void> {
+    const renderer = this.renderer as unknown as {
+      compileAsync?: (object: T.Object3D, camera: T.Camera, scene: T.Object3D) => Promise<void>;
+    };
+    if (typeof renderer.compileAsync !== "function" || this.warmPassesDone) return;
+    this.warmPassesDone = true;
+    // The fleet's textures are uploaded the first time a carrier draws — after `#start-air`,
+    // mid-flight. `initTexture` takes the same `Textures.updateTexture` path a first render does,
+    // so every texture the non-aircraft meshes reference is resident before the player looks at it.
+    const initTexture =
+      typeof (renderer as unknown as { initTexture?: unknown }).initTexture === "function"
+        ? (renderer as unknown as { initTexture: (texture: T.Texture) => void }).initTexture.bind(renderer)
+        : null;
+    if (initTexture) {
+      const warmed = new Set<T.Texture>();
+      for (const [id, root] of this.meshes) {
+        if (id.startsWith("air-")) continue;
+        root.traverse((object) => {
+          const mesh = object as T.Mesh;
+          if (!mesh.isMesh) return;
+          for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+            if (!material) continue;
+            for (const value of Object.values(material)) {
+              if (value instanceof T.Texture && !warmed.has(value)) {
+                warmed.add(value);
+                try {
+                  initTexture(value);
+                } catch {
+                  // A texture the backend will not take yet still uploads on first render; a warm-up
+                  // must never stop the game starting.
+                }
+              }
+            }
+          }
+        });
+      }
+    }
+    // The hidden render is what actually builds the shadow and mirrored variants, and, measured,
+    // it is the cheap half: drawing every hull and a representative aircraft of each type through
+    // all three passes cost a few seconds, while compiling those same hulls node-by-node before it
+    // cost 22 s on a loaded host. So it runs here, held. The per-hull compile, which reaches
+    // materials this one camera does not draw, runs on the briefing's idle time (`runWarmViews`).
+    await this.warmHiddenPasses();
+  }
+
+  /** The player's view subtrees and the per-hull compiles, on the briefing's idle time, never held. */
+  private async runWarmViews(): Promise<void> {
     const renderer = this.renderer as unknown as {
       compileAsync?: (object: T.Object3D, camera: T.Camera, scene: T.Object3D) => Promise<void>;
     };
@@ -830,37 +905,143 @@ export class WorldView {
         for (const object of hidden) object.visible = false;
       }
     }
-    // The compile above warms only the player's own roots, so the fleet's textures are still
-    // uploaded the first time a carrier draws — after `#start-air`, mid-flight. `initTexture` takes
-    // the same `Textures.updateTexture` path a first render does, so every texture the non-aircraft
-    // meshes reference is resident before the player looks at it, and no upload lands in a sample.
-    const initTexture =
-      typeof (renderer as unknown as { initTexture?: unknown }).initTexture === "function"
-        ? (renderer as unknown as { initTexture: (texture: T.Texture) => void }).initTexture.bind(renderer)
-        : null;
-    if (initTexture) {
-      const warmed = new Set<T.Texture>();
-      for (const [id, root] of this.meshes) {
-        if (id.startsWith("air-")) continue;
-        root.traverse((object) => {
-          const mesh = object as T.Mesh;
-          if (!mesh.isMesh) return;
-          for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-            if (!material) continue;
-            for (const value of Object.values(material)) {
-              if (value instanceof T.Texture && !warmed.has(value)) {
-                warmed.add(value);
-                try {
-                  initTexture(value);
-                } catch {
-                  // A texture the backend will not take yet still uploads on first render; a warm-up
-                  // must never stop the game starting.
-                }
-              }
-            }
-          }
-        });
+    // Every hull's own pipelines, which a compile of the player's roots never reached: each hull is
+    // revealed for its own compile against the real camera and put straight back. The hidden render
+    // already made most of these resident, so this is a cache walk that reaches the rest.
+    for (const [id, root] of this.meshes) {
+      if (id.startsWith("air-")) continue;
+      const hidden: T.Object3D[] = [];
+      root.traverse((object) => {
+        if (!object.visible) {
+          hidden.push(object);
+          object.visible = true;
+        }
+      });
+      try {
+        await renderer.compileAsync(root, this.camera, this.scene);
+      } catch {
+        // A hull that will not precompile still draws; it just pays the stall it would have paid.
+      } finally {
+        for (const object of hidden) object.visible = false;
       }
+    }
+  }
+
+  /**
+   * One hidden render that exercises the shadow and the mirrored pass for everything the first
+   * minutes of flight will show.
+   *
+   * `compileAsync` compiles main-pass pipelines only, so every shadow and reflection variant of a
+   * hull and an airframe was created the first time that pass drew it — measured at 107 pipelines
+   * and a 615 ms freeze after the loading screen. This moves every fleet hull and one aircraft of
+   * each AI type into a cluster in front of a throwaway camera, forces the hulls to full detail,
+   * widens the sun's shadow frustum to hold the cluster, and draws the scene once with the shadow
+   * and the water's mirror active while the loading screen still covers the frame. The pipeline
+   * cache is keyed by material and render target, not by the camera, so one view reaches every
+   * variant the deck, chase and cockpit views will ask for.
+   *
+   * Every transform and visibility it touches is snapshotted first and restored in a `finally`, and
+   * the representatives are handed back to the aircraft pool, so no object is left in a different
+   * state whatever the render does.
+   */
+  private async warmHiddenPasses(): Promise<void> {
+    const renderer = this.renderer as unknown as {
+      render?: (scene: T.Object3D, camera: T.Camera) => void;
+    };
+    if (typeof renderer.render !== "function" || !this.playerMesh) return;
+    const origin = this.playerMesh.getWorldPosition(new T.Vector3());
+    const restore: Array<() => void> = [];
+    const move = (root: T.Object3D, x: number, z: number, y = 0): void => {
+      const visible = root.visible;
+      const position = root.position.clone();
+      const quaternion = root.quaternion.clone();
+      restore.push(() => {
+        root.position.copy(position);
+        root.quaternion.copy(quaternion);
+        root.visible = visible;
+      });
+      root.position.set(x, y, z);
+      root.visible = true;
+    };
+    // Hulls at full detail and inside the widened frustum. At these ranges the per-frame gate would
+    // otherwise show the merged stand-in and none of the hull's own materials would reach either
+    // pass, so the body is forced on and the merged sibling off for the warm frame only.
+    let slot = 0;
+    for (const [id, m] of this.meshes) {
+      if (id.startsWith("air-")) continue;
+      const body = m.userData.hullBody as T.Object3D | undefined;
+      const low = m.userData.hullLow as T.Object3D | undefined;
+      const proxyHull = m.userData.shadowProxyHull as T.Object3D | undefined;
+      const shown = { body: body?.visible, low: low?.visible, proxyHull: proxyHull?.visible };
+      if (body) body.visible = true;
+      if (low) low.visible = false;
+      if (proxyHull) proxyHull.visible = true;
+      restore.push(() => {
+        if (body) body.visible = shown.body ?? true;
+        if (low) low.visible = shown.low ?? false;
+        if (proxyHull) proxyHull.visible = shown.proxyHull ?? true;
+      });
+      move(m, origin.x + (slot % 5 - 2) * 150, origin.z + (Math.floor(slot / 5) - 1) * 200);
+      slot += 1;
+    }
+    // One aircraft of every type an AI flight draws. Aircraft are not on the water's reflected
+    // layer, so these are left off it exactly as the live ones are; they exist for the shadow
+    // variants of each airframe's materials.
+    const reps = [
+      { team: "us", kind: "fighter", airframe: "wildcat" },
+      { team: "jp", kind: "fighter", airframe: "zero" },
+      { team: "jp", kind: "bomber", airframe: "kate" },
+      { team: "us", kind: "torpedo", airframe: "tbd" },
+    ];
+    const built: T.Group[] = [];
+    for (const [i, spec] of reps.entries()) {
+      const m = this.buildAircraft({ ...spec, id: `warm-${i}` }, true);
+      m.position.set(origin.x + (i - 1.5) * 90, 60, origin.z + 120);
+      m.visible = true;
+      m.updateMatrixWorld(true);
+      this.scene.add(m);
+      built.push(m);
+    }
+    const camera = new T.PerspectiveCamera(this.camera.fov, this.camera.aspect, this.camera.near, this.camera.far);
+    camera.layers.mask = this.camera.layers.mask;
+    camera.position.set(origin.x, origin.y + 320, origin.z + 520);
+    camera.lookAt(origin.x, 0, origin.z);
+    camera.updateMatrixWorld(true);
+    // The sun follows the player and its shadow camera covers ±80 m. Widen it to hold the cluster,
+    // then restore the envelope and the sun's own placement.
+    const shadowCam = this.sun.shadow.camera;
+    const shadow = {
+      left: shadowCam.left,
+      right: shadowCam.right,
+      top: shadowCam.top,
+      bottom: shadowCam.bottom,
+      near: shadowCam.near,
+      far: shadowCam.far,
+    };
+    const sunPosition = this.sun.position.clone();
+    const sunTarget = this.sun.target.position.clone();
+    Object.assign(shadowCam, { left: -500, right: 500, top: 500, bottom: -500, near: 1, far: 3000 });
+    shadowCam.updateProjectionMatrix();
+    this.sun.position.set(origin.x, origin.y + 600, origin.z);
+    this.sun.target.position.copy(origin);
+    this.sun.target.updateMatrixWorld(true);
+    this.scene.updateMatrixWorld(true);
+    try {
+      renderer.render(this.scene, camera);
+    } catch {
+      // A warm render that throws has still compiled what it reached; it must never stop the game.
+    } finally {
+      for (const m of built) {
+        this.scene.remove(m);
+        this.releaseAircraft(m);
+      }
+      for (const undo of restore) undo();
+      Object.assign(shadowCam, shadow);
+      shadowCam.updateProjectionMatrix();
+      this.sun.position.copy(sunPosition);
+      this.sun.target.position.copy(sunTarget);
+      this.sun.target.updateMatrixWorld(true);
+      this.scene.updateMatrixWorld(true);
     }
   }
 
@@ -1637,6 +1818,11 @@ export class WorldView {
   }
 
   private buildAircraft(a: any, detail: boolean): T.Group {
+    const reused = this.aircraftPool.get(`${a.airframe}:${a.kind}`)?.pop();
+    if (reused) {
+      this.resetAircraft(reused, detail);
+      return reused;
+    }
     const m = importedAircraftFor(a)();
     // The merged stand-in, built once per airframe type from this first instance and shared by every
     // later one. It is a sibling of the full model so the per-frame gate can show either without a
@@ -1723,8 +1909,47 @@ export class WorldView {
     }
   }
 
-  /** Give up one aircraft's mesh without touching geometry another instance still shares. */
+  /** Give up one aircraft's mesh, keeping its clone for the next aircraft of the same type. */
   private releaseAircraft(m: T.Object3D): void {
+    const key = `${m.userData.airframe}:${m.userData.kind}`;
+    let pool = this.aircraftPool.get(key);
+    if (!pool) {
+      pool = [];
+      this.aircraftPool.set(key, pool);
+    }
+    if (pool.length < WorldView.AIRCRAFT_POOL_MAX) {
+      pool.push(m as T.Group);
+      return;
+    }
+    this.disposeAircraft(m);
+  }
+
+  /** Put a pooled clone back into the state a fresh `buildAircraft` would have left it in. */
+  private resetAircraft(m: T.Group, detail: boolean): void {
+    m.userData.detailed = detail;
+    m.visible = false;
+    m.position.set(0, 0, 0);
+    m.rotation.set(0, 0, 0);
+    m.scale.set(1, 1, 1);
+    m.userData.propAngle = 0;
+    const prop = m.userData.prop as T.Object3D | undefined;
+    if (prop) prop.rotation.set(0, 0, 0);
+    const rearGun = m.userData.rearGun as T.Object3D | undefined;
+    if (rearGun) rearGun.rotation.set(0, 0, 0);
+    for (const stain of Object.values((m.userData.damageVisuals ?? {}) as Record<string, T.Mesh>)) {
+      stain.visible = false;
+      (stain.material as T.MeshBasicMaterial).opacity = 0;
+    }
+    const torpedo = m.userData.torpedoLoad as T.Object3D | undefined;
+    if (torpedo) torpedo.visible = false;
+    const load = m.userData.load as T.Object3D | undefined;
+    if (load) load.visible = true;
+    if (m.userData.devastator) resetDevastatorAnimation(m);
+    else if (m.userData.douglas || m.userData.importedAircraft) resetAirframeAnimation(m);
+  }
+
+  /** Dispose one aircraft's clone and everything it owns. */
+  private disposeAircraft(m: T.Object3D): void {
     this.forgetFrozen(m);
     if (m.userData.devastator) disposeDevastator(m as T.Group);
     else if (m.userData.douglas || m.userData.importedAircraft) disposeAirframe(m as T.Group);

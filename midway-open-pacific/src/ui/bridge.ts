@@ -23,9 +23,9 @@ export interface IUiBridge {
  * Every publish carries the complete HUD-object state (`IHudUiState`), never a list of calls to
  * replay: the store coalesces at 100 ms, so a second command staged before a flush overwrites the
  * first, and replaying a list would lose it. Overwriting complete state loses nothing — the newer
- * snapshot already contains what the older one did. `update` still publishes at the 10 Hz the HUD
- * refreshes itself at; the rest publish immediately, because the next tick is up to 100 ms away
- * and a toast or debrief must not wait for it.
+ * snapshot already contains what the older one did. `update` publishes every frame, and the store
+ * coalesces that to one publication per frame; the event methods publish immediately so a toast or
+ * debrief never waits for the next frame's update.
  */
 class BridgeHud implements IHud {
   declare b: IBattleView;
@@ -43,7 +43,8 @@ class BridgeHud implements IHud {
     toastText: "",
     toastSeq: 0,
     debriefSeq: 0,
-    fpsOn: false,
+    // `VITE_MIDWAY_FPS=1` at build time opens the F4 frame-time panel from the first frame (native builds).
+    fpsOn: import.meta.env.VITE_MIDWAY_FPS === "1",
     elapsed: 0,
     updateSpeed: 1,
   };
@@ -106,8 +107,10 @@ class BridgeHud implements IHud {
   }
 
   update(dt: number, speed = 1): void {
+    // Every frame, not at 10 Hz: the engine store already coalesces to one publication per frame,
+    // and a 100 ms gate here made the native HUD move in visible steps beside a smooth scene.
     this.#since += dt;
-    if (this.#since < 0.1) return;
+    if (this.#since <= 0) return;
     // Add to a running total, never a per-publish delta: the consumer applies the increase since
     // its last apply, so an event publish repeating the total adds nothing and two publishes
     // coalesced into one flush still carry the whole interval exactly once.
@@ -119,7 +122,7 @@ class BridgeHud implements IHud {
 
   /**
    * Nothing to paint here: the HUD's 2D canvas is in the web view, and the real `Hud.draw()` runs
-   * there against each snapshot as it arrives. The markers therefore move at the snapshot's 10 Hz
+   * there against each snapshot as it arrives. The markers therefore move at the snapshot's rate (every frame)
    * rather than the render's 60 — raise the publish rate of `view` alone if that reads as a stutter.
    */
   draw(): void {}

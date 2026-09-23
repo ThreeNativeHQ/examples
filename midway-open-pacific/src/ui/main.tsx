@@ -80,7 +80,7 @@ function NativeUi(): null {
   /**
    * The flight HUD, drawn here by the game's own renderer.
    *
-   * The snapshot arrives at 10 Hz and carries the whole HUD-object state, so a newer staged patch
+   * The snapshot arrives every frame and carries the whole HUD-object state, so a newer staged patch
    * overwriting an older one before a flush loses nothing. `memory` drops a repeated render of the
    * same snapshot — React re-runs this effect when the unrelated `ui` half changes — and keeps a
    * toast, a debrief or an fps flip from firing twice.
