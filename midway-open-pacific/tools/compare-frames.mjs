@@ -29,7 +29,7 @@
  *
  * `diff <dirA> <dirB>` prints, per view, the mean absolute channel difference (0-255), the share of
  * pixels with any channel over 8, and the maximum channel difference. It exits non-zero when a view
- * exceeds `--max-mean` (default 0.02) or `--max-pct` (default 0.05%). Those defaults are the
+ * exceeds `--max-mean` (default 0.002) or `--max-pct` (default 0.005%). Those defaults are the
  * measured stock-vs-stock noise floor on this host (RTX 2080, Chromium 151, 1280x720), rounded up:
  *
  *   view        floor mean / pct>8        no-shadow mean / pct>8     default limit
@@ -39,6 +39,10 @@
  *
  * So stock passes and the US-carrier shadow nerf fails on the deck and chase views — which is the
  * point of the tool. Raise the limits only with a fresh floor measured on the same host.
+ *
+ * 2026-09-23: with the dt-driven animators canonicalised the same-build floor is 0.000 on every
+ * view, and the old 0.02 / 0.05% limits passed a build whose deck crew had vanished (mean 0.015).
+ * The defaults are therefore 0.002 / 0.005%: above an exact floor, far below any missing object.
  *
  * PNGs are decoded in Chromium (createImageBitmap + canvas getImageData) — no new dependency.
  *
@@ -382,7 +386,7 @@ if (command === "capture") {
   const dirA = argv[1];
   const dirB = argv[2];
   if (!dirA || !dirB) throw new Error("usage: compare-frames.mjs diff <dirA> <dirB> [--max-mean N] [--max-pct N]");
-  await diff(dirA, dirB, Number(flag("--max-mean", 0.02)), Number(flag("--max-pct", 0.05)));
+  await diff(dirA, dirB, Number(flag("--max-mean", 0.002)), Number(flag("--max-pct", 0.005)));
 } else {
   throw new Error("usage: compare-frames.mjs <capture|diff> ... (see the file header)");
 }

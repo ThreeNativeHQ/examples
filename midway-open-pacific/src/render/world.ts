@@ -67,6 +67,26 @@ const WORLD_UP = new T.Vector3(0, 1, 0);
  */
 const staleWhileHidden = new WeakSet<T.Object3D>();
 
+/**
+ * Whether a Bone sits anywhere under `node`, decided once per node and remembered: a skinned rig is
+ * built whole (the deck crew at load, a pooled airframe's seated crew when it is cloned), so its
+ * shape does not change after the first time a hidden walk meets it.
+ */
+const bonesBelow = new WeakMap<T.Object3D, boolean>();
+/** The base walk, to tell a class that overrides `updateMatrixWorld` (SkinnedMesh, Camera) apart. */
+const BASE_UPDATE_MATRIX_WORLD = T.Object3D.prototype.updateMatrixWorld;
+function holdsBones(node: T.Object3D): boolean {
+  let known = bonesBelow.get(node);
+  if (known === undefined) {
+    known = false;
+    node.traverse((object) => {
+      if ((object as T.Bone).isBone) known = true;
+    });
+    bonesBelow.set(node, known);
+  }
+  return known;
+}
+
 /** The tracer ellipsoid's long axis, rotated onto each round's velocity every frame. */
 const TRACER_LONG = new T.Vector3(0, 0, 1);
 
@@ -1126,6 +1146,19 @@ export class WorldView {
    * The camera is never in this walk: `updateCamera` updates it directly.
    */
   updateVisibleMatrixWorld(root: T.Object3D = this.scene, force = false): void {
+    // A hidden node that holds bones is still walked: a visible SkinnedMesh draws with its
+    // skeleton's bone matrices wherever the bones sit, and a rig's armature can be hidden while the
+    // skinned mesh draws.
+    //
+    // A class that extends the walk runs its own: `SkinnedMesh` refreshes `bindMatrixInverse` from
+    // its new world matrix, `Camera` its `matrixWorldInverse`. Re-implementing only the base walk
+    // skipped both, and every deck-crew sailor that had moved since load drew with a stale bind
+    // matrix and vanished. Their subtrees are small, so walking them whole costs nothing.
+    if (root.updateMatrixWorld !== BASE_UPDATE_MATRIX_WORLD) {
+      const stale = staleWhileHidden.delete(root);
+      root.updateMatrixWorld(force || stale);
+      return;
+    }
     if (root.matrixAutoUpdate) root.updateMatrix();
     if (root.matrixWorldNeedsUpdate || force) {
       if (root.matrixWorldAutoUpdate === true) {
@@ -1135,7 +1168,7 @@ export class WorldView {
       root.matrixWorldNeedsUpdate = false;
       force = true;
     }
-    if (root.visible === false) {
+    if (root.visible === false && !holdsBones(root)) {
       // The recompute above cleared the flag, so `force` is true exactly when this node's own world
       // matrix (and so its subtree) is dirty. Nothing under it can draw while hidden; defer it.
       if (force) staleWhileHidden.add(root);
