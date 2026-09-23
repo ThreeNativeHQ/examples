@@ -11,9 +11,18 @@
  * Sampling starts only after the briefing's `warmUpViews()` resolves, so the compile's texture
  * uploads are not in the window. `MIDWAY_HIDE` names a layer to switch off for attribution; the
  * hide is re-applied after every `World.update`, which otherwise rewrites `visible` each frame.
+ * `us-carrier-shadows` is the AC-3/AC-4 negative control: it switches `castShadow` off on every
+ * mesh under the three US carriers, which changes the picture (a nerf the look comparison must
+ * catch) and nothing else.
+ *
+ * Per-carrier, per-pass SUBMISSION counts are taken at the renderer's per-object submit, so a mesh
+ * cast into the shadow map is charged to the shadow pass and not to main. They are reported per
+ * engine window beside the `TN_FRAME_BUDGET` split, home carrier flagged. AC-4 ("US carrier
+ * shadow-pass draws <= 12") and AC-5 ("home-carrier main-pass draws <= 80") are judged from it.
  *
  *   MIDWAY_URL=http://localhost:5341 node tools/capture-deck-perf.mjs
  *   MIDWAY_HIDE=us-carriers MIDWAY_URL=http://localhost:5341 node tools/capture-deck-perf.mjs
+ *   MIDWAY_HIDE=us-carrier-shadows MIDWAY_URL=http://localhost:5341 node tools/capture-deck-perf.mjs
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -111,18 +120,27 @@ try {
     await page.evaluate((what) => {
       const w = window.midway.world;
       const hidden = new Set();
+      const noShadow = new Set();
       if (what === "sea") w.sea.visible = false;
       if (what === "ships") for (const id of w.meshes.keys()) if (!id.startsWith("air-")) hidden.add(id);
       // The three Yorktown-class US carriers are the ships drawn from `hornet.glb`.
       if (what === "us-carriers")
         for (const s of w.battle.ships) if (s.team === "us" && s.kind === "carrier") hidden.add(s.id);
+      // The AC-4 negative control: the same three carriers keep drawing, but stop casting. Every
+      // mesh under the root, so the hull, the park, the decor and the crew all go dark at once.
+      if (what === "us-carrier-shadows")
+        for (const s of w.battle.ships) if (s.team === "us" && s.kind === "carrier") noShadow.add(s.id);
       if (what === "crew") w.crew.group.visible = false;
       if (what === "sky") w.scene.background = null;
-      if (hidden.size) {
+      if (hidden.size || noShadow.size) {
         const apply = () => {
           for (const id of hidden) {
             const m = w.meshes.get(id);
             if (m) m.visible = false;
+          }
+          for (const id of noShadow) {
+            const m = w.meshes.get(id);
+            if (m) m.traverse((o) => { if (o.isMesh) o.castShadow = false; });
           }
         };
         const orig = w.update;
@@ -133,6 +151,92 @@ try {
         apply();
       }
     }, HIDDEN);
+
+  // Per-carrier, per-pass submissions, counted at the two places three actually submits. The shadow
+  // pass has its own render-object function and calls `renderer.renderObject` directly, so that is
+  // wrapped for shadow; the main and mirrored passes walk their render lists through
+  // `_renderObjects`, so that is wrapped for everything else (skipping the shadow list). The two are
+  // mutually exclusive, so nothing is counted twice. The pass comes from the scene name, the same
+  // signal the engine's own budget uses: ShadowNode renames the scene `Shadow Map [...]` and
+  // ReflectorNode appends `[ Reflector ]`. Window boundaries come from the `TN_FRAME_BUDGET` marker
+  // itself, so they line up with the engine's split.
+  const countersInstalled = await page.evaluate((marker) => {
+    const w = window.midway.world;
+    const raw = w.renderer;
+    const homeId = w.battle.home?.id ?? w.battle.home;
+    const carriers = w.battle.ships
+      .filter((s) => s.team === "us" && s.kind === "carrier")
+      .map((s) => ({ id: s.id, name: s.name, home: homeId === s.id }));
+    const roots = carriers.map((c) => ({ c, root: w.meshes.get(c.id) })).filter((x) => x.root);
+    if (!roots.length || typeof raw.renderObject !== "function") return null;
+    const st = { carriers, frames: 0, sums: new Map(), windows: [] };
+    window.__deckCount = st;
+    const isShadow = (scene) => !!scene && typeof scene.name === "string" && /^Shadow Map/.test(scene.name);
+    const passOf = (scene) => {
+      const name = scene && typeof scene.name === "string" ? scene.name : "";
+      if (/^Shadow Map/.test(name)) return "shadow";
+      if (/reflect/i.test(name)) return "reflection";
+      return "main";
+    };
+    const carrierOf = (object) => {
+      for (let o = object; o; o = o.parent)
+        for (const x of roots) if (o === x.root) return x.c.id;
+      return null;
+    };
+    const count = (object, scene) => {
+      const id = carrierOf(object);
+      if (!id) return;
+      const key = `${id}|${passOf(scene)}`;
+      st.sums.set(key, (st.sums.get(key) ?? 0) + 1);
+    };
+    const origRenderObject = raw.renderObject;
+    raw.renderObject = function (...args) {
+      if (isShadow(args[1])) count(args[0], args[1]);
+      return origRenderObject.apply(this, args);
+    };
+    const proto = Object.getPrototypeOf(raw);
+    const origRenderObjects = proto._renderObjects;
+    const useRenderObjects = typeof origRenderObjects === "function";
+    if (useRenderObjects)
+      proto._renderObjects = function (list, camera, scene, ...rest) {
+        if (!isShadow(scene)) for (let i = 0; i < list.length; i += 1) count(list[i].object, scene);
+        return origRenderObjects.call(this, list, camera, scene, ...rest);
+      };
+    else if (typeof raw.setRenderObjectFunction === "function") {
+      const origFn = typeof raw.getRenderObjectFunction === "function" ? raw.getRenderObjectFunction() : null;
+      raw.setRenderObjectFunction((...args) => {
+        if (!isShadow(args[1])) count(args[0], args[1]);
+        return origFn ? origFn.apply(raw, args) : origRenderObject.apply(raw, args);
+      });
+    }
+    const origRender = raw.render;
+    let depth = 0;
+    raw.render = function (...args) {
+      depth += 1;
+      try {
+        return origRender.apply(this, args);
+      } finally {
+        depth -= 1;
+        if (depth === 0) st.frames += 1;
+      }
+    };
+    const origLog = console.log;
+    console.log = function (...args) {
+      if (typeof args[0] === "string" && args[0].startsWith(marker)) {
+        st.windows.push({ frames: st.frames, sums: [...st.sums] });
+        st.frames = 0;
+        st.sums = new Map();
+      }
+      return origLog.apply(console, args);
+    };
+    return { carriers: carriers.map((c) => ({ id: c.id, name: c.name, home: c.home })), useRenderObjects };
+  }, MARKER);
+  // The marker hook starts now, so drop the windows recorded before it: both arrays then begin at
+  // the same window and index `i` means the same thing in each.
+  if (countersInstalled) {
+    budgetWindows.length = 0;
+    budgetCursor = 0;
+  }
 
   // Warm-up, then four complete windows. The first windows after the cursor can straddle setup or
   // the tail of the compile, so the last two are taken and both are reported.
@@ -211,6 +315,50 @@ try {
   }
   if (!windows.some((w) => Object.keys(w.passes).length))
     throw new Error("the frame budget reported no per-pass split; nothing to attribute");
+
+  // Per-carrier submissions for the same two measured windows, and the subtree census they are
+  // judged against. `visible` follows the ancestors, so a mesh under a hidden LOD level is not
+  // counted as drawn.
+  const deckCount = countersInstalled
+    ? await page.evaluate((upto) => {
+        const st = window.__deckCount;
+        if (!st) return null;
+        const world = window.midway.world;
+        const census = st.carriers.map((c) => {
+          const root = world.meshes.get(c.id);
+          const materials = new Set();
+          let visibleMeshes = 0;
+          let shadowMeshes = 0;
+          const walk = (o) => {
+            if (!o.visible) return;
+            if (o.isMesh) {
+              visibleMeshes += 1;
+              if (o.castShadow) shadowMeshes += 1;
+              for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) materials.add(m.uuid);
+            }
+            for (const child of o.children) walk(child);
+          };
+          if (root) walk(root);
+          return { ...c, visibleMeshes, shadowMeshes, materials: materials.size };
+        });
+        return { carriers: census, windows: st.windows.slice(Math.max(0, upto - 2), upto).map((x) => ({ frames: x.frames, sums: x.sums })) };
+      }, needed)
+    : null;
+  if (deckCount) {
+    console.log("per-carrier submissions (mean per frame; home flagged)");
+    deckCount.windows.forEach((win, i) => {
+      const frames = Math.max(1, win.frames);
+      const sums = new Map(win.sums);
+      console.log(`  submissions window ${i + 1}: ${win.frames} frames counted`);
+      for (const c of deckCount.carriers) {
+        const at = (pass) => ((sums.get(`${c.id}|${pass}`) ?? 0) / frames).toFixed(1);
+        console.log(`    ${c.name}${c.home ? " (home)" : ""}: shadow ${at("shadow")}  reflection ${at("reflection")}  main ${at("main")}`);
+      }
+    });
+    console.log("per-carrier census (visible meshes / castShadow meshes / distinct materials)");
+    for (const c of deckCount.carriers)
+      console.log(`  ${c.name}${c.home ? " (home)" : ""}: ${c.visibleMeshes} / ${c.shadowMeshes} / ${c.materials}`);
+  }
 
   // The stock baseline, written where AC-2 records it. A hidden run is attribution, never a baseline.
   const baselineOut = process.env.MIDWAY_DECK_BASELINE_OUT || (!HIDDEN ? join(import.meta.dirname, "..", "docs/perf/deck-baseline-20260922.json") : null);
