@@ -1,6 +1,7 @@
 # PRD-midway-native-smooth-20260923 — Native Midway that plays smoothly
 
-**Status:** IN PROGRESS
+**Status:** PARTIAL
+**Blocker:** AC-2 (22 pipelines still compile in flight) and AC-3 (HUD 14-16/s, target 30) need engine PRD-442; AC-4's update spikes (110-160 ms, up to 5 catch-up ticks) are not yet attributed; loading grew ~8.5 s -> ~20 s from the warm-up; AC-6 owner play pending.
 **Complexity:** 4 (MEDIUM)
 **Owner:** Joao Paulo Furtado (play sign-off); agent (implementation)
 **Depends on:** PRD-midway-render-cpu-20260922 (merged, `0ecd12b`)
@@ -59,23 +60,23 @@ host's load average was 8–22 because other agents were running.
 
 ## Acceptance Criteria
 
-- [ ] AC-1 [local; actor: agent]: `tools/bench-native.sh` runs a native artifact hands-off through
+- [x] AC-1 [local; actor: agent]: `tools/bench-native.sh` runs a native artifact hands-off through
   AIRBORNE START and prints fps, presented p95/p99/max, hitches, update and render p99, UI
   uploads/s, and pipelines created after the start. Negative control: stock reports pipelines > 0
-  and UI uploads ≈ 9/s. — Evidence: pending.
+  and UI uploads ≈ 9/s. — Evidence: `tools/bench-native.sh` (#9, #11): stock 44 pipelines after start, UI uploads 9/s, over 3 interleaved 150 s pairs.
 - [ ] AC-2 [local; actor: agent]: No render pipeline is created after the airborne start on the
-  candidate (stock: 107). — Evidence: pending.
+  candidate (stock: 107). — Evidence: NOT MET. 44 -> 22-23 over 3 pairs (#9); the rest needs PRD-442's all-pass warm-up.
 - [ ] AC-3 [local; actor: agent]: In flight the HUD repaints at ≥ 30/s (stock ≈ 9). A synthetic
   hover over TAKE THE DECK applies `tn-hover`, and a press on it logs `hit:true` and starts the
-  game. — Evidence: pending.
+  game. — Evidence: PARTIAL. Uploads 9 -> 14-16/s; hover and `hit:true` presses work on the owner's desktop. 30/s needs PRD-442.
 - [ ] AC-4 [local; actor: agent]: Over a 120 s airborne bench, 3 interleaved pairs on a quiet host,
   the candidate's presented p99 is ≥ 30% lower than stock, and no frame after the first 10 s of
   flight exceeds 150 ms. The same battle is flown: the same seed, with `check-tactics-equivalence`
-  passing. — Evidence: pending.
-- [ ] AC-5 [local; actor: agent]: The look is unchanged: `compare-frames` PASSes on all views
+  passing. — Evidence: PARTIAL. Worst frame 415-562 -> 108-121 ms over 3 pairs (#9); the matrix pass (#10) cuts 29% of flight JS; the equivalence check passes. p99 is still dominated by update spikes on catch-up ticks, and `TN_MIDWAY_SLOW_TICK` (#11) is in place to attribute them.
+- [x] AC-5 [local; actor: agent]: The look is unchanged: `compare-frames` PASSes on all views
   against stock. The regression gates pass as they do on stock: typecheck, vite build,
   check-fleet, check-catalog, capture-deck, capture-fleet and the WebGPU launch playtest. —
-  Evidence: pending.
+  Evidence: `compare-frames` mean 0.000 on every view vs main (#10, under the strict 0.002 / 0.005% limits); the gates pass (#9, #10).
 - [ ] AC-6 [owner; actor: Joao]: He plays the final native build (FPS panel on from launch) and
   confirms it plays smoothly and the HUD keeps up. — Evidence: pending.
 
