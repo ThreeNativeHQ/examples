@@ -152,3 +152,24 @@ what the gaps *were* — `imageDecodeDrain 2965.129 ms, animationFrames 473.653 
 merely brackets the iteration. This is PRD-394's launch story on the native target, from one command
 instead of two greps. Commit `bc4cf759d`; this checkout is pinned to
 `threenative-playtest-0.3.2-midway-caf9f195d53f.tgz`, verified against that log.
+
+## 2026-09-22 — Merging static shadow casters into one proxy is a mechanism
+
+Every US carrier drew its static shadow as one submission per part: on the deck the home carrier's
+hull, parked load, decor and scars put **351** shadow submissions into the pass, and a pure
+Three.js merge of them into a single shadow-only proxy takes that to **5** with the same picture.
+The merge, the layer the proxy alone lives on, and the shadow camera's mask are all plain
+Three.js — no browser global, no platform seam — so a game can write it itself, and this one did.
+It stays in `src/render/world.ts` (`addShadowProxy`, `SHADOW_PROXY_LAYER`) until a second game
+needs it, at which point it is a candidate for `packages/core` under the charter's rule 1.
+
+The one non-obvious seam the game had to know about is the WebGPU `ShadowNode`: a shadow camera
+with no layer above bit 0 copies the main camera's mask every frame, so a proxy on its own layer
+never submits until the mask is given a bit above 0 and kept in step (`node_modules/three/src/
+nodes/lighting/ShadowNode.js`, the `0xFFFFFFFE` test). That is engine knowledge a game should not
+have to carry twice; it is the strongest argument for the lift.
+
+Evidence: `tools/capture-deck-perf.mjs` reports the split (own = parts + proxy, movers kept) and
+proves the proxy submits in the shadow pass only; `tools/compare-frames.mjs` diffs the three
+frozen views against stock. Baseline `docs/perf/deck-baseline-20260922.json`; this lane's numbers
+and the PRD are `docs/PRDs/PRD-midway-render-cpu-20260922.md` (AC-4, Phase 2).

@@ -17,8 +17,11 @@
  *
  * Per-carrier, per-pass SUBMISSION counts are taken at the renderer's per-object submit, so a mesh
  * cast into the shadow map is charged to the shadow pass and not to main. They are reported per
- * engine window beside the `TN_FRAME_BUDGET` split, home carrier flagged. AC-4 ("US carrier
- * shadow-pass draws <= 12") and AC-5 ("home-carrier main-pass draws <= 80") are judged from it.
+ * engine window beside the `TN_FRAME_BUDGET` split, home carrier flagged, and each shadow submission
+ * is tagged `part` (the carrier's own static geometry), `proxy` (the single shadow-only merge that
+ * replaces it) or `moving` (the deck crew and the player aircraft that ride it and must keep
+ * casting). AC-4 ("US carrier shadow-pass draws <= 12") counts `part + proxy`; the movers are
+ * unchanged by design. AC-5 ("home-carrier main-pass draws <= 80") is judged from the same report.
  *
  *   MIDWAY_URL=http://localhost:5341 node tools/capture-deck-perf.mjs
  *   MIDWAY_HIDE=us-carriers MIDWAY_URL=http://localhost:5341 node tools/capture-deck-perf.mjs
@@ -98,17 +101,21 @@ try {
   if (/swiftshader|lavapipe|llvmpipe/i.test(JSON.stringify(adapter)))
     throw new Error(`software adapter, the figure would be meaningless: ${JSON.stringify(adapter)}`);
 
-  // The briefing's compile is unawaited by the game; sample only once it has settled.
+  // The briefing's compile is unawaited by the game; sample only once it has settled. A build that
+  // predates the `warmUpDone` promise has nothing to await, and its compile is long finished by the
+  // fixed warm-up wait below, so the sampling window is still honest against it.
   const warmUp = await page.evaluate(async () => {
     const w = window.midway.world;
+    if (w.warmUpDone === undefined) return { resolvedAt: null, waitedMs: 0 };
     const started = performance.now();
-    while (w.warmUpDone === null || w.warmUpDone === undefined)
-      await new Promise((r) => setTimeout(r, 20));
+    while (w.warmUpDone === null) await new Promise((r) => setTimeout(r, 20));
     const resolvedAt = await w.warmUpDone;
     return { resolvedAt, waitedMs: performance.now() - started };
   });
   console.log(
-    `warm-up resolved at ${warmUp.resolvedAt.toFixed(1)} ms (page clock); the wait began ${warmUp.waitedMs.toFixed(1)} ms before it`,
+    warmUp.resolvedAt === null
+      ? "warm-up marker unavailable in this build (pre-dates warmUpDone); the fixed wait stands in for it"
+      : `warm-up resolved at ${warmUp.resolvedAt.toFixed(1)} ms (page clock); the wait began ${warmUp.waitedMs.toFixed(1)} ms before it`,
   );
 
   // The deck start: the player aboard the home carrier, its full park and crew on screen.
@@ -186,7 +193,20 @@ try {
     const count = (object, scene) => {
       const id = carrierOf(object);
       if (!id) return;
-      const key = `${id}|${passOf(scene)}`;
+      // Tag each submission: the carrier's own static parts, its shadow-only proxy, or a mover that
+      // rides it (the skinned deck party, the player's aircraft while wheels-down). The proxy is
+      // found by its root, not its layer, because the hull body also carries the reflection bit.
+      // AC-4 counts own = parts + proxy; the movers are unchanged by design.
+      let tag = "part";
+      for (let o = object; o && tag === "part"; o = o.parent)
+        for (const x of roots) if (x.root?.userData?.shadowProxy && o === x.root.userData.shadowProxy) tag = "proxy";
+      if (tag === "part") {
+        if (object.isSkinnedMesh) tag = "moving";
+        else
+          for (let o = object; o; o = o.parent)
+            if (o === w.crew?.group || o === w.playerMesh) { tag = "moving"; break; }
+      }
+      const key = `${id}|${passOf(scene)}|${tag}`;
       st.sums.set(key, (st.sums.get(key) ?? 0) + 1);
     };
     const origRenderObject = raw.renderObject;
@@ -296,7 +316,7 @@ try {
     url: URL,
     viewport: { width: WIDTH, height: HEIGHT },
     hidden: HIDDEN,
-    warmUpResolvedAtMs: +warmUp.resolvedAt.toFixed(1),
+    warmUpResolvedAtMs: warmUp.resolvedAt === null ? null : +warmUp.resolvedAt.toFixed(1),
     windows,
   };
 
@@ -351,10 +371,37 @@ try {
       const sums = new Map(win.sums);
       console.log(`  submissions window ${i + 1}: ${win.frames} frames counted`);
       for (const c of deckCount.carriers) {
-        const at = (pass) => ((sums.get(`${c.id}|${pass}`) ?? 0) / frames).toFixed(1);
-        console.log(`    ${c.name}${c.home ? " (home)" : ""}: shadow ${at("shadow")}  reflection ${at("reflection")}  main ${at("main")}`);
+        const at = (pass, tag) => (sums.get(`${c.id}|${pass}|${tag}`) ?? 0) / frames;
+        const shadow = at("shadow", "part") + at("shadow", "proxy") + at("shadow", "moving");
+        const own = at("shadow", "part") + at("shadow", "proxy");
+        const pass = (p) => at(p, "part") + at(p, "proxy") + at(p, "moving");
+        console.log(
+          `    ${c.name}${c.home ? " (home)" : ""}: shadow ${shadow.toFixed(1)} ` +
+            `(own ${own.toFixed(1)} = parts ${at("shadow", "part").toFixed(1)} + proxy ${at("shadow", "proxy").toFixed(1)}; movers ${at("shadow", "moving").toFixed(1)})  ` +
+            `reflection ${pass("reflection").toFixed(1)}  main ${pass("main").toFixed(1)}`,
+        );
       }
     });
+    // The AC-4 line: the US carriers' own static shadow submissions, and proof the proxy submits
+    // only in the shadow pass.
+    const ownSum = deckCount.windows.map((win) => {
+      const frames = Math.max(1, win.frames);
+      const sums = new Map(win.sums);
+      return deckCount.carriers.reduce(
+        (a, c) => a + ((sums.get(`${c.id}|shadow|part`) ?? 0) + (sums.get(`${c.id}|shadow|proxy`) ?? 0)) / frames,
+        0,
+      );
+    });
+    const last = deckCount.windows.at(-1);
+    const lastFrames = Math.max(1, last.frames);
+    const lastSums = new Map(last.sums);
+    const proxyPass = (p) =>
+      deckCount.carriers.reduce((a, c) => a + ((lastSums.get(`${c.id}|${p}|proxy`) ?? 0) / lastFrames), 0);
+    console.log(`AC-4 US-carrier own shadow submissions (parts + proxy): ${ownSum.map((v) => v.toFixed(1)).join(" / ")}`);
+    console.log(
+      `proxy submissions by pass (last window): shadow ${proxyPass("shadow").toFixed(1)}, ` +
+        `main ${proxyPass("main").toFixed(1)}, reflection ${proxyPass("reflection").toFixed(1)}`,
+    );
     console.log("per-carrier census (visible meshes / castShadow meshes / distinct materials)");
     for (const c of deckCount.carriers)
       console.log(`  ${c.name}${c.home ? " (home)" : ""}: ${c.visibleMeshes} / ${c.shadowMeshes} / ${c.materials}`);

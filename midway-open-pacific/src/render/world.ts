@@ -1,5 +1,6 @@
 /** The battle's Three.js world, built into the scene the framework owns. */
 import * as T from "three";
+import { mergeParts } from "@threenative/core";
 import { shipClass } from "../sim/catalog.js";
 import { REAR_RELOAD_SECONDS } from "../sim/armament.js";
 import { axesOf } from "../sim/flight.js";
@@ -43,6 +44,15 @@ function importedAircraftFor(a: { team: string; kind: string }): () => T.Group {
   if (a.kind === "recon") return a.team === "jp" ? () => createAirframe("b5n2", "ai") : douglas;
   return a.team === "jp" ? createZero : douglas;
 }
+
+/**
+ * The layer a carrier's shadow-only proxy lives on.
+ *
+ * No camera but the sun's shadow camera enables it, so the proxy never enters the main or mirrored
+ * pass. `REFLECTED_LAYER` is bit 1; this is the next free bit. The shadow camera's own mask is
+ * widened to include it in the constructor and kept in step in `update`.
+ */
+export const SHADOW_PROXY_LAYER = 2;
 
 /** Reused so the per-frame camera orbit allocates nothing. */
 const WORLD_UP = new T.Vector3(0, 1, 0);
@@ -243,6 +253,64 @@ function markReflected(root: T.Object3D): void {
  */
 const MOVING_NODE = /threenativepivot|cockpit controls|propeller|aileron|rudder|flap|elevator|gear|wingport|wingstarboard|canopy|torpedo|hook|wheel|crew|gunner/i;
 
+/**
+ * Every mesh of `root` a static caster can include.
+ *
+ * These are the surfaces a carrier's shadow proxy may bake: a caster that neither is, nor sits
+ * under, a `MOVING_NODE` and is not skinned. A mesh that is or rides a mover keeps its own
+ * `castShadow` and goes on casting live; only the meshes this returns are merged and switched off.
+ */
+function staticMeshes(root: T.Object3D): T.Mesh[] {
+  const out: T.Mesh[] = [];
+  root.traverse((node) => {
+    const mesh = node as T.Mesh;
+    if (!mesh.isMesh) return;
+    // A skinned mesh's vertices are its bind pose, not what the mixer draws, exactly as in the
+    // airframe stand-in: it is never a static caster.
+    if ((mesh as T.SkinnedMesh).isSkinnedMesh === true) return;
+    // A mesh the model never draws a shadow from — open canopy glass, say — must not start casting
+    // one just because it was merged in.
+    if (!mesh.castShadow) return;
+    for (let o: T.Object3D | null = node; o; o = o.parent) if (MOVING_NODE.test(o.name)) return;
+    if (!(mesh.geometry as T.BufferGeometry | undefined)?.getAttribute("position")) return;
+    out.push(mesh);
+  });
+  return out;
+}
+
+/**
+ * The static-only merge for a carrier's shadow proxy, cached by key and shared by every instance.
+ *
+ * `airframeLod` bakes every mesh at rest, which is right for a far stand-in but freezes a moving
+ * part into the proxy's shadow. A depth caster carries position alone, so no other channel is
+ * preserved; the merge helper clones each part, so the originals are untouched. Null when the root
+ * has nothing static to merge.
+ */
+const shadowMergeCache = new Map<string, T.BufferGeometry | null>();
+
+function shadowMerge(root: T.Object3D, key: string): T.BufferGeometry | null {
+  const cached = shadowMergeCache.get(key);
+  if (cached !== undefined) return cached;
+  root.updateMatrixWorld(true);
+  const toLocal = root.matrixWorld.clone().invert();
+  const parts = staticMeshes(root).map((mesh) => ({
+    geometry: mesh.geometry as T.BufferGeometry,
+    matrix: new T.Matrix4().multiplyMatrices(toLocal, mesh.matrixWorld),
+  }));
+  let merged: T.BufferGeometry | null = null;
+  if (parts.length) {
+    try {
+      merged = mergeParts(parts, { label: `carrier shadow proxy (${key})` });
+      merged.computeBoundingSphere();
+      merged.computeBoundingBox();
+    } catch {
+      merged = null;
+    }
+  }
+  shadowMergeCache.set(key, merged);
+  return merged;
+}
+
 /** Scratch for one scout's seat on its ship, refilled per scout. */
 const SCOUT_SEAT = new T.Vector3();
 /** Where a flying scout is drawn. `SCOUT_ALTITUDE` in the simulation is its observation height. */
@@ -377,6 +445,12 @@ export class WorldView {
   /** Composed-local-matrix freeze for static nodes, and the verification switch that reverses it. */
   freezeStatics = true;
   private frozen = new Set<T.Object3D>();
+  /**
+   * The one material every carrier shadow proxy draws with. The shadow pass overrides it with its
+   * own depth material and reads only `side`, so `DoubleSide` reproduces what the hornet hull's own
+   * casters cast (all 75 of its materials are double-sided) and the colour is never drawn.
+   */
+  private readonly shadowProxyMaterial = new T.MeshBasicMaterial({ side: T.DoubleSide, name: "carrier shadow proxy" });
 
   constructor(host: IWorldHost, battle: any) {
     this.host = host;
@@ -404,6 +478,10 @@ export class WorldView {
     Object.assign(this.sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 1, far: 850 });
     this.sun.shadow.bias = -0.000035;
     this.sun.shadow.normalBias = 0.018;
+    // The shadow camera keeps the main camera's layers plus the proxy bit. Without a bit above 0
+    // the WebGPU `ShadowNode` copies the main camera's mask every frame and the proxy would never
+    // submit; with one it uses its own mask verbatim, so it is kept in step in `update`.
+    this.sun.shadow.camera.layers.mask = this.camera.layers.mask | (1 << SHADOW_PROXY_LAYER);
     this.sunDir = SUN_DIRECTION.clone();
     this.wakeTex = wakeTexture();
     this.makeSky();
@@ -497,6 +575,9 @@ export class WorldView {
           detailed.add(mitchell);
           mesh.userData.decor.push(mitchell);
         }
+        // The three Yorktown-class carriers draw one shared hull, so their static shadow merges
+        // into a single shadow-only proxy per ship instead of a few hundred per-part submissions.
+        if (s.team === "us") this.addShadowProxy(mesh, detailed, model?.lod ?? model?.classId ?? model?.id ?? s.name);
       } else {
         throw new Error(`no model for ship: ${s.name} (${s.team} ${s.kind})`);
       }
@@ -519,8 +600,11 @@ export class WorldView {
         }
       }
       markReflected(mesh);
-      // Parked aircraft are hull children, but the water reflection excludes the deck load.
-      for (const planes of [mesh.userData.parked ?? [], mesh.userData.decor ?? []] as T.Object3D[][])
+      // Parked aircraft are hull children, but the water reflection excludes the deck load — and the
+      // shadow proxy, whose `layers.set` the reflection enable above would otherwise widen.
+      const excluded = [mesh.userData.parked ?? [], mesh.userData.decor ?? []] as T.Object3D[][];
+      if (mesh.userData.shadowProxy) excluded.push([mesh.userData.shadowProxy as T.Object3D]);
+      for (const planes of excluded)
         for (const plane of planes) plane.traverse((o) => o.layers.disable(REFLECTED_LAYER));
       // Range-gated, and this hull has no position or visibility yet: the engine's fixed-step loop
       // can submit its first world frame with zero updates elapsed (the loop is released the frame
@@ -844,6 +928,10 @@ export class WorldView {
         const merged = m.visible && s !== b.home && s.sink <= 0 && px < hullPixels;
         (m.userData.hullBody as T.Object3D).visible = !merged;
         low.visible = merged;
+        // The proxy stands in for the static hull only while the full-detail body is shown; the
+        // merged `low` already casts its own shadow, so the two never both submit.
+        const hullProxy = m.userData.shadowProxyHull as T.Object3D | undefined;
+        if (hullProxy) hullProxy.visible = !merged;
       }
       // The scouts this hull carries, each drawn where its own state puts it. Aboard and alongside
       // are on the ship and ride her motion; the airborne states are over the sector the simulation
@@ -860,11 +948,19 @@ export class WorldView {
         // The park is the ready line: an airframe with none ready is below in the hangar, so its
         // parked instance hides and the other types stay spotted.
         a.visible = camD < 1900 && (s.air?.ready?.[type] ?? 0) > 0;
+        // The proxy piece follows the parked airframe's own visibility: an exhausted type hides its
+        // original, so its proxy piece must hide too or it would cast a shadow of nothing.
+        const parkedProxy = a.userData.shadowProxyMesh as T.Object3D | undefined;
+        if (parkedProxy) parkedProxy.visible = a.visible;
         // Turning over on the spot, waiting for the flag. One airframe, one animator.
         spinParked(a, dt);
       }
       // Decorative deck dressing follows the same visual LOD with no inventory tie.
-      for (const d of (m.userData.decor ?? []) as T.Group[]) d.visible = camD < 1900;
+      for (const d of (m.userData.decor ?? []) as T.Group[]) {
+        d.visible = camD < 1900;
+        const decorProxy = d.userData.shadowProxyMesh as T.Object3D | undefined;
+        if (decorProxy) decorProxy.visible = d.visible;
+      }
       if (m.userData.elevator) (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
 
     }
@@ -1003,6 +1099,8 @@ export class WorldView {
     this.ripples.update(b, this.camera.position, dt);
     this.particles.update(b, this.camera.position);
     this.ocean.update(this.camera.position, time, b.ships);
+    // Keep the shadow camera's mask carrying the proxy bit even if the main camera's mask moves.
+    this.sun.shadow.camera.layers.mask = this.camera.layers.mask | (1 << SHADOW_PROXY_LAYER);
     this.sun.position.copy(this.sunDir).multiplyScalar(500).add(this.playerMesh.getWorldPosition(this.tmp));
     this.sun.target.position.copy(this.playerMesh.getWorldPosition(this.tmp));
   }
@@ -1306,6 +1404,59 @@ export class WorldView {
     void a;
     if (had) return range < 1500;
     return range < 1100 && granted < 10;
+  }
+
+  /**
+   * One shadow-only proxy per US carrier, standing in for the per-part casters of its static load.
+   *
+   * Every static mesh under a carrier — the full-detail hull, the parked deck load and the
+   * decorative B-25 — stops casting shadows itself, and this proxy casts in their place. A mesh
+   * that is, or sits under, a `MOVING_NODE` is never merged and never switched off: a parked
+   * aircraft's windmilling propeller, a control surface and a gear leg go on casting live, which is
+   * why the proxy is a merge of static surfaces rather than the whole-aircraft stand-in. The hull's
+   * static merge is cached by `hullKey`, and each parked type's by its model name, so the three
+   * Yorktown-class carriers share one geometry per model instead of one per ship. `receiveShadow`
+   * is left exactly as it was.
+   */
+  private addShadowProxy(mesh: T.Group, detailed: T.Group, hullKey: string): void {
+    const parked = (mesh.userData.parked ?? []) as T.Group[];
+    const decor = (mesh.userData.decor ?? []) as T.Group[];
+    const proxy = new T.Group();
+    proxy.name = "carrier shadow proxy";
+    const piece = (geometry: T.BufferGeometry, source: T.Object3D): void => {
+      const part = new T.Mesh(geometry, this.shadowProxyMaterial);
+      part.castShadow = true;
+      part.receiveShadow = false;
+      part.position.copy(source.position);
+      part.quaternion.copy(source.quaternion);
+      part.scale.copy(source.scale);
+      source.userData.shadowProxyMesh = part;
+      proxy.add(part);
+    };
+    // The hull merge is already in `body`'s frame, so its proxy sits at the origin of that frame.
+    // Built from `body`, never from `detailed`, so the merged stand-in — a sibling of `body` — is
+    // not baked into its own shadow.
+    const body = mesh.userData.hullBody as T.Object3D | undefined;
+    if (body) {
+      const hull = shadowMerge(body, `${hullKey}:shadow`);
+      if (hull) {
+        const hullProxy = new T.Mesh(hull, this.shadowProxyMaterial);
+        hullProxy.castShadow = true;
+        hullProxy.receiveShadow = false;
+        mesh.userData.shadowProxyHull = hullProxy;
+        proxy.add(hullProxy);
+        for (const part of staticMeshes(body)) part.castShadow = false;
+      }
+    }
+    for (const root of [...parked, ...decor]) {
+      const geometry = shadowMerge(root, root.name || `${root.type}#${root.id}`);
+      if (!geometry) continue;
+      piece(geometry, root);
+      for (const part of staticMeshes(root)) part.castShadow = false;
+    }
+    proxy.traverse((o) => o.layers.set(SHADOW_PROXY_LAYER));
+    detailed.add(proxy);
+    mesh.userData.shadowProxy = proxy;
   }
 
   /**
