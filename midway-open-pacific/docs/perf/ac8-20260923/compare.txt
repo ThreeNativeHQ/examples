@@ -1,0 +1,17 @@
+updateRenderCpu: 28.420 -> 15.220 ms p95 median (-46.4%) ok vs 0.8x
+sceneUpdateCpu: 3.600 -> 2.200 ms p95 median (-38.9%) ok vs 1.1x
+worldUpdateCpu: 2.100 -> 1.200 ms p95 median (-42.9%) ok vs 1.1x
+rippleUpdateCpu: 0.200 -> 0.200 ms p95 median (0.0%) ok vs 1.1x
+renderCpu: 9.915 -> 5.670 ms p95 median (-42.8%) ok vs 1.1x
+gpu: 13.723 -> 13.487 ms p95 median (-1.7%) ok vs 1.1x
+AC-6 FAIL:
+  stock-1.json: source changed during the sample
+  stock-2.json: sample starts at battle time 38.217 not 38.25 (limit 1/60 s)
+  stock-2.json: sample covers 52.683s of battle not 36.9s (limit 0.1 s)
+  stock-3.json: sample starts at battle time 38.117 not 38.25 (limit 1/60 s)
+  stock-3.json: sample covers 48.433s of battle not 36.9s (limit 0.1 s)
+  cand-1.json: sample starts at battle time 38.217 not 38.25 (limit 1/60 s)
+  cand-1.json: sample covers 52.567s of battle not 36.9s (limit 0.1 s)
+  cand-2.json: sample covers 48.817s of battle not 36.9s (limit 0.1 s)
+  cand-3.json: sample starts at battle time 38.217 not 38.25 (limit 1/60 s)
+  cand-3.json: sample covers 48.2s of battle not 36.9s (limit 0.1 s)

@@ -1,6 +1,6 @@
 # PRD-midway-render-cpu-20260922 — Same picture, fewer submissions
 
-**Status:** NOT STARTED
+**Status:** IN PROGRESS — agent work complete: AC-1/2/3/6/7/9 met; AC-4 look + static-draw target met, CPU 20–30% not 50%; AC-5 rejected; AC-8 not met; AC-10 is the owner's
 **Complexity:** 4 (MEDIUM)
 **Owner:** Joao Paulo Furtado (visual sign-off); agent (implementation)
 **Depends on:** None. Coordinate with the `prd398` lane, which currently holds uncommitted
@@ -196,45 +196,52 @@ Evidence rules:
 - Any look AC uses the Phase 1 frozen-frame comparison.
 - Record the tested revision, including the dirty diff digest the tool already prints.
 
-- [ ] AC-1 [local; actor: agent]: Attribution is real. The `MIDWAY_HIDE=ships` and new
+- [x] AC-1 [local; actor: agent]: Attribution is real. The `MIDWAY_HIDE=ships` and new
   `us-carriers` modes still hide after `World.update` has run. Negative control: a hide run's
   per-pass draw count must be lower than stock's, where today it reads identical (188 = 188). The
   sample starts only after `warmUpViews()` resolves, and the report prints when it did. —
-  Evidence: pending.
-- [ ] AC-2 [local; actor: agent]: The deck workload exists. `tools/capture-deck-perf.mjs`, promoted
+  Evidence: `be2dbcc` — airborne stock 194 draws → `ships` 80; deck `us-carriers` shadow 357 → 0; warm-up resolved at ~31 s and printed.
+- [x] AC-2 [local; actor: agent]: The deck workload exists. `tools/capture-deck-perf.mjs`, promoted
   from `docs/perf/deck-probe-20260922.mjs`, reports per-pass draws and triangles from
   `TN_FRAME_BUDGET`, GPU p50/p95 and render CPU p50/p95 on the deck start at 1920×1080. It records
-  a stock baseline to `docs/perf/`. — Evidence: pending.
-- [ ] AC-3 [local; actor: agent]: The look comparison exists and can fail. It freezes the sim at a
+  a stock baseline to `docs/perf/`. — Evidence: `be2dbcc`, `7164a38` — `docs/perf/deck-baseline-20260922.json`; stock home carrier 351 shadow / 117 main / 46 reflection submissions per frame.
+- [x] AC-3 [local; actor: agent]: The look comparison exists and can fail. It freezes the sim at a
   fixed tick, sets a fixed camera for three views (deck, 400 m chase past the home carrier, and a
   carrier at 2 km in the reflection), captures stock and candidate, and prints a per-pixel diff.
   Controls:
   - stock against stock gives the noise floor;
   - US carriers with `castShadow = false` must exceed that floor, so the tool catches a shadow nerf.
 
-  — Evidence: pending.
-- [ ] AC-4 [local; actor: agent]: The shadow proxy passes both tests below. — Evidence: pending.
-  - **Cost:** on the deck workload, shadow-pass draws for the US carrier subtrees are **≤ 12** (from
+  — Evidence: `7164a38` — floor deck 0.006 / chase 0.001 / reflection 0.000 mean; US `castShadow=false` gives deck 1.155, chase 0.026 → FAIL at the 0.02 / 0.05% defaults.
+- [ ] AC-4 [local; actor: agent]: The shadow proxy passes both tests below. — Evidence: `a467d9e`, `65af64f` — static own shadow 272 → **5** (proxy only; 0 main, 0 reflection); movers (crew, player aircraft, propellers, ~92) cast per-part as the Solution requires; drift probe 0 of 801 baked sources moved. Look: deck 0.015 / chase 0.001 / reflection 0.000 vs limit 0.02 (floor 0.010–0.011). Deck render CPU p50 11.5–14.2 → 9.3–9.8 ms over 3 interleaved pairs: **20–30%, not 50%** — all US-carrier shadows off reaches the same ~8.2 ms floor on this host, so the proxy already removes the whole shadow cost. No elevator frame: `userData.elevator` is never assigned and hornet.glb has no lift node.
+  - **Cost:** on the deck workload, shadow-pass draws for the US carriers' static load (movers excluded) are **≤ 12** (from
     about 356). Deck render CPU p50 is **≥ 50% lower** than the AC-2 stock baseline.
-  - **Look:** all three AC-3 views stay within the noise floor, including one frame mid-elevator
+  - **Look:** all three AC-3 views stay within the noise floor, including one frame mid-elevator (void: no elevator exists)
     cycle.
-- [ ] AC-5 [local; actor: agent]: The main-pass merge passes both tests below. — Evidence: pending.
+- [ ] AC-5 [local; actor: agent]: The main-pass merge passes both tests below. — **REJECTED.** Built and measured: home-carrier own main submissions 50 → 44 (the other 67 are movers), and merging parked aircraft failed the deck look gate (0.027 > 0.02). Kill switch: ~150 lines for 6 draws and a visible change; removed in `65af64f`.
   - **Cost:** home-carrier main-pass draws are **≤ 80**, down from the per-part count that AC-2
     records.
   - **Look:** all three AC-3 views stay within the noise floor, with BLEND parts still sorted
     correctly.
-- [ ] AC-6 [local; actor: agent]: The engine frame gate walks only visible subtrees. It is a
+- [x] AC-6 [local; actor: agent]: The engine frame gate walks only visible subtrees. It is a
   `packages/core` unit test, red then green, with the failing and passing output pasted. The engine
   gates pass: `pnpm typecheck && pnpm lint && pnpm test`. The package goes out as a content-hashed
-  tarball in `.packages/`, and the game is repointed to it. — Evidence: pending.
-- [ ] AC-7 [local; actor: agent]: Warm-up uploads each texture once, and no texture upload lands in
+  tarball in `.packages/`, and the game is repointed to it. — Evidence: engine `249e8fb60` on `perf/cull-visible-walk` (from `fix/native-perf-followups`): red `expected 2 to be 1`, green 17/17; core 1508 tests pass; typecheck/lint/runtime-native failures identical on a clean stash (pre-existing). Tarball `threenative-core-0.3.2-rendercpu-d0171cafff9a.tgz`; dist differs from prd398 only in the walk.
+- [x] AC-7 [local; actor: agent]: Warm-up uploads each texture once, and no texture upload lands in
   a sampled flight window. Count uploads per texture across `warmUpViews()`; the result must be
   1 each. The airborne CPU profile must show `copyExternalImageToTexture` below 1% of busy time.
-  — Evidence: pending.
+  — Evidence: `65af64f` — instrumented 266 uploads, **0** textures copied twice (the profile's two stacks are disjoint sets; `Textures.js:207` guards repeats). The real leak was 98 fleet uploads after `#start-air`; `initTexture` in warm-up makes it **0**.
 - [ ] AC-8 [local; actor: agent]: The whole airborne frame is cheaper. `updateRenderCpu` p50 is
   **≥ 25% lower** than the stock baseline on the natural workload. GPU p95 is no worse than stock
-  beyond the host's pair-to-pair spread. — Evidence: pending.
-- [ ] AC-9 [local; actor: agent]: Nothing regressed. All of these pass:
+  beyond the host's pair-to-pair spread. — Evidence: **NOT MET.** 3 interleaved pairs
+  (`docs/perf/ac8-20260923/`, natural airborne, `acceptedImpacts` 0 on all six): `updateRenderCpu`
+  p50 stock 8.2 / 8.3 ms (run 1, 20.6 ms, flagged "source changed during the sample", excluded) vs
+  candidate 7.9 / 9.15 / 7.9 ms — within the spread, not −25%. GPU p95 13.6–14.9 → 13.3–13.8 ms, no
+  worse. The tool's own window-matching check fails on both sides alike (the loaded host clamps
+  catch-up, so wall windows cover 48–53 s of battle). Why: airborne the home carrier draws its merged
+  `low` stand-in, which already cast one shadow, so the proxy only pays on the deck. The next lever
+  is the `BundleGroup` follow-up.
+- [x] AC-9 [local; actor: agent]: Nothing regressed. All of these pass:
   - `pnpm typecheck`
   - `pnpm exec vite build`
   - the `launch.playtest.json` per-pass budget on `--browser-recipe webgpu --headed`
@@ -244,7 +251,7 @@ Evidence rules:
   - `check-fleet.mjs`
   - `check-catalog.mjs`
 
-  — Evidence: pending.
+  — Evidence: candidate gates identical to stock — typecheck, vite build, check-fleet, check-catalog, capture-deck, capture-fleet, launch playtest PASS on both; `capture-sortie-runs` FAILS on both identically (strike leg exceeds 720 s, pre-existing on `c277aee`).
 - [ ] AC-10 [owner; actor: Joao]: The owner compares stock and candidate on his own display, at
   1472×935, flying the deck launch and a pass by the fleet. He confirms the carriers, shadows and
   deck look unchanged. — Evidence: pending.
@@ -264,7 +271,7 @@ Native desktop and Android are **unreachable**: the doctor reports runtime v0.3.
 ## Execution Phases
 
 #### Phase 1: Measurement you can trust
-**Status:** NOT STARTED
+**Status:** DONE
 **ACs:** AC-1, AC-2, AC-3
 **Files:**
 - `tools/capture-performance.mjs`: hide after update, wait for warm-up, add `us-carriers`.
@@ -284,10 +291,10 @@ Native desktop and Android are **unreachable**: the doctor reports runtime v0.3.
 - the negative controls listed in AC-1 and AC-3;
 - the deck and natural stock baselines, written to `docs/perf/`.
 
-**Checkpoint:** pending
+**Checkpoint:** `be2dbcc`, `7164a38`
 
 #### Phase 2: One shadow per carrier
-**Status:** NOT STARTED
+**Status:** DONE
 **ACs:** AC-4
 **Files:**
 - `src/render/world.ts`: `addHullLod`, sun shadow-camera layer.
@@ -304,13 +311,13 @@ Native desktop and Android are **unreachable**: the doctor reports runtime v0.3.
 
 **Verification:** E2:
 - deck ABAB with at least 3 pairs;
-- AC-3 comparison on all three views plus the mid-elevator frame;
+- AC-3 comparison on all three views (no elevator exists);
 - `capture-deck.mjs` (deck geometry is unchanged).
 
-**Checkpoint:** pending. `prd-work-reviewer` on the diff and on E2.
+**Checkpoint:** `a467d9e`, `65af64f`; fresh-eyes review found no blocking bug. `prd-work-reviewer` on the diff and on E2.
 
 #### Phase 3: One main-pass draw per material
-**Status:** NOT STARTED
+**Status:** REJECTED (merge), AC-8 measured
 **ACs:** AC-5, AC-8
 **Files:**
 - `src/render/world.ts` or `src/render/imported-ships.ts`: the per-material merge of the full-detail
@@ -332,7 +339,7 @@ Native desktop and Android are **unreachable**: the doctor reports runtime v0.3.
 **Checkpoint:** pending. `prd-work-reviewer` on the diff and on E3.
 
 #### Phase 4: Engine walk and a warm-up that uploads once
-**Status:** NOT STARTED
+**Status:** DONE except AC-10
 **ACs:** AC-6, AC-7, AC-9, AC-10
 **Files:**
 - `threenative-engine/packages/core/src/…` (frame gate) plus its unit test;
@@ -355,7 +362,7 @@ Native desktop and Android are **unreachable**: the doctor reports runtime v0.3.
 - the full AC-9 gate list, run once at the end;
 - then one combined request to the owner for AC-10.
 
-**Checkpoint:** pending
+**Checkpoint:** engine `249e8fb60`; `65af64f`
 
 ## Follow-ups (not required, not boxed)
 
