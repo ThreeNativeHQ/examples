@@ -3,7 +3,7 @@
  * autopilot's navigation point, the L gate and the HUD's approach cues all read this one module,
  * so the guidance the player is shown and the eligibility the game enforces cannot drift apart.
  */
-import { angleDelta, clamp, distance2, forward, localPoint } from "./math.js";
+import { angleDelta, bearing, clamp, distance2, forward, localPoint } from "./math.js";
 
 type Any = any;
 
@@ -62,6 +62,12 @@ export interface IApproach {
   altitude: number;
   ready: boolean;
   cues: string[];
+  /**
+   * The signed corrections the HUD repeats while the approach is engaged: bearing to the next point,
+   * height above/below the target altitude and speed above/below the approach speed. Words, not raw
+   * numbers, so the line can be flown without interpreting a readout.
+   */
+  corrections: string[];
   range: number;
   astern: number;
   lateral: number;
@@ -129,6 +135,7 @@ export function approach(p: Any, s: Any): IApproach {
       altitude: p.y,
       ready: false,
       cues: ["NO AVAILABLE DECK"],
+      corrections: [],
       range: 0,
       astern: 0,
       lateral: 0,
@@ -171,23 +178,24 @@ export function approach(p: Any, s: Any): IApproach {
     if (Math.abs(right) >= lateral) cues.push(right > 0 ? "RIGHT OF CENTERLINE" : "LEFT OF CENTERLINE");
     if (Math.abs(headingError) >= FINAL.heading) cues.push(headingError > 0 ? "LINE UP LEFT" : "LINE UP RIGHT");
   }
+  // Chase a lead point down the centreline rather than the deck itself: aiming at the ship turns
+  // the approach into a pursuit curve that arrives off centreline and then oscillates.
+  const point =
+    phase === "final" || phase === "groove" ? centrelinePoint(s, local.forward + GROOVE_LEAD) : setup;
+  const altitude =
+    phase === "transit"
+      ? SETUP.transitAltitude
+      : phase === "setup"
+        ? SETUP.altitude
+        : clamp(glidePath(-local.forward, deck), deck + FINAL.minClearance + 4, SETUP.altitude);
   return {
     carrier: s,
     phase,
-    // Chase a lead point down the centreline rather than the deck itself: aiming at the ship turns
-    // the approach into a pursuit curve that arrives off centreline and then oscillates.
-    point:
-      phase === "final" || phase === "groove"
-        ? centrelinePoint(s, local.forward + GROOVE_LEAD)
-        : setup,
-    altitude:
-      phase === "transit"
-        ? SETUP.transitAltitude
-        : phase === "setup"
-          ? SETUP.altitude
-          : clamp(glidePath(-local.forward, deck), deck + FINAL.minClearance + 4, SETUP.altitude),
+    point,
+    altitude,
     ready,
     cues,
+    corrections: correctionCues(angleDelta(bearing(p, point), p.heading), p.y - altitude, (p.speed ?? 0) - APPROACH_SPEED),
     range,
     astern: -local.forward,
     lateral: right,
@@ -195,6 +203,22 @@ export function approach(p: Any, s: Any): IApproach {
     speed: p.speed ?? 0,
     descent: p.vy ?? 0,
   };
+}
+
+/**
+ * Translate the three signed errors into what a pilot does about them. The bearing error is positive
+ * to the right, the height error positive when high, and the speed error positive when fast — so each
+ * line names the correction to make, not the number to read. Within tolerance the line says so.
+ */
+export function correctionCues(turn: number, height: number, speed: number): string[] {
+  const deg = Math.round((turn * 180) / Math.PI);
+  const metres = Math.round(height);
+  const knots = Math.round(speed * 1.94384);
+  return [
+    Math.abs(deg) < 4 ? "ON CENTRELINE" : `TURN ${deg > 0 ? "RIGHT" : "LEFT"} ${Math.abs(deg)}`,
+    Math.abs(metres) < 5 ? "ON GLIDE PATH" : `${metres > 0 ? "HIGH" : "LOW"} ${Math.abs(metres)} M`,
+    Math.abs(knots) < 3 ? "ON SPEED" : `${knots > 0 ? "FAST" : "SLOW"} ${Math.abs(knots)} KT`,
+  ];
 }
 
 export interface IReserve {

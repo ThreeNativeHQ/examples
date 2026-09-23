@@ -1,10 +1,12 @@
 /** The battle's DOM and 2D-canvas heads-up display, ported from the standalone build. */
 import type { IReport } from "./sim/battle.js";
+import type { IBattleView, IViewState } from "./ui/hud-input.js";
 import { damageSummary } from "./sim/damage.js";
 import { torpedoEnvelope, torpedoIntercept } from "./sim/armament.js";
-import { attitudeAxes } from "./sim/flight.js";
+import { axesOf } from "./sim/flight.js";
 import { ASSIGNMENTS, objectiveText, outcomeText, type Assignment } from "./sim/sortie.js";
 import { angleDelta, bearing, bombImpact, clamp, contactEstimate, distance2, distance3, forward } from "./sim/math.js";
+import { PING_SECONDS } from "./sim/rescue.js";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 /** Optional element: the approach, wing and reserve lines are additive, never required markup. */
@@ -31,12 +33,14 @@ export function viewCameraLabel(mode: number): string {
 }
 
 export class Hud {
-  b: any;
-  view: any;
+  b: IBattleView;
+  view: IViewState;
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   lastRadio = "";
   lastContacts = "";
+  lastBattleStatus = "";
+  lastDowned = "";
   lastTip = "";
   toastUntil = 0;
   hitFlash = 0;
@@ -56,7 +60,7 @@ export class Hud {
   private fpsTick = 0;
   private fpsLines: string[] = [];
 
-  constructor(battle: any, view: any) {
+  constructor(battle: IBattleView, view: IViewState) {
     this.b = battle;
     this.view = view;
     this.canvas = $("hud-canvas") as HTMLCanvasElement;
@@ -101,8 +105,25 @@ export class Hud {
     $("battle-clock").textContent = new Date((6 * 3600 + 30 * 60 + b.time) * 1000).toISOString().slice(11, 19);
     $("bomb-count").textContent = p.loadout === "torpedo" ? (p.torpedo ? "◆" : "◇") : "◆ ".repeat(p.bombs) + "◇ ".repeat(3 - p.bombs);
     $("ordnance-label").textContent = p.loadout === "torpedo" ? "TORPEDO" : "BOMBS";
-    $("btn-camera").textContent = viewCameraLabel(this.view.cameraMode);
+    // The rear-gun station: who is flying, the gun's own ammunition, and which hint line applies.
+    const gunner = p.gunner === true;
+    $("btn-camera").textContent = gunner ? "C / LOCKED" : viewCameraLabel(this.view.cameraMode);
     $("ammo").textContent = String(p.ammo);
+    $("btn-gunner").textContent = gunner ? "Y / PILOT" : "Y / REAR GUN";
+    $("btn-gunner").setAttribute("aria-pressed", String(gunner));
+    $("btn-gunner").setAttribute("aria-label", gunner ? "Return to the pilot seat" : "Man the rear gun");
+    // The station is first-person only, so the camera control is truly disabled, not cosmetic.
+    $("btn-camera").toggleAttribute("disabled", gunner);
+    $("btn-camera").setAttribute("aria-label", gunner ? "Camera locked to the rear gunner station" : "Cycle camera views");
+    $("rear-block").classList.toggle("hidden", !gunner);
+    // Total sortie rounds, then the belt: LOADED/RESERVE, or the countdown while a belt change runs.
+    const rearLoaded = p.rearLoaded ?? 0;
+    const rearReloading = (p.rearReloadUntil ?? 0) > b.time;
+    $("rear-ammo").textContent = rearReloading
+      ? `${p.rearAmmo ?? 0} · LOADING ${Math.max(0, (p.rearReloadUntil ?? 0) - b.time).toFixed(1)}s`
+      : `${p.rearAmmo ?? 0} · ${rearLoaded}/${Math.max(0, (p.rearAmmo ?? 0) - rearLoaded)}`;
+    $("camera-hint").classList.toggle("hidden", gunner);
+    $("gunner-hint").classList.toggle("hidden", !gunner);
     for (const [id, on] of [
       ["gear", p.gear],
       ["brakes", p.brakes],
@@ -125,7 +146,7 @@ export class Hud {
     $("flight-label").textContent = speed > 1 ? "TRANSIT 3×" : `${p.loadout === "torpedo" ? "TBD" : "SBD"} / ${b.command.toUpperCase()}`;
     const nav = b.navigationPoint;
     const dist = distance2(p, nav);
-    const designated = b.contacts.get(b.target);
+    const designated = b.contacts.get(b.target ?? "");
     // The contact line already gives its course and range, so the nav line only speaks when it
     // is steering somewhere else: home, or a search sector with nothing designated.
     $("nav-detail").textContent =
@@ -135,7 +156,7 @@ export class Hud {
       if (designated) {
         const e = contactEstimate(designated, b.time);
         const ship = b.ships.find((s: any) => s.id === designated.id);
-        const state = e.age < 2 ? (ship.sunk ? "SINKING" : `DECK ${ship.deck < 0.35 ? "OUT" : "ACTIVE"}${ship.fire > 0.3 ? " / BURNING" : ""}`) : `${Math.floor(e.age)}s OLD · ${Math.round(e.confidence * 100)}%`;
+        const state = e.age < 2 && ship ? (ship.sunk ? "SINKING" : `DECK ${ship.deck < 0.35 ? "OUT" : "ACTIVE"}${ship.fire > 0.3 ? " / BURNING" : ""}`) : `${Math.floor(e.age)}s OLD · ${Math.round(e.confidence * 100)}%`;
         contactLine.textContent = `◈ ${designated.name.toUpperCase()} ${heading(bearing(p, e))}° / ${(distance2(p, e) / 1000).toFixed(1)} KM · ${state}`;
       } else contactLine.textContent = "";
     }
@@ -205,6 +226,11 @@ export class Hud {
       else if (p.fuel < 15) warning = "LOW FUEL";
     }
     $("warning").textContent = warning;
+    // The rear gun refuses a round that would cross the aircraft's own tail or, on the Douglas, its
+    // own fuselage. The player is looking down the barrels, so the refusal needs its own cue: it is
+    // a status, not a warning, and must not be suppressed behind a higher-priority one (low fuel,
+    // low airspeed) even though those still own the warning line above.
+    $("gunner-block").classList.toggle("hidden", !(gunner && p.rearBlocked === true));
     const recent = b.radio.filter((r: any) => b.time - r.time < 23).slice(0, 2);
     const key = recent.map((r: any) => r.id).join();
     if (key !== this.lastRadio) {
@@ -228,7 +254,7 @@ export class Hud {
         const a = b.approach();
         const r = b.returnReserve();
         cueLine.textContent = a.carrier
-          ? `${a.phase.toUpperCase()} · ${knots(a.speed)} KT AIRSPEED · ${feetPerMinute(a.descent)} FT/MIN · ${a.cues.join(" · ")} · ${r.available ? `RESERVE ${clock(Math.max(0, r.spare))} (EST)` : "RESERVE UNKNOWN"}`
+          ? `${a.phase.toUpperCase()} · ${a.corrections.join(" · ")} · ${knots(a.speed)} KT AIRSPEED · ${feetPerMinute(a.descent)} FT/MIN · ${a.cues.join(" · ")} · ${r.available ? `RESERVE ${clock(Math.max(0, r.spare))} (EST)` : "RESERVE UNKNOWN"}`
           : "NO AVAILABLE DECK";
       } else cueLine.textContent = "";
     }
@@ -247,11 +273,50 @@ export class Hud {
       $("service-bar").style.width = `${(1 - p.serviceTime / 12) * 100}%`;
       $("service-time").textContent = `READY FOR LAUNCH IN ${Math.ceil(p.serviceTime)} SECONDS`;
     }
+    this.updateDownedPanel();
     this.drawRadar();
     if (this.mapOpen) {
       this.drawMap();
       this.updateContactList();
+      this.updateBattleStatus();
     }
+  }
+
+  /**
+   * The replacement prompt, published on change only: the panel itself is new, so it must not write
+   * to the DOM every frame. `replacementStatus` is what the button and its reason read.
+   */
+  updateDownedPanel(): void {
+    const downed = this.b.player.mode === "downed";
+    const status = downed ? this.b.replacementStatus() : null;
+    const key = status ? `${status.available}|${status.carrier}|${status.reason}|${status.last}` : "";
+    if (key === this.lastDowned) return;
+    this.lastDowned = key;
+    const panel = $("downed");
+    panel.classList.toggle("hidden", !downed);
+    if (!status) return;
+    $("downed-title").textContent = status.available ? "Take another aircraft." : "No aircraft ready.";
+    $("downed-reason").textContent = `${status.last} ${status.reason}`;
+    const button = $("take-aircraft") as HTMLButtonElement;
+    button.disabled = !status.available;
+    button.textContent = status.available ? `↩ TAKE ANOTHER AIRCRAFT — ${status.carrier.toUpperCase()}` : "NO AIRCRAFT AVAILABLE";
+  }
+
+  /**
+   * The map's battle appraisal, published on change only, from `Battle.battleStatus`. Enemy figures
+   * are the crew's beliefs, so damage nobody reported never moves the label.
+   */
+  updateBattleStatus(): void {
+    const s = this.b.battleStatus();
+    const key = `${s.appraisal}|${s.friendlyOperational}|${s.friendlySunk}|${s.enemyReported}|${s.enemyDecksOut}|${s.airLosses}|${s.airKills}`;
+    if (key === this.lastBattleStatus) return;
+    this.lastBattleStatus = key;
+    const appraisal = $("battle-appraisal");
+    if (appraisal) appraisal.textContent = s.appraisal;
+    const line = $("battle-line");
+    if (line) line.textContent = s.line;
+    const basis = $("battle-basis");
+    if (basis) basis.textContent = s.basis;
   }
 
   /** One canvas paint of the latest state, once per presented frame. */
@@ -390,7 +455,28 @@ export class Hud {
     c.fill();
     this.drawGauges();
     if (p.mode === "flight") {
-      const f = p.attitude ? attitudeAxes(p).f : forward(p.heading, p.pitch);
+      // The gunner's sight. The rear-gun camera looks straight down the sim's own aim, so a fixed
+      // centre reticle is the true gun direction at every yaw and pitch — the asset's iron sights
+      // do not line up with the fixed eye, so this is the player's actual sight. Unobtrusive and in
+      // the same brass/pale palette as the rest of the HUD.
+      if (p.gunner === true) {
+        const rx = w / 2;
+        const ry = h / 2;
+        c.strokeStyle = "rgba(232,214,174,.7)";
+        c.lineWidth = 1;
+        c.beginPath();
+        c.arc(rx, ry, 8, 0, Math.PI * 2);
+        c.stroke();
+        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+          c.beginPath();
+          c.moveTo(rx + dx * 12, ry + dy * 12);
+          c.lineTo(rx + dx * 19, ry + dy * 19);
+          c.stroke();
+        }
+        c.fillStyle = "#edf1d9";
+        c.fillRect(rx - 1, ry - 1, 2, 2);
+      }
+      const f = axesOf(p).f;
       const aim = this.view.project({ x: p.x + f.x * 1600, y: p.y + f.y * 1600, z: p.z + f.z * 1600 });
       if (aim.visible) {
         c.strokeStyle = "rgba(234,239,218,.8)";
@@ -441,7 +527,7 @@ export class Hud {
         }
       }
       if (p.torpedo > 0) {
-        const target = this.b.contacts.get(this.b.target);
+        const target = this.b.contacts.get(this.b.target ?? "");
         if (target && this.b.time - target.time < 3) {
           const lead = torpedoIntercept(p, target);
           const pt = this.view.project({ ...lead, y: 4 });
@@ -480,7 +566,7 @@ export class Hud {
           c.fillText(`${a.kind === "fighter" ? "ZERO" : a.kind === "torpedo" ? "KATE" : "VAL"} · ${Math.round(d)} M`, pt.x, pt.y - 22);
         }
       }
-      const contact = this.b.contacts.get(this.b.target);
+      const contact = this.b.contacts.get(this.b.target ?? "");
       if (contact && this.b.time - contact.time < 3) {
         const pt = this.view.project({ ...contact, y: 22 });
         if (pt.visible) {
@@ -689,7 +775,27 @@ export class Hud {
       c.fillStyle = a.team === "us" ? "#8ebbbb" : "#df9872";
       c.fillRect(q.x - 2, q.y - 2, 4, 4);
     }
+    for (const w of this.b.wrecks) this.ping(c, pt(w), w.team, w.age, 7);
     this.shipIcon(c, R, R, p.heading, "plane", 12, "#f0e2c1");
+    c.restore();
+  }
+
+  /**
+   * A sea-impact ping: a hollow ring that fades and expands as it ages. Blue is an allied aircraft,
+   * orange an enemy one. Drawn on both the radar and the tactical map from the simulation's own
+   * `Battle.wrecks` records, so the two views can never disagree about who went in where.
+   */
+  ping(c: CanvasRenderingContext2D, a: { x: number; y: number }, team: string, age: number, size: number): void {
+    const t = clamp(age / PING_SECONDS, 0, 1);
+    c.save();
+    c.globalAlpha = 1 - t;
+    c.strokeStyle = team === "us" ? "#6fb4f0" : "#f0a04a";
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.arc(a.x, a.y, size + t * 8, 0, Math.PI * 2);
+    c.stroke();
+    c.fillStyle = c.strokeStyle;
+    c.fillRect(a.x - 1.5, a.y - 1.5, 3, 3);
     c.restore();
   }
 
@@ -786,6 +892,7 @@ export class Hud {
       const p = pt(a);
       this.shipIcon(c, p.x, p.y, a.heading, "plane", 4, a.team === "us" ? "#73aba9" : "#c99a77");
     }
+    for (const w of b.wrecks) this.ping(c, pt(w), w.team, w.age, 8);
     for (const contact of b.contacts.values()) {
       const e = contactEstimate(contact, b.time);
       const a = pt(e);

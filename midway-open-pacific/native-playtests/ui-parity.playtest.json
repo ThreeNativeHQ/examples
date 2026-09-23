@@ -1,0 +1,191 @@
+{
+  "name": "midway-native-ui-parity",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "steps": [
+    {
+      "label": "briefing",
+      "waitTicks": 420
+    },
+    {
+      "pointerPosition": {
+        "x": 0.338,
+        "y": 0.538,
+        "buttons": 1
+      },
+      "release": true,
+      "waitTicks": 30
+    },
+    {
+      "label": "choose-torpedo",
+      "waitForResource": {
+        "id": "state",
+        "path": "ui.loadout.id",
+        "equals": "torpedo"
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "pointerPosition": {
+        "x": 0.149,
+        "y": 0.831,
+        "buttons": 1
+      },
+      "release": true,
+      "waitTicks": 30
+    },
+    {
+      "label": "take-deck",
+      "waitForResource": {
+        "id": "state",
+        "path": "ui.screens.flight",
+        "equals": true
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "press": "KeyQ",
+      "holdTicks": 4,
+      "release": true,
+      "waitTicks": 30
+    },
+    {
+      "label": "open-command",
+      "waitForResource": {
+        "id": "state",
+        "path": "ui.overlay",
+        "equals": "command-overlay"
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "pointerPosition": {
+        "x": 0.499,
+        "y": 0.5,
+        "buttons": 1
+      },
+      "release": true,
+      "waitTicks": 30
+    },
+    {
+      "label": "order-cover",
+      "waitForResource": {
+        "id": "state",
+        "path": "ui.overlay",
+        "equals": null
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "pointerPosition": {
+        "x": 0.789,
+        "y": 0.094,
+        "buttons": 1
+      },
+      "release": true,
+      "waitTicks": 30
+    },
+    {
+      "label": "open-map",
+      "waitForResource": {
+        "id": "state",
+        "path": "hud.mapOpen",
+        "equals": true
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "waitTicks": 240
+    },
+    {
+      "pointerPosition": {
+        "x": 0.83,
+        "y": 0.135,
+        "buttons": 1
+      },
+      "release": true,
+      "waitTicks": 30
+    },
+    {
+      "label": "close-map",
+      "waitForResource": {
+        "id": "state",
+        "path": "hud.mapOpen",
+        "equals": false
+      },
+      "timeoutMs": 60000
+    }
+  ],
+  "assert": {
+    "resources": [
+      {
+        "id": "state",
+        "path": "uiReady",
+        "atSteps": [
+          {
+            "label": "briefing",
+            "equals": true
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "ui.loadout.id",
+        "atSteps": [
+          {
+            "label": "choose-torpedo",
+            "equals": "torpedo"
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "ui.screens.flight",
+        "atSteps": [
+          {
+            "label": "take-deck",
+            "equals": true
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "ui.overlay",
+        "atSteps": [
+          {
+            "label": "open-command",
+            "equals": "command-overlay"
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "hud.battle.command",
+        "atSteps": [
+          {
+            "label": "order-cover",
+            "equals": "cover"
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "hud.mapOpen",
+        "atSteps": [
+          {
+            "label": "open-map",
+            "equals": true
+          },
+          {
+            "label": "close-map",
+            "equals": false
+          }
+        ]
+      }
+    ]
+  }
+}

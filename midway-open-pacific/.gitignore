@@ -8,3 +8,4 @@ node_modules/
 # Captured frames are local debugging evidence, not shipped source. The folder itself stays.
 screenshots/*
 !screenshots/.gitkeep
+.afk/

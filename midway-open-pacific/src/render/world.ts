@@ -1,15 +1,19 @@
 /** The battle's Three.js world, built into the scene the framework owns. */
 import * as T from "three";
+import { mergeParts } from "@threenative/core";
 import { shipClass } from "../sim/catalog.js";
-import { attitudeAxes } from "../sim/flight.js";
+import { REAR_RELOAD_SECONDS } from "../sim/armament.js";
+import { axesOf } from "../sim/flight.js";
 import { distance2, forward, localPoint } from "../sim/math.js";
 import { addFloats, ellipsoid, mat, wakeTexture } from "./assets.js";
+import type { IViewSnapshot } from "../ui/hud-input.js";
 import { type CarrierModelId, createCarrier, createIjnCarrier, createMitchell, shipModelFor } from "./imported-ships.js";
 import { createAirframe, createDouglas, animateDouglas, animateImportedAirframe, disposeAirframe, spinPropeller } from "./imported-aircraft.js";
 import { airframeLod } from "./airframe-lod.js";
 import { createMidwayAtoll, createZero } from "./imported-fleet.js";
 import { DeckCrew } from "./deck-crew.js";
 import { animateDevastator, disposeDevastator } from "./devastator.js";
+import { createRearStation, type RearStation } from "./rear-station.js";
 import { addDamageVisuals, makeTorpedoModel, updateDamageVisuals, updateShipScars } from "./model-damage.js";
 import { dawnEnvironment, SKY_ROTATION, SUN_DIRECTION, SUN_COLOR } from "./environment.js";
 import { createOcean, REFLECTED_LAYER } from "./ocean.js";
@@ -41,8 +45,20 @@ function importedAircraftFor(a: { team: string; kind: string }): () => T.Group {
   return a.team === "jp" ? createZero : douglas;
 }
 
+/**
+ * The layer a carrier's shadow-only proxy lives on.
+ *
+ * No camera but the sun's shadow camera enables it, so the proxy never enters the main or mirrored
+ * pass. `REFLECTED_LAYER` is bit 1; this is the next free bit. The shadow camera's own mask is
+ * widened to include it in the constructor and kept in step in `update`.
+ */
+export const SHADOW_PROXY_LAYER = 2;
+
 /** Reused so the per-frame camera orbit allocates nothing. */
 const WORLD_UP = new T.Vector3(0, 1, 0);
+
+/** The tracer ellipsoid's long axis, rotated onto each round's velocity every frame. */
+const TRACER_LONG = new T.Vector3(0, 0, 1);
 
 /**
  * Distance past which a hull's full imported detail stops paying.
@@ -235,7 +251,118 @@ function markReflected(root: T.Object3D): void {
  * never again; a node whose parent moves stays correct because Three forces the parent's matrix
  * down through the children.
  */
-const MOVING_NODE = /threenativepivot|cockpit controls|propeller|aileron|rudder|flap|elevator|gear|wingport|wingstarboard|canopy|torpedo|hook|wheel/i;
+const MOVING_NODE = /threenativepivot|cockpit controls|propeller|aileron|rudder|flap|elevator|gear|wingport|wingstarboard|canopy|torpedo|hook|wheel|crew|gunner/i;
+
+/**
+ * The nodes one parked airframe's animator actually writes while it sits on the deck.
+ *
+ * `spinParked` turns the propeller every frame through the airframe's own published handle, and the
+ * ported Devastator's animator also eases its arresting hook down as the park settles. The Douglas
+ * mixer holds its surfaces and flaps at rest and its gear legs at the fixed down pose, so a mesh
+ * under those nodes never moves while parked. That is the whole narrowing: the parked parts a
+ * `MOVING_NODE` match used to keep casting per-part — ailerons, flaps, gear, wheels, canopy — are
+ * static, and only the propeller (and the Devastator hook) goes on moving.
+ */
+function parkedMovingRoots(root: T.Object3D): Set<T.Object3D> {
+  const roots = new Set<T.Object3D>();
+  // The stores are visibility-toggled by the same animators (`torpedo.visible = …`), so a merge
+  // would freeze one on: a parked Devastator would draw the torpedo its animator hides.
+  for (const handle of [
+    root.userData.propeller,
+    root.userData.arrestingHook,
+    root.userData.torpedoLoad,
+    root.userData.load,
+  ]) {
+    if (handle instanceof T.Object3D) handle.traverse((node) => roots.add(node));
+  }
+  return roots;
+}
+
+/**
+ * The hull's own moving set: every node a later animator may write, matched by name.
+ *
+ * A hull publishes no animator handle the way an airframe does, so `MOVING_NODE` is the only record
+ * of what may move; the elevator `update` drives is a `mesh` child and is never in this set.
+ */
+function hullMovingRoots(root: T.Object3D): Set<T.Object3D> {
+  const roots = new Set<T.Object3D>();
+  root.traverse((node) => {
+    if (MOVING_NODE.test(node.name)) roots.add(node);
+  });
+  return roots;
+}
+
+/** True when `node` is one of `roots` or sits under one. */
+function underMovingRoots(node: T.Object3D, roots: Set<T.Object3D>): boolean {
+  for (let o: T.Object3D | null = node; o; o = o.parent) if (roots.has(o)) return true;
+  return false;
+}
+
+/**
+ * Every mesh of `root` a static shadow proxy may include.
+ *
+ * These are the surfaces a carrier may bake: a mesh that neither is, nor sits under, one of
+ * `moving`, and is not skinned. A mesh that is or rides a mover keeps its own `castShadow` and goes
+ * on casting live; only the meshes this returns are merged and switched off. A caller that must not
+ * start a shadow from a mesh that never cast one filters on `castShadow` itself.
+ */
+function staticMeshes(root: T.Object3D, moving: Set<T.Object3D>): T.Mesh[] {
+  const out: T.Mesh[] = [];
+  root.traverse((node) => {
+    const mesh = node as T.Mesh;
+    if (!mesh.isMesh) return;
+    // A skinned mesh's vertices are its bind pose, not what the mixer draws, exactly as in the
+    // airframe stand-in: it is never a static caster.
+    if ((mesh as T.SkinnedMesh).isSkinnedMesh === true) return;
+    if (underMovingRoots(node, moving)) return;
+    if (!(mesh.geometry as T.BufferGeometry | undefined)?.getAttribute("position")) return;
+    out.push(mesh);
+  });
+  return out;
+}
+
+/** Mark every caster a mover keeps, so a capture can report movers apart from the carrier's own. */
+function markShadowMovers(root: T.Object3D, moving: Set<T.Object3D>): void {
+  root.traverse((node) => {
+    const mesh = node as T.Mesh;
+    if (mesh.isMesh && mesh.castShadow && underMovingRoots(mesh, moving)) mesh.userData.shadowMover = true;
+  });
+}
+
+/**
+ * The static-only merge for a carrier's shadow proxy, cached by key and shared by every instance.
+ *
+ * `airframeLod` bakes every mesh at rest, which is right for a far stand-in but freezes a moving
+ * part into the proxy's shadow. A depth caster carries position alone, so no other channel is
+ * preserved; the merge helper clones each part, so the originals are untouched. Null when the root
+ * has nothing static to merge.
+ */
+const shadowMergeCache = new Map<string, T.BufferGeometry | null>();
+
+function shadowMerge(root: T.Object3D, key: string, moving: Set<T.Object3D>): T.BufferGeometry | null {
+  const cached = shadowMergeCache.get(key);
+  if (cached !== undefined) return cached;
+  root.updateMatrixWorld(true);
+  const toLocal = root.matrixWorld.clone().invert();
+  const parts = staticMeshes(root, moving)
+    .filter((mesh) => mesh.castShadow)
+    .map((mesh) => ({
+      geometry: mesh.geometry as T.BufferGeometry,
+      matrix: new T.Matrix4().multiplyMatrices(toLocal, mesh.matrixWorld),
+    }));
+  let merged: T.BufferGeometry | null = null;
+  if (parts.length) {
+    try {
+      merged = mergeParts(parts, { label: `carrier shadow proxy (${key})` });
+      merged.computeBoundingSphere();
+      merged.computeBoundingBox();
+    } catch {
+      merged = null;
+    }
+  }
+  shadowMergeCache.set(key, merged);
+  return merged;
+}
 
 /** Scratch for one scout's seat on its ship, refilled per scout. */
 const SCOUT_SEAT = new T.Vector3();
@@ -320,6 +447,8 @@ export class WorldView {
   cameraMode = 0;
   rear = false;
   followBomb = false;
+  /** True while the pilot view is the one being drawn. Read by the UI shell. */
+  cockpitView = false;
   snap = true;
   quality = "balanced";
   wallTime = 0;
@@ -335,13 +464,22 @@ export class WorldView {
   playerMesh!: T.Group;
   /** Fixed eye point for the crash settle, chosen once at the moment of impact. */
   private wreckEye: T.Vector3 | null = null;
-  tracers!: T.LineSegments;
-  // Six vertices per round: the velocity streak plus a camera-facing cross at the head. A 1 px
-  // line seen end-on — the player's own fire from the cockpit or chase — projects to nothing,
-  // and THREE.Points cannot carry it on the WebGPU backend (a 1 m HDR-red point 10 m ahead of
-  // the eye rasterizes zero fragments), so the cross rides the proven line path instead.
-  tracerPositions = new Float32Array(1000 * 18);
-  tracerColors = new Float32Array(1000 * 18);
+  /** Camera mode to restore when the player leaves the rear-gun station; null when not on the gun. */
+  private gunnerPrevMode: number | null = null;
+  /** Weapon-follow view state to restore on the same handback. */
+  private gunnerPrevFollow = false;
+  tracers!: T.InstancedMesh;
+  // One instance of a unit sphere per round, stretched along its velocity: side-on a thin streak,
+  // end-on a small round dot. A 1 px line seen down its own path — the player's own fire from the
+  // cockpit or gunner — projects to nothing, and THREE.Points rasterizes zero fragments on the
+  // WebGPU backend, so the round is a real head instead of a camera-facing cross. One pool, one
+  // geometry and one draw; a frame only composes matrices and colours into them.
+  private tracerMatrix = new T.Matrix4();
+  private tracerQuat = new T.Quaternion();
+  private tracerDir = new T.Vector3();
+  private tracerPos = new T.Vector3();
+  private tracerScale = new T.Vector3();
+  private tracerTint = new T.Color();
   particles!: CombatParticles;
   ripples!: ReturnType<typeof createRipples>;
   private sky!: T.Texture;
@@ -354,11 +492,25 @@ export class WorldView {
   private orbit = new T.Vector3();
   private orbitAxis = new T.Vector3();
   private tmp = new T.Vector3();
+  private clip = new T.Matrix4();
   private look = new T.Vector3();
   private targetCamera = new T.Vector3();
   /** Composed-local-matrix freeze for static nodes, and the verification switch that reverses it. */
   freezeStatics = true;
   private frozen = new Set<T.Object3D>();
+  /**
+   * Every mesh whose shadow the carrier proxy took over, with its parent and the root frame the
+   * proxy was baked in. Verification only: a drift probe rebuilds each one's root-relative matrix
+   * from the live parent and its local matrix.
+   */
+  staticSources: { root: T.Object3D; parent: T.Object3D; mesh: T.Object3D }[] = [];
+  private staticDrift: Map<T.Object3D, number[]> | null = null;
+  /**
+   * The one material every carrier shadow proxy draws with. The shadow pass overrides it with its
+   * own depth material and reads only `side`, so `DoubleSide` reproduces what the hornet hull's own
+   * casters cast (all 75 of its materials are double-sided) and the colour is never drawn.
+   */
+  private readonly shadowProxyMaterial = new T.MeshBasicMaterial({ side: T.DoubleSide, name: "carrier shadow proxy" });
 
   constructor(host: IWorldHost, battle: any) {
     this.host = host;
@@ -386,6 +538,10 @@ export class WorldView {
     Object.assign(this.sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 1, far: 850 });
     this.sun.shadow.bias = -0.000035;
     this.sun.shadow.normalBias = 0.018;
+    // The shadow camera keeps the main camera's layers plus the proxy bit. Without a bit above 0
+    // the WebGPU `ShadowNode` copies the main camera's mask every frame and the proxy would never
+    // submit; with one it uses its own mask verbatim, so it is kept in step in `update`.
+    this.sun.shadow.camera.layers.mask = this.camera.layers.mask | (1 << SHADOW_PROXY_LAYER);
     this.sunDir = SUN_DIRECTION.clone();
     this.wakeTex = wakeTexture();
     this.makeSky();
@@ -479,6 +635,9 @@ export class WorldView {
           detailed.add(mitchell);
           mesh.userData.decor.push(mitchell);
         }
+        // The three Yorktown-class carriers draw one shared hull, so their static shadow merges
+        // into a single shadow-only proxy per ship instead of a few hundred per-part submissions.
+        if (s.team === "us") this.addShadowProxy(mesh, detailed, model?.lod ?? model?.classId ?? model?.id ?? s.name);
       } else {
         throw new Error(`no model for ship: ${s.name} (${s.team} ${s.kind})`);
       }
@@ -501,8 +660,11 @@ export class WorldView {
         }
       }
       markReflected(mesh);
-      // Parked aircraft are hull children, but the water reflection excludes the deck load.
-      for (const planes of [mesh.userData.parked ?? [], mesh.userData.decor ?? []] as T.Object3D[][])
+      // Parked aircraft are hull children, but the water reflection excludes the deck load — and the
+      // shadow proxy, whose `layers.set` the reflection enable above would otherwise widen.
+      const excluded = [mesh.userData.parked ?? [], mesh.userData.decor ?? []] as T.Object3D[][];
+      if (mesh.userData.shadowProxy) excluded.push([mesh.userData.shadowProxy as T.Object3D]);
+      for (const planes of excluded)
         for (const plane of planes) plane.traverse((o) => o.layers.disable(REFLECTED_LAYER));
       // Range-gated, and this hull has no position or visibility yet: the engine's fixed-step loop
       // can submit its first world frame with zero updates elapsed (the loop is released the frame
@@ -524,28 +686,188 @@ export class WorldView {
     this.setAirframe();
   }
 
+  /**
+   * The player airframes that have been built this session, by type.
+   *
+   * A switch used to dispose the aircraft and build the other one from scratch, which threw away
+   * every pipeline WebGPU had compiled for it: picking the torpedo loadout and then the bomb
+   * loadout paid the same multi-second compile twice, and every time after that. Both airframes
+   * are two aircraft of geometry — cheap next to the fleet already resident — so the one being
+   * left is detached and kept, and coming back to it is a `scene.add`.
+   */
+  private readonly builtAirframes = new Map<string, T.Group>();
+
   setAirframe(): void {
     const type = this.battle.player.airframe || "sbd";
     if (this.playerMesh?.userData.airframe === type) return;
     if (this.playerMesh) {
       this.playerMesh.removeFromParent();
       this.forgetFrozen(this.playerMesh);
-      if (this.playerMesh.userData.devastator) disposeDevastator(this.playerMesh);
-      else if (this.playerMesh.userData.importedAircraft) disposeAirframe(this.playerMesh);
-      this.disposeModel(this.playerMesh);
+    }
+    const built = this.builtAirframes.get(type);
+    if (built) {
+      this.playerMesh = built;
+      this.scene.add(this.playerMesh);
+      this.freezeStatic(this.playerMesh);
+      this.snap = true;
+      return;
     }
     // The player's Devastator is the imported TBD-1, driven by its own shipped clips; the SBD
     // keeps the Douglas constructor, and the procedural Dauntless is gone from the player's seat.
     this.playerMesh =
       type === "sbd" ? createDouglas(true) : createAirframe("tbd1", "hero", true);
     this.playerMesh.userData.airframe = type;
+    this.builtAirframes.set(type, this.playerMesh);
     addDamageVisuals(this.playerMesh);
+    // The player's own first-person rear station is **not** built here. It is 0.9-1.6 s of
+    // procedural texture and geometry work (measured by a launch profile: `rear-station.ts` plus
+    // the attribute conversion it drives), it is only visible while the gun owns the view, and the
+    // launch is exactly where a second is worth the most. `ensureRearStation` builds it on first
+    // need — the briefing's idle time via `warmUpViews`, or a switch to the gun before that.
+    this.playerMesh.userData.rearStation = undefined;
     this.scene.add(this.playerMesh);
     this.freezeStatic(this.playerMesh);
     this.snap = true;
   }
 
+  /**
+   * Build the player's own rear station, once, on first need.
+   *
+   * Returns `undefined` for an airframe with no gunner eye and for one whose station cannot be
+   * built; `userData.rearStation` records the answer either way, so a station-less airframe is not
+   * asked twice. The same published eye the gunner camera uses anchors shell and camera together.
+   */
+  ensureRearStation(): RearStation | undefined {
+    const mesh = this.playerMesh;
+    if (!mesh) return undefined;
+    const built = mesh.userData.rearStation as RearStation | null | undefined;
+    if (built !== undefined) return built ?? undefined;
+    const type = mesh.userData.airframe as string | undefined;
+    const eye = mesh.userData.gunnerEye as T.Vector3 | undefined;
+    if (type === undefined || eye === undefined) {
+      mesh.userData.rearStation = null;
+      return undefined;
+    }
+    const station = createRearStation(type, [eye.x, eye.y, eye.z]) ?? null;
+    mesh.userData.rearStation = station;
+    if (station) mesh.add(station.group);
+    return station ?? undefined;
+  }
+
+  /**
+   * Compile the views the player has not looked at yet, while the loading layer is still up.
+   *
+   * The cockpit interior is built at load and then kept `visible = false` until the player chooses
+   * the cockpit, so WebGPU had never been asked to build a pipeline for any of its materials. It
+   * built all of them inside the first cockpit frame: a measured **~1000 ms stall**, once per view
+   * per session. Switching back was always cheap, which is how a one-time compile tells itself
+   * apart from work the switch is doing.
+   *
+   * This compiles the player's own view subtrees and nothing else. The engine's `warmUpScene` is
+   * the wrong tool here and was measured to be: it compiles the whole scene, which on this scene
+   * added **13 s to the launch** to save 250 ms of stall, and raised a WebGPU validation error
+   * besides. It is built for a native launch that must pay that cost once for everything; Midway
+   * needs three views warmed, not 2,205 meshes. `compileAsync`'s three-argument form is the
+   * targeted equivalent — the subtree compiles against the real scene, so it takes the scene's
+   * lights and its cache keys match the ones `render` will look up.
+   *
+   * Both the object walk and the light gather skip invisible nodes, so each root is revealed for
+   * its own compile and put back immediately. Revealing the whole scene instead also drags in the
+   * reflector's depth target and fails bind-group validation.
+   */
+  /** Airframes whose views are already compiled; warming one twice buys nothing and costs seconds. */
+  private readonly warmedAirframes = new Set<string>();
+
+  /**
+   * Resolves with the page clock at the moment the current `warmUpViews()` settled, or null before
+   * it has been called. A capture waits on it so the texture uploads the warm-up performs are not
+   * in a "steady state" sample.
+   */
+  warmUpDone: Promise<number> | null = null;
+
+  warmUpViews(): Promise<void> {
+    const done = this.runWarmUpViews().then(() => performance.now());
+    this.warmUpDone = done;
+    return done.then(() => undefined);
+  }
+
+  private async runWarmUpViews(): Promise<void> {
+    const renderer = this.renderer as unknown as {
+      compileAsync?: (object: T.Object3D, camera: T.Camera, scene: T.Object3D) => Promise<void>;
+    };
+    if (typeof renderer.compileAsync !== "function") return;
+    const airframe = this.playerMesh?.userData.airframe as string | undefined;
+    if (airframe !== undefined && this.warmedAirframes.has(airframe)) return;
+    if (airframe !== undefined) this.warmedAirframes.add(airframe);
+    const data = this.playerMesh?.userData as
+      | { cockpitInterior?: T.Object3D; cockpitShell?: T.Object3D[]; crew?: T.Object3D[] }
+      | undefined;
+    if (!data) return;
+    // The rear station is built here rather than at load: its own construction is the single
+    // largest main-thread cost the launch had after the assets, and the briefing is idle.
+    const station = this.ensureRearStation();
+    const roots = [
+      data.cockpitInterior,
+      ...(data.cockpitShell ?? []),
+      ...(data.crew ?? []),
+      station?.shell,
+      station?.pivot,
+    ].filter((root): root is T.Object3D => root !== undefined);
+    for (const root of roots) {
+      const hidden: T.Object3D[] = [];
+      root.traverse((object) => {
+        if (!object.visible) {
+          hidden.push(object);
+          object.visible = true;
+        }
+      });
+      try {
+        await renderer.compileAsync(root, this.camera, this.scene);
+      } catch {
+        // A view that will not precompile still draws; it just pays the stall it would have paid
+        // anyway. Never let warming a camera angle stop the game starting.
+      } finally {
+        for (const object of hidden) object.visible = false;
+      }
+    }
+    // The compile above warms only the player's own roots, so the fleet's textures are still
+    // uploaded the first time a carrier draws — after `#start-air`, mid-flight. `initTexture` takes
+    // the same `Textures.updateTexture` path a first render does, so every texture the non-aircraft
+    // meshes reference is resident before the player looks at it, and no upload lands in a sample.
+    const initTexture =
+      typeof (renderer as unknown as { initTexture?: unknown }).initTexture === "function"
+        ? (renderer as unknown as { initTexture: (texture: T.Texture) => void }).initTexture.bind(renderer)
+        : null;
+    if (initTexture) {
+      const warmed = new Set<T.Texture>();
+      for (const [id, root] of this.meshes) {
+        if (id.startsWith("air-")) continue;
+        root.traverse((object) => {
+          const mesh = object as T.Mesh;
+          if (!mesh.isMesh) return;
+          for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+            if (!material) continue;
+            for (const value of Object.values(material)) {
+              if (value instanceof T.Texture && !warmed.has(value)) {
+                warmed.add(value);
+                try {
+                  initTexture(value);
+                } catch {
+                  // A texture the backend will not take yet still uploads on first render; a warm-up
+                  // must never stop the game starting.
+                }
+              }
+            }
+          }
+        });
+      }
+    }
+  }
+
   setCamera(mode: number): void {
+    // The rear-gun station owns the view: a camera order must not take it, or leave it.
+    const p = this.battle?.player;
+    if (p?.gunner === true && p.mode === "flight") return;
     this.cameraMode = mode;
     this.snap = true;
     this.followBomb = false;
@@ -599,11 +921,12 @@ export class WorldView {
   }
 
   makeTracers(): void {
-    const geom = new T.BufferGeometry();
-    geom.setAttribute("position", new T.BufferAttribute(this.tracerPositions, 3).setUsage(T.DynamicDrawUsage));
-    geom.setAttribute("color", new T.BufferAttribute(this.tracerColors, 3).setUsage(T.DynamicDrawUsage));
-    geom.setDrawRange(0, 0);
-    this.tracers = new T.LineSegments(geom, new T.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending }));
+    const geom = new T.SphereGeometry(1, 8, 6);
+    const mat = new T.MeshBasicMaterial({ transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending });
+    this.tracers = new T.InstancedMesh(geom, mat, 1000);
+    this.tracers.instanceMatrix.setUsage(T.DynamicDrawUsage);
+    this.tracers.instanceColor = new T.InstancedBufferAttribute(new Float32Array(1000 * 3), 3).setUsage(T.DynamicDrawUsage);
+    this.tracers.count = 0;
     this.tracers.frustumCulled = false;
     this.scene.add(this.tracers);
     this.freezeNode(this.tracers);
@@ -629,6 +952,24 @@ export class WorldView {
       this.meshes.delete(id);
     }
     this.setAirframe();
+  }
+
+  /**
+   * The camera, for a HUD that is not in this process.
+   *
+   * A native target draws the HUD in the web view, which has no scene graph to project through, so
+   * it gets the one matrix `project` applies and the viewport it lands in. Read from the live
+   * camera each time it is asked for, which is once per published snapshot.
+   */
+  viewSnapshot(): IViewSnapshot {
+    this.clip.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    return {
+      cameraMode: this.cameraMode,
+      followBomb: this.followBomb,
+      height: this.host.viewport.size.height,
+      matrix: [...this.clip.elements],
+      width: this.host.viewport.size.width,
+    };
   }
 
   project(p: any): { x: number; y: number; visible: boolean; depth: number } {
@@ -679,6 +1020,10 @@ export class WorldView {
         const merged = m.visible && s !== b.home && s.sink <= 0 && px < hullPixels;
         (m.userData.hullBody as T.Object3D).visible = !merged;
         low.visible = merged;
+        // The proxy stands in for the static hull only while the full-detail body is shown; the
+        // merged `low` already casts its own shadow, so the two never both submit.
+        const hullProxy = m.userData.shadowProxyHull as T.Object3D | undefined;
+        if (hullProxy) hullProxy.visible = !merged;
       }
       // The scouts this hull carries, each drawn where its own state puts it. Aboard and alongside
       // are on the ship and ride her motion; the airborne states are over the sector the simulation
@@ -695,11 +1040,19 @@ export class WorldView {
         // The park is the ready line: an airframe with none ready is below in the hangar, so its
         // parked instance hides and the other types stay spotted.
         a.visible = camD < 1900 && (s.air?.ready?.[type] ?? 0) > 0;
+        // The proxy piece follows the parked airframe's own visibility: an exhausted type hides its
+        // original, so its proxy piece must hide too or it would cast a shadow of nothing.
+        const parkedProxy = a.userData.shadowProxyMesh as T.Object3D | undefined;
+        if (parkedProxy) parkedProxy.visible = a.visible;
         // Turning over on the spot, waiting for the flag. One airframe, one animator.
         spinParked(a, dt);
       }
       // Decorative deck dressing follows the same visual LOD with no inventory tie.
-      for (const d of (m.userData.decor ?? []) as T.Group[]) d.visible = camD < 1900;
+      for (const d of (m.userData.decor ?? []) as T.Group[]) {
+        d.visible = camD < 1900;
+        const decorProxy = d.userData.shadowProxyMesh as T.Object3D | undefined;
+        if (decorProxy) decorProxy.visible = d.visible;
+      }
       if (m.userData.elevator) (m.userData.elevator as T.Object3D).position.y = 19.85 - (d < 800 && Math.sin(time * 0.12) > 0 ? Math.sin(time * 0.12) * 5 : 0);
 
     }
@@ -752,6 +1105,13 @@ export class WorldView {
       if (m.userData.detailed) detailed += 1;
       m.position.set(a.x, a.y, a.z);
       m.rotation.set(a.pitch, -a.heading, a.roll, "YXZ");
+      // A visible AI gun rides the angle it last fired at, so the drawn barrel points where its
+      // rounds went instead of resetting to the rest position every frame.
+      const aiGun = m.userData.rearGun as T.Object3D | undefined;
+      if (aiGun) {
+        if (typeof a.rearYaw === "number") aiGun.rotation.set(-(a.rearPitch ?? 0), a.rearYaw, 0, "YXZ");
+        else aiGun.rotation.set(0, 0, 0);
+      }
       const camD = Math.hypot(a.x - camPos.x, a.y - camPos.y, a.z - camPos.z);
       const projectedPx = (2 * (m.userData.radius as number) * focalPx) / Math.max(1, camD);
       // Below the merged line the airframe is one draw: hide the full content — model, gear, stores
@@ -810,7 +1170,7 @@ export class WorldView {
     updateDamageVisuals(this.playerMesh, p);
     // The wreck is under the splash from the moment it hits: the airframe goes with the impact,
     // not two seconds later when the report opens.
-    this.playerMesh.visible = b.status !== "lost" && p.mode !== "wreck";
+    this.playerMesh.visible = b.status !== "lost" && p.mode !== "wreck" && p.mode !== "downed";
     this.updateProjectiles();
     this.updateCamera(dt, briefing, time);
     // The eye below the surface is in a different medium: the dawn sky behind a submerged hull
@@ -831,20 +1191,38 @@ export class WorldView {
     this.ripples.update(b, this.camera.position, dt);
     this.particles.update(b, this.camera.position);
     this.ocean.update(this.camera.position, time, b.ships);
+    // Keep the shadow camera's mask carrying the proxy bit even if the main camera's mask moves.
+    this.sun.shadow.camera.layers.mask = this.camera.layers.mask | (1 << SHADOW_PROXY_LAYER);
     this.sun.position.copy(this.sunDir).multiplyScalar(500).add(this.playerMesh.getWorldPosition(this.tmp));
     this.sun.target.position.copy(this.playerMesh.getWorldPosition(this.tmp));
   }
 
   updateCamera(dt: number, briefing: boolean, time: number): void {
     const p = this.battle.player;
-    const axes = p.attitude ? attitudeAxes(p) : { f: forward(p.heading, p.pitch), u: { x: 0, y: 1, z: 0 }, r: { x: 1, y: 0, z: 0 } };
+    const axes = axesOf(p);
     const f = axes.f;
     const u = axes.u;
+    // The rear-gun station is a camera the player can leave: remember the view they came from and
+    // restore it on the way back, so gunning never silently changes their camera choice.
+    const gunnerView = p.gunner === true && p.mode === "flight";
+    if (gunnerView && this.gunnerPrevMode === null) {
+      this.gunnerPrevMode = this.cameraMode;
+      this.gunnerPrevFollow = this.followBomb;
+      this.cameraMode = 1;
+      this.followBomb = false;
+      this.snap = true;
+    } else if (!gunnerView && this.gunnerPrevMode !== null) {
+      this.cameraMode = this.gunnerPrevMode;
+      this.followBomb = this.gunnerPrevFollow;
+      this.gunnerPrevMode = null;
+      this.snap = true;
+    }
     const ownBomb = [...this.battle.bombs, ...this.battle.airTorpedoes, ...this.battle.torpedoes].filter((a: any) => a.owner === "player").at(-1);
     let cockpit = false;
     // The wreck is in the water and the camera is not: it stops at the surface, backs off and
-    // watches the splash from outside it rather than descending into its own plume.
-    if (p.mode === "wreck") {
+    // watches the splash from outside it rather than descending into its own plume. A downed pilot
+    // waits for a replacement from that same offshore eye, so the shot does not snap back inside.
+    if (p.mode === "wreck" || p.mode === "downed") {
       if (!this.wreckEye) {
         const dx = this.camera.position.x - p.x;
         const dz = this.camera.position.z - p.z;
@@ -868,6 +1246,26 @@ export class WorldView {
       this.targetCamera.set(focus.x + 17 + Math.sin(time * 0.055) * 2, focus.y + 6.5, focus.z + 21);
       this.look.set(focus.x - 5, focus.y - 0.1, focus.z - 4);
       this.camera.fov = 49;
+    } else if (gunnerView) {
+      // The gunner's own eye, from the visual contract: `userData.gunnerEye` is the station in
+      // aircraft-root coordinates. An authored framing offset is added in that same frame — 0.32 m
+      // toward the nose and 3 cm up — so the externally-scaled gun sits low in the lens instead of
+      // filling it; it is a camera anchor, not a claim about an exact eye bone, and the world gun
+      // scale, pivot and ballistics are untouched. Still inside the open rear station. The 0.32 m
+      // offset and 72° lens hold the externally-scaled gun low in frame and cut the extreme
+      // foreshortening on the breech boxes without changing the aim direction.
+      const eye = this.playerMesh.userData.gunnerEye as T.Vector3 | undefined;
+      if (eye) this.targetCamera.set(eye.x, eye.y + 0.03, eye.z - 0.32);
+      this.playerMesh.localToWorld(this.targetCamera);
+      // The sight and the camera are one ray: the sim's own aim, off the airframe's real attitude,
+      // so a banked or pitched aircraft keeps the eye, the gun pivot and the bullet agreeing.
+      const dir = this.battle.gunnerAim();
+      this.look.set(
+        this.targetCamera.x + dir.x * 1000,
+        this.targetCamera.y + dir.y * 1000,
+        this.targetCamera.z + dir.z * 1000,
+      );
+      this.camera.fov = 72;
     } else if (this.followBomb && ownBomb) {
       this.targetCamera.set(ownBomb.x + 12, ownBomb.y + 16, ownBomb.z + 28);
       this.look.set(ownBomb.x + ownBomb.vx * 0.6, ownBomb.y + (ownBomb.vy ?? 0) * 0.6, ownBomb.z + ownBomb.vz * 0.6);
@@ -936,13 +1334,53 @@ export class WorldView {
       this.camera.fov = overhead ? 64 : wide ? 60 : 56;
     }
     if (this.playerMesh.userData.crew) this.playerMesh.userData.crew[0].visible = !cockpit;
+    // The player's own gunner figure is hidden only in his first-person station; the pilot and
+    // chase views show the crew exactly as before.
+    if (this.playerMesh.userData.gunner) (this.playerMesh.userData.gunner as T.Object3D).visible = !gunnerView;
+    // One mapping for the gun's one pivot, in every view: the station aims it, and leaving the gun
+    // returns it to its rest barrel instead of freezing where the player let go.
+    const rearGun = this.playerMesh.userData.rearGun as T.Object3D | undefined;
+    if (rearGun) {
+      // The supplied exterior gun yields its place to the first-person twin in the rear station;
+      // every other view (pilot, chase, external) draws it exactly as before.
+      rearGun.visible = !gunnerView;
+      if (gunnerView) {
+        const e = this.battle.rearGunPivotEuler();
+        rearGun.rotation.set(e.x, e.y, e.z, "YXZ");
+      } else if (typeof p.rearYaw === "number") {
+        // The AI gunner works the same gun while the pilot flies: show the angle it last fired at,
+        // so the drawn barrel points where the rounds went instead of snapping back to rest.
+        rearGun.rotation.set(-(p.rearPitch ?? 0), p.rearYaw, 0, "YXZ");
+      } else rearGun.rotation.set(0, 0, 0);
+    }
+    // The player's first-person rear station: shell and visible twin gun show only while the gun
+    // owns the view, and the gun pivot rides the same sim euler the rounds leave from.
+    const rearStation = gunnerView ? this.ensureRearStation() : (this.playerMesh.userData.rearStation as RearStation | null | undefined) ?? undefined;
+    if (rearStation) {
+      rearStation.shell.visible = gunnerView;
+      rearStation.pivot.visible = gunnerView;
+      if (gunnerView) {
+        const e = this.battle.rearGunPivotEuler();
+        rearStation.pivot.rotation.set(e.x, e.y, e.z, "YXZ");
+      } else rearStation.pivot.rotation.set(0, 0, 0);
+      // The visible barrels kick back only from a round that actually left the player's gun: the sim
+      // sets `rearTimer` on a successful shot and to zero on a refused or empty trigger, and the AI
+      // gunner never runs while this station owns the view.
+      rearStation.setRecoil(gunnerView ? Math.min(1, (p.rearTimer || 0) / 0.08) * 0.05 : 0);
+      // The belt change is a render-only cycle over the sim's own countdown: it opens with the
+      // change, peaks at the midpoint and closes as the belt is loaded. Outside a change it rests.
+      const reloadLeft = Math.max(0, (p.rearReloadUntil ?? 0) - this.battle.time);
+      rearStation.setReload(reloadLeft > 0 ? Math.sin(Math.PI * (1 - reloadLeft / REAR_RELOAD_SECONDS)) : 0);
+    }
     // The detailed interior and the supplied canopy shell are alternatives: show the interior in
-    // the pilot view, the exterior canopy every other time.
+    // the pilot view, the exterior canopy every other time the rear station is not inside it.
     if (this.playerMesh.userData.cockpitInterior) this.playerMesh.userData.cockpitInterior.visible = cockpit;
     if (this.playerMesh.userData.cockpitShell)
-      for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit;
-    document.body.classList.toggle("cockpit-view", cockpit);
-    if (this.snap || briefing || cockpit) {
+      for (const shell of this.playerMesh.userData.cockpitShell) shell.visible = !cockpit && !gunnerView;
+    // The look of the page is the shell's business, not the renderer's: `Midway` publishes this
+    // through `shell.cockpitView`, so the native build has no DOM call to make.
+    this.cockpitView = cockpit;
+    if (this.snap || briefing || cockpit || gunnerView) {
       this.camera.position.copy(this.targetCamera);
       this.snap = false;
     } else {
@@ -953,8 +1391,8 @@ export class WorldView {
       }
       this.camera.position.lerp(this.targetCamera, 1 - Math.exp(-dt * 6));
     }
-    this.camera.near = cockpit ? 0.045 : 0.35;
-    if (cockpit) this.camera.up.set(u.x, u.y, u.z);
+    this.camera.near = cockpit || gunnerView ? 0.045 : 0.35;
+    if (cockpit || gunnerView) this.camera.up.set(u.x, u.y, u.z);
     else this.camera.up.set(u.x * 0.13, 0.87 + u.y * 0.13, u.z * 0.13).normalize();
     if (!briefing && p.mode === "flight") {
       const buffet = Math.min(0.12, (p.stall || 0) * 0.045 + Math.max(0, Math.abs(p.gforce || 1) - 4) * 0.008);
@@ -976,34 +1414,35 @@ export class WorldView {
     // near-constant angular size at the muzzle and at the target, and the converging markers are
     // what make the pilot's own fire readable.
     const me = this.camera.matrixWorld.elements;
-    const rx = me[0], ry = me[1], rz = me[2];
-    const ux = me[4], uy = me[5], uz = me[6];
     const ex = me[12], ey = me[13], ez = me[14];
     const focalPx = (this.host.viewport.size.height * 0.5) / Math.tan((this.camera.fov * Math.PI) / 360);
-    const headHalfPx = 5;
     let i = 0;
     for (const a of b.bullets) {
       if (i >= 1000) break;
-      const k = i * 18;
-      const length = a.type === "flak" ? 0.02 : 0.012;
-      this.tracerPositions.set([a.x, a.y, a.z, a.x - a.vx * length, a.y - a.vy * length, a.z - a.vz * length], k);
-      const color = a.team === "us" ? [1, 0.83, 0.4] : [1, 0.42, 0.18];
-      this.tracerColors.set([...color, ...color.map((x) => x * 0.4)], k);
-      // The head is the same round seen end-on against bright sky, where the pale streak colour
-      // washes out: saturate it so it keeps an orange edge ACES cannot clip to white.
-      const head = a.team === "us" ? [1, 0.52, 0.12] : [1, 0.3, 0.08];
-      const arm = Math.min((Math.hypot(a.x - ex, a.y - ey, a.z - ez) * headHalfPx) / focalPx, 40);
-      this.tracerPositions.set(
-        [a.x - rx * arm, a.y - ry * arm, a.z - rz * arm, a.x + rx * arm, a.y + ry * arm, a.z + rz * arm,
-          a.x - ux * arm, a.y - uy * arm, a.z - uz * arm, a.x + ux * arm, a.y + uy * arm, a.z + uz * arm],
-        k + 6,
-      );
-      this.tracerColors.set([...head, ...head, ...head, ...head], k + 6);
+      // A round with no velocity (a just-spawned or resolved bullet) still gets a valid instance
+      // rather than a degenerate quaternion: the streak points along +Z and keeps a positive length.
+      const speed = Math.hypot(a.vx, a.vy, a.vz);
+      if (speed > 1e-6) this.tracerDir.set(a.vx, a.vy, a.vz).multiplyScalar(1 / speed);
+      else this.tracerDir.set(0, 0, 1);
+      const half = Math.max((a.type === "flak" ? 0.02 : 0.012) * speed, 0.02) * 0.5;
+      // The head holds ~1.25 px whatever the range (a world length that grows with distance), so a
+      // far round is a dot and never a balloon: the only clamp is a sane floor and ceiling.
+      const radius = T.MathUtils.clamp((Math.hypot(a.x - ex, a.y - ey, a.z - ez) * 1.25) / focalPx, 0.015, 0.45);
+      this.tracerQuat.setFromUnitVectors(TRACER_LONG, this.tracerDir);
+      // The ellipsoid is centred half a length BEHIND the ballistic head, so the visible streak
+      // trails the round instead of reaching past it.
+      this.tracerPos.set(a.x - this.tracerDir.x * half, a.y - this.tracerDir.y * half, a.z - this.tracerDir.z * half);
+      this.tracerScale.set(radius, radius, half);
+      this.tracerMatrix.compose(this.tracerPos, this.tracerQuat, this.tracerScale);
+      this.tracers.setMatrixAt(i, this.tracerMatrix);
+      if (a.team === "us") this.tracerTint.setRGB(1, 0.83, 0.4);
+      else this.tracerTint.setRGB(1, 0.42, 0.18);
+      this.tracers.setColorAt(i, this.tracerTint);
       i += 1;
     }
-    this.tracers.geometry.setDrawRange(0, i * 6);
-    (this.tracers.geometry.attributes.position as T.BufferAttribute).needsUpdate = true;
-    (this.tracers.geometry.attributes.color as T.BufferAttribute).needsUpdate = true;
+    this.tracers.count = i;
+    this.tracers.instanceMatrix.needsUpdate = true;
+    if (this.tracers.instanceColor) this.tracers.instanceColor.needsUpdate = true;
     const ids = new Set<string>();
     for (const a of [...b.bombs, ...b.airTorpedoes]) {
       ids.add(a.id);
@@ -1057,6 +1496,115 @@ export class WorldView {
     void a;
     if (had) return range < 1500;
     return range < 1100 && granted < 10;
+  }
+
+  /**
+   * One shadow-only proxy per US carrier, standing in for the per-part casters of its static load.
+   *
+   * Every static mesh under a carrier — the full-detail hull, the parked deck load and the
+   * decorative B-25 — stops casting shadows itself, and this proxy casts in their place. A mesh
+   * that is, or sits under, a mover is never merged and never switched off: the hull's `MOVING_NODE`
+   * matches, a parked aircraft's windmilling propeller and the Devastator hook go on casting live.
+   * The parked control surfaces and gear the `MOVING_NODE` match used to keep are static now, which
+   * is why the proxy is a merge of static surfaces rather than the whole-aircraft stand-in. The
+   * hull's static merge is cached by `hullKey`, and each parked type's by its model name, so the
+   * three Yorktown-class carriers share one geometry per model instead of one per ship.
+   * `receiveShadow` is left exactly as it was.
+   */
+  private addShadowProxy(mesh: T.Group, detailed: T.Group, hullKey: string): void {
+    const parked = (mesh.userData.parked ?? []) as T.Group[];
+    const decor = (mesh.userData.decor ?? []) as T.Group[];
+    const proxy = new T.Group();
+    proxy.name = "carrier shadow proxy";
+    const piece = (geometry: T.BufferGeometry, source: T.Object3D): void => {
+      const part = new T.Mesh(geometry, this.shadowProxyMaterial);
+      part.castShadow = true;
+      part.receiveShadow = false;
+      part.position.copy(source.position);
+      part.quaternion.copy(source.quaternion);
+      part.scale.copy(source.scale);
+      source.userData.shadowProxyMesh = part;
+      proxy.add(part);
+    };
+    // The hull merge is already in `body`'s frame, so its proxy sits at the origin of that frame.
+    // Built from `body`, never from `detailed`, so the merged stand-in — a sibling of `body` — is
+    // not baked into its own shadow.
+    const body = mesh.userData.hullBody as T.Object3D | undefined;
+    if (body) {
+      const moving = hullMovingRoots(body);
+      const hull = shadowMerge(body, `${hullKey}:shadow`, moving);
+      if (hull) {
+        const hullProxy = new T.Mesh(hull, this.shadowProxyMaterial);
+        hullProxy.castShadow = true;
+        hullProxy.receiveShadow = false;
+        mesh.userData.shadowProxyHull = hullProxy;
+        proxy.add(hullProxy);
+        this.consumeStatic(body, moving);
+        markShadowMovers(body, moving);
+      }
+    }
+    for (const root of [...parked, ...decor]) {
+      const moving = parkedMovingRoots(root);
+      const geometry = shadowMerge(root, root.name || `${root.type}#${root.id}`, moving);
+      if (!geometry) continue;
+      piece(geometry, root);
+      this.consumeStatic(root, moving);
+      markShadowMovers(root, moving);
+    }
+    proxy.traverse((o) => o.layers.set(SHADOW_PROXY_LAYER));
+    detailed.add(proxy);
+    mesh.userData.shadowProxy = proxy;
+  }
+
+  /**
+   * Stop `root`'s static casters casting, and record them for the drift probe.
+   *
+   * The proxy casts in their place, so each mesh it replaces is kept — with the parent that stays in
+   * the graph — for `sampleStaticDrift` to prove it never moved. This is the one place the merged
+   * proxy consumes a part, and the one place the check reads.
+   */
+  private consumeStatic(root: T.Object3D, moving: Set<T.Object3D>): void {
+    for (const part of staticMeshes(root, moving)) {
+      if (!part.castShadow) continue;
+      part.castShadow = false;
+      if (part.parent) this.staticSources.push({ root, parent: part.parent, mesh: part });
+    }
+  }
+
+  /**
+   * Sample the consumed static meshes' root-relative matrices and return how many moved.
+   *
+   * Verification only. The relative matrix is rebuilt from the live parent —
+   * `inv(root) * parent.matrixWorld * mesh.matrix` — and compared to the first sample. The deck tool
+   * calls this over sixty frames; a non-zero count means the static predicate mis-classed a mover
+   * and the proxy would bake motion into its shadow.
+   */
+  sampleStaticDrift(): number {
+    const inv = new T.Matrix4();
+    const rel = new T.Matrix4();
+    const sample = (record: { root: T.Object3D; parent: T.Object3D; mesh: T.Object3D }): number[] => {
+      inv.copy(record.root.matrixWorld).invert();
+      rel.multiplyMatrices(record.parent.matrixWorld, record.mesh.matrix).premultiply(inv);
+      return rel.elements;
+    };
+    if (!this.staticDrift) {
+      this.staticDrift = new Map();
+      for (const record of this.staticSources) this.staticDrift.set(record.mesh, [...sample(record)]);
+      return 0;
+    }
+    let moved = 0;
+    for (const record of this.staticSources) {
+      const baseline = this.staticDrift.get(record.mesh);
+      if (!baseline) continue;
+      const now = sample(record);
+      for (let i = 0; i < 16; i++) {
+        if (Math.abs(now[i]! - baseline[i]!) > 1e-6) {
+          moved += 1;
+          break;
+        }
+      }
+    }
+    return moved;
   }
 
   /**
@@ -1203,6 +1751,7 @@ export class WorldView {
     const torpedo = group.userData.torpedoLoad as T.Object3D | undefined;
     torpedo?.traverse((o) => (o as T.Mesh).geometry?.dispose());
     (group.userData.cockpitRig as { dispose?: () => void } | undefined)?.dispose?.();
+    (group.userData.rearStation as RearStation | undefined)?.dispose?.();
     // The Devastator's own parts are given back by `disposeDevastator` in `releaseAircraft`
     // before this runs; traversing them here would dispose geometry twice.
     if (group.userData.detailed || group.userData.importedAircraft || group.userData.importedShip || group.userData.devastator)

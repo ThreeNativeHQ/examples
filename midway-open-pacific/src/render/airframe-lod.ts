@@ -17,6 +17,7 @@
  * animated node stays on the full-detail path, which the caller keeps and toggles between.
  */
 import * as T from "three";
+import { mergeParts } from "@threenative/core";
 
 export interface AirframeLod {
   geometry: T.BufferGeometry;
@@ -63,6 +64,10 @@ function buildLod(full: T.Object3D): AirframeLod | null {
   full.traverse((node) => {
     if (!(node as T.Mesh).isMesh) return;
     const mesh = node as T.Mesh;
+    // A skinned mesh's vertices are its bind pose, not what the mixer draws: merging a seated crew
+    // figure would bake a standing T-pose into the distant stand-in. The posed figure stays on the
+    // full-detail path, which the caller hides when it shows the merge.
+    if ((mesh as T.SkinnedMesh).isSkinnedMesh === true) return;
     const geometry = mesh.geometry as T.BufferGeometry | undefined;
     if (!geometry?.getAttribute("position")) return;
     if (Array.isArray(mesh.material)) return;
@@ -99,39 +104,21 @@ function buildLod(full: T.Object3D): AirframeLod | null {
 }
 
 function mergeLod(parts: T.BufferGeometry[]): T.BufferGeometry | null {
-  // Written out rather than importing `mergeGeometries`, so the attribute order this file already
-  // guarantees is the order it reads: fewer moving parts on the hot path is the whole point.
-  let vertices = 0;
-  for (const part of parts) vertices += part.getAttribute("position").count;
-  const position = new Float32Array(vertices * 3);
-  const normal = new Float32Array(vertices * 3);
-  const uv = new Float32Array(vertices * 2);
-  let at = 0;
-  for (const part of parts) {
-    const p = part.getAttribute("position");
-    const n = part.getAttribute("normal");
-    const u = part.getAttribute("uv");
-    // Read component by component, not `.array`: a supplied model can hand back an interleaved
-    // attribute whose backing array is not this attribute's values in order.
-    for (let i = 0; i < p.count; i++) {
-      position[(at + i) * 3] = p.getX(i);
-      position[(at + i) * 3 + 1] = p.getY(i);
-      position[(at + i) * 3 + 2] = p.getZ(i);
-      normal[(at + i) * 3] = n.getX(i);
-      normal[(at + i) * 3 + 1] = n.getY(i);
-      normal[(at + i) * 3 + 2] = n.getZ(i);
-      uv[(at + i) * 2] = u.getX(i);
-      uv[(at + i) * 2 + 1] = u.getY(i);
-    }
-    at += p.count;
+  // `mergeParts` keeps the authored normals and texture coordinates; it refuses rather than
+  // returning `null`, so the null the caller's contract expects is translated here. Every part is
+  // already de-indexed, placed and carrying position/normal/uv, so the preserved channels are the
+  // attribute set this file has always read.
+  try {
+    const merged = mergeParts(
+      parts.map((geometry) => ({ geometry })),
+      { label: "airframe-lod", preserve: ["uv", "normal"] },
+    );
+    merged.computeBoundingSphere();
+    merged.computeBoundingBox();
+    return merged;
+  } catch {
+    return null;
   }
-  const geometry = new T.BufferGeometry();
-  geometry.setAttribute("position", new T.BufferAttribute(position, 3));
-  geometry.setAttribute("normal", new T.BufferAttribute(normal, 3));
-  geometry.setAttribute("uv", new T.BufferAttribute(uv, 2));
-  geometry.computeBoundingSphere();
-  geometry.computeBoundingBox();
-  return geometry;
 }
 
 /**

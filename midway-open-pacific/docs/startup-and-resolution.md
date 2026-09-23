@@ -241,3 +241,66 @@ bytes and call structure:
 - `cruiser.mogami.glb` is marked used on the strength of the code path
   (`imported-ships.ts:117` → `imported-fleet.ts:294` → `world.ts:97` → `battle.ts:819`); no runtime
   trace was taken.
+
+---
+
+## The launch flow, leg by leg (2026-09-19)
+
+A CDP CPU profile from before navigation to the intro screen, with self time bucketed by the game's
+own `TN_LOAD_STEP` marks, so each leg is attributed rather than pooled. One run, 1280×720, WebGPU
+(`nvidia/turing`), machine load ≈ 21 from other work — the legs below are compared within a run,
+which is why the two fixes are quoted as leg deltas and not as totals.
+
+| leg | before | after | what is in it |
+| --- | ---: | ---: | --- |
+| page → scene loaded | 5072 ms | 4598 ms | three's GLTF parse (hottest lines `GLTFLoader:1743`, `:1613`), `createImageBitmap`, 146 Ogg decodes, HDR |
+| scene loaded → `enter()` | 3141 ms | **1731 ms** | the rear station (924 ms of procedural texture + geometry, plus ~650 ms of attribute conversion it drives), ocean hash, scene assembly |
+| `enter()` → `ready` | 2366 ms | **1575 ms** | texture uploads (`_copyImageToTexture` 219 ms), TSL node builds (102 ms), world matrices, bone binding |
+| `ready` → intro screen | 2.8 s | **25 ms** | the warm-up, which used to run between the briefing being shown and its first paint |
+| **to the intro screen** | **11.0 s** | **7.9 s** | |
+
+Both fixes are in `d901f20`:
+
+- The rear station is built on first need (`ensureRearStation`), not in `buildPlayerAirframe`. It is
+  only visible while the gun owns the view, and its own code was the largest single main-thread cost
+  the launch had after the assets.
+- `warmUpViews` is deferred past a task boundary after the briefing is made visible, so the screen
+  the player is waiting for paints before the compile takes the thread.
+
+Two later runs on the same machine (still loaded by other work) read **7252 ms** and **7105 ms** to
+the intro screen, with the legs at assets 3.8–4.0 s, `enter()` 1.5 s, warm-up 1.7 s, and
+`ready` → intro **26–29 ms**.
+
+Still in front of the player: the asset leg (3.8–4.0 s — parse and decode, not bytes fetched),
+`enter()`'s remaining 1.5 s, and the warm-up's 1.7 s. None of those is waiting on I/O: the bundle is
+local.
+
+### Two leads measured and dropped
+
+- **De-indexing before `mergeParts`** (`airframe-lod.ts`): the game de-indexes every part and the
+  engine's `flatten` de-indexes again, which looks like duplicated work. Benchmarked on an
+  airframe-sized merge (260,000 triangles across six parts, one geometry-shaped part each):
+  **85.6 ms → 91.1 ms**, a wash. Both paths de-index exactly once — the game's copy expands, the
+  engine's clone does not — so the redundancy is real and the cost is not. Reverted.
+- **Which asset is slow**: the game logs group totals ("ships 3.4 s") and the engine's progress
+  ledger is byte-weighted, so neither can name a file. The engine now has
+  `globalThis.__TN_ASSET_TRACE__ = true` → `TN_ASSET:{"kind","path","ms","bytes"}` per settle
+  (`74bf6791e`, engine). One launch of this game is 172 settles; the longest was a model at 7.7 s
+  from its own request on a machine at load ≈ 20, which is queue time rather than parse time. The
+  seam is what makes the next pass possible; it has not been read on a quiet machine yet.
+
+## The asset leg is a band, not one slow file (2026-09-19)
+
+With the engine's opt-in per-asset trace (`globalThis.__TN_ASSET_TRACE__ = true`, `74bf6791e`) one
+launch reports **172 settles**, and they land in a band: the last twelve (three speech clips, then the
+atoll, the torpedo, the Douglas, the director, Kaga, Soryu, the pilot, the Nautilus, the Hornet) all
+report 2.27–2.38 s *from their own request*. Nothing stands out, because nothing is slow on its own —
+they are all in flight at once and the leg's 3.3 s is bandwidth and main-thread parse work, not one
+asset.
+
+That kills the obvious fix (defer the heavy file) and leaves the structural one: **the briefing needs
+none of it.** It is a DOM screen with a loadout list; the world is only needed when the player takes
+the deck. Showing the briefing first and loading the world behind it would put the intro screen on
+screen in about a second, with the deck button gated on readiness — a launch-sequence change, not a
+micro-optimisation, and it is the next thing worth doing here. Best flow measured on this tree so
+far: **6129 ms** to the intro screen (assets 3313, `enter()` 1288, warm-up 1492, `ready` → intro 36).

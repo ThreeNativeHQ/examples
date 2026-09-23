@@ -39,10 +39,24 @@ export const EYE: [number, number, number] = [0, 1.42, 1.6];
 export type CockpitMaterials = Record<string, any> & { textures: Record<string, T.Texture> };
 
 export async function loadCockpitMaterials(base = "/assets/cockpit/", anisotropy = 8): Promise<CockpitMaterials> {
+  // Load by CAPABILITY, never by browser sniff. The native runtime has `window` and `document`
+  // but no `Image`/`HTMLImageElement`, so `TextureLoader` (which builds an <img>) cannot run
+  // there — while `fetch` + `createImageBitmap` both exist, which is exactly what
+  // `ImageBitmapLoader` uses. Sniffing for `Image` silently skipped every cockpit texture on
+  // native, and because `pbr()` takes its colour from the basecolor map alone, the whole interior
+  // rendered white and fully metallic.
+  const canImage = typeof Image !== "undefined";
+  const canBitmap = typeof createImageBitmap === "function";
+  const bitmapLoader = canImage ? undefined : new T.ImageBitmapLoader();
+  // An ImageBitmap ignores `texture.flipY`, so the flip has to happen during decode instead.
+  bitmapLoader?.setOptions({ imageOrientation: "flipY" });
   const loader = new T.TextureLoader();
   const textures: Record<string, T.Texture> = {};
   const load = async (name: string, file: string, srgb: boolean) => {
-    const t = await loader.loadAsync(base + file);
+    const t = bitmapLoader === undefined
+      ? await loader.loadAsync(base + file)
+      : new T.Texture(await bitmapLoader.loadAsync(base + file) as unknown as HTMLImageElement);
+    if (bitmapLoader !== undefined) t.flipY = false;
     t.name = name;
     t.wrapS = t.wrapT = T.RepeatWrapping;
     t.anisotropy = anisotropy;
@@ -50,8 +64,9 @@ export async function loadCockpitMaterials(base = "/assets/cockpit/", anisotropy
     t.needsUpdate = true;
     textures[name] = t;
   };
-  // Headless CPU checks import this module with no DOM; build the same materials map-lessly there.
-  if (typeof window !== "undefined" && typeof Image !== "undefined") {
+  // Headless CPU checks import this module with no image decoder at all; those build the same
+  // materials map-lessly. Any target that can decode an image loads the real ones.
+  if (canImage || canBitmap) {
     await Promise.all([
       ...PBR.flatMap((id) => [
         load(`${id}-basecolor`, `${id}-basecolor.jpg`, true),

@@ -1,5 +1,6 @@
 /** Procedural geometry and textures. No copyrighted game assets or image downloads. */
 import * as THREE from "three";
+import { mergeParts, type IMergePart } from "@threenative/core";
 
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
 
@@ -84,44 +85,68 @@ export function canvasTexture(
   w: number,
   h: number,
   draw: (c: CanvasRenderingContext2D, w: number, h: number) => void,
-): THREE.CanvasTexture {
+): THREE.Texture {
+  // A target with no 2D canvas gets a flat white pixel: the material keeps its own colour and the
+  // model is untextured, rather than the whole build throwing while it draws a decal.
+  if (typeof document === "undefined" || typeof document.createElement !== "function") return flatTexture();
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
-  draw(c.getContext("2d") as CanvasRenderingContext2D, w, h);
+  const ctx = c.getContext("2d");
+  if (ctx === null) return flatTexture();
+  // The native 2D shim implements the common path but not every method (createRadialGradient,
+  // setLineDash); a draw that throws on a missing one falls back to the flat pixel instead of
+  // taking the build down.
+  try {
+    draw(ctx, w, h);
+  } catch {
+    return flatTexture();
+  }
   const tx = new THREE.CanvasTexture(c);
   tx.colorSpace = THREE.SRGBColorSpace;
   tx.anisotropy = 4;
   return tx;
 }
 
+/** The stand-in a target without a 2D canvas gets: one opaque white texel. */
+function flatTexture(): THREE.Texture {
+  const tx = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+  tx.colorSpace = THREE.SRGBColorSpace;
+  tx.needsUpdate = true;
+  return tx;
+}
+
 /** Merge static components by material to avoid a draw call for every bolt and window. */
 export function consolidate(group: THREE.Object3D): THREE.Group {
   group.updateMatrixWorld(true);
-  const batches = new Map<string, { material: THREE.Material; positions: number[]; normals: number[]; uv: number[] }>();
+  const batches = new Map<
+    string,
+    { material: THREE.Material; parts: IMergePart[]; temps: THREE.BufferGeometry[] }
+  >();
   group.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
-    const geometry = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
-    geometry.applyMatrix4(mesh.matrixWorld);
-    const id = (mesh.material as THREE.Material).uuid;
-    let b = batches.get(id);
+    const material = mesh.material as THREE.Material;
+    let b = batches.get(material.uuid);
     if (!b) {
-      b = { material: mesh.material as THREE.Material, positions: [], normals: [], uv: [] };
-      batches.set(id, b);
+      b = { material, parts: [], temps: [] };
+      batches.set(material.uuid, b);
     }
-    b.positions.push(...Array.from(geometry.attributes.position.array as ArrayLike<number>));
-    b.normals.push(...Array.from(geometry.attributes.normal.array as ArrayLike<number>));
-    if (geometry.attributes.uv) b.uv.push(...Array.from(geometry.attributes.uv.array as ArrayLike<number>));
-    else b.uv.push(...new Float32Array(geometry.attributes.position.count * 2));
-    geometry.dispose();
+    // `mergeParts` refuses a listed channel a piece does not carry, so a missing uv is a game data
+    // decision made here on the way in rather than something the engine invents. The zero-uv copy
+    // is ours to release after the merge; `mergeParts` clones again and never touches the input.
+    let geometry = mesh.geometry;
+    if (!geometry.getAttribute("uv")) {
+      const uv = new THREE.Float32BufferAttribute(geometry.getAttribute("position").count * 2, 2);
+      geometry = mesh.geometry.clone().setAttribute("uv", uv);
+      b.temps.push(geometry);
+    }
+    b.parts.push({ geometry, matrix: mesh.matrixWorld });
   });
   const result = new THREE.Group();
   for (const b of batches.values()) {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(b.positions, 3));
-    g.setAttribute("normal", new THREE.Float32BufferAttribute(b.normals, 3));
-    g.setAttribute("uv", new THREE.Float32BufferAttribute(b.uv, 2));
+    const g = mergeParts(b.parts, { label: "consolidate", preserve: ["uv", "normal"] });
+    for (const geometry of b.temps) geometry.dispose();
     g.computeBoundingSphere();
     const m = new THREE.Mesh(g, b.material);
     m.castShadow = true;
@@ -131,7 +156,7 @@ export function consolidate(group: THREE.Object3D): THREE.Group {
   return result;
 }
 
-function roundel(team: string): THREE.CanvasTexture {
+function roundel(team: string): THREE.Texture {
   return canvasTexture(128, 128, (c) => {
     c.fillStyle = team === "us" ? "#193446" : "#eee5cf";
     c.beginPath();
@@ -219,7 +244,7 @@ export function makeCrew(): THREE.Group {
   return group;
 }
 
-export function smokeTexture(): THREE.CanvasTexture {
+export function smokeTexture(): THREE.Texture {
   return canvasTexture(128, 128, (c) => {
     const g = c.createRadialGradient(64, 64, 0, 64, 64, 62);
     g.addColorStop(0, "rgba(255,255,255,.9)");
@@ -231,7 +256,7 @@ export function smokeTexture(): THREE.CanvasTexture {
   });
 }
 
-export function cloudTexture(): THREE.CanvasTexture {
+export function cloudTexture(): THREE.Texture {
   return canvasTexture(512, 256, (c) => {
     for (let i = 0; i < 33; i += 1) {
       const x = 80 + (Math.sin(i * 2.1) + 1) * 170;
@@ -247,7 +272,7 @@ export function cloudTexture(): THREE.CanvasTexture {
   });
 }
 
-export function wakeTexture(): THREE.CanvasTexture {
+export function wakeTexture(): THREE.Texture {
   return canvasTexture(256, 512, (c) => {
     for (let i = 0; i < 110; i += 1) {
       const y = i * 4.5;

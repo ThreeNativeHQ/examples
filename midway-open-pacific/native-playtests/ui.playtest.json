@@ -1,0 +1,19 @@
+{
+  "name": "midway-native-ui",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    { "label": "ui-ready", "waitTicks": 420 },
+    { "pointerPosition": { "x": 0.149, "y": 0.831, "buttons": 1 }, "release": true, "waitTicks": 30 },
+    { "label": "take-deck", "waitForResource": { "id": "state", "path": "ui.screens.flight", "equals": true }, "timeoutMs": 60000 },
+    { "kind": "input", "label": "throttle", "press": "KeyW", "holdTicks": 180, "release": true },
+    { "label": "rolling", "waitTicks": 300 }
+  ],
+  "assert": {
+    "resources": [
+      { "id": "state", "path": "uiReady", "atSteps": [{ "label": "ui-ready", "equals": true }] },
+      { "id": "state", "path": "ias", "changed": true },
+      { "id": "state", "path": "throttle", "changed": true }
+    ]
+  }
+}

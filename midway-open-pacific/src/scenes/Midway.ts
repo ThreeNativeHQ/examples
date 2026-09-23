@@ -1,4 +1,4 @@
-import { Scene } from "@threenative/core";
+import { Scene, onLaunchFailure } from "@threenative/core";
 import { AudioBus } from "@threenative/core";
 import { Vector3 } from "three";
 import type { ICtx } from "@threenative/core";
@@ -13,19 +13,109 @@ import { loadImportedAircraft } from "../render/imported-aircraft.js";
 import { loadImportedFleet, loadImportedHulls } from "../render/imported-fleet.js";
 import { loadDeckCrew } from "../render/deck-crew.js";
 import { WorldView } from "../render/world.js";
-import { Hud } from "../hud.js";
+import { nullShell, shell, type IHud, type Intent } from "../ui/port.js";
+import type { IHudSnapshot, IUiSnapshot } from "../ui/state.js";
 import { Soundscape } from "../audio.js";
 
-export type GameState = Record<string, never>;
+/**
+ * What the game publishes about itself.
+ *
+ * Small on purpose: it is the only thing a UI that does not share memory with the simulation can
+ * read — a native HUD, or a playtest asserting that the aircraft actually left the deck.
+ */
+export type GameState = {
+  /** The native web view mirrors these into the real HUD markup; the web build owns its own DOM. */
+  ui?: IUiSnapshot;
+  hud?: IHudSnapshot;
+  status: string;
+  mode: string;
+  altitude: number;
+  ias: number;
+  throttle: number;
+  airborne: boolean;
+  /** Live smoke+glow particles. Zero while a target renders them is a native parity failure. */
+  particles: number;
+  /** Why the airframe was lost, so a scenario can tell the loss paths apart. */
+  crashReason: string;
+  /** Lines the speech queue actually started; zero with radio lines present is a silent voice path. */
+  spoken: number;
+  /** Lines the radio script wrote, spoken or not. */
+  radioLines: number;
+  /** Explosion bursts actually rendered. A native regression that drops the blast shows here. */
+  explosions: number;
+  /** Muzzle-flash bursts actually rendered, so a gun test proves the flash, not just the shot. */
+  muzzle: number;
+  /** Water-impact bursts actually rendered: the effect a released bomb's miss produces. */
+  splashes: number;
+  /**
+   * Existing `WaterEffects` counters, exposed read-only so a native effects gate can prove the
+   * whitewater solver accepted an impact rather than only that the request was queued.
+   */
+  waterAccepted: number;
+  waterRejected: number;
+  /** Bombs left on the rack, so a release test proves a weapon actually left the aircraft. */
+  ordnance: number;
+  /**
+   * `battle.approach().ready` — the single assisted-final gate `finalReady` that `assistRecovery`
+   * and the HUD's "READY FOR L" cue both read. Exposed read-only so a scenario can time the real
+   * KeyL press from the game's own gate instead of guessing a duration.
+   */
+  recoveryReady: boolean;
+  /**
+   * The UI layer has a peer and has rendered at least once.
+   *
+   * `ctx.state.flush()` alone is not proof the HUD is alive: a native overlay attaches, subscribes
+   * and stays blank until the page reports ready. This is that report, so a scenario can assert the
+   * web view is really up rather than that the process booted.
+   */
+  uiReady: boolean;
+};
 
-const $ = (id: string) => document.getElementById(id) as HTMLElement;
+/**
+ * Every key `action` reacts to, bound by name so the framework latches the press.
+ *
+ * A one-shot key has to survive a keydown and keyup that land in the same task — which is exactly
+ * what a scripted run does — and only `justPressed` sees that. Continuous controls (throttle,
+ * stick, guns, transit) are read as held keys instead, because a hold is what they mean.
+ */
+export const ACTION_KEYS = [
+  "Escape", "KeyP", "Slash", "KeyM", "KeyQ", "Tab", "Enter",
+  "KeyB", "KeyF", "KeyG", "KeyN", "KeyU", "KeyI", "KeyR", "KeyT", "KeyH", "KeyL", "KeyJ", "KeyY",
+  "BracketLeft", "BracketRight",
+  "KeyC", "KeyO", "F1", "F2", "F3", "F4",
+  "Digit1", "Digit2", "Digit3", "Digit4",
+] as const;
+
+/** The same codes as framework actions, so `input.justPressed` can latch each one. */
+export const ACTION_BINDINGS = Object.fromEntries(
+  ACTION_KEYS.map((code) => [code, { keys: [code] }]),
+) as Record<string, { keys: string[] }>;
 
 export class Midway extends Scene<GameState, undefined> {
-  static override readonly initialState: GameState = {};
+  static override readonly initialState: GameState = {
+    status: "briefing",
+    mode: "deck",
+    altitude: 0,
+    crashReason: "",
+    spoken: 0,
+    radioLines: 0,
+    ias: 0,
+    throttle: 0,
+    airborne: false,
+    particles: 0,
+    explosions: 0,
+    muzzle: 0,
+    splashes: 0,
+    waterAccepted: 0,
+    waterRejected: 0,
+    ordnance: 0,
+    recoveryReady: false,
+    uiReady: false,
+  };
 
   battle!: Battle;
   world!: WorldView;
-  hud!: Hud;
+  hud!: IHud;
   audio!: Soundscape;
   ctx!: ICtx<GameState, undefined>;
   paused = false;
@@ -34,29 +124,108 @@ export class Midway extends Scene<GameState, undefined> {
   ended = false;
   private crashCam = false;
   started = false;
-  keys = new Set<string>();
-  mouse = { fire: false, looking: false, lx: 0, ly: 0 };
+  private publishTick = 0;
+  private mouseState = { fire: false, looking: false, lockClick: false, lx: 0, ly: 0 };
+  /**
+   * Live pointer view for capture tools. `fire`/`looking` are computed from the framework pointer
+   * rather than the last polled frame, so a button release reads false in the same turn the tool
+   * asserts it — the old window listener cleared these synchronously and the tools depend on it.
+   */
+  get mouse(): { fire: boolean; looking: boolean; lockClick: boolean; lx: number; ly: number } {
+    const buttons = this.ctx?.input?.raw?.pointer?.buttons ?? 0;
+    const live = this.battle?.status === "playing" && !this.paused;
+    const looking = live && (buttons & 2) !== 0 && !this.battle?.player?.gunner;
+    const blocked = this.battle?.player?.gunner === true
+      && (!this.ctx?.input?.raw?.pointer?.captured || this.mouseState.lockClick);
+    return {
+      fire: live && (buttons & 1) !== 0 && !blocked,
+      looking,
+      lockClick: this.mouseState.lockClick,
+      lx: this.mouseState.lx,
+      ly: this.mouseState.ly,
+    };
+  }
+  /** The held keys the scene is acting on; exposed because capture tools read `midway.keys`. */
+  get keys(): ReadonlySet<string> {
+    return this.ctx?.input?.raw?.keys ?? new Set<string>();
+  }
+  /** Set only from the engine's real lock state; it is the latch that turns an Esc unlock into a pause. */
+  private wasCaptured = false;
   /** Briefing selection, kept on the scene so it survives a restart into a fresh Battle. */
   assignment: Assignment = "strike";
   private audioBuffers: ReadonlyMap<string, AudioBuffer> = new Map();
   private camPos = new Vector3();
   private nextAlbatross = 0;
   private cleanups: Array<() => void> = [];
+  private stopReporting: () => void = () => {};
+
+  /**
+   * Keep the loading layer honest while the launch runs: the engine's own byte-weighted
+   * `startup.progress` drives the bar, and its in-flight ledger names the file being loaded. A
+   * launch the engine gives up on (stalled, or a lost GPU device) replaces both with the message
+   * and the copy button — a loading screen that hangs with no text is a bug report nobody can file.
+   *
+   * On a timer rather than per frame on purpose: this launch renders about one frame a second
+   * while the models decode, and a per-frame pump would update the bar exactly that often.
+   */
+  /**
+   * What the launch is doing right now, in the player's words.
+   *
+   * Naming the outstanding asset is only right while there is one. Measured on this desktop: every
+   * asset settles 5.6 s in and the world is not ready until 24 s, so a label that only ever names
+   * an asset spends three quarters of the launch showing the last file that happened to be in
+   * flight — which is exactly how "68% — weapon.torpedo.glb" reads as frozen.
+   */
+  private launchLabel(ctx: ICtx<GameState, undefined>): string {
+    const [loading] = ctx.assets.progress.pending;
+    if (loading !== undefined) return loading;
+    if (!ctx.startup.compileSettled) return "Compiling shaders for the Pacific…";
+    return "Warming up the first frames…";
+  }
+
+  private reportLaunch(ctx: ICtx<GameState, undefined>): () => void {
+    let failure: string | undefined;
+    const offFailure = onLaunchFailure((reported) => {
+      failure = reported.message;
+    });
+    const publish = (): void => {
+      shell.loading({
+        ...(failure === undefined ? {} : { failure }),
+        label: failure === undefined ? this.launchLabel(ctx) : "The launch stopped.",
+        progress: ctx.startup.progress,
+      });
+    };
+    publish();
+    const timer = setInterval(publish, 250);
+    return () => {
+      clearInterval(timer);
+      offFailure();
+    };
+  }
 
   async load(ctx: ICtx<GameState, undefined>): Promise<void> {
+    const stopReporting = this.reportLaunch(ctx);
+    const timed = async <R>(label: string, work: Promise<R>): Promise<R> => {
+      const began = performance.now();
+      const value = await work;
+      console.log(`TN_LOAD_STEP:{"label":"${label}","ms":${(performance.now() - began).toFixed(1)}}`);
+      return value;
+    };
     const [, , , , , , buffers] = await Promise.all([
-      loadImportedAircraft(ctx),
-      loadImportedShips(ctx),
-      loadImportedFleet(ctx),
+      timed("aircraft", loadImportedAircraft(ctx)),
+      timed("ships", loadImportedShips(ctx)),
+      timed("fleet", loadImportedFleet(ctx)),
       // The imported hulls the fleet is built from — Yorktown, the three Japanese carriers, the
       // cruisers, destroyers and submarines. Their sizes come from src/sim/catalog.ts, which
       // `Battle` has already read; this only brings in the geometry to draw them with.
-      loadImportedHulls(ctx),
-      loadDeckCrew(ctx),
-      loadEnvironment(ctx),
-      Soundscape.load(ctx.assets),
+      timed("hulls", loadImportedHulls(ctx)),
+      timed("deck-crew", loadDeckCrew(ctx)),
+      timed("environment", loadEnvironment(ctx)),
+      timed("audio", Soundscape.load(ctx.assets)),
     ]);
     this.audioBuffers = buffers;
+    this.stopReporting = stopReporting;
+    console.log(`TN_LOAD_STEP:{"label":"scene-load-total","ms":${performance.now().toFixed(1)}}`);
     // Keep the opaque loading layer up until the first update has built the world and placed the
     // camera; hiding it here showed a few frames of an unlit, half-built scene.
   }
@@ -83,7 +252,7 @@ export class Midway extends Scene<GameState, undefined> {
         scene.matrixWorldAutoUpdate = savedAutoUpdate;
       });
     }
-    this.hud = new Hud(this.battle, this.world);
+    this.hud = shell.hud(this.battle, this.world);
     // HUD state, timers and input feedback update on every fixed simulation tick; the canvas is
     // drawn once per presented frame from the latest state. `hud.update` used to clear and redraw
     // here for every fixed tick, so catch-up ticks repainted states that were never presented.
@@ -93,17 +262,39 @@ export class Midway extends Scene<GameState, undefined> {
       new AudioBus({ camera: ctx.camera, maxVoices: 48 }),
       new AudioBus({ camera: ctx.camera, maxVoices: 16 }),
     );
-    this.attachInput();
+    this.cleanups.push(shell.onIntent((intent) => this.intent(intent)));
     this.updateLoadoutUI();
-    $("flight-ui").classList.add("hidden");
+    this.updateAssignmentUI();
+    shell.screen("flight", false);
+    console.log(`TN_LOAD_STEP:{"label":"enter","ms":${performance.now().toFixed(1)}}`);
     void ctx.startup.whenReady().then(() => {
+      this.stopReporting();
+      console.log(`TN_LOAD_STEP:{"label":"ready","ms":${performance.now().toFixed(1)}}`);
       this.started = true;
-      $("loading").classList.add("hidden");
-      if (this.battle.status === "briefing") $("briefing").classList.remove("hidden");
+      shell.screen("loading", false);
+      if (this.battle.status === "briefing") {
+        // Nothing on a native target can click "take the deck", so the sortie starts itself.
+        if (shell === nullShell) this.begin(false);
+        else shell.screen("briefing", true);
+      }
+      // Compile the unseen views now, while the briefing is up and the player is reading it —
+      // never on the way to the briefing. Precompiling these subtrees is genuinely expensive
+      // (measured in tens of seconds on this scene, whether through the engine's whole-scene
+      // `warmUpScene` or a targeted `compileAsync`), so putting it in front of the loading gate
+      // trades a one-second stall for a minute of launch. Unawaited on purpose: the briefing is
+      // idle time, the compile yields, and a player who presses on before it finishes is no worse
+      // off than they were without it.
+      // Deferred past a task boundary on purpose: the briefing was just made visible, and the
+      // warm-up's first act is a synchronous build (the rear station, ~1 s of procedural texture
+      // and geometry) that would otherwise land between `screen("briefing", true)` and the
+      // browser's next chance to paint it. Measured: 2.7 s between this handler and the intro
+      // screen appearing, for work the player never sees.
+      setTimeout(() => void this.world.warmUpViews(), 0);
     });
   }
 
   exit(): void {
+    this.ctx.input.releaseMouse();
     this.audio.dispose();
     this.world.crew.dispose();
     this.world.ripples.dispose();
@@ -111,171 +302,164 @@ export class Midway extends Scene<GameState, undefined> {
     this.world.particles.dispose();
     for (const off of this.cleanups) off();
     this.cleanups = [];
-    this.keys.clear();
+    this.clearInput();
   }
 
-  private on<K extends keyof WindowEventMap>(target: Window, type: K, handler: (event: WindowEventMap[K]) => void): void {
-    target.addEventListener(type, handler);
-    this.cleanups.push(() => target.removeEventListener(type, handler));
-  }
-
-  private onElement(target: HTMLElement, type: string, handler: (event: Event) => void): void {
-    this.onTarget(target, type, handler);
-  }
-
-  /** Every listener the scene takes out has to come back on exit, document ones included. */
-  private onTarget(target: EventTarget, type: string, handler: (event: Event) => void): void {
-    target.addEventListener(type, handler);
-    this.cleanups.push(() => target.removeEventListener(type, handler));
-  }
-
-  private attachInput(): void {
-    const buttons: Record<string, () => void> = {
-      "start-deck": () => this.begin(false),
-      "start-air": () => this.begin(true),
-      "brief-help": () => this.showOverlay("pause-overlay"),
-      "btn-camera": () => this.action("KeyC"),
-      "btn-pause": () => this.showOverlay("pause-overlay"),
-      "btn-map": () => this.showOverlay("map-overlay"),
-      "close-pause": () => this.hideOverlays(),
-      "close-map": () => this.hideOverlays(),
-      "close-command": () => this.hideOverlays(),
-      resume: () => this.hideOverlays(),
-      "restart-deck": () => this.begin(false, true),
-      "restart-air": () => this.begin(true, true),
-      "restart-pause": () => this.restartToBriefing(),
-      "map-home": () => {
+  /** One switch for everything the player asks for, whatever surface asked it. */
+  private intent(intent: Intent): void {
+    switch (intent.kind) {
+      case "begin":
+        // A fresh deck start taken from the debrief continues the operation from the carrier
+        // rather than resetting the battle (upstream af5caac, where the DOM button did this).
+        if (!intent.airborne && intent.fresh && this.battle.status === "debrief") this.continueOnDeck();
+        else this.begin(intent.airborne, intent.fresh);
+        break;
+      case "briefing":
+        this.restartToBriefing();
+        break;
+      case "key":
+        this.action(intent.code);
+        break;
+      case "resume":
+        this.resume();
+        break;
+      case "overlay":
+        this.showOverlay(intent.id);
+        break;
+      case "loadout":
+        this.selectLoadout(intent.id);
+        break;
+      case "assignment":
+        this.selectAssignment(intent.id);
+        break;
+      case "quality":
+        this.world.setQuality(intent.id);
+        break;
+      case "command":
+        this.command(intent.id);
+        break;
+      case "target":
+        this.designateTarget(intent.id);
+        break;
+      case "take-aircraft":
+        this.takeAnotherAircraft();
+        break;
+      case "home":
         this.goHome();
         this.hideOverlays();
-      },
-      "btn-audio": () => {
+        break;
+      case "audio":
         this.audio.start();
         this.audio.muted = !this.audio.muted;
-        $("btn-audio").textContent = this.audio.muted ? "SOUND OFF" : "SOUND ON";
-      },
-      fullscreen: async () => {
-        try {
-          if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
-          else await document.exitFullscreen();
-        } catch {
-          this.hud.toast("FULLSCREEN IS NOT AVAILABLE IN THIS VIEW");
-        }
-      },
-    };
-    for (const [id, fn] of Object.entries(buttons)) {
-      const el = document.getElementById(id);
-      if (el) this.onElement(el, "click", fn);
-    }
-    for (const id of ["bomb", "torpedo"]) {
-      const el = $("loadout-" + id);
-      if (el) this.onElement(el, "click", () => this.selectLoadout(id));
-    }
-    const assignment = document.getElementById("assignment-select") as HTMLSelectElement | null;
-    if (assignment) {
-      assignment.value = this.assignment;
-      this.onElement(assignment, "change", (e) => this.selectAssignment((e.target as HTMLSelectElement).value));
-    }
-    const deckLoadout = $("deck-loadout") as HTMLSelectElement;
-    this.onElement(deckLoadout, "change", (e) => this.selectLoadout((e.target as HTMLSelectElement).value));
-    const quality = $("quality") as HTMLSelectElement;
-    this.onElement(quality, "change", (e) => this.world.setQuality((e.target as HTMLSelectElement).value));
-    this.onElement($("command-buttons"), "click", (e) => {
-      const btn = (e.target as HTMLElement).closest("[data-command]") as HTMLElement | null;
-      if (btn) this.command((btn as HTMLElement).dataset.command as string);
-    });
-    this.onElement($("contact-list"), "click", (e) => {
-      const btn = (e.target as HTMLElement).closest("[data-contact]") as HTMLElement | null;
-      if (btn) this.designateTarget(btn.dataset.contact as string);
-    });
-    this.onElement($("big-map"), "click", (e) => {
-      const canvas = e.target as HTMLCanvasElement;
-      const rect = canvas.getBoundingClientRect();
-      const x = ((e as MouseEvent).clientX - rect.left) / rect.width * canvas.width;
-      const y = ((e as MouseEvent).clientY - rect.top) / rect.height * canvas.height;
-      const nearest = this.hud.mapItems.map((p) => ({ ...p, d: Math.hypot(p.x - x, p.y - y) })).sort((a, b) => a.d - b.d)[0];
-      if (nearest && nearest.d < 55) this.designateTarget(nearest.id);
-    });
-    this.on(window, "keydown", (e) => {
-      if ((e.target as HTMLElement).matches("select,input,textarea")) return;
-      if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab", "F1", "F2", "F3"].includes(e.code)) e.preventDefault();
-      if (!e.repeat) {
-        this.keys.add(e.code);
-        this.action(e.code);
-      } else this.keys.add(e.code);
-    });
-    this.on(window, "keyup", (e) => {
-      this.keys.delete(e.code);
-      if (e.code === "KeyV") this.world.rear = false;
-    });
-    this.on(window, "blur", () => {
-      this.clearInput();
-      if (this.battle.status === "playing" && !this.paused) this.showOverlay("pause-overlay");
-    });
-    this.onTarget(document, "visibilitychange", () => {
-      if (document.hidden) {
+        break;
+      case "suspend":
         this.clearInput();
         if (this.battle.status === "playing" && !this.paused) this.showOverlay("pause-overlay");
+        break;
+    }
+  }
+
+  /**
+   * Reads this frame's input from the framework rather than the window.
+   *
+   * `ctx.input` is the one surface the desktop and playtest transports can drive, so the keyboard
+   * and mouse work identically in a browser, in a native window and under a scripted run.
+   */
+  private pollInput(): { keys: ReadonlySet<string>; fire: boolean } {
+    const input = this.ctx.input;
+    for (const code of ACTION_KEYS) if (input.justPressed(code)) this.action(code);
+    const raw = input.raw;
+    const live = this.battle.status === "playing" && !this.paused;
+    const gunner = this.battle.player.gunner === true;
+    const down = (raw.pointer.buttons & 1) !== 0;
+    // On the gun the first press only takes the pointer lock; that press never fires.
+    if (live && gunner && down && !raw.pointer.captured) {
+      if (!this.mouseState.lockClick) {
+        this.mouseState.lockClick = true;
+        this.ctx.input.captureMouse();
       }
-    });
-    this.on(window, "pointerdown", (e) => {
-      if ((e.target as HTMLElement).closest("button,select,.dialog") || this.battle.status !== "playing" || this.paused) return;
-      if (e.button === 2) {
-        this.mouse.looking = true;
-        this.mouse.lx = e.clientX;
-        this.mouse.ly = e.clientY;
-        this.world.lookActive = true;
-        return;
-      }
-      if (e.button !== 0 || this.mouse.looking) return;
-      this.audio.start();
-      this.mouse.fire = true;
-    });
-    this.on(window, "pointerup", (e) => {
-      if (e.button === 0) this.mouse.fire = false;
-      if (e.button === 2) {
-        this.mouse.looking = false;
-        this.world.lookActive = false;
-      }
-    });
-    this.on(window, "pointermove", (e) => {
-      if (this.paused) return;
-      if (this.mouse.looking) {
-        this.world.lookYaw = clamp((this.world.lookYaw || 0) + (e.clientX - this.mouse.lx) * 0.005, -2.7, 2.7);
-        this.world.lookPitch = clamp((this.world.lookPitch || 0) - (e.clientY - this.mouse.ly) * 0.004, -0.8, 0.95);
-        this.mouse.lx = e.clientX;
-        this.mouse.ly = e.clientY;
-      }
-    });
-    this.on(window, "contextmenu", (e) => {
-      if (this.battle.status === "playing") e.preventDefault();
-    });
+    } else if (!down) this.mouseState.lockClick = false;
+    const looking = live && !gunner && (raw.pointer.buttons & 2) !== 0;
+    const blocked = gunner && (!raw.pointer.captured || this.mouseState.lockClick);
+    const fire = live && down && !blocked;
+    if (fire && !this.mouseState.fire) this.audio.start();
+    const { x, y } = raw.pointer.position;
+    if (looking && this.mouseState.looking) {
+      // Right-drag free-looks from the cockpit; the pilot's view is otherwise unchanged.
+      this.world.lookYaw = clamp((this.world.lookYaw || 0) + (x - this.mouseState.lx) * 0.005, -2.7, 2.7);
+      this.world.lookPitch = clamp((this.world.lookPitch || 0) - (y - this.mouseState.ly) * 0.004, -0.8, 0.95);
+    }
+    this.mouseState.fire = fire;
+    this.mouseState.looking = looking;
+    this.mouseState.lx = x;
+    this.mouseState.ly = y;
+    this.world.lookActive = looking;
+    return { keys: raw.keys, fire };
   }
 
   update(_ctx: ICtx<GameState, undefined>, dt: number): void {
     this.wall += dt;
     const b = this.battle;
+    const { keys, fire: mouseFire } = this.pollInput();
+    // A lock granted late — after a pause, a menu, an exit or a seat change — must never outlive
+    // the state that asked for it, even if the latch never saw it taken. Read the engine's real
+    // capture state, not the request, and this runs paused too so the cursor cannot stay hidden.
+    if ((!b.player.gunner || this.paused) && this.ctx.input.raw.pointer.captured) {
+      this.wasCaptured = false;
+      this.ctx.input.releaseMouse();
+    }
+    // Losing a lock we actually held is an Esc: the browser drops it with no keydown, and the
+    // cursor comes back. Detect it before the controls are computed so the tick that lost the
+    // lock opens the menu instead of spending one last round on a held trigger.
+    if (
+      b.player.gunner === true &&
+      !this.paused &&
+      this.wasCaptured &&
+      !this.ctx.input.raw.pointer.captured
+    ) {
+      this.wasCaptured = false;
+      this.showOverlay("pause-overlay");
+    }
     const inFlight = b.status === "playing" && !this.paused;
     if (inFlight) {
-      let turn = (this.keys.has("ArrowRight") || this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("ArrowLeft") || this.keys.has("KeyA") ? 1 : 0);
+      const turn = (keys.has("ArrowRight") || keys.has("KeyD") ? 1 : 0) - (keys.has("ArrowLeft") || keys.has("KeyA") ? 1 : 0);
       // Inverted pitch, as a flight-sim stick: pulling back (Down) raises the nose. The mouse
       // never commands pitch or roll — it fires the guns and, held right, moves the view.
-      const pitch = (this.keys.has("ArrowDown") ? 1 : 0) - (this.keys.has("ArrowUp") ? 1 : 0);
-      const input = {
-        turn,
-        pitch,
-        rudder: (this.keys.has("KeyE") ? 1 : 0) - (this.keys.has("KeyZ") ? 1 : 0),
-        wheelBrake: this.keys.has("KeyK"),
-        throttleUp: this.keys.has("KeyW"),
-        throttleDown: this.keys.has("KeyS"),
-        fire: this.keys.has("Space") || this.mouse.fire,
-      };
-      this.world.rear = this.keys.has("KeyV");
+      const pitch = (keys.has("ArrowDown") ? 1 : 0) - (keys.has("ArrowUp") ? 1 : 0);
+      // Manning the gun, the same keys aim the rear station instead of the aircraft: the AI pilot
+      // already holds the course, so a stray stick input must not disengage it. The gunner looks
+      // aft, where the camera's screen-right is the aircraft's port (−X), so the keys are mapped
+      // to the view rather than the aircraft's +X: D / ArrowRight raises the aim to the gunner's
+      // right, A / ArrowLeft to the left.
+      const gunner = b.player.gunner === true;
+      const input = gunner
+        ? {
+            aimYaw: (keys.has("ArrowLeft") || keys.has("KeyA") ? 1 : 0) - (keys.has("ArrowRight") || keys.has("KeyD") ? 1 : 0),
+            aimPitch: (keys.has("ArrowUp") || keys.has("KeyW") ? 1 : 0) - (keys.has("ArrowDown") || keys.has("KeyS") ? 1 : 0),
+            fire: keys.has("Space") || mouseFire,
+          }
+        : {
+            turn,
+            pitch,
+            rudder: (keys.has("KeyE") ? 1 : 0) - (keys.has("KeyZ") ? 1 : 0),
+            wheelBrake: keys.has("KeyK"),
+            throttleUp: keys.has("KeyW"),
+            throttleDown: keys.has("KeyS"),
+            fire: keys.has("Space") || mouseFire,
+          };
+      if (gunner) this.aimFromPointer();
+      // A battle-side exit from the station (crash, seat gone) must not leave the cursor locked.
+      else if (this.wasCaptured) {
+        this.wasCaptured = false;
+        this.ctx.input.releaseMouse();
+      }
+      this.world.rear = !gunner && keys.has("KeyV");
       // Shift is a simulation control only: it runs extra fixed steps, and never touches
       // thrust, the camera, animation rates or audio. `canAccelerate()` gates it to level
       // flight above 120 m, undamaged, with no enemy aircraft within 2400 m or ship within
       // 2800 m, so it can never fast-forward a fight.
       const speed =
-        (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight")) && b.canAccelerate() ? 3 : 1;
+        (keys.has("ShiftLeft") || keys.has("ShiftRight")) && b.canAccelerate() ? 3 : 1;
       for (let i = 0; i < speed; i += 1) b.step(1 / 60, input);
       for (const e of b.events.splice(0)) {
         this.audio.event(e);
@@ -284,7 +468,9 @@ export class Midway extends Scene<GameState, undefined> {
       }
     }
     this.world.update(this.paused ? 0 : dt, this.wall, b.status === "briefing");
+    shell.cockpitView(this.world.cockpitView);
     this.hud.update(dt);
+    if ((this.publishTick += 1) % 6 === 0) this.publish();
     const p = b.player;
     const onShip = p.mode === "deck" || p.mode === "launch" || p.mode === "arrest" || p.mode === "service";
     const nearShip = onShip || b.ships.some((s: any) => s.team === "us" && s.kind === "carrier" && !s.sunk && distance2(s, p) < 1800 * 1800);
@@ -356,31 +542,102 @@ export class Midway extends Scene<GameState, undefined> {
     }
     // The pilot's own view ends with the aircraft. From the moment it is a wreck the camera watches
     // it go in from outside, the way the player watches the ones they shoot down.
-    if ((p.mode === "crashing" || p.mode === "wreck") && !this.crashCam) {
+    if ((p.mode === "crashing" || p.mode === "wreck" || p.mode === "downed") && !this.crashCam) {
       this.crashCam = true;
+      this.wasCaptured = false;
+      this.ctx.input.releaseMouse();
       if (this.world.cameraMode === 1) this.world.setCamera(0);
-    } else if (p.mode !== "crashing" && p.mode !== "wreck" && this.crashCam) this.crashCam = false;
+    } else if (p.mode !== "crashing" && p.mode !== "wreck" && p.mode !== "downed" && this.crashCam) this.crashCam = false;
     if ((b.status === "lost" || b.status === "won" || b.status === "debrief") && !this.ended) {
       this.ended = true;
+      this.wasCaptured = false;
+      this.ctx.input.releaseMouse();
       this.clearInput();
+      // The hud channel's `debrief()` un-hides #debrief in the web view, but the native entry
+      // re-applies `ui.screens` on every published ui snapshot. Without this the published
+      // `screens.debrief` never leaves the false `begin()` set, so the first later snapshot hides
+      // the dialog again — the debrief exists in the simulation and never on screen. Same
+      // derivation hideOverlays uses, so both agree.
+      this.syncDebriefScreen();
       this.hud.debrief();
     }
   }
 
+  /** The one place `ui.screens.debrief` is derived from the battle, for the terminal states. */
+  private syncDebriefScreen(): void {
+    shell.screen("debrief", ["lost", "won", "debrief"].includes(this.battle.status));
+  }
+
+  /** Aim from the lock only; the lock's own loss is handled before the controls, in update(). */
+  private aimFromPointer(): void {
+    const pointer = this.ctx.input.raw.pointer;
+    if (!pointer.captured) return;
+    if (!this.wasCaptured) {
+      // The first tick that sees the lock can still carry the cursor movement that took it — the
+      // HUD button click walks the pointer across the screen — or the browser's warp into the
+      // lock. Applying that one sample would snap the barrels to a clamp on entry, so drop it;
+      // the engine's per-tick relative reset clears it, and the next real motion aims normally.
+      this.wasCaptured = true;
+      return;
+    }
+    const d = this.ctx.input.vector("aim");
+    if (d.x !== 0 || d.y !== 0) this.battle.aimRear(-d.x * 0.004, -d.y * 0.004);
+  }
+
+  /** The state anything outside the simulation reads: a native HUD, or a playtest assertion. */
+  private publish(): void {
+    const p = this.battle.player;
+    const mode = String(p.mode ?? "");
+    this.ctx.state.set({
+      status: String(this.battle.status),
+      mode,
+      altitude: Math.round(p.y ?? 0),
+      ias: Math.round(p.ias ?? p.speed ?? 0),
+      throttle: Number((p.throttle ?? 0).toFixed(2)),
+      airborne: mode === "flight" || mode === "crashing",
+      particles: this.world.particles.smoke.items.length + this.world.particles.glow.items.length,
+      explosions: this.world.particles.counts.explosion ?? 0,
+      crashReason: String(this.battle.crashReason ?? ""),
+      spoken: this.audio.spokenLines,
+      radioLines: this.battle.radio.length,
+      muzzle: this.world.particles.counts.muzzle ?? 0,
+      splashes: this.world.particles.counts.splash ?? 0,
+      waterAccepted: this.world.ripples.effects.accepted,
+      waterRejected: this.world.ripples.effects.rejected,
+      ordnance: p.bombs ?? 0,
+      recoveryReady: this.battle.approach().ready,
+    });
+    // `set` only stages the patch; the UI channel receives nothing until it is flushed. Without
+    // this the native web view attaches, subscribes, and then waits forever for a first snapshot
+    // — an overlay that is present and permanently blank.
+    this.ctx.state.flush();
+  }
+
+  /** Drops the mouse state only: held keys are the framework's, and it clears them on blur. */
   private clearInput(): void {
-    this.keys.clear();
-    this.mouse.fire = false;
-    this.mouse.looking = false;
+    this.mouseState.fire = false;
+    this.mouseState.looking = false;
+    this.mouseState.lockClick = false;
+    this.world.rear = false;
     this.world.lookActive = false;
   }
 
   private hideOverlays(): void {
-    for (const id of ["pause-overlay", "map-overlay", "command-overlay"]) $(id).classList.add("hidden");
-    $("debrief").classList.toggle("hidden", !["lost", "won", "debrief"].includes(this.battle.status));
+    shell.overlay(null);
+    this.syncDebriefScreen();
     this.overlay = null;
     this.hud.mapOpen = false;
     this.paused = false;
+    // Opening or closing a menu always drops the lock; only resume() re-takes it, from a click.
+    this.wasCaptured = false;
+    this.ctx.input.releaseMouse();
     this.clearInput();
+  }
+
+  /** The pause/map/command buttons resume play; the click is the gesture that re-takes the lock. */
+  private resume(): void {
+    this.hideOverlays();
+    if (this.battle.player.gunner) this.ctx.input.captureMouse();
   }
 
   private showOverlay(id: string): void {
@@ -391,20 +648,22 @@ export class Midway extends Scene<GameState, undefined> {
     this.hideOverlays();
     this.overlay = id;
     this.paused = true;
-    $("debrief").classList.add("hidden");
-    $(id).classList.remove("hidden");
+    shell.screen("debrief", false);
+    shell.overlay(id);
     this.hud.mapOpen = id === "map-overlay";
     this.updateLoadoutUI();
     if (this.hud.mapOpen) {
       this.hud.drawMap();
       this.hud.lastContacts = "";
       this.hud.updateContactList();
+      this.hud.lastBattleStatus = "";
+      this.hud.updateBattleStatus();
     }
   }
 
   private begin(airborne = false, fresh = false): void {
     this.hideOverlays();
-    $("debrief").classList.add("hidden");
+    shell.screen("debrief", false);
     this.ended = false;
     if (fresh) {
       const choice = this.battle.player.loadout;
@@ -421,8 +680,8 @@ export class Midway extends Scene<GameState, undefined> {
     this.battle.start(airborne);
     if (!airborne) this.audio.event({ type: "engineStart", airframe: this.battle.player.airframe });
     this.updateLoadoutUI();
-    $("briefing").classList.add("hidden");
-    $("flight-ui").classList.remove("hidden");
+    shell.screen("briefing", false);
+    shell.screen("flight", true);
     this.clearInput();
     this.world.snap = true;
     this.world.followBomb = false;
@@ -440,29 +699,27 @@ export class Midway extends Scene<GameState, undefined> {
     this.hud.hitFlash = 0;
     this.ended = false;
     this.updateAssignmentUI();
-    $("flight-ui").classList.add("hidden");
-    $("briefing").classList.remove("hidden");
-    $("debrief").classList.add("hidden");
+    shell.screen("flight", false);
+    shell.screen("briefing", true);
+    shell.screen("debrief", false);
     this.updateLoadoutUI();
   }
 
-  private updateLoadoutUI(): void {
+  private updateLoadoutUI(notice?: string): void {
     const p = this.battle.player;
-    const torpedo = p.loadout === "torpedo";
+    const id = p.loadout || "bomb";
+    const torpedo = id === "torpedo";
     const can = p.mode === "deck" && (p.deckSpeed || 0) < 0.5;
-    $("selected-aircraft").textContent = LOADOUTS[p.loadout || "bomb"].name;
-    $("aircraft-tag-title").textContent = torpedo ? "DOUGLAS TBD DEVASTATOR" : "DOUGLAS SBD DAUNTLESS";
-    $("aircraft-tag-role").textContent = torpedo ? "TORPEDO BOMBER · DOUGLAS TBD-1 DEVASTATOR" : "SCOUT BOMBER · BOMBING SQUADRON SIX";
-    $("loadout-note").textContent = torpedo ? "Low, slow, straight run · 1 aerial torpedo · no dive brakes" : "Steep dive attack · perforated dive brakes · lighter wing stores";
-    for (const id of ["bomb", "torpedo"]) {
-      const el = $("loadout-" + id);
-      el.classList.toggle("selected", p.loadout === id);
-      el.setAttribute("aria-pressed", String(p.loadout === id));
-    }
-    const deck = $("deck-loadout") as HTMLSelectElement;
-    deck.value = p.loadout;
-    deck.disabled = !can;
-    $("deck-loadout-note").textContent = can ? "Changes aircraft and payload." : "Stop on the flight deck to change loadout.";
+    shell.loadout({
+      id,
+      name: LOADOUTS[id].name,
+      tagTitle: torpedo ? "DOUGLAS TBD DEVASTATOR" : "DOUGLAS SBD DAUNTLESS",
+      tagRole: torpedo ? "TORPEDO BOMBER · DOUGLAS TBD-1 DEVASTATOR" : "SCOUT BOMBER · BOMBING SQUADRON SIX",
+      note: torpedo ? "Low, slow, straight run · 1 aerial torpedo · no dive brakes" : "Steep dive attack · perforated dive brakes · lighter wing stores",
+      deckEnabled: can,
+      deckNote: can ? "Changes aircraft and payload." : "Stop on the flight deck to change loadout.",
+      deckNotice: notice,
+    });
   }
 
   /** The briefing choice outlives a restart, so replay launches the assignment the player picked. */
@@ -473,29 +730,57 @@ export class Midway extends Scene<GameState, undefined> {
   }
 
   private updateAssignmentUI(): void {
-    const select = document.getElementById("assignment-select") as HTMLSelectElement | null;
-    if (select) select.value = this.assignment;
-    const note = document.getElementById("assignment-note");
-    if (note) note.textContent = ASSIGNMENTS[this.assignment].brief;
+    shell.assignment(this.assignment, ASSIGNMENTS[this.assignment].brief);
   }
 
   private selectLoadout(id: string): void {
     if (!this.battle.selectLoadout(id)) {
       const notice = this.battle.events.at(-1);
-      this.updateLoadoutUI();
-      if (notice?.type === "notice") {
-        this.hud.toast(notice.text);
-        $("deck-loadout-note").textContent = notice.text;
-      }
+      this.updateLoadoutUI(notice?.type === "notice" ? notice.text : undefined);
+      if (notice?.type === "notice") this.hud.toast(notice.text);
       return;
     }
     this.world.setAirframe();
+    // A different airframe is a different cockpit, and the new one has never been drawn. Warm it
+    // here on the deck, where the compile is invisible, instead of in the first cockpit frame aloft.
+    void this.world.warmUpViews();
     this.updateLoadoutUI();
   }
 
   private setCamera(mode: number): void {
+    // Authority boundary: the gunner station is first-person only, so no route may change the view.
+    if (this.battle.player.gunner) {
+      this.hud.toast("CAMERA LOCKED — REAR GUNNER · Y FOR THE PILOT SEAT");
+      return;
+    }
     this.world.setCamera(mode);
     this.hud.toast(["CHASE CAMERA", "PILOT COCKPIT — HOLD RIGHT MOUSE TO LOOK", "WIDE CHASE CAMERA", "OVERHEAD ATTACK CAMERA — LOOKING DOWN ON YOUR AIRCRAFT"][mode]);
+  }
+
+  /** Y and the HUD button: swap the pilot and the rear gunner, or say why the seat is unavailable. */
+  private toggleGunner(): void {
+    const b = this.battle;
+    if (b.player.gunner) {
+      b.setGunner(false);
+      this.wasCaptured = false;
+      this.ctx.input.releaseMouse();
+      this.hud.toast("PILOT — YOU HAVE CONTROL");
+      return;
+    }
+    if (!b.setGunner(true)) {
+      this.hud.toast("REAR GUN NEEDS AN SBD OR TBD IN FLIGHT");
+      return;
+    }
+    this.audio.start();
+    // The Y keydown and the HUD button are both user gestures. The request is asynchronous: the
+    // lock is only trusted once raw.pointer.captured reports it, and a refusal leaves the cursor
+    // free to click the canvas and try again.
+    this.ctx.input.captureMouse();
+    // The controls live in the persistent lower-centre hint; this transient line only says who has
+    // the stick, so the two rows never repeat each other.
+    this.hud.toast(
+      b.player.rearAmmo > 0 ? "AI PILOT HAS THE STICK" : "REAR GUN EMPTY — INSPECT STATION · Y PILOT",
+    );
   }
 
   private goHome(): void {
@@ -505,6 +790,31 @@ export class Midway extends Scene<GameState, undefined> {
       return;
     }
     this.hud.toast(`RETURN COURSE — ${home.name.toUpperCase()}`);
+  }
+
+  /** Take a replacement aircraft after a shoot-down. A refusal is surfaced by the battle's notice. */
+  private takeAnotherAircraft(): void {
+    if (!this.battle.takeAnotherAircraft()) return;
+    this.world.snap = true;
+    this.world.followBomb = false;
+    this.audio.event({ type: "engineStart", airframe: this.battle.player.airframe });
+    this.updateLoadoutUI();
+    this.hud.toast("NEW AIRCRAFT ON DECK — HOLD W TO LAUNCH");
+  }
+
+  /**
+   * The debrief's deck action. A short sortie's after-action report ends the sortie, not the war:
+   * this resumes the same battle on the deck, where the service the recovery started finishes and
+   * re-arms the aircraft. A lost or won mission uses the button to start a fresh operation instead.
+   */
+  private continueOnDeck(): void {
+    if (!this.battle.continueAfterRecovery()) return;
+    this.ended = false;
+    this.hideOverlays();
+    this.world.snap = true;
+    this.world.followBomb = false;
+    this.updateLoadoutUI();
+    this.hud.toast("BACK ON DECK — REFUELLED AND REARMED, HOLD W TO LAUNCH AGAIN");
   }
 
   private designateTarget(id: string): void {
@@ -560,7 +870,28 @@ export class Midway extends Scene<GameState, undefined> {
     const p = this.battle.player;
     // A wrecked aircraft takes no more orders; the keys go dead until it hits the water.
     if (p.mode === "crashing" || p.mode === "wreck") return;
+    // Downed: no aircraft to command. The replacement order is the only one that lands; the map and
+    // manual were already handled above, on their own paths.
+    if (p.mode === "downed") {
+      if (code === "Enter") this.takeAnotherAircraft();
+      return;
+    }
+    // The rear-gun station owns the view: camera and view orders are refused at the route, not
+    // merely reset a frame later.
+    if (p.gunner && ["KeyC", "F1", "F2", "F3", "KeyJ", "KeyV"].includes(code)) {
+      this.hud.toast("CAMERA LOCKED — REAR GUNNER · Y FOR THE PILOT SEAT");
+      return;
+    }
+    // The AI pilot owns the aircraft while the player is on the gun; these orders would either
+    // disengage it or drop the bombs from the wrong seat.
+    if (p.gunner && ["KeyT", "KeyL", "KeyB", "KeyF", "KeyG", "KeyN", "KeyI", "KeyU", "BracketLeft", "BracketRight"].includes(code)) {
+      this.hud.toast("AI PILOT HAS CONTROL — Y TO RETURN TO THE PILOT SEAT");
+      return;
+    }
     switch (code) {
+      case "KeyY":
+        this.toggleGunner();
+        break;
       case "KeyB":
         this.battle.releaseOrdnance();
         break;
@@ -626,7 +957,9 @@ export class Midway extends Scene<GameState, undefined> {
         this.hud.toast(p.engineCut ? "ENGINE FUEL CUTOFF — ENGINE STOPPING / WING FIRES UNAFFECTED" : "ENGINE FUEL VALVE OPEN");
         break;
       case "KeyR":
-        this.battle.report();
+        // In the rear station R is the belt change; in the pilot's seat it still sends the report.
+        if (p.gunner) this.battle.reloadRear();
+        else this.battle.report();
         break;
       case "KeyT":
         p.autopilot = !p.autopilot;

@@ -212,7 +212,12 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
   aa11: { volume: 0.55, cooldown: 0.08 },
   aa20: { volume: 0.5, cooldown: 0.07 },
   aa25: { volume: 0.5, cooldown: 0.07 },
-  flakAirburst: { volume: 0.7, cooldown: 0.08 },
+  // A heavy-AA volley bursts several rounds within the same frame, and the cue cooldown is what
+  // decides how many of them the pilot hears. Measured at 0.08 s with three bursts 100 m off the
+  // wing: one sounded and two were swallowed, so every salvo collapsed to a single pop and flak
+  // read as silent. 0.02 s still caps a runaway at 50 voices a second but lets a volley sound
+  // like a volley.
+  flakAirburst: { volume: 0.7, cooldown: 0.02 },
   bombShackle: { volume: 0.55, cooldown: 0.15 },
   torpedoRelease: { volume: 0.55, cooldown: 0.15 },
   bombDeck: { volume: 0.85, cooldown: 0.05 },
@@ -244,6 +249,16 @@ const ONE_SHOT: Record<string, { volume: number; cooldown: number; fade?: boolea
 
 /** A simple engineering starting point for acoustic travel time; temperature changes it. */
 const SOUND_SPEED = 343;
+
+/**
+ * The player's own weapon cue: it sounds at the listener's own ear, not at a world point, so it
+ * is neither panned nor distance-attenuated, and it has its own cooldown lane so a distant AI
+ * gunner firing the same weapon family can never claim the slot ahead of the player's shot. The
+ * value is the flat mix gain; only the player's own trigger uses it.
+ */
+const OWN_SHOT: Record<string, number> = {
+  gun30: 0.8,
+};
 
 /**
  * Seconds from a subsurface burst to its water column falling back onto the sea. The plume rises
@@ -300,7 +315,16 @@ export class Soundscape {
       Object.entries({ ...CUE_FILES, ...SPEECH_FILES }).map(async ([key, path]) => [key, await assets.audio(path)] as const),
     );
     const buffers = new Map<string, AudioBuffer>();
-    for (const result of entries) if (result.status === "fulfilled") buffers.set(result.value[0], result.value[1]);
+    const failed: string[] = [];
+    const names = Object.keys({ ...CUE_FILES, ...SPEECH_FILES });
+    entries.forEach((result, index) => {
+      if (result.status === "fulfilled") buffers.set(result.value[0], result.value[1]);
+      else failed.push(`${names[index]}: ${String((result as PromiseRejectedResult).reason).slice(0, 90)}`);
+    });
+    // Reported only when something failed: the doc comment promised a missing file is reported
+    // once, and a per-boot "140 loaded" line is noise the gates had to ignore.
+    if (failed.length > 0)
+      console.warn(`Audio: ${failed.length} packaged cue(s) failed to load; those cues stay silent: ${failed.slice(0, 12).join("; ")}`);
     return buffers;
   }
 
@@ -333,6 +357,11 @@ export class Soundscape {
   }
 
   /** True while a spoken line sounds; the scene ducks effects under it. */
+  /** Lines the queue has started; a scenario reads it to tell "not requested" from "not audible". */
+  get spokenLines(): number {
+    return this.speech.spoken;
+  }
+
   get speaking(): boolean {
     return this.speech.speaking;
   }
@@ -487,15 +516,16 @@ export class Soundscape {
   }
 
   /** One-shot cue with the family's cooldown and distance falloff; missing buffers stay quiet. */
-  #play(key: string, attenuation = 1): boolean {
+  #play(key: string, attenuation = 1, lane = "", ownVolume?: number): boolean {
     if (this.#disposed || this.#muted || this.#paused) return false;
     const buffer = this.buffers.get(key);
     const tune = ONE_SHOT[key];
     if (!buffer || !tune || attenuation <= 0.01) return false;
     const now = this.bus.listener.context.currentTime;
-    if (now - (this.#lastAt.get(key) ?? -Infinity) < tune.cooldown) return true;
-    this.#lastAt.set(key, now);
-    this.bus.play(buffer, { volume: tune.volume * attenuation, fade: tune.fade ? 0.05 : undefined });
+    const clock = lane + key;
+    if (now - (this.#lastAt.get(clock) ?? -Infinity) < tune.cooldown) return true;
+    this.#lastAt.set(clock, now);
+    this.bus.play(buffer, { volume: (ownVolume ?? tune.volume) * attenuation, fade: tune.fade ? 0.05 : undefined });
     return true;
   }
 
@@ -619,7 +649,8 @@ export class Soundscape {
     if (!cue) return;
     if (!e.at) {
       const d = typeof e.distance === "number" ? e.distance : 0;
-      this.#play(cue, Math.max(0, 1 - d / (FALLOFF[cue] ?? 1)));
+      const own = OWN_SHOT[cue];
+      this.#play(cue, Math.max(0, 1 - d / (FALLOFF[cue] ?? 1)), own === undefined ? "" : "own:", own);
       return;
     }
     const at = { x: e.at.x, y: e.at.y, z: e.at.z };

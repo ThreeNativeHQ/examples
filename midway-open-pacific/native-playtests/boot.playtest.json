@@ -1,0 +1,11 @@
+{
+  "name": "midway-native-boot",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    { "kind": "input", "label": "throttle", "press": "KeyW", "holdTicks": 240, "release": true },
+    { "kind": "input", "label": "rotate", "press": "ArrowDown", "holdTicks": 60, "release": true },
+    { "kind": "wait", "label": "climb", "waitTicks": 360, "release": true, "screenshot": "native-flight.png" }
+  ],
+  "assert": { "world": { "seed": null } }
+}

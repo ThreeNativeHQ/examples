@@ -1,0 +1,18 @@
+{
+  "name": "midway-native-select",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "viewport": { "width": 1280, "height": 720 },
+  "steps": [
+    { "label": "briefing", "waitTicks": 420 },
+    { "pointerPosition": { "x": 0.246, "y": 0.7, "buttons": 1 }, "release": true, "waitTicks": 150 },
+    { "pointerPosition": { "x": 0.246, "y": 0.801, "buttons": 1 }, "release": true, "waitTicks": 60 },
+    { "label": "assignment-picked", "waitForResource": { "id": "state", "path": "ui.assignment.id", "equals": "recon" }, "timeoutMs": 30000 }
+  ],
+  "assert": {
+    "resources": [
+      { "id": "state", "path": "uiReady", "atSteps": [{ "label": "briefing", "equals": true }] },
+      { "id": "state", "path": "ui.assignment.id", "atSteps": [{ "label": "assignment-picked", "equals": "recon" }] }
+    ]
+  }
+}

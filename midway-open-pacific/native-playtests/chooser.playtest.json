@@ -1,0 +1,15 @@
+{
+  "name": "midway-native-chooser",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    { "label": "briefing", "waitTicks": 900, "screenshot": "native-chooser-briefing.png" },
+    { "label": "chooser-visible", "waitTicks": 1500, "screenshot": "native-chooser-visible.png" }
+  ],
+  "assert": {
+    "resources": [
+      { "id": "state", "path": "uiReady", "atSteps": [{ "label": "briefing", "equals": true }] },
+      { "id": "state", "path": "status", "atSteps": [{ "label": "briefing", "equals": "briefing" }] }
+    ]
+  }
+}

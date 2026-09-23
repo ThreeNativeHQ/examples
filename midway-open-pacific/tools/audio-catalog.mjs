@@ -99,7 +99,11 @@ export const SFX = [
 
   // Weapons
   { id: "gun-50", seconds: 2, loop: false, identity: "documented", prompt: "One short burst from a single aircraft-mounted Browning fifty-caliber machine gun, rapid hard mechanical reports with a dry percussive attack, outdoors, no shell impacts." },
-  { id: "gun-30", seconds: 2, loop: false, identity: "documented", prompt: "One short burst from a flexible aircraft-mounted thirty-caliber Browning machine gun, lighter fast mechanical chatter, outdoors, no shell impacts." },
+  // gun-30 is a reconstruction: ElevenLabs `eleven_text_to_sound_v2` (1 s request), post-processed
+  // to a mono 0.180 s one-shot (40 Hz high-pass, 1 ms guard fade-in, 50 ms fade-out to true zero,
+  // -6.0 dB before Vorbis q6). The prompt below is the exact 450-character request text sent, so a
+  // forced regeneration replays the same words; identity is reconstruction, not a recording.
+  { id: "gun-30", seconds: 1, loop: false, identity: "reconstruction", prompt: "A single round fired from an aircraft-mounted thirty-caliber Browning machine gun, extremely close and dry, one hard metallic report and a short crisp mechanical action clatter immediately decaying to near silence, rifle-caliber snap not a heavy cannon boom, no echo, no wind, no aircraft engine, no shell impact. Isolated sound effect only. No music, no speech, no cinematic sweetening, no artificial stereo movement. One event with a clean attack a" },
   { id: "gun-77", seconds: 2, loop: false, identity: "documented", prompt: "One short burst from a Japanese aircraft seven point seven millimeter machine gun, quick light mechanical chatter and sharp small reports, outdoors, no shell impacts." },
   { id: "cannon-20", seconds: 2, loop: false, identity: "documented", prompt: "One short burst from a Japanese Type 99 twenty millimeter aircraft cannon, distinct heavy automatic reports with mechanical cycling, outdoors, no shell impacts." },
   { id: "bullet-near", seconds: 1, loop: false, identity: "reconstruction", prompt: "One brief close supersonic rifle-caliber projectile crack and air snap passing the listener outdoors, no gun muzzle report and no impact." },
@@ -196,6 +200,12 @@ export const SPEECH = [
   { id: "R29", voice: "wingman", priority: 1, text: "Scout Three to Enterprise. Lead is hit hard and losing power. I'm staying with him." },
   { id: "R30", voice: "wingman", priority: 1, text: "Scout Three to Enterprise. Lead is going down. Marking the position." },
   { id: "R31", voice: "wingman", priority: 2, text: "Scout Three. You're trailing oil from the engine. Watch your temperature." },
+  { id: "R32", voice: "wingman", priority: 1, text: "Scout Three. Bandit on your tail and you're not turning into him. Break now." },
+  { id: "R33", voice: "wingman", priority: 1, text: "Scout Three. You're low. Pull out. Pull out!" },
+  { id: "R34", voice: "wingman", priority: 3, text: "Scout Three. That target is already being worked over. Pick another or follow me in." },
+  { id: "R35", voice: "wingman", priority: 2, text: "Scout Three. There's a ship ahead with its guns up. Do not overfly her." },
+  { id: "R36", voice: "wingman", priority: 2, text: "Scout Three. You're down to fumes. Break off and head for home." },
+  { id: "R37", voice: "wingman", priority: 1, text: "Scout Three. Your tank's been hit. You're losing fuel. Get her home." },
   { id: "P01", voice: "pa", priority: 2, text: "General quarters. General quarters. All hands to battle stations." },
   { id: "P02", voice: "pa", priority: 3, text: "Flight quarters. Stand by to launch aircraft. Keep the flight deck clear." },
   { id: "P03", voice: "pa", priority: 1, text: "Enemy aircraft approaching. All exposed personnel take cover." },

@@ -1,0 +1,52 @@
+/*
+ * The overlay sits on top of the game's own frame, so it must not paint a page behind itself:
+ * src/style.css gives html and body the sea colour #163847, which on a native target would hide
+ * the entire 3D world under an opaque UI. Nothing else about the look changes here.
+ */
+html,
+body,
+#tn-ui {
+  background: transparent !important;
+}
+
+/*
+ * The assignment/loadout selects are white-on-white in the native WebKit popup: it paints the
+ * drop-down rows with the platform default instead of the page's dark #193c49. Styling the rows
+ * (not just the closed control, which src/style.css already covers) keeps the text readable.
+ * Native-only: the web build's own rendering is untouched.
+ */
+select {
+  color-scheme: dark;
+}
+select option,
+select optgroup {
+  background: #193c49 !important;
+  color: #eceddf !important;
+}
+
+/*
+ * The `<select>` list, which the engine draws in the page on a native target: a native popup has no
+ * view to open into once the HUD is composited into the game's own frame. The engine owns where the
+ * list sits; this is the look, and without it the list is an unstyled column of text.
+ */
+[data-tn-native-select] {
+  padding: 4px 0;
+  border: 1px solid rgba(208, 225, 213, 0.22);
+  background: #193c49;
+  box-shadow: 0 8px 30px rgba(2, 17, 26, 0.4);
+}
+
+[data-tn-native-select-option] {
+  padding: 7px 12px;
+  color: #eceddf;
+  font: 11px ui-monospace, monospace;
+  cursor: pointer;
+}
+
+[data-tn-native-select-option][aria-selected="true"] {
+  background: rgba(86, 75, 48, 0.38);
+}
+
+[data-tn-native-select-option][aria-disabled="true"] {
+  opacity: 0.45;
+}

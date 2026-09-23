@@ -45,6 +45,8 @@ export interface ISpeechBus {
 const COOLDOWN: Record<SpeechPriority, number> = { 1: 30, 2: 30, 3: 45 };
 /** Queued but not yet started, an alert is stale after these seconds (PRD §3). */
 const EXPIRY: Record<SpeechPriority, number> = { 1: 5, 2: 15, 3: 20 };
+/** How long a sentence must have sounded before anything may cut it off. */
+const MIN_AUDIBLE = 0.5;
 /** Pause between routine sentences; nothing between an urgent one and the next. */
 const ROUTINE_GAP = 3;
 /** Maximum queued sentences; overflow discards the oldest lowest-priority entry. */
@@ -98,7 +100,21 @@ export class SpeechQueue {
     const dedup = `${cue.slug}|${request.identity ?? ""}`;
     if (now - (this.#lastAt.get(dedup) ?? -Infinity) < COOLDOWN[cue.priority]) return false;
     const entry: IQueued = { cue, dedup, valid: request.valid, at: now };
-    const urgent = this.#current && (cue.priority < this.#current.cue.priority || (cue.channel === "intercom" && this.#current.cue.channel !== "intercom"));
+    // A line that has only just begun is not interrupted, however urgent the next one is. The
+    // launch call and general quarters are both raised within a quarter second of taking the deck,
+    // and the more urgent one cut the other 250 ms in — every launch, so the player heard one word
+    // of "Flight quarters" and then a different sentence. Half a second costs an urgent warning
+    // nothing and is the difference between a cut and a phrase.
+    const started = this.#current === null ? Infinity : now - this.#current.startedAt;
+    // A priority-1 call is the one the player has to act on *now* — a fighter behind them, the
+    // aircraft burning — and it takes over whatever is being said, immediately. Everything else
+    // waits out the grace.
+    const mayCut = started >= MIN_AUDIBLE || cue.priority === 1;
+    const urgent =
+      this.#current !== null &&
+      mayCut &&
+      (cue.priority < this.#current.cue.priority ||
+        (cue.channel === "intercom" && this.#current.cue.channel !== "intercom"));
     if (urgent) {
       this.#interrupt();
       this.#start(entry, now);
@@ -150,7 +166,9 @@ export class SpeechQueue {
     const buffer = this.#buffers.get(`speech:${entry.cue.slug}`);
     this.#lastAt.set(entry.dedup, now);
     if (!buffer) return; // missing clip: silent, caption already in the log
-    const voice = this.#bus.play(buffer, { volume: entry.cue.channel === "intercom" ? 0.95 : 0.8, lowpassHz: entry.cue.channel === "pa" ? 9000 : 3200 });
+    // The cue label is what `audioRuntimeSnapshot().cues` counts, so a scenario can assert that a
+    // one-shot call sounded once. It changes nothing about the sound.
+    const voice = this.#bus.play(buffer, { cue: `speech:${entry.cue.slug}`, volume: entry.cue.channel === "intercom" ? 0.95 : 0.8, lowpassHz: entry.cue.channel === "pa" ? 9000 : 3200 });
     this.#current = { cue: entry.cue, dedup: entry.dedup, voice, startedAt: now, endsAt: now + (buffer.duration || 4) };
     this.spoken += 1;
   }

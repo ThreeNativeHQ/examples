@@ -1,0 +1,101 @@
+{
+  "name": "midway-native-crash-vfx",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    {
+      "label": "briefing",
+      "waitTicks": 420
+    },
+    {
+      "pointerPosition": {
+        "x": 0.149,
+        "y": 0.831,
+        "buttons": 1
+      },
+      "release": true,
+      "waitTicks": 30
+    },
+    {
+      "label": "take-deck",
+      "waitForResource": {
+        "id": "state",
+        "path": "ui.screens.flight",
+        "equals": true
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "kind": "input",
+      "label": "throttle",
+      "press": "KeyW",
+      "holdTicks": 900,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "rotate",
+      "press": "ArrowDown",
+      "holdTicks": 60,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "climb",
+      "waitTicks": 420,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "dive",
+      "press": "ArrowUp",
+      "holdTicks": 400,
+      "release": true
+    },
+    {
+      "label": "downed",
+      "waitForResource": {
+        "id": "state",
+        "path": "mode",
+        "equals": "downed"
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "kind": "wait",
+      "label": "impact",
+      "waitTicks": 240,
+      "release": true,
+      "screenshot": "native-crash.png"
+    }
+  ],
+  "assert": {
+    "resources": [
+      {
+        "id": "state",
+        "path": "mode",
+        "atSteps": [
+          {
+            "label": "downed",
+            "equals": "downed"
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "crashReason",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "particles",
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "explosions",
+        "changed": true
+      }
+    ]
+  }
+}

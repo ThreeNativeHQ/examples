@@ -1,0 +1,90 @@
+{
+  "name": "midway-native-audio-sweep",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "steps": [
+    {
+      "label": "briefing",
+      "waitTicks": 420
+    },
+    {
+      "pointerPosition": {
+        "x": 0.149,
+        "y": 0.831,
+        "buttons": 1
+      },
+      "release": true,
+      "waitTicks": 30
+    },
+    {
+      "label": "take-deck",
+      "waitForResource": {
+        "id": "state",
+        "path": "ui.screens.flight",
+        "equals": true
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "kind": "input",
+      "label": "throttle",
+      "press": "KeyW",
+      "holdTicks": 900,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "rotate",
+      "press": "ArrowDown",
+      "holdTicks": 60,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "climb",
+      "waitTicks": 600,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "guns",
+      "press": "Space",
+      "holdTicks": 240,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "cruise",
+      "waitTicks": 1800,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "more-guns",
+      "press": "Space",
+      "holdTicks": 180,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "long-flight",
+      "waitTicks": 2400,
+      "release": true
+    }
+  ],
+  "assert": {
+    "audio": [
+      {
+        "cue": "speech:p01",
+        "minPlays": 1,
+        "maxPlays": 1,
+        "minGapMs": 500
+      },
+      {
+        "cue": "speech:p02",
+        "minPlays": 1,
+        "maxPlays": 1
+      }
+    ]
+  }
+}
