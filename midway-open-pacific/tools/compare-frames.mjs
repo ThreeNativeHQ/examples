@@ -12,6 +12,10 @@
  *     captures share the same seed, the same tick and the same ship/aircraft state.
  *   - `World.updateCamera` is replaced with a fixed per-view pose, and a fixed number of frames are
  *     rendered after each pose so the shadow and mirrored passes settle for the new eye.
+ *   - the dt-driven animations `battle.time` does not pin — the parked and player propellers and the
+ *     deck party's mixer — are frozen to a fixed phase and `World.update` is pinned to `dt = 0`, so
+ *     a build that draws a frame faster does not freeze with its blades at a different angle. Without
+ *     this, a 10x frame-cost difference between builds alone moved the deck diff past its floor.
  *
  * Then a PNG of the canvas is written per view. Views: `deck` (on the home carrier's deck, looking
  * at the island and the parked line), `chase` (400 m astern and above, looking past the home
@@ -194,6 +198,36 @@ async function capture(url, outDir, mode) {
         camera.updateProjectionMatrix();
         camera.updateMatrixWorld();
       };
+      // `battle.time` pins everything the simulation drives, but the parked propellers wind and the
+      // deck party walks off `World.update`'s own frame `dt`, so two builds of different frame cost
+      // reach this freeze with that animation at a different phase (`wallTime` differs), and the
+      // windmilling blades alone pushed the deck diff over its floor. Canonicalise every dt-driven
+      // visible animator to a fixed phase and pin `World.update` to `dt = 0`: a diff then sees how
+      // the two builds draw the one frozen battle, not how fast each got here. The canonical step
+      // runs after every `update`, because the airframe mixers write their propeller nodes each
+      // frame whether or not `dt` is zero.
+      const canonical = () => {
+        const airframes = [w.playerMesh];
+        for (const mesh of w.meshes.values()) airframes.push(...(mesh.userData.parked ?? []));
+        for (const airframe of airframes) {
+          airframe.userData.propAngle = 0;
+          const prop = airframe.userData.propeller;
+          if (prop)
+            prop.traverse((node) => {
+              node.quaternion.identity();
+              node.updateMatrix();
+              node.matrixAutoUpdate = false;
+            });
+        }
+        for (const sailor of w.crew.sailors) sailor.player.mixer.setTime(0);
+      };
+      const advance = w.update.bind(w);
+      w.update = () => {
+        advance(0, 0);
+        canonical();
+      };
+      advance(0, 0);
+      canonical();
       return { time: b.time, seed: b.seed, home: b.home?.id ?? b.home };
     }, { ticks: FREEZE_TICKS });
 

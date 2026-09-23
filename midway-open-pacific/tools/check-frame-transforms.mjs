@@ -7,8 +7,11 @@
  * not counted), then after each outer draw independently recomputes each sampled object's world
  * matrix by walking its ancestors (compose local pose when `matrixAutoUpdate`, else use `matrix`)
  * and compares it with the renderer-updated `matrixWorld`. Sample objects: a ship, the player, an
- * aircraft and one animated bone. Fails if the root-walk-per-frame ratio exceeds 1.1, if a world
- * matrix is non-finite or disagrees with the independent multiply, or on any console/page error.
+ * aircraft and one animated bone. Only objects whose whole ancestor chain is visible are compared:
+ * the per-frame walk deliberately does not recurse into a hidden subtree, so a hidden object's
+ * world matrix is allowed to be stale until it is shown again. Fails if the root-walk-per-frame
+ * ratio exceeds 1.1, if a visible world matrix is non-finite or disagrees with the independent
+ * multiply, if a phase has nothing visible to check, or on any console/page error.
  *
  * Baseline run (before the fix) is expected to FAIL with ratio ~2-3; that is the regression it
  * guards. Parent runs it behind the game's wrapper:
@@ -117,6 +120,17 @@ try {
       };
       const probe = (label, o) => {
         if (!o) return { label, present: false };
+        // The per-frame pass does not recurse into a hidden subtree, so a hidden object's
+        // `matrixWorld` is allowed to lag until it is shown again. Only compare objects whose whole
+        // ancestor chain is visible; the flag keeps `stop` from scoring a deliberately stale hidden
+        // node while still reporting it present so the required-probe assertions are unchanged.
+        let hidden = false;
+        for (let c = o; c; c = c.parent) {
+          if (c.visible === false) {
+            hidden = true;
+            break;
+          }
+        }
         const e = expected(o);
         const a = o.matrixWorld.elements;
         const b = e.elements;
@@ -126,7 +140,7 @@ try {
           if (!Number.isFinite(a[i]) || !Number.isFinite(b[i])) finite = false;
           diff = Math.max(diff, Math.abs(a[i] - b[i]));
         }
-        return { label, present: true, diff: +diff.toFixed(6), finite, m: Array.from(a, (v) => +v.toFixed(4)) };
+        return { label, present: true, hidden, diff: +diff.toFixed(6), finite, m: Array.from(a, (v) => +v.toFixed(4)) };
       };
       const ship = s.battle.ships.find((x) => !x.sunk);
       const air = s.battle.aircraft.find((x) => x.hp > 0);
@@ -174,10 +188,13 @@ try {
       const samples = P.samples;
       const first = samples[0];
       const last = samples[samples.length - 1];
-      const changed = first && last ? first.objects.some((o, i) => o.present && last.objects[i].present && o.m.join(",") !== last.objects[i].m.join(",")) : false;
-      const maxDiff = samples.reduce((m, s) => s.objects.reduce((n, o) => (o.present ? Math.max(n, o.diff) : n), m), 0);
-      const allFinite = samples.every((s) => s.objects.every((o) => !o.present || o.finite));
-      return { name: P.phase, rootWalks: P.rootWalks, frames: P.frames, ratio: +(P.rootWalks / Math.max(1, P.frames)).toFixed(4), rootMs: P.rootMs, maxDiff: +maxDiff.toFixed(6), allFinite, changed, samples, objects: first ? first.objects.map((o) => o.label) : [] };
+      const changed = first && last ? first.objects.some((o, i) => o.present && o.m && last.objects[i].present && last.objects[i].m && o.m.join(",") !== last.objects[i].m.join(",")) : false;
+      const maxDiff = samples.reduce((m, s) => s.objects.reduce((n, o) => (o.present && !o.hidden ? Math.max(n, o.diff) : n), m), 0);
+      const allFinite = samples.every((s) => s.objects.every((o) => !o.present || o.hidden || o.finite));
+      // A phase that only ever sampled hidden objects would pass vacuously; require at least one
+      // visible object in every sampled frame.
+      const checked = samples.reduce((m, s) => Math.min(m, s.objects.filter((o) => o.present && !o.hidden).length), Infinity);
+      return { name: P.phase, rootWalks: P.rootWalks, frames: P.frames, ratio: +(P.rootWalks / Math.max(1, P.frames)).toFixed(4), rootMs: P.rootMs, maxDiff: +maxDiff.toFixed(6), allFinite, changed, checked: Number.isFinite(checked) ? checked : 0, samples, objects: first ? first.objects.map((o) => o.label) : [] };
     };
   });
 
@@ -219,7 +236,8 @@ try {
     assert.ok(r.ratio <= 1.1, `${name}: ${r.ratio} root world traversals per presented frame (want <= 1.1)`);
     const required = name === "briefing" ? ["ship", "player", "bone"] : ["ship", "player", "aircraft", "bone"];
     assert.ok(r.samples.every(s => required.every(label => s.objects.some(o => o.label === label && o.present))), `${name}: required probe objects present`);
-    assert.ok(r.allFinite, `${name}: every sampled world matrix is finite`);
+    assert.ok(r.checked > 0, `${name}: at least one sampled object has a fully visible ancestor chain`);
+    assert.ok(r.allFinite, `${name}: every sampled visible world matrix is finite`);
     assert.ok(r.maxDiff < 1e-3, `${name}: world matrices match the independent ancestor multiply (max diff ${r.maxDiff})`);
   }
   // At least one airborne phase must show motion, so the check cannot pass on a frozen scene.

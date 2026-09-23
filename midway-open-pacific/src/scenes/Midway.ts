@@ -242,12 +242,14 @@ export class Midway extends Scene<GameState, undefined> {
     // world draw in the engine's beforeRender seam, which runs before the render projection
     // reconciles and hands the renderer the mirror scene; an authored-scene onBeforeRender never
     // fires while projecting, so the walk would go stale. Shadow and reflection passes (which draw
-    // through their own cameras) reuse the transforms prepared here.
+    // through their own cameras) reuse the transforms prepared here. The pass skips hidden subtrees
+    // — a hull's full body while the merged stand-in shows, hidden LOD levels, parked aircraft —
+    // which three's own walk would still recurse into and multiply for.
     const scene = ctx.scene;
     const savedAutoUpdate = scene.matrixWorldAutoUpdate;
     if (savedAutoUpdate) {
       scene.matrixWorldAutoUpdate = false;
-      this.cleanups.push(ctx.beforeRender(() => scene.updateMatrixWorld()));
+      this.cleanups.push(ctx.beforeRender(() => this.world.updateVisibleMatrixWorld()));
       this.cleanups.push(() => {
         scene.matrixWorldAutoUpdate = savedAutoUpdate;
       });
