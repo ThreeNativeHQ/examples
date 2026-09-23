@@ -1,0 +1,47 @@
+{
+  "name": "midway-native-loading-frames",
+  "schemaVersion": 1,
+  "target": "desktop",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "awaitStartup": false,
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "loading-a",
+      "waitTicks": 1,
+      "release": true,
+      "screenshot": "loading-a.png"
+    },
+    {
+      "kind": "wait",
+      "label": "loading-b",
+      "waitTicks": 1,
+      "release": true,
+      "screenshot": "loading-b.png"
+    }
+  ],
+  "assert": {
+    "resources": [
+      {
+        "id": "state",
+        "path": "ui.screens.loading",
+        "atSteps": [
+          { "label": "loading-a", "equals": true },
+          { "label": "loading-b", "equals": true }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "ui.screens.flight",
+        "atSteps": [
+          { "label": "loading-a", "equals": false },
+          { "label": "loading-b", "equals": false }
+        ]
+      }
+    ]
+  }
+}
