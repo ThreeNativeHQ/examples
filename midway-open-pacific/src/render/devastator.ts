@@ -1017,6 +1017,12 @@ export function animateDevastator(
   // him exactly like the propeller.
   for (const station of inst.crew) station.player.update(dt);
 }
+/** Rewind one pooled Devastator's crew animation to rest time. */
+export function resetDevastatorAnimation(root: T.Group): void {
+  const inst = instances.get(root);
+  if (inst) for (const station of inst.crew) station.player.mixer.setTime(0);
+}
+
 export function disposeDevastator(root: T.Group): void {
   const inst = instances.get(root);
   if (!inst) return;

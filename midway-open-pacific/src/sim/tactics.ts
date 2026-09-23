@@ -275,46 +275,48 @@ export function selectNavalTarget(b: Any, a: Any): Any {
 
 export function chooseFighterTarget(b: Any, a: Any, shipsById?: Map<Any, Any>): Any {
   const home = shipsById ? shipsById.get(a.home) : b.ships.find((s: Any) => s.id === a.home);
-  // Gather candidates with a squared-range reject, so only the handful actually in range pay for a
-  // `Math.hypot`. The order is the aircraft order the old `.filter()` produced, with the player last.
-  const candidates = FIGHTER_CANDIDATES;
-  candidates.length = 0;  for (const e of b.aircraft) {
-    if (e.team === a.team || e.hp <= 0 || e.mode === "launch") continue;
+  const attacks = attacksFor(a.team);
+  const cx = Math.floor(a.x / FIGHTER_RANGE);
+  const cz = Math.floor(a.z / FIGHTER_RANGE);
+  let best: Any = null;
+  let bestIndex = Infinity;
+  let score = -Infinity;
+  // Visit the 3x3 cell neighbourhood the old full-fleet scan reduced to. Bucket entries are
+  // `b.aircraft` indices, so an equal rank still goes to the aircraft that came first in the scan.
+  for (let gx = cx - 1; gx <= cx + 1; gx += 1) {
+    for (let gz = cz - 1; gz <= cz + 1; gz += 1) {
+      const bucket = FIGHTER_GRID.get(cellKey(gx, gz));
+      if (!bucket) continue;
+      for (let k = 0; k < bucket.length; k += 1) {
+        const index = bucket[k];
+        const e = b.aircraft[index];
+        if (e.team === a.team || e.hp <= 0 || e.mode === "launch") continue;
+        const dx = e.x - a.x;
+        const dy = e.y - a.y;
+        const dz = e.z - a.z;
+        if (dx * dx + dy * dy + dz * dz >= FIGHTER_RANGE2) continue;
+        const rank = fighterRank(b, a, e, home, attacks);
+        if (rank > score || (rank === score && index < bestIndex)) {
+          score = rank;
+          best = e;
+          bestIndex = index;
+        }
+      }
+    }
+  }
+  if (a.team === "jp" && b.player.mode === "flight" && b.player.hp > 0) {
+    const e = b.player;
     const dx = e.x - a.x;
     const dy = e.y - a.y;
     const dz = e.z - a.z;
-    if (dx * dx + dy * dy + dz * dz < 12250000) candidates.push(e);
-  }
-  if (a.team === "jp" && b.player.mode === "flight" && b.player.hp > 0) {
-    const dx = b.player.x - a.x;
-    const dy = b.player.y - a.y;
-    const dz = b.player.z - a.z;
-    if (dx * dx + dy * dy + dz * dz < 12250000) candidates.push(b.player);
-  }
-  let best: Any = null;
-  let score = -Infinity;
-  // How many of this aircraft's own side are already chasing each target, tabulated once rather than
-  // by rescanning the whole fleet for every candidate.
-  let attacks: Map<Any, number> | null = null;
-  if (candidates.length > 0) {
-    attacks = ATTACKS;
-    attacks.clear();
-    for (const f of b.aircraft) {
-      if (f.team === a.team && f !== a && f.airTarget != null)
-        attacks.set(f.airTarget, (attacks.get(f.airTarget) || 0) + 1);
-    }
-  }
-  for (const e of candidates) {
-    const d = distance3(a, e);
-    const strike = e.kind === "bomber" || e.kind === "torpedo";
-    const danger = home ? (e.x - home.x) * (e.x - home.x) + (e.z - home.z) * (e.z - home.z) < 23040000 : false;
-    const attacking = attacks ? attacks.get(e.id) || 0 : 0;
-    let rank = (strike ? 2500 : 0) + (danger ? 1400 : 0) - d - attacking * 1050 + (a.airTarget === e.id ? 500 : 0);
-    if (a.wing && distance3(e, b.player) < 900) rank += 1400;
-    if (e.kind === "fighter" && e.airTarget === a.id) rank += 900;
-    if (rank > score) {
-      score = rank;
-      best = e;
+    if (dx * dx + dy * dy + dz * dz < FIGHTER_RANGE2) {
+      const rank = fighterRank(b, a, e, home, attacks);
+      // The player was appended last by the old scan, so it loses every tie.
+      if (rank > score || (rank === score && b.aircraft.length < bestIndex)) {
+        score = rank;
+        best = e;
+        bestIndex = b.aircraft.length;
+      }
     }
   }
   return best;
@@ -369,10 +371,70 @@ function aimPoint(x: number, z: number): { x: number; z: number } {
   return DEST;
 }
 /** Reused candidate buffers and count maps: the AI is single-threaded and never retains them. */
-const FIGHTER_CANDIDATES: Any[] = [];
 const NAVAL_CANDIDATES: Any[] = [];
-const ATTACKS = new Map<any, number>();
 const PRESSURE = new Map<any, number>();
+/**
+ * Fighter target selection reads one per-step table instead of rescanning the fleet for every
+ * fighter. `FIGHTER_GRID` buckets the fleet by a cell equal to the 3500 m candidate range, so a
+ * query only visits the 3x3 neighbourhood; the exact range test still runs against live positions.
+ * Buckets hold `b.aircraft` indices, which also restores the old scan's iteration order — the
+ * tie-break for equal ranks. `ATTACKS_BY_TEAM` is how many aircraft of each team are already
+ * committed to each target id, adjusted in place as fighters are assigned so a later fighter sees
+ * an earlier one's choice.
+ */
+const FIGHTER_GRID = new Map<number, number[]>();
+const ATTACKS_BY_TEAM = new Map<string, Map<any, number>>();
+/** The candidate range, squared for the reject, and the bucket size: they are deliberately equal. */
+const FIGHTER_RANGE = 3500;
+const FIGHTER_RANGE2 = FIGHTER_RANGE * FIGHTER_RANGE;
+function attacksFor(team: string): Map<any, number> {
+  let m = ATTACKS_BY_TEAM.get(team);
+  if (!m) {
+    m = new Map();
+    ATTACKS_BY_TEAM.set(team, m);
+  }
+  return m;
+}
+/** Pack two signed cell coordinates into one integer key: numeric keys, so no string is built. */
+function cellKey(cx: number, cz: number): number {
+  return (cx + 32768) * 65536 + (cz + 32768);
+}
+/**
+ * Refill the per-step tables before the aircraft loop. The grid keeps step-start positions: in one
+ * step an aircraft moves a few metres, far less than a cell, so an enemy in range at query time is
+ * still in the 3x3 neighbourhood of its step-start cell and the live range test keeps the set exact.
+ */
+function prepareFighterTargets(b: Any): void {
+  for (const bucket of FIGHTER_GRID.values()) bucket.length = 0;
+  for (const m of ATTACKS_BY_TEAM.values()) m.clear();
+  const aircraft = b.aircraft;
+  for (let i = 0; i < aircraft.length; i += 1) {
+    const e = aircraft[i];
+    const key = cellKey(Math.floor(e.x / FIGHTER_RANGE), Math.floor(e.z / FIGHTER_RANGE));
+    let bucket = FIGHTER_GRID.get(key);
+    if (!bucket) {
+      bucket = [];
+      FIGHTER_GRID.set(key, bucket);
+    }
+    bucket.push(i);
+    if (e.airTarget != null) {
+      const attacks = attacksFor(e.team);
+      attacks.set(e.airTarget, (attacks.get(e.airTarget) || 0) + 1);
+    }
+  }
+}
+/** One candidate's rank. The terms and their order are the old ranking loop's, unchanged. */
+function fighterRank(b: Any, a: Any, e: Any, home: Any, attacks: Map<any, number>): number {
+  const d = distance3(a, e);
+  const strike = e.kind === "bomber" || e.kind === "torpedo";
+  const danger = home ? (e.x - home.x) * (e.x - home.x) + (e.z - home.z) * (e.z - home.z) < 23040000 : false;
+  // `attacks` counts every same-team commitment including this aircraft; the old scan excluded `a`.
+  const attacking = (attacks.get(e.id) || 0) - (a.airTarget === e.id ? 1 : 0);
+  let rank = (strike ? 2500 : 0) + (danger ? 1400 : 0) - d - attacking * 1050 + (a.airTarget === e.id ? 500 : 0);
+  if (a.wing && distance3(e, b.player) < 900) rank += 1400;
+  if (e.kind === "fighter" && e.airTarget === a.id) rank += 900;
+  return rank;
+}
 /**
  * Scratch objects for one step. Each is refilled immediately before use and read before the next
  * aircraft's turn; none is stored on an aircraft, so a stale field cannot leak into the simulation.
@@ -909,6 +971,7 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
   const shipsById = SHIPS_BY_ID;
   shipsById.clear();
   for (const s of b.ships) if (!shipsById.has(s.id)) shipsById.set(s.id, s);
+  prepareFighterTargets(b);
   for (const a of b.aircraft) {
     if (a.recovered || a.removed) continue;
     if (a.mode === "crashing") {
@@ -1046,7 +1109,21 @@ export function updateTacticalAircraft(b: Any, dt: number): void {
       if (distance2(a, dest) < 1300) dest = aimPoint(dest.x + Math.sin(b.time * 0.018 + a.phase) * 2800, dest.z + Math.cos(b.time * 0.018 + a.phase) * 2800);
     } else if (a.kind === "fighter") {
       const t = chooseFighterTarget(b, a, shipsById);
-      a.airTarget = t?.id || null;
+      const nextTarget = t?.id || null;
+      // Keep the per-team commitment counts current for the fighters still to run this step: the
+      // old code rebuilt them from scratch, so an earlier assignment had to be visible to a later one.
+      if (a.airTarget !== nextTarget) {
+        const attacks = attacksFor(a.team);
+        if (a.airTarget != null) {
+          const held = attacks.get(a.airTarget);
+          if (held !== undefined) {
+            if (held <= 1) attacks.delete(a.airTarget);
+            else attacks.set(a.airTarget, held - 1);
+          }
+        }
+        if (nextTarget != null) attacks.set(nextTarget, (attacks.get(nextTarget) || 0) + 1);
+        a.airTarget = nextTarget;
+      }
       if (t) {
         const d = distance3(a, t);
         const fx = Math.sin(a.heading) * Math.cos(a.pitch);

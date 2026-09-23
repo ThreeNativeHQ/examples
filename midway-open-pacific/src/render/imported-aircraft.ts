@@ -792,6 +792,21 @@ export function animateImportedAirframe(
 }
 
 /**
+ * Rewind one airframe's own animation to its rest time, so a pooled reuse starts where a fresh
+ * clone would. Imported AI airframes carry no rig and are a no-op.
+ */
+export function resetAirframeAnimation(root: T.Group): void {
+  const instance = instances.get(root);
+  if (instance) {
+    instance.player.mixer.setTime(0);
+    instance.pilot.player.mixer.setTime(0);
+    instance.gunner.player.mixer.setTime(0);
+    return;
+  }
+  animatedImports.get(root)?.mixer.setTime(0);
+}
+
+/**
  * Give back what this one aircraft owns, and nothing else.
  *
  * Geometry, materials and textures come from the shared GLTF that `ctx.assets` owns and outlive
