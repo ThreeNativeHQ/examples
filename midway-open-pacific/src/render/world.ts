@@ -634,7 +634,20 @@ export class WorldView {
   /** Airframes whose views are already compiled; warming one twice buys nothing and costs seconds. */
   private readonly warmedAirframes = new Set<string>();
 
-  async warmUpViews(): Promise<void> {
+  /**
+   * Resolves with the page clock at the moment the current `warmUpViews()` settled, or null before
+   * it has been called. A capture waits on it so the texture uploads the warm-up performs are not
+   * in a "steady state" sample.
+   */
+  warmUpDone: Promise<number> | null = null;
+
+  warmUpViews(): Promise<void> {
+    const done = this.runWarmUpViews().then(() => performance.now());
+    this.warmUpDone = done;
+    return done.then(() => undefined);
+  }
+
+  private async runWarmUpViews(): Promise<void> {
     const renderer = this.renderer as unknown as {
       compileAsync?: (object: T.Object3D, camera: T.Camera, scene: T.Object3D) => Promise<void>;
     };
