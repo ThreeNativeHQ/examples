@@ -103,6 +103,8 @@ export interface IHudUiState {
   toastSeq: number;
   debriefSeq: number;
   fpsOn: boolean;
+  /** The game's own frame-time summary (native), shown instead of the overlay's rAF figure. */
+  fpsLines: string[];
   /** Total live HUD seconds published so far; the web view applies only the increase. */
   elapsed: number;
   updateSpeed: number;
@@ -393,6 +395,7 @@ export function applyHudSnapshot(display: IHud, snap: IHudSnapshot, mem: IHudMem
     mem.fpsOn = snap.fpsOn;
     display.toggleFps();
   }
+  if (snap.fpsLines.length) display.setFrameLines?.(snap.fpsLines);
   // Only the increase since the last apply is real time; a non-tick publish repeats the total, so
   // its delta is zero and cannot double-decay the flash or over-advance the DOM tick.
   const dt = snap.elapsed - mem.elapsed;
