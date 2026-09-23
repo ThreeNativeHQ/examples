@@ -57,6 +57,36 @@ export const SHADOW_PROXY_LAYER = 2;
 /** Reused so the per-frame camera orbit allocates nothing. */
 const WORLD_UP = new T.Vector3(0, 1, 0);
 
+/**
+ * Nodes whose subtree was skipped while hidden, to be force-refreshed the first frame they show.
+ *
+ * `WorldView.updateVisibleMatrixWorld` does not recurse into a hidden node, so a hidden ancestor's
+ * descendants keep whatever world matrices they last had. This set remembers which hidden nodes were
+ * (or would have been) forced, so the frame one becomes visible again its whole subtree is recomputed
+ * with `force = true` before anything reads or draws it.
+ */
+const staleWhileHidden = new WeakSet<T.Object3D>();
+
+/**
+ * Whether a Bone sits anywhere under `node`, decided once per node and remembered: a skinned rig is
+ * built whole (the deck crew at load, a pooled airframe's seated crew when it is cloned), so its
+ * shape does not change after the first time a hidden walk meets it.
+ */
+const bonesBelow = new WeakMap<T.Object3D, boolean>();
+/** The base walk, to tell a class that overrides `updateMatrixWorld` (SkinnedMesh, Camera) apart. */
+const BASE_UPDATE_MATRIX_WORLD = T.Object3D.prototype.updateMatrixWorld;
+function holdsBones(node: T.Object3D): boolean {
+  let known = bonesBelow.get(node);
+  if (known === undefined) {
+    known = false;
+    node.traverse((object) => {
+      if ((object as T.Bone).isBone) known = true;
+    });
+    bonesBelow.set(node, known);
+  }
+  return known;
+}
+
 /** The tracer ellipsoid's long axis, rotated onto each round's velocity every frame. */
 const TRACER_LONG = new T.Vector3(0, 0, 1);
 
@@ -1101,6 +1131,59 @@ export class WorldView {
       }
   }
 
+  /**
+   * `Object3D.updateMatrixWorld(force)`, but a hidden node's subtree is not walked.
+   *
+   * Three recurses into every child of every node and multiplies a world matrix for each, so a
+   * hidden subtree — a hull's full body while the merged stand-in draws, a hidden LOD level, a parked
+   * or hangared aircraft — pays the walk even though nothing under it can draw. This mirrors three
+   * exactly for a visible node (`matrixAutoUpdate` -> `updateMatrix`, then the
+   * `matrixWorldNeedsUpdate || force` recompute, respecting `matrixWorldAutoUpdate` and a null
+   * parent, then force the children). A node with `visible === false` is visited but not recursed
+   * into; when it was forced or carried a dirty flag it is remembered, so the first frame it is
+   * visible again its whole subtree is refreshed with `force = true`.
+   *
+   * The camera is never in this walk: `updateCamera` updates it directly.
+   */
+  updateVisibleMatrixWorld(root: T.Object3D = this.scene, force = false): void {
+    // A hidden node that holds bones is still walked: a visible SkinnedMesh draws with its
+    // skeleton's bone matrices wherever the bones sit, and a rig's armature can be hidden while the
+    // skinned mesh draws.
+    //
+    // A class that extends the walk runs its own: `SkinnedMesh` refreshes `bindMatrixInverse` from
+    // its new world matrix, `Camera` its `matrixWorldInverse`. Re-implementing only the base walk
+    // skipped both, and every deck-crew sailor that had moved since load drew with a stale bind
+    // matrix and vanished. Their subtrees are small, so walking them whole costs nothing.
+    if (root.updateMatrixWorld !== BASE_UPDATE_MATRIX_WORLD) {
+      const stale = staleWhileHidden.delete(root);
+      root.updateMatrixWorld(force || stale);
+      return;
+    }
+    if (root.matrixAutoUpdate) root.updateMatrix();
+    if (root.matrixWorldNeedsUpdate || force) {
+      if (root.matrixWorldAutoUpdate === true) {
+        if (root.parent === null) root.matrixWorld.copy(root.matrix);
+        else root.matrixWorld.multiplyMatrices(root.parent.matrixWorld, root.matrix);
+      }
+      root.matrixWorldNeedsUpdate = false;
+      force = true;
+    }
+    if (root.visible === false && !holdsBones(root)) {
+      // The recompute above cleared the flag, so `force` is true exactly when this node's own world
+      // matrix (and so its subtree) is dirty. Nothing under it can draw while hidden; defer it.
+      if (force) staleWhileHidden.add(root);
+      return;
+    }
+    if (staleWhileHidden.has(root)) {
+      staleWhileHidden.delete(root);
+      force = true;
+    }
+    const children = root.children;
+    for (let i = 0, l = children.length; i < l; i += 1) {
+      this.updateVisibleMatrixWorld(children[i]!, force);
+    }
+  }
+
   makeTracers(): void {
     const geom = new T.SphereGeometry(1, 8, 6);
     const mat = new T.MeshBasicMaterial({ transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending });
@@ -1763,7 +1846,15 @@ export class WorldView {
   sampleStaticDrift(): number {
     const inv = new T.Matrix4();
     const rel = new T.Matrix4();
+    // A consumed mesh can sit under a hidden LOD body, whose subtree the per-frame visible walk
+    // deliberately skips, so the parent's world matrix would be stale here and a moving ship would
+    // read as drift. Verification only, once per root per sample: force the root's whole subtree.
+    const refreshed = new Set<T.Object3D>();
     const sample = (record: { root: T.Object3D; parent: T.Object3D; mesh: T.Object3D }): number[] => {
+      if (!refreshed.has(record.root)) {
+        refreshed.add(record.root);
+        record.root.updateMatrixWorld(true);
+      }
       inv.copy(record.root.matrixWorld).invert();
       rel.multiplyMatrices(record.parent.matrixWorld, record.mesh.matrix).premultiply(inv);
       return rel.elements;
