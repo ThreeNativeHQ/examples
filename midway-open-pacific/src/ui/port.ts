@@ -26,6 +26,8 @@ export interface IHud {
   updateContactList(): void;
   updateBattleStatus(): void;
   toggleFps(): void;
+  /** Native: show the game's own frame-time summary instead of the overlay's rAF measurement. */
+  setFrameLines?(lines: string[]): void;
 }
 
 export type ScreenName = "loading" | "briefing" | "flight" | "debrief";

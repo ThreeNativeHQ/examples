@@ -9,6 +9,7 @@
  */
 import { type IHud, type IShell, type ILoadoutView, type Intent, type ScreenName } from "./port.js";
 import type { IBattleView, IViewState } from "./hud-input.js";
+import { FrameMeter } from "./frame-meter.js";
 import { toHudSnapshot, type IHudSnapshot, type IHudUiState, type IUiPatch, type IUiSnapshot } from "./state.js";
 
 export interface IUiBridge {
@@ -45,10 +46,13 @@ class BridgeHud implements IHud {
     debriefSeq: 0,
     // `VITE_MIDWAY_FPS=1` at build time opens the F4 frame-time panel from the first frame (native builds).
     fpsOn: import.meta.env.VITE_MIDWAY_FPS === "1",
+    fpsLines: [],
     elapsed: 0,
     updateSpeed: 1,
   };
   #since = 0;
+  readonly #frames = new FrameMeter("game");
+  #lastDraw = 0;
   #seq = 0;
 
   constructor(
@@ -125,7 +129,16 @@ class BridgeHud implements IHud {
    * there against each snapshot as it arrives. The markers therefore move at the snapshot's rate (every frame)
    * rather than the render's 60 — raise the publish rate of `view` alone if that reads as a stutter.
    */
-  draw(): void {}
+  draw(): void {
+    // Once per rendered frame (the engine's beforeRender): the only place that sees the game's own
+    // frame cadence. The overlay's rAF runs at its snapshot rate, so the F4 panel reads this instead.
+    const now = performance.now();
+    if (this.#ui.fpsOn && this.#lastDraw) {
+      this.#frames.sample(now - this.#lastDraw);
+      this.#ui.fpsLines = this.#frames.lines;
+    }
+    this.#lastDraw = now;
+  }
 
   toast(text: string): void {
     this.#ui.toastText = text;

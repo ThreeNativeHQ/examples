@@ -124,6 +124,8 @@ export class Midway extends Scene<GameState, undefined> {
   ended = false;
   private crashCam = false;
   started = false;
+  /** Last tick's simulation-step time, for the slow-tick line. */
+  private tickTimes = { step: 0 };
   private publishTick = 0;
   private mouseState = { fire: false, looking: false, lockClick: false, lx: 0, ly: 0 };
   /**
@@ -403,6 +405,8 @@ export class Midway extends Scene<GameState, undefined> {
   }
 
   update(_ctx: ICtx<GameState, undefined>, dt: number): void {
+    const tickStart = performance.now();
+    this.tickTimes.step = 0;
     this.wall += dt;
     const b = this.battle;
     const { keys, fire: mouseFire } = this.pollInput();
@@ -465,16 +469,21 @@ export class Midway extends Scene<GameState, undefined> {
       // 2800 m, so it can never fast-forward a fight.
       const speed =
         (keys.has("ShiftLeft") || keys.has("ShiftRight")) && b.canAccelerate() ? 3 : 1;
+      const stepStart = performance.now();
       for (let i = 0; i < speed; i += 1) b.step(1 / 60, input);
+      this.tickTimes.step = performance.now() - stepStart;
       for (const e of b.events.splice(0)) {
         this.audio.event(e);
         if (e.type === "notice") this.hud.toast(e.text);
         if (e.type === "damage") this.hud.hitFlash = 1;
       }
     }
+    const worldStart = performance.now();
     this.world.update(this.paused ? 0 : dt, this.wall, b.status === "briefing");
     shell.cockpitView(this.world.cockpitView);
+    const hudStart = performance.now();
     this.hud.update(dt);
+    const hudEnd = performance.now();
     if ((this.publishTick += 1) % 6 === 0) this.publish();
     const p = b.player;
     const onShip = p.mode === "deck" || p.mode === "launch" || p.mode === "arrest" || p.mode === "service";
@@ -500,6 +509,19 @@ export class Midway extends Scene<GameState, undefined> {
       this.paused || b.status !== "playing",
       dt,
     );
+    // A tick over 20 ms names its heaviest part: the fixed step can run up to five ticks in one
+    // drawn frame, so one slow part here is what turns into a visible hitch. Silent otherwise.
+    const tickMs = performance.now() - tickStart;
+    if (tickMs > 20)
+      console.log(
+        `TN_MIDWAY_SLOW_TICK:${JSON.stringify({
+          ms: +tickMs.toFixed(1),
+          step: +this.tickTimes.step.toFixed(1),
+          world: +(hudStart - worldStart).toFixed(1),
+          hud: +(hudEnd - hudStart).toFixed(1),
+          after: +(performance.now() - hudEnd).toFixed(1),
+        })}`,
+      );
     // Continuous world loops follow the scene: a burning hull hisses where it is, the atoll surf
     // only exists near the atoll. Passing the full set each frame makes a stopped loop impossible.
     const emitters: Array<{ id: string; key: string; source: unknown; volume: number }> = [];
