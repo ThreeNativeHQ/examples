@@ -5,17 +5,17 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  create-threenative: file:/tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5.tgz
-  '@threenative/assets': file:/tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz
-  threenative-blender-mcp: file:/tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2.tgz
-  '@threenative/core': file:/tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz
-  threenative-engine-mcp: file:/tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2.tgz
-  '@threenative/physics': file:/tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2.tgz
-  '@threenative/playtest': file:/tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz
-  '@threenative/raw-unreal': file:/tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2.tgz
-  '@threenative/runtime-native': file:/tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2.tgz
-  '@threenative/ueformat': file:/tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2.tgz
-  '@threenative/ui': file:/tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2.tgz
+  create-threenative: file:/tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5-npm-1e0af7942595.tgz
+  '@threenative/assets': file:/tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2-npm-31630a90db89.tgz
+  threenative-blender-mcp: file:/tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2-npm-2d8640cdecce.tgz
+  '@threenative/core': file:/tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz
+  threenative-engine-mcp: file:/tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2-npm-00257b0d3b14.tgz
+  '@threenative/physics': file:/tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2-npm-d5f4b4747fc7.tgz
+  '@threenative/playtest': file:/tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz
+  '@threenative/raw-unreal': file:/tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2-npm-794204a7a82c.tgz
+  '@threenative/runtime-native': file:/tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2-npm-553baa5214f8.tgz
+  '@threenative/ueformat': file:/tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2-npm-36c6539c46ae.tgz
+  '@threenative/ui': file:/tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2-npm-68eb08c22fc6.tgz
 
 patchedDependencies:
   three@0.185.1:
@@ -27,42 +27,42 @@ importers:
   .:
     dependencies:
       '@threenative/core':
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0)
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0)
       '@threenative/physics':
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2.tgz(@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0))(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2-npm-d5f4b4747fc7.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2-npm-d5f4b4747fc7.tgz(@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0))(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))
       '@threenative/raw-unreal':
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2.tgz
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2-npm-794204a7a82c.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2-npm-794204a7a82c.tgz
       '@threenative/ueformat':
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2.tgz
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2-npm-36c6539c46ae.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2-npm-36c6539c46ae.tgz
       '@threenative/ui':
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2.tgz(@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2-npm-68eb08c22fc6.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2-npm-68eb08c22fc6.tgz(@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       three:
         specifier: 0.185.1
         version: 0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)
       threenative-blender-mcp:
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2.tgz
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2-npm-2d8640cdecce.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2-npm-2d8640cdecce.tgz
     devDependencies:
       '@gltf-transform/cli':
         specifier: 4.4.2
         version: 4.4.2(@types/node@26.5.1)
       '@threenative/assets':
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz(@types/node@26.5.1)
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2-npm-31630a90db89.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2-npm-31630a90db89.tgz(@types/node@26.5.1)
       '@threenative/playtest':
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))
       '@types/three':
         specifier: 0.185.3
         version: 0.185.3
       create-threenative:
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5.tgz(@threenative/assets@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz(@types/node@26.5.1))(@types/node@26.5.1)
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5-npm-1e0af7942595.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5-npm-1e0af7942595.tgz(@threenative/assets@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2-npm-31630a90db89.tgz(@types/node@26.5.1))(@types/node@26.5.1)
       esbuild:
         specifier: 0.27.0
         version: 0.27.0
@@ -70,8 +70,8 @@ importers:
         specifier: 1.62.1
         version: 1.62.1
       threenative-engine-mcp:
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2.tgz
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2-npm-00257b0d3b14.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2-npm-00257b0d3b14.tgz
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -80,8 +80,8 @@ importers:
         version: 8.2.0(@types/node@26.5.1)(esbuild@0.27.0)
     optionalDependencies:
       '@threenative/runtime-native':
-        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2.tgz
-        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2.tgz
+        specifier: file:/tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2-npm-553baa5214f8.tgz
+        version: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2-npm-553baa5214f8.tgz
 
 packages:
 
@@ -855,12 +855,12 @@ packages:
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
 
-  '@threenative/assets@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz':
-    resolution: {integrity: sha512-Rb8RbUYjDkG5tqaR6mU28haePuw8Se+Wz/vykqe78eHxNiriR+QgMWAzGbLWYknBOKKRur4ewBuWSjt1KSA9fQ==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz}
+  '@threenative/assets@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2-npm-31630a90db89.tgz':
+    resolution: {integrity: sha512-Rb8RbUYjDkG5tqaR6mU28haePuw8Se+Wz/vykqe78eHxNiriR+QgMWAzGbLWYknBOKKRur4ewBuWSjt1KSA9fQ==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2-npm-31630a90db89.tgz}
     version: 0.3.2
 
-  '@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz':
-    resolution: {integrity: sha512-33zIZYrFx3STJGWyaPAgNAt7AhdREugqx5m8GTj+ZCkuSejoM3LJ5F81ZkCgCpLRRABR1K12SDSHpWSGj+bX3g==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz}
+  '@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz':
+    resolution: {integrity: sha512-tVJlMP3XjnE+D8OlAu7PO64LY4ybxEu9zTbLGEmVWYfckliXU+FddryCKZsni01GVYaMkVbI22kfIGltbpzlLQ==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz}
     version: 0.3.2
     peerDependencies:
       '@threenative/playtest': '>=0.3.2 <0.4.0'
@@ -874,15 +874,15 @@ packages:
       react-reconciler:
         optional: true
 
-  '@threenative/physics@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2.tgz':
-    resolution: {integrity: sha512-BCStDRRMmv7IZLTOXzJvzmMu0AypoYaDf1Lr8guT0CHovvuPlaHwGgifMWjqivyEJucVWnn9kWK9O/+LLJTaiA==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2.tgz}
+  '@threenative/physics@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2-npm-d5f4b4747fc7.tgz':
+    resolution: {integrity: sha512-BCStDRRMmv7IZLTOXzJvzmMu0AypoYaDf1Lr8guT0CHovvuPlaHwGgifMWjqivyEJucVWnn9kWK9O/+LLJTaiA==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2-npm-d5f4b4747fc7.tgz}
     version: 0.3.2
     peerDependencies:
       '@threenative/core': '>=0.3.2 <0.4.0'
       three: '>=0.185.0 <0.186.0'
 
-  '@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz':
-    resolution: {integrity: sha512-9WCby8blM/B2Vl5sUVAFXS6i4pcmnTeemuYJNwSGaw3lelkS9OcREm2uyNioTD0BybXHX22BmP4vG39HKq83wg==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz}
+  '@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz':
+    resolution: {integrity: sha512-v2ALGs+ZgWh2cZ9a2ekj8//UUz3D8UuMHTUfFJ5y5wln/0Q8+KDQrK+YsaIQhmAa538NXv2f3+IQOafUp+hK7g==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz}
     version: 0.3.2
     hasBin: true
     peerDependencies:
@@ -894,21 +894,21 @@ packages:
       three:
         optional: true
 
-  '@threenative/raw-unreal@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2.tgz':
-    resolution: {integrity: sha512-wuJNPKhHkwTbsE/o9ImWdlzsaCbdbp2uxeiJjjlWJ+WBGbiwfwE71tvjrb80QKxeTv4e+lNdO4sKMy6Au4xIVQ==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2.tgz}
+  '@threenative/raw-unreal@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2-npm-794204a7a82c.tgz':
+    resolution: {integrity: sha512-wuJNPKhHkwTbsE/o9ImWdlzsaCbdbp2uxeiJjjlWJ+WBGbiwfwE71tvjrb80QKxeTv4e+lNdO4sKMy6Au4xIVQ==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2-npm-794204a7a82c.tgz}
     version: 0.1.2
 
-  '@threenative/runtime-native@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2.tgz':
-    resolution: {integrity: sha512-9+X5DrgxRJ8nSqL2RREQOYzBDh5YBmhrxfRQlpUJsuwJDi36aDCeyaZFgSPg7X1atyXSvKy3+9ITaTVC3rJ57w==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2.tgz}
+  '@threenative/runtime-native@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2-npm-553baa5214f8.tgz':
+    resolution: {integrity: sha512-ekCvPXEEuIWl3NQ+UCBs39iZL/Dtexd/2ixf5/D0E4PAYem7rGwuTuYZt3j/g4TJlZ5kqA5B9Hc94z2JRSfwNA==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2-npm-553baa5214f8.tgz}
     version: 0.3.2
 
-  '@threenative/ueformat@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2.tgz':
-    resolution: {integrity: sha512-YWFtlFV/FqaIU1NboBNL/2RbtkMB3ywkciNpOq+ibmAUKt3tOdnA9PPPPsOr3A7mQfJwjJ+PmdhBLap5Srt6BQ==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2.tgz}
+  '@threenative/ueformat@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2-npm-36c6539c46ae.tgz':
+    resolution: {integrity: sha512-YWFtlFV/FqaIU1NboBNL/2RbtkMB3ywkciNpOq+ibmAUKt3tOdnA9PPPPsOr3A7mQfJwjJ+PmdhBLap5Srt6BQ==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2-npm-36c6539c46ae.tgz}
     version: 0.1.2
     hasBin: true
 
-  '@threenative/ui@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2.tgz':
-    resolution: {integrity: sha512-690s66yRFrTWi6u7dTKIGdWWPzZT59oR0kNlHaJMMrsl29ZeIotPj9+GyKXmsN/Kv6IrBJaty/ePvMM9hx1/Jw==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2.tgz}
+  '@threenative/ui@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2-npm-68eb08c22fc6.tgz':
+    resolution: {integrity: sha512-690s66yRFrTWi6u7dTKIGdWWPzZT59oR0kNlHaJMMrsl29ZeIotPj9+GyKXmsN/Kv6IrBJaty/ePvMM9hx1/Jw==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2-npm-68eb08c22fc6.tgz}
     version: 0.3.2
     peerDependencies:
       '@threenative/core': '>=0.3.2 <0.4.0'
@@ -1147,8 +1147,8 @@ packages:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
 
-  create-threenative@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5.tgz:
-    resolution: {integrity: sha512-8CGneVRovnvw7Ii6dQzX72i5wMll0YSykil0hyuFq7HkcxxNhwIbgI64jebgg88YLGrZe8sJ1/MT5b9zb9//dA==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5.tgz}
+  create-threenative@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5-npm-1e0af7942595.tgz:
+    resolution: {integrity: sha512-e6GAGHl1GlF0/KzHWeTgGvPQBTVbasUjNZVKOVc1GR/fZ+5EvZGElzutq2iRHrYr04bko7OW+5LQv7xYLD4gUg==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5-npm-1e0af7942595.tgz}
     version: 0.2.5
     engines: {node: '>=20.19.0', pnpm: '>=10.0.0'}
     hasBin: true
@@ -1970,13 +1970,13 @@ packages:
     engines: {node: '>=20.19.0'}
     hasBin: true
 
-  threenative-blender-mcp@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2.tgz:
-    resolution: {integrity: sha512-SabFRv2y3kWr3rmKU6xEQI/1Lom1LAdBkpChoe8DKAGgnwt+hEdqzoZr/SDEqsQ09YICscUn+oGrZ8fTtCeWLw==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2.tgz}
+  threenative-blender-mcp@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2-npm-2d8640cdecce.tgz:
+    resolution: {integrity: sha512-SabFRv2y3kWr3rmKU6xEQI/1Lom1LAdBkpChoe8DKAGgnwt+hEdqzoZr/SDEqsQ09YICscUn+oGrZ8fTtCeWLw==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2-npm-2d8640cdecce.tgz}
     version: 0.1.2
     hasBin: true
 
-  threenative-engine-mcp@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2.tgz:
-    resolution: {integrity: sha512-OFPqV8Isht2dZXj8LqOPr8sh/2wI06M0pjYGfPi7dfQzknRUwW+o/CSwyUay2Bc8bphJffXzoIyIHxZ0AT6d+Q==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2.tgz}
+  threenative-engine-mcp@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2-npm-00257b0d3b14.tgz:
+    resolution: {integrity: sha512-OFPqV8Isht2dZXj8LqOPr8sh/2wI06M0pjYGfPi7dfQzknRUwW+o/CSwyUay2Bc8bphJffXzoIyIHxZ0AT6d+Q==, tarball: file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2-npm-00257b0d3b14.tgz}
     version: 0.2.2
     hasBin: true
 
@@ -2756,7 +2756,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@threenative/assets@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz(@types/node@26.5.1)':
+  '@threenative/assets@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2-npm-31630a90db89.tgz(@types/node@26.5.1)':
     dependencies:
       '@gltf-transform/core': 4.4.2
       '@gltf-transform/extensions': 4.4.2
@@ -2774,7 +2774,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0)':
+  '@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0)':
     dependencies:
       three: 0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)
       three-mesh-bvh: 0.9.14(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))
@@ -2782,7 +2782,7 @@ snapshots:
       threenative-sculpt-mcp: 0.1.1(@types/node@26.5.1)
       zustand: 5.0.14(react@19.3.0)
     optionalDependencies:
-      '@threenative/playtest': file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))
+      '@threenative/playtest': file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))
       react: 19.3.0
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -2792,37 +2792,37 @@ snapshots:
       - supports-color
       - use-sync-external-store
 
-  '@threenative/physics@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2.tgz(@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0))(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))':
+  '@threenative/physics@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-physics-0.3.2-npm-d5f4b4747fc7.tgz(@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0))(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))':
     dependencies:
       '@dimforge/rapier3d-compat': 0.19.3
-      '@threenative/core': file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0)
+      '@threenative/core': file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0)
       recast-navigation: 0.43.1
       three: 0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)
 
-  '@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))':
+  '@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1))':
     dependencies:
       pngjs: 7.0.0
     optionalDependencies:
       playwright: 1.62.1
       three: 0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)
 
-  '@threenative/raw-unreal@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2.tgz':
+  '@threenative/raw-unreal@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-raw-unreal-0.1.2-npm-794204a7a82c.tgz':
     dependencies:
       three: 0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)
 
-  '@threenative/runtime-native@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2.tgz':
+  '@threenative/runtime-native@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-runtime-native-0.3.2-npm-553baa5214f8.tgz':
     dependencies:
       pngjs: 7.0.0
     optional: true
 
-  '@threenative/ueformat@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2.tgz':
+  '@threenative/ueformat@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ueformat-0.1.2-npm-36c6539c46ae.tgz':
     dependencies:
       fflate: 0.8.3
       three: 0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)
 
-  '@threenative/ui@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2.tgz(@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@threenative/ui@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-ui-0.3.2-npm-68eb08c22fc6.tgz(@threenative/core@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
-      '@threenative/core': file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0)
+      '@threenative/core': file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-core-0.3.2-npm-f14c86388713.tgz(@threenative/playtest@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-playtest-0.3.2-npm-06258378bee1.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=c19a119d28a4eea28256121178b99c54497e83496698e5d5af44b9413124cfb1)))(@types/node@26.5.1)(react@19.3.0)
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
 
@@ -3056,12 +3056,12 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  create-threenative@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5.tgz(@threenative/assets@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz(@types/node@26.5.1))(@types/node@26.5.1):
+  create-threenative@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/create-threenative-0.2.5-npm-1e0af7942595.tgz(@threenative/assets@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2-npm-31630a90db89.tgz(@types/node@26.5.1))(@types/node@26.5.1):
     dependencies:
       '@gltf-transform/core': 4.4.2
       '@gltf-transform/extensions': 4.4.2
       '@gltf-transform/functions': 4.4.2(@types/node@26.5.1)
-      '@threenative/assets': file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2.tgz(@types/node@26.5.1)
+      '@threenative/assets': file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-assets-0.3.2-npm-31630a90db89.tgz(@types/node@26.5.1)
       draco3dgltf: 1.5.7
       ktx-parse: 1.1.0
       ktx2-encoder: 0.6.0
@@ -3978,9 +3978,9 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  threenative-blender-mcp@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2.tgz: {}
+  threenative-blender-mcp@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-blender-mcp-0.1.2-npm-2d8640cdecce.tgz: {}
 
-  threenative-engine-mcp@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2.tgz: {}
+  threenative-engine-mcp@file:../../../../../../tmp/opencode/rig-consumer-packages/packages/threenative-engine-mcp-0.2.2-npm-00257b0d3b14.tgz: {}
 
   threenative-sculpt-mcp@0.1.1(@types/node@26.5.1):
     dependencies:

@@ -16,9 +16,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/core": "file:../.packages/threenative-core-0.3.0-caravel-5217e06b49a9.tgz",
-    "@threenative/physics": "file:../.packages/threenative-physics-0.3.0-caravel-15e1261f0d2c.tgz",
-    "@threenative/ui": "file:../.packages/threenative-ui-0.3.0-caravel-48199aa2c821.tgz",
+    "@threenative/core": "file:../.packages/threenative-core-0.3.0-npm-9f3b266819ab.tgz",
+    "@threenative/physics": "file:../.packages/threenative-physics-0.3.0-npm-7e419324f826.tgz",
+    "@threenative/ui": "file:../.packages/threenative-ui-0.3.0-npm-91ad807c7fda.tgz",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-reconciler": "0.33.0",
@@ -29,23 +29,23 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
-    "@threenative/assets": "file:../.packages/threenative-assets-0.3.0-caravel-5663d4ec5acd.tgz",
-    "@threenative/playtest": "file:../.packages/threenative-playtest-0.3.0-caravel-858861c15e64.tgz",
+    "@threenative/assets": "file:../.packages/threenative-assets-0.3.0-npm-a0d5f19f258f.tgz",
+    "@threenative/playtest": "file:../.packages/threenative-playtest-0.3.0-npm-720a16eb6ff4.tgz",
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
     "@types/three": "0.185.3",
     "@vitejs/plugin-react": "6.0.5",
-    "create-threenative": "file:../.packages/create-threenative-0.2.3-caravel-edd09d5693ed.tgz",
+    "create-threenative": "file:../.packages/create-threenative-0.2.3-npm-834944058f7b.tgz",
     "esbuild": "0.27.0",
     "playwright": "1.62.1",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "8.2.0",
     "@gltf-transform/cli": "4.4.2",
-    "threenative-engine-mcp": "file:../.packages/threenative-engine-mcp-0.2.0-caravel-b132222e3578.tgz"
+    "threenative-engine-mcp": "file:../.packages/threenative-engine-mcp-0.2.0-npm-fa2d3f69fd14.tgz"
   },
   "optionalDependencies": {
-    "@threenative/runtime-native": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-runtime-native-0.3.0.tgz"
+    "@threenative/runtime-native": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-runtime-native-0.3.0-npm-9700ec48f882.tgz"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -56,17 +56,17 @@
       "three@0.185.1": "patches/three@0.185.1.patch"
     },
     "overrides": {
-      "create-threenative": "file:/home/joao/projects/threenative/.tnshots/packages/create-threenative-0.2.3.tgz",
-      "@threenative/assets": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-assets-0.3.0.tgz",
+      "create-threenative": "file:/home/joao/projects/threenative/.tnshots/packages/create-threenative-0.2.3-npm-834944058f7b.tgz",
+      "@threenative/assets": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-assets-0.3.0-npm-a0d5f19f258f.tgz",
       "threenative-blender-mcp": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-blender-mcp-0.1.0.tgz",
-      "@threenative/core": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-core-0.3.0.tgz",
-      "threenative-engine-mcp": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-engine-mcp-0.2.0.tgz",
-      "@threenative/physics": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-physics-0.3.0.tgz",
-      "@threenative/playtest": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-playtest-0.3.0.tgz",
+      "@threenative/core": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-core-0.3.0-eb389429f8ea.tgz",
+      "threenative-engine-mcp": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-engine-mcp-0.2.0-npm-fa2d3f69fd14.tgz",
+      "@threenative/physics": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-physics-0.3.0-npm-7e419324f826.tgz",
+      "@threenative/playtest": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-playtest-0.3.0-6ecbccda5fa8.tgz",
       "@threenative/raw-unreal": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-raw-unreal-0.1.0.tgz",
-      "@threenative/runtime-native": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-runtime-native-0.3.0.tgz",
+      "@threenative/runtime-native": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-runtime-native-0.3.0-npm-9700ec48f882.tgz",
       "@threenative/ueformat": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-ueformat-0.1.0.tgz",
-      "@threenative/ui": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-ui-0.3.0.tgz"
+      "@threenative/ui": "file:/home/joao/projects/threenative/.tnshots/packages/threenative-ui-0.3.0-1c3eb20cde96.tgz"
     }
   }
 }

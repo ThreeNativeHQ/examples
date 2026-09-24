@@ -17,14 +17,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/core": "file:/tmp/foxpkg-fix/threenative-core-0.2.0.tgz",
-    "@threenative/physics": "file:/home/joao/projects/fox-native-packages/threenative-physics-0.1.0.tgz",
+    "@threenative/core": "file:/tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz",
+    "@threenative/physics": "file:/home/joao/projects/fox-native-packages/threenative-physics-0.1.0-npm-cc470453f013.tgz",
     "three": "0.185.1",
-    "@threenative/ui": "file:/home/joao/projects/fox-native-packages/threenative-ui-0.1.12.tgz"
+    "@threenative/ui": "file:/home/joao/projects/fox-native-packages/threenative-ui-0.1.12-npm-3317e8bb1480.tgz"
   },
   "devDependencies": {
     "@types/three": "0.185.3",
-    "@threenative/playtest": "file:/home/joao/projects/fox-native-packages/threenative-playtest-0.1.0.tgz",
+    "@threenative/playtest": "file:/home/joao/projects/fox-native-packages/threenative-playtest-0.1.0-npm-a0822c3f4cdd.tgz",
     "create-threenative": "file:/home/joao/projects/fox-native-packages/create-threenative-0.1.0.tgz",
     "playwright": "1.62.1",
     "threenative-asset-mcp": "0.4.0",

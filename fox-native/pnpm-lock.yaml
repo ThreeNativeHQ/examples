@@ -9,21 +9,21 @@ importers:
   .:
     dependencies:
       '@threenative/core':
-        specifier: file:/tmp/foxpkg-fix/threenative-core-0.2.0.tgz
-        version: file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8)
+        specifier: file:/tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz
+        version: file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz(react@19.2.8)
       '@threenative/physics':
-        specifier: file:/home/joao/projects/fox-native-packages/threenative-physics-0.1.0.tgz
-        version: file:../../../fox-native-packages/threenative-physics-0.1.0.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8))
+        specifier: file:/home/joao/projects/fox-native-packages/threenative-physics-0.1.0-npm-cc470453f013.tgz
+        version: file:../../../fox-native-packages/threenative-physics-0.1.0-npm-cc470453f013.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz(react@19.2.8))
       '@threenative/ui':
-        specifier: file:/home/joao/projects/fox-native-packages/threenative-ui-0.1.12.tgz
-        version: file:../../../fox-native-packages/threenative-ui-0.1.12.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: file:/home/joao/projects/fox-native-packages/threenative-ui-0.1.12-npm-3317e8bb1480.tgz
+        version: file:../../../fox-native-packages/threenative-ui-0.1.12-npm-3317e8bb1480.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       three:
         specifier: 0.185.1
         version: 0.185.1
     devDependencies:
       '@threenative/playtest':
-        specifier: file:/home/joao/projects/fox-native-packages/threenative-playtest-0.1.0.tgz
-        version: file:../../../fox-native-packages/threenative-playtest-0.1.0.tgz(playwright@1.62.1)(three@0.185.1)
+        specifier: file:/home/joao/projects/fox-native-packages/threenative-playtest-0.1.0-npm-a0822c3f4cdd.tgz
+        version: file:../../../fox-native-packages/threenative-playtest-0.1.0-npm-a0822c3f4cdd.tgz(playwright@1.62.1)(three@0.185.1)
       '@types/three':
         specifier: 0.185.3
         version: 0.185.3
@@ -333,18 +333,18 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz':
-    resolution: {integrity: sha512-DzqKRxCWE+PJwtg/SHy/cv2hBv3ve4l9la0f4JJTjGq7Tu8OZjy2ZW16GLxUz6WVxdrDLNBXHid032YjMu3VXQ==, tarball: file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz}
+  '@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz':
+    resolution: {integrity: sha512-lU48NtvdoLveV3AP6XcVwCHgGvjXOUPmG4BGvPn9cb1JQUBlPZi8ZRKqRLgghCQ/cejyEdeA7WcWpLbvkBCWaA==, tarball: file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz}
     version: 0.2.0
 
-  '@threenative/physics@file:../../../fox-native-packages/threenative-physics-0.1.0.tgz':
-    resolution: {integrity: sha512-EwYJtxIS0NH7y1pYMDQkK0U13huL8zvFsUoyhumv0baQrMe3423yggmfOdP0F+yRzTiYI0E4NZJQx9Lpn7koTQ==, tarball: file:../../../fox-native-packages/threenative-physics-0.1.0.tgz}
+  '@threenative/physics@file:../../../fox-native-packages/threenative-physics-0.1.0-npm-cc470453f013.tgz':
+    resolution: {integrity: sha512-EwYJtxIS0NH7y1pYMDQkK0U13huL8zvFsUoyhumv0baQrMe3423yggmfOdP0F+yRzTiYI0E4NZJQx9Lpn7koTQ==, tarball: file:../../../fox-native-packages/threenative-physics-0.1.0-npm-cc470453f013.tgz}
     version: 0.1.0
     peerDependencies:
       '@threenative/core': '>=0.1.0 <0.2.0'
 
-  '@threenative/playtest@file:../../../fox-native-packages/threenative-playtest-0.1.0.tgz':
-    resolution: {integrity: sha512-ai7s5F1q9NaetSMIkPMab7xC4GDOdIc8zuRlrSCbCMVSGhnQtx2Wbj82s/xKQPXDLto+djjRuLlj2unbEpmijg==, tarball: file:../../../fox-native-packages/threenative-playtest-0.1.0.tgz}
+  '@threenative/playtest@file:../../../fox-native-packages/threenative-playtest-0.1.0-npm-a0822c3f4cdd.tgz':
+    resolution: {integrity: sha512-LsLslpVcJueWOSUi31LDFlfcWzzmi78lXMkkKL/j60ws0tGOCpY++sYdwRMEoZ4qdh7MR2xx5oX9sr1buBKSVg==, tarball: file:../../../fox-native-packages/threenative-playtest-0.1.0-npm-a0822c3f4cdd.tgz}
     version: 0.1.0
     hasBin: true
     peerDependencies:
@@ -360,8 +360,8 @@ packages:
     resolution: {integrity: sha512-BhgMd3+63W7fACxU6jMZeRt7gNDpe+ERuY/19L0Oov15Dw2i17HD3YtDLgOcReGt8JXhvGtNu3Y8dO8UaIkgRw==, tarball: file:../../../fox-native-packages/threenative-runtime-native-0.1.13.tgz}
     version: 0.1.13
 
-  '@threenative/ui@file:../../../fox-native-packages/threenative-ui-0.1.12.tgz':
-    resolution: {integrity: sha512-rCwO1qWBTMsJerhNMD7bi6SgGDZoVqmoYv/2ipNvCzaVIg5PDRYRG6/qIG2Fa9Ecne3Sn5NBp4xeg2oWv/i3zg==, tarball: file:../../../fox-native-packages/threenative-ui-0.1.12.tgz}
+  '@threenative/ui@file:../../../fox-native-packages/threenative-ui-0.1.12-npm-3317e8bb1480.tgz':
+    resolution: {integrity: sha512-rCwO1qWBTMsJerhNMD7bi6SgGDZoVqmoYv/2ipNvCzaVIg5PDRYRG6/qIG2Fa9Ecne3Sn5NBp4xeg2oWv/i3zg==, tarball: file:../../../fox-native-packages/threenative-ui-0.1.12-npm-3317e8bb1480.tgz}
     version: 0.1.12
     peerDependencies:
       '@threenative/core': '>=0.1.0 <0.2.0'
@@ -1230,7 +1230,7 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8)':
+  '@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz(react@19.2.8)':
     dependencies:
       three: 0.185.1
       three-mesh-bvh: 0.9.14(three@0.185.1)
@@ -1241,13 +1241,13 @@ snapshots:
       - react
       - use-sync-external-store
 
-  '@threenative/physics@file:../../../fox-native-packages/threenative-physics-0.1.0.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8))':
+  '@threenative/physics@file:../../../fox-native-packages/threenative-physics-0.1.0-npm-cc470453f013.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz(react@19.2.8))':
     dependencies:
       '@dimforge/rapier3d-compat': 0.19.3
-      '@threenative/core': file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8)
+      '@threenative/core': file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz(react@19.2.8)
       recast-navigation: 0.43.1
 
-  '@threenative/playtest@file:../../../fox-native-packages/threenative-playtest-0.1.0.tgz(playwright@1.62.1)(three@0.185.1)':
+  '@threenative/playtest@file:../../../fox-native-packages/threenative-playtest-0.1.0-npm-a0822c3f4cdd.tgz(playwright@1.62.1)(three@0.185.1)':
     dependencies:
       pngjs: 7.0.0
     optionalDependencies:
@@ -1259,9 +1259,9 @@ snapshots:
       pngjs: 7.0.0
     optional: true
 
-  '@threenative/ui@file:../../../fox-native-packages/threenative-ui-0.1.12.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@threenative/ui@file:../../../fox-native-packages/threenative-ui-0.1.12-npm-3317e8bb1480.tgz(@threenative/core@file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@threenative/core': file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0.tgz(react@19.2.8)
+      '@threenative/core': file:../../../../../../tmp/foxpkg-fix/threenative-core-0.2.0-npm-6a652ca87684.tgz(react@19.2.8)
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 

@@ -16,25 +16,25 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-core-0.3.0-fc43de5f9a7d.tgz",
-    "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-physics-0.3.0-15e1261f0d2c.tgz",
+    "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-core-0.3.0-npm-9f3b266819ab.tgz",
+    "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-physics-0.3.0-npm-7e419324f826.tgz",
     "three": "0.185.1",
-    "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-ui-0.3.0-48199aa2c821.tgz"
+    "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-ui-0.3.0-npm-91ad807c7fda.tgz"
   },
   "devDependencies": {
-    "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-assets-0.3.0-5c407f7a7b7e.tgz",
-    "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-playtest-0.3.0-acf14db76bba.tgz",
+    "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-assets-0.3.0-npm-a0d5f19f258f.tgz",
+    "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-playtest-0.3.0-npm-720a16eb6ff4.tgz",
     "@types/three": "0.185.3",
-    "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/create-threenative-0.2.3-e7bd2d92b17e.tgz",
+    "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/create-threenative-0.2.3-npm-834944058f7b.tgz",
     "esbuild": "0.27.0",
     "playwright": "1.62.1",
     "typescript": "5.9.3",
     "vite": "8.2.0",
     "@gltf-transform/cli": "4.4.2",
-    "threenative-engine-mcp": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-engine-mcp-0.2.0-eb1f55151faa.tgz"
+    "threenative-engine-mcp": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-engine-mcp-0.2.0-npm-fa2d3f69fd14.tgz"
   },
   "optionalDependencies": {
-    "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-runtime-native-0.3.0-f364aeeed3d1.tgz"
+    "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-runtime-native-0.3.0-npm-9700ec48f882.tgz"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -45,14 +45,14 @@
       "three@0.185.1": "patches/three@0.185.1.patch"
     },
     "overrides": {
-      "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-core-0.3.0-fc43de5f9a7d.tgz",
-      "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-assets-0.3.0-5c407f7a7b7e.tgz",
-      "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-physics-0.3.0-15e1261f0d2c.tgz",
-      "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-playtest-0.3.0-acf14db76bba.tgz",
-      "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-runtime-native-0.3.0-f364aeeed3d1.tgz",
-      "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-ui-0.3.0-48199aa2c821.tgz",
-      "threenative-engine-mcp": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-engine-mcp-0.2.0-eb1f55151faa.tgz",
-      "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/create-threenative-0.2.3-e7bd2d92b17e.tgz"
+      "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-core-0.3.0-npm-9f3b266819ab.tgz",
+      "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-assets-0.3.0-npm-a0d5f19f258f.tgz",
+      "@threenative/physics": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-physics-0.3.0-npm-7e419324f826.tgz",
+      "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-playtest-0.3.0-npm-720a16eb6ff4.tgz",
+      "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-runtime-native-0.3.0-npm-9700ec48f882.tgz",
+      "@threenative/ui": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-ui-0.3.0-npm-91ad807c7fda.tgz",
+      "threenative-engine-mcp": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/threenative-engine-mcp-0.2.0-npm-fa2d3f69fd14.tgz",
+      "create-threenative": "file:/home/joao/projects/threenative/sandbox/.packages/ue-proof/create-threenative-0.2.3-npm-834944058f7b.tgz"
     }
   }
 }
