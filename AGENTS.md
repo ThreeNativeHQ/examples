@@ -71,6 +71,7 @@ Every command runs inside a game folder — there is no root build.
 7. **Free a dev server by port** (`lsof -ti tcp:<port> | xargs -r kill`) — `pkill -f vite` matches your own shell — and never search `.worktrees/`, which holds other agents' dead lanes.
 8. **Never claim a gate you did not run**; "unverified" is an acceptable answer.
 9. **Every automated gate here is blind to how a game looks** — all of them pass on grey boxes, so look at the frame before calling a visual change done.
+10. **Profile before optimizing:** `threenative-playtest <scenario> --cpu-prof out.cpuprofile` (browser/desktop) or the native host's `--cpu-prof <file>` writes a Chrome DevTools profile, `threenative-playtest perf` reads the `TN_FRAME_BUDGET` windows, and `perf record -e cpu-clock:u -p <pid>` covers native C++ threads — compare interleaved before/after runs, never one.
 
 ## The folders
 
