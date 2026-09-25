@@ -1,0 +1,50 @@
+{
+  "name": "fab-hornbeam-lands-at-tree-height",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 10,
+  "subject": "player",
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "imported-models-resolve-through-the-manifest",
+      "waitTicks": 600,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "fabImportsLoaded",
+        "equals": 4,
+        "allowTrivial": "The height is measured once when the model loads, before tick 0; this scenario asks what size the imported tree arrived at, not whether gameplay changes it."
+      },
+      {
+        "id": "state",
+        "path": "fabImportHeights.hornbeam",
+        "gte": 3,
+        "lte": 40,
+        "allowTrivial": "The height is measured once when the model loads, before tick 0; this scenario asks what size the imported tree arrived at, not whether gameplay changes it."
+      }
+    ],
+    "sceneNodes": [
+      {
+        "select": {
+          "pathContains": "hornbeam"
+        },
+        "texturesLoaded": true,
+        "minTriangles": 100000
+      }
+    ]
+  }
+}

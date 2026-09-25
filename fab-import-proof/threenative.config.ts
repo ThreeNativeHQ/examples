@@ -38,6 +38,10 @@ const config: IThreeNativeConfig = {
     // them. Ship exactly what is committed.
     models: "none",
     textures: "none",
+    // PRD-450: the Hornbeam's textures/ are the importer's unmappable extra inputs; the GLB embeds
+    // what it draws. Its 127 MB uncooked GLB is a deliberate proof of a real Fab tree.
+    exclude: ["fab/c6f917b6/textures/**"],
+    budget: { uncooked: 160_000_000 },
   },
   // One UI on every target: src/ui/ renders through the platform's own browser-class renderer,
   // so the same React, Tailwind, CSS and SVG run on web, desktop, Android and iOS alike.

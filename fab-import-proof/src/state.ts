@@ -7,6 +7,8 @@ export type GameState = {
   fabImportsTextured: number;
   /** How many arrived with an alpha-cutout material, the masked-foliage case. */
   fabImportsMasked: number;
+  /** Measured height in metres of each Fab import, keyed like FAB_IMPORTS. */
+  fabImportHeights: Record<string, number>;
   flagDisplacement: number;
   flagGusts: number;
   flagReadbacks: number;

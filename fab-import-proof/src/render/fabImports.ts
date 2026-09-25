@@ -36,6 +36,14 @@ export const FAB_IMPORTS: readonly IFabImport[] = [
     position: [3.6, 0, -4.2],
     expectedHeight: 8.19,
   },
+  {
+    // PRD-450: the tree the 2026-09-24 session was asked for and never placed. Height is the
+    // importer's reported sizeMeters.y; it lands beside the camp rather than in the opening frame.
+    key: "hornbeam",
+    path: "fab/c6f917b6/Models/SM_EuropeanHornbeam_Forest_01.glb",
+    position: [9, 0, -12],
+    expectedHeight: 16.13,
+  },
 ];
 
 export interface ILoadedFabImport extends IFabImport {

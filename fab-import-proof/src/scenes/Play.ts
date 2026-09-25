@@ -35,6 +35,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   static override readonly initialState: GameState = {
     coyoteJumps: 0,
     entityCount: 0,
+    fabImportHeights: {},
     fabImportsLoaded: 0,
     fabImportsMasked: 0,
     fabImportsTextured: 0,
@@ -126,6 +127,7 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     // Published so a playtest can assert the import on any target. Desktop has no pixel-level
     // visibility observer, and "the game booted" is not evidence that the meshes arrived.
     ctx.state.set({
+      fabImportHeights: Object.fromEntries(this.#fabImports.map((entry) => [entry.key, entry.measuredHeight])),
       fabImportsLoaded: this.#fabImports.length,
       fabImportsMasked: this.#fabImports.reduce((sum, entry) => sum + entry.maskedMeshes, 0),
       fabImportsTextured: this.#fabImports.reduce((sum, entry) => sum + entry.texturedMeshes, 0),
