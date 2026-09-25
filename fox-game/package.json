@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/playtest": "file:/home/joao/projects/threenative/sandbox/.packages/threenative-playtest-0.1.0-npm-a0822c3f4cdd.tgz",
+    "@threenative/playtest": "0.3.3",
     "three": "0.185.1"
   },
   "devDependencies": {
