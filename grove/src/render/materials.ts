@@ -5,8 +5,8 @@ import { palette } from "./palette.js";
 
 export const floorMaterial = new MeshStandardMaterial({
   color: palette.floor,
-  roughness: 0.78,
-  metalness: 0.12,
+  roughness: 1,
+  metalness: 0,
 });
 
 /** The player's visor and boots: the one warm note against a cool morning. */

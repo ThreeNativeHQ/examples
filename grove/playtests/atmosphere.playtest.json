@@ -4,7 +4,7 @@
   "schemaVersion": 1,
   "viewport": { "width": 1280, "height": 720 },
   "warmupFrames": 30,
-  "steps": [{ "kind": "wait", "label": "sun moves", "waitTicks": 600, "release": true }],
+  "steps": [{ "kind": "wait", "label": "static sun, moving wind", "waitTicks": 600, "release": true }],
   "assert": {
     "diagnostics": {
       "noConsoleErrors": true,
@@ -12,9 +12,27 @@
       "runtimeReady": true
     },
     "resources": [
-      { "id": "state", "path": "sunElevation", "changed": true },
-      { "id": "state", "path": "sunAzimuth", "changed": true },
-      { "id": "state", "path": "sunTransmittanceRed", "changed": true }
+      {
+        "id": "state",
+        "path": "sunElevation",
+        "gte": 55,
+        "lte": 65,
+        "allowTrivial": "The sun is deliberately frozen at 13.5, early afternoon, so its angles are held invariants; the wind supplies this scene's frame-to-frame change."
+      },
+      {
+        "id": "state",
+        "path": "sunAzimuth",
+        "gte": 210,
+        "lte": 225,
+        "allowTrivial": "Frozen with the elevation: a static sun is the design, not an unobserved one."
+      },
+      {
+        "id": "state",
+        "path": "sunTransmittanceRed",
+        "gte": 0.2,
+        "lte": 1.2,
+        "allowTrivial": "Read once from the atmosphere node for a fixed sun direction, so it is held for the run. A missing node leaves it at 0 and fails the floor."
+      }
     ],
     "visual": [
       {

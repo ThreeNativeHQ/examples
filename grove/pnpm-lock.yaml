@@ -19,6 +19,9 @@ importers:
       '@threenative/physics':
         specifier: 0.3.3
         version: 0.3.3(@threenative/core@0.3.3(@threenative/playtest@0.3.3(playwright@1.62.1)(three@0.185.1(patch_hash=95255b38a876c1eebc77ee516bf12b6405126aa2586e9c6c420775800d6e5888)))(@types/node@26.6.3))(three@0.185.1(patch_hash=95255b38a876c1eebc77ee516bf12b6405126aa2586e9c6c420775800d6e5888))
+      ez-tree-source:
+        specifier: github:dgreenheck/ez-tree#dcf309bd86bd521083d9c70f01f2de45fdc7c457
+        version: '@dgreenheck/ez-tree@https://codeload.github.com/dgreenheck/ez-tree/tar.gz/dcf309bd86bd521083d9c70f01f2de45fdc7c457(three@0.185.1(patch_hash=95255b38a876c1eebc77ee516bf12b6405126aa2586e9c6c420775800d6e5888))'
       three:
         specifier: 0.185.1
         version: 0.185.1(patch_hash=95255b38a876c1eebc77ee516bf12b6405126aa2586e9c6c420775800d6e5888)
@@ -67,6 +70,12 @@ packages:
 
   '@dabh/diagnostics@2.0.9':
     resolution: {integrity: sha512-R6siwR65Hm+3yfgP7o8DKhNvputQAwfoz9zTc3kyDudnomj2/BcLmD+uGQQPICjuFUp8ounPBU+jmKsocwVVAg==}
+
+  '@dgreenheck/ez-tree@https://codeload.github.com/dgreenheck/ez-tree/tar.gz/dcf309bd86bd521083d9c70f01f2de45fdc7c457':
+    resolution: {tarball: https://codeload.github.com/dgreenheck/ez-tree/tar.gz/dcf309bd86bd521083d9c70f01f2de45fdc7c457}
+    version: 1.1.0
+    peerDependencies:
+      three: '>=0.167'
 
   '@dimforge/rapier3d-compat@0.12.0':
     resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
@@ -2089,6 +2098,10 @@ snapshots:
       '@so-ric/colorspace': 1.1.6
       enabled: 2.0.0
       kuler: 2.0.0
+
+  '@dgreenheck/ez-tree@https://codeload.github.com/dgreenheck/ez-tree/tar.gz/dcf309bd86bd521083d9c70f01f2de45fdc7c457(three@0.185.1(patch_hash=95255b38a876c1eebc77ee516bf12b6405126aa2586e9c6c420775800d6e5888))':
+    dependencies:
+      three: 0.185.1(patch_hash=95255b38a876c1eebc77ee516bf12b6405126aa2586e9c6c420775800d6e5888)
 
   '@dimforge/rapier3d-compat@0.12.0': {}
 

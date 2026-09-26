@@ -1,0 +1,92 @@
+import type { BufferGeometry, Object3D } from "three";
+import {
+  Fn,
+  float,
+  modelWorldMatrixInverse,
+  normalGeometry,
+  normalLocal,
+  positionGeometry,
+  uniform,
+  vec3,
+  vec4,
+} from "three/tsl";
+import type { MeshStandardNodeMaterial } from "three/webgpu";
+import { type IWind, validateWind } from "../vegetation/geometry.js";
+
+/**
+ * Editable appearance, intentionally not an engine preset. This lane is for ordinary meshes.
+ * `direction` is world space, so yawed clones sharing the material sway together; amplitude,
+ * base and extent are in the mesh's local units.
+ */
+export function createTreeWind(base: MeshStandardNodeMaterial, options: IWind) {
+  const wind = validateWind(options);
+  if (base.positionNode || base.normalNode || base.displacementMap)
+    throw new Error(
+      "Tree wind needs an unmodified vertex path; compose custom appearance in this source file.",
+    );
+  const material = base.clone();
+  const simulationTime = uniform(0);
+  let disposed = false;
+  const worldDirection = vec4(wind.direction[0], 0, wind.direction[1], 0);
+  material.positionNode = Fn(
+    (
+      _: unknown,
+      builder: { readonly object: Object3D | null; readonly geometry: BufferGeometry | null },
+    ) => {
+      const object = builder.object;
+      if (
+        !object ||
+        "isInstancedMesh" in object ||
+        "isSkinnedMesh" in object ||
+        (builder.geometry && "isInstancedBufferGeometry" in builder.geometry)
+      )
+        throw new Error(
+          "Tree wind currently supports ordinary meshes only; use static generated variants for instanced forests.",
+        );
+      const direction = modelWorldMatrixInverse.mul(worldDirection).xyz.normalize();
+      const t = positionGeometry.y.sub(wind.base).div(wind.extent).clamp(0, 1);
+      const oscillation = simulationTime
+        .mul(wind.frequency)
+        .add(wind.phase)
+        .sin()
+        .mul(wind.amplitude);
+      const offset = oscillation.mul(t.mul(t).mul(float(3).sub(t.mul(2))));
+      const derivative = oscillation
+        .mul(t)
+        .mul(float(1).sub(t))
+        .mul(6 / wind.extent);
+      normalLocal.assign(
+        normalGeometry.sub(vec3(0, derivative.mul(direction.dot(normalGeometry)), 0)).normalize(),
+      );
+      return positionGeometry.add(direction.mul(offset));
+    },
+  )();
+  return {
+    material,
+    updateTime(seconds: number): void {
+      if (disposed) throw new Error("Tree wind is disposed.");
+      if (!Number.isFinite(seconds))
+        throw new Error("Tree wind time must be finite simulation time.");
+      simulationTime.value = seconds;
+    },
+    expandBounds(geometry: BufferGeometry): void {
+      if (disposed) throw new Error("Tree wind is disposed.");
+      geometry.computeBoundingBox();
+      geometry.computeBoundingSphere();
+      // Any yaw maps the world direction onto a local horizontal axis, so pad both.
+      if (geometry.boundingBox) {
+        geometry.boundingBox.min.x -= wind.amplitude;
+        geometry.boundingBox.max.x += wind.amplitude;
+        geometry.boundingBox.min.z -= wind.amplitude;
+        geometry.boundingBox.max.z += wind.amplitude;
+      }
+      if (geometry.boundingSphere) geometry.boundingSphere.radius += wind.amplitude;
+    },
+    dispose(): void {
+      if (!disposed) {
+        disposed = true;
+        material.dispose();
+      }
+    },
+  };
+}

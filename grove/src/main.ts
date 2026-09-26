@@ -5,9 +5,9 @@ import "./style.css";
 const app = document.querySelector<HTMLElement>("#app");
 if (app === null) throw new Error("Missing #app element.");
 
-// No DOM readout here. This template's HUD is `src/render/hud.ts`, drawn in the scene so it
-// survives on native, and a second DOM copy of the same score rendered on top of it: a blind score
-// of the first frame read "a small Score: 0 chip overlapping a large glowing SCORE 0". One HUD.
+// No DOM readout here, and no in-scene HUD either: this game is a grove to look at, and a score
+// chip over it only ever covered a tree. The scene's own numbers are readable in the playtest
+// bridge, which is where an automated check should read them from anyway.
 
 import.meta.hot?.accept();
 acceptHotUpdate(game, import.meta.hot);

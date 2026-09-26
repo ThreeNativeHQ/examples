@@ -30,9 +30,15 @@ export function setupLighting(
 
   scene.add(new HemisphereLight(palette.skyHigh, palette.shadow, 1.6));
 
+  // The grove is 44 m across, so the shadow camera has to hold all of it or the far trunks stop
+  // casting. 2048² over a 35-unit extent is about 3.4 cm per texel, which still resolves a trunk.
+  const extent = 35;
   const key = new DirectionalLight(palette.accent, 3);
   const updateSun = (direction: Vector3): void => {
-    key.position.copy(direction).multiplyScalar(7);
+    // A directional light's position only aims its shadow camera, and that camera looks from here
+    // at the origin. Sitting 7 m out — the old value — put half the grove behind its near plane,
+    // where casters are clipped and stop casting at all.
+    key.position.copy(direction).multiplyScalar(extent * 2);
     const transmittance = atmosphere?.sunTransmittance(direction);
     if (transmittance instanceof Vector3) {
       key.color.copy(new Color().setRGB(transmittance.x, transmittance.y, transmittance.z));
@@ -40,13 +46,9 @@ export function setupLighting(
   };
   updateSun(atmosphere?.getSunDirection() ?? new Vector3(4, 7, 3).normalize());
   key.castShadow = true;
-  // 1024² keeps the default shadow pass at one quarter of a 2048² map's
-  // texel storage and fill work. The small generated scene fits this 12-unit
-  // extent; widen it when the playable area grows, accepting softer shadows.
-  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.mapSize.set(2048, 2048);
   key.shadow.camera.near = 0.5;
-  key.shadow.camera.far = 60;
-  const extent = 12;
+  key.shadow.camera.far = extent * 4;
   key.shadow.camera.left = -extent;
   key.shadow.camera.right = extent;
   key.shadow.camera.top = extent;
@@ -55,7 +57,7 @@ export function setupLighting(
   key.shadow.normalBias = 0.03;
   scene.add(key);
 
-  const rim = new DirectionalLight(palette.player, 0.75);
+  const rim = new DirectionalLight(0xffc28a, 0.35);
   rim.position.set(-5, 3, -6);
   scene.add(rim);
 

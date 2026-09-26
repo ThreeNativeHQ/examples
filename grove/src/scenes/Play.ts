@@ -4,37 +4,59 @@ import {
   Scene,
   type SceneFrame,
   isMobile,
-  isTouchscreenAvailable,
   solarPosition,
 } from "@threenative/core";
-import { Area3D, CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
-import { BoxGeometry, Mesh, type PerspectiveCamera, Vector3 } from "three";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { Player } from "../entities/Player.js";
+import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
+import { BoxGeometry, Group, Mesh, type PerspectiveCamera, Vector3 } from "three";
 import { setupCamera } from "../render/camera.js";
-import { createHud } from "../render/hud.js";
 import { setupLighting } from "../render/lighting.js";
 import { createLoadingScreen } from "../render/loading.js";
-import { defaultMaterial, floorMaterial } from "../render/materials.js";
+import { floorMaterial } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { setupSky } from "../render/sky.js";
-import { TouchControls } from "../render/touch-controls.js";
+import { barkMaterial, type TreeWind, leafMaterial, windVariant } from "../render/trees.js";
 import type { GameState } from "../state.js";
+import { generateTree, type TreeOptions } from "../vegetation/tree.js";
 
 export type GameCtx = ICtx<GameState, IPhysicsContext>;
 
+/** Four generated variants; every tree in the grove is a clone of one of them. */
+const VARIANT_SEEDS = [11, 23, 37, 51] as const;
+const TREE_COUNT = 22;
+
+/**
+ * A deciduous tree at grove scale, in metres. The donor's own defaults are a 20 m trunk with 20 m
+ * primary branches, so only the fields that set size are touched: length, radius and leaf size.
+ * Everything else — branch angle, gnarliness, taper, leaf placement — stays at the donor's values,
+ * which already describe a believable broadleaf tree.
+ */
+function configureDeciduous(options: TreeOptions, levels: number): void {
+  options.branch.levels = levels;
+  options.branch.length = { 0: 5.4, 1: 4.2, 2: 2.6, 3: 1.2 };
+  options.branch.radius = { 0: 0.42, 1: 0.24, 2: 0.13, 3: 0.07 };
+  options.branch.children = { 0: 6, 1: 4, 2: 3 };
+  options.branch.sections = { 0: 10, 1: 8, 2: 6, 3: 4 };
+  options.branch.segments = { 0: 8, 1: 6, 2: 4, 3: 3 };
+  options.leaves.count = 12;
+  options.leaves.size = 1.15;
+  options.leaves.sizeVariance = 0.6;
+}
+
 export class Play extends Scene<GameState, IPhysicsContext> {
   static override readonly initialState: GameState = {
-    playerX: -2,
-    score: 0,
+    treeCount: 0,
+    treeVertices: 0,
+    windTime: 0,
     sunAzimuth: 0,
     sunElevation: 0,
     sunTransmittanceRed: 0,
   };
 
+  private winds: TreeWind[] = [];
+  private variants: ReturnType<typeof generateTree>[] = [];
+
   override enter(ctx: GameCtx): SceneFrame<GameState, IPhysicsContext> {
-    const showTouchControls = isMobile() && isTouchscreenAvailable();
-    const useAtmosphere = ctx.renderer.kind === "webgpu" && !showTouchControls;
+    const useAtmosphere = ctx.renderer.kind === "webgpu";
     const atmosphere = useAtmosphere
       ? new Atmosphere({
           rayleigh: [0.005802, 0.013558, 0.0331],
@@ -49,15 +71,12 @@ export class Play extends Scene<GameState, IPhysicsContext> {
           },
         })
       : undefined;
+    // Early afternoon, and it stays there. A moving sun was the template's proof that the
+    // atmosphere was live; the wind now supplies every frame-to-frame change this scene has. At
+    // 16.5 the canopy went muddy under a low sun, so a high one lights the leaves from above.
     const solarInput = {
       dayOfYear: 172,
-      // Late morning. At 6 the sun clears the horizon by a couple of degrees at this latitude and
-      // the atmosphere has almost no light to scatter: the smallest template's first frame was a
-      // dark slab under a black sky, which is a poor advertisement for a physically-based sky.
-      // The fix is the sun, not the exposure — `sky.ts` explains why the radiance multiplier
-      // cannot simply be raised, since the same radiance is also fed to aerial perspective. At
-      // 11.75 the sun is around fifty degrees up and the scattering does the work it is there for.
-      timeOfDay: 11.75,
+      timeOfDay: 13.5,
       latitude: 49.28,
       longitude: -123.12,
       utcOffset: -8,
@@ -87,93 +106,118 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     setupCamera(ctx.camera as PerspectiveCamera);
     const loading = createLoadingScreen(ctx);
     ctx.add(ctx.camera);
-    const touchControls = showTouchControls
-      ? ctx.entities.add("touch-controls", new TouchControls(ctx.camera as PerspectiveCamera))
-      : undefined;
-    const hud = ctx.entities.add("hud", createHud(ctx.camera as PerspectiveCamera, "SCORE"));
-    const floor = new Mesh(new BoxGeometry(10, 0.2, 4), floorMaterial);
-    floor.position.y = -0.1;
-    floor.receiveShadow = true;
-    ctx.add(floor);
-    // Two things at very different distances, so aerial perspective has something to work on:
-    // a marker beside the player and a range of hills five kilometres away. Both used to be plain
-    // boxes — the far one a single 12 km x 500 m slab — and the frame showed a flat blue stripe
-    // ruled across the sky above a grey monolith. Same probe, same one draw call, but the near
-    // one reads as a marker and the far one as a horizon.
-    const marker = new BoxGeometry(0.7, 2.4, 0.7);
-    marker.translate(-3, 1.2, 2.5);
-    const markerCap = new BoxGeometry(1, 0.22, 1);
-    markerCap.translate(-3, 2.5, 2.5);
-    // Seeded, so two captures of the same build frame the same skyline.
-    let seed = 20_260_906;
-    const jitter = (): number => {
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      return seed / 0x7fffffff;
-    };
-    const ridges: BoxGeometry[] = [];
-    for (let index = 0; index < 14; index += 1) {
-      const height = 260 + jitter() * 620;
-      const width = 900 + jitter() * 1_500;
-      const peak = new BoxGeometry(width, height, 260 + jitter() * 300);
-      peak.translate(
-        -6_000 + index * 900 + jitter() * 320,
-        height / 2 - 40,
-        -4_600 - jitter() * 1_400,
-      );
-      ridges.push(peak);
-    }
-    const hazeProbe = new Mesh(mergeGeometries([marker, markerCap, ...ridges]), defaultMaterial);
-    hazeProbe.castShadow = true;
-    ctx.add(hazeProbe);
+
+    const ground = new Mesh(new BoxGeometry(400, 0.2, 400), floorMaterial);
+    ground.position.y = -0.1;
+    ground.receiveShadow = true;
+    ctx.add(ground);
     new RigidBody3D({
-      object: floor,
+      object: ground,
       physics: ctx.physics,
-      shape: CollisionShape3D.fromMesh(floor),
+      shape: CollisionShape3D.fromMesh(ground),
       type: "fixed",
     });
-    const player = new Player(ctx);
-    ctx.entities.add("player", player);
-    const pickup = new Area3D({
-      physics: ctx.physics,
-      position: { x: 1.5, y: 0.5, z: 0 },
-      shape: CollisionShape3D.box(1, 1, 1),
-    });
-    pickup.on("bodyEntered", (body) => {
-      if (body === player.body) ctx.state.set((state) => ({ score: state.score + 1 }));
-    });
+
+    const grove = this.buildGrove(ctx);
+    this.winds = grove.winds;
+    this.variants = grove.variants;
 
     let elapsed = 0;
-    const statePatch: Partial<GameState> = {};
+    const statePatch: Partial<GameState> = {
+      treeCount: grove.trees.length,
+      treeVertices: grove.vertices,
+    };
     return (frameCtx, dt) => {
       loading.update();
-      player.update(
-        frameCtx,
-        dt,
-        touchControls?.update(frameCtx.input.raw.pointers, frameCtx.viewport.size),
-      );
       elapsed += dt;
-      solarInput.timeOfDay = (6 + elapsed * 2) % 24;
-      solarPosition(solarInput, sun);
-      if (atmosphere !== undefined) {
-        atmosphere.setSunDirection(sun);
-        lighting.updateSun(atmosphere.getSunDirection());
-      }
-      const state = frameCtx.state.getState();
-      hud.update({
-        primary: state.score,
-        seconds: elapsed,
-      });
-      statePatch.playerX = player.mesh.position.x;
+      for (const wind of this.winds) wind.updateTime(elapsed);
+      statePatch.windTime = elapsed;
       statePatch.sunAzimuth = sun.azimuth;
       statePatch.sunElevation = sun.elevation;
       if (atmosphere !== undefined) {
-        // The sun's angle is plain arithmetic and keeps moving with the atmosphere deleted, so a
-        // scenario asserting only on it proves nothing. This number cannot be produced without
-        // the node, which is what makes the atmosphere playtest able to go red.
+        // The sun's angle is plain arithmetic, so a scenario asserting only on it proves nothing.
+        // This number cannot be produced without the node, which is what makes the atmosphere
+        // playtest able to go red.
         const transmittance = atmosphere.sunTransmittance(atmosphere.getSunDirection());
         if (transmittance instanceof Vector3) statePatch.sunTransmittanceRed = transmittance.x;
       }
       frameCtx.state.set(statePatch);
     };
   }
+
+  override exit(): void {
+    for (const wind of this.winds) wind.dispose();
+    for (const variant of this.variants) variant.dispose();
+    this.winds = [];
+    this.variants = [];
+  }
+
+  /**
+   * Generate the variants once, then place `TREE_COUNT` clones of them in an irregular clump. A
+   * clone shares its variant's geometry and materials, so the whole grove costs four generations
+   * and eight materials.
+   */
+  private buildGrove(ctx: GameCtx): {
+    trees: Group[];
+    winds: TreeWind[];
+    variants: ReturnType<typeof generateTree>[];
+    vertices: number;
+  } {
+    const variants: ReturnType<typeof generateTree>[] = [];
+    const winds: TreeWind[] = [];
+    let vertices = 0;
+    VARIANT_SEEDS.forEach((seed, index) => {
+      const variant = generateTree({
+        seed,
+        trunkMaterial: barkMaterial,
+        leafMaterial,
+        maxVertices: 120_000,
+        configure: (options) => configureDeciduous(options, index % 2 === 0 ? 2 : 3),
+      });
+      variants.push(variant);
+      vertices += variant.vertices;
+      // One phase per variant, so neighbouring trees never sway in lockstep.
+      winds.push(...windVariant(variant, index * 1.7));
+    });
+
+    const groveRandom = lcg(7_317_051);
+    const trees: Group[] = [];
+    const spacing = 5;
+    for (let attempt = 0; trees.length < TREE_COUNT && attempt < 2_000; attempt += 1) {
+      const angle = groveRandom() * Math.PI * 2;
+      // Square-root radius: dense at the middle of the clump, thinning outward, never a ring.
+      const radius = 3 + Math.sqrt(groveRandom()) * 19;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius - 6;
+      const tooClose = trees.some(
+        (tree) => (tree.position.x - x) ** 2 + (tree.position.z - z) ** 2 < spacing * spacing,
+      );
+      if (tooClose) continue;
+      const variant = variants[trees.length % variants.length];
+      if (variant === undefined) break;
+      const tree = variant.root.clone();
+      tree.position.set(x, 0, z);
+      tree.rotation.y = groveRandom() * Math.PI * 2;
+      const scale = 0.8 + groveRandom() * 0.45;
+      tree.scale.setScalar(scale);
+      tree.traverse((object) => {
+        if (object instanceof Mesh) {
+          object.castShadow = true;
+          object.receiveShadow = true;
+        }
+      });
+      ctx.add(tree);
+      trees.push(tree);
+    }
+    return { trees, winds, variants, vertices };
+  }
+}
+
+/** A seeded 32-bit LCG, one per use: the same build frames the same skyline and grove every run. */
+function lcg(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state * 1103515245 + 12345) & 0x7fffffff;
+    return state / 0x7fffffff;
+  };
 }

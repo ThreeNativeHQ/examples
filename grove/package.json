@@ -18,9 +18,11 @@
   "dependencies": {
     "@threenative/core": "0.3.3",
     "@threenative/physics": "0.3.3",
+    "ez-tree-source": "github:dgreenheck/ez-tree#dcf309bd86bd521083d9c70f01f2de45fdc7c457",
     "three": "0.185.1"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "4.4.2",
     "@threenative/assets": "0.3.3",
     "@threenative/playtest": "0.3.3",
     "@types/three": "0.185.3",
@@ -28,14 +30,16 @@
     "esbuild": "0.27.0",
     "playwright": "1.62.1",
     "typescript": "5.9.3",
-    "vite": "8.2.0",
-    "@gltf-transform/cli": "4.4.2"
+    "vite": "8.2.0"
   },
   "optionalDependencies": {
     "@threenative/runtime-native": "0.3.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@threenative/core", "@threenative/runtime-native"],
+    "onlyBuiltDependencies": [
+      "@threenative/core",
+      "@threenative/runtime-native"
+    ],
     "patchedDependencies": {
       "three@0.185.1": "patches/three@0.185.1.patch"
     }
