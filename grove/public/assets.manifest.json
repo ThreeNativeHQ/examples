@@ -1,0 +1,289 @@
+{
+  "version": 1,
+  "entries": {
+    "trees/tree-11.glb": {
+      "bytes": 163872,
+      "kind": "model",
+      "output": "trees/tree-11.40e975fb.glb",
+      "passes": [
+        "audio",
+        "model"
+      ],
+      "extensions": [
+        "KHR_mesh_quantization",
+        "TN_discrete_lod"
+      ],
+      "bytesAfter": 163872,
+      "bytesBefore": 235364,
+      "compact": {
+        "flatten": {
+          "enabled": true,
+          "reparented": 2
+        },
+        "instance": {
+          "batches": 0,
+          "enabled": true,
+          "instances": 0,
+          "reason": "no mesh was shared by >=2 nodes"
+        },
+        "join": {
+          "enabled": true,
+          "primitivesAfter": 2,
+          "primitivesBefore": 2
+        },
+        "nodesAfter": 3,
+        "nodesBefore": 3,
+        "primitivesAfter": 2,
+        "primitivesBefore": 2,
+        "removed": [
+          "Tree"
+        ],
+        "protected": []
+      },
+      "lod": {
+        "byteOverhead": 17640,
+        "diagnostics": [],
+        "errorTargets": [
+          0.002,
+          0.006,
+          0.02,
+          0.06
+        ],
+        "fingerprint": "c272cb6f7ca5f044",
+        "generated": 1,
+        "join": false,
+        "levels": 2,
+        "maxLevels": 4,
+        "minSaving": 0.2,
+        "minTriangles": 128,
+        "minTrianglesScope": "asset",
+        "preset": "balanced",
+        "reasons": [
+          "material-unsupported"
+        ],
+        "runtime": {
+          "hysteresis": 0.15,
+          "maxPixelError": 1
+        },
+        "skipped": 1,
+        "trianglesAfter": 464,
+        "trianglesBefore": 2976
+      },
+      "triangles": 4796,
+      "vertices": 5673
+    },
+    "trees/tree-23.glb": {
+      "bytes": 591980,
+      "kind": "model",
+      "output": "trees/tree-23.c052a903.glb",
+      "passes": [
+        "audio",
+        "model"
+      ],
+      "extensions": [
+        "KHR_mesh_quantization",
+        "TN_discrete_lod"
+      ],
+      "bytesAfter": 591980,
+      "bytesBefore": 816896,
+      "compact": {
+        "flatten": {
+          "enabled": true,
+          "reparented": 2
+        },
+        "instance": {
+          "batches": 0,
+          "enabled": true,
+          "instances": 0,
+          "reason": "no mesh was shared by >=2 nodes"
+        },
+        "join": {
+          "enabled": true,
+          "primitivesAfter": 2,
+          "primitivesBefore": 2
+        },
+        "nodesAfter": 3,
+        "nodesBefore": 3,
+        "primitivesAfter": 2,
+        "primitivesBefore": 2,
+        "removed": [
+          "Tree"
+        ],
+        "protected": []
+      },
+      "lod": {
+        "byteOverhead": 95688,
+        "diagnostics": [],
+        "errorTargets": [
+          0.002,
+          0.006,
+          0.02,
+          0.06
+        ],
+        "fingerprint": "c272cb6f7ca5f044",
+        "generated": 1,
+        "join": false,
+        "levels": 3,
+        "maxLevels": 4,
+        "minSaving": 0.2,
+        "minTriangles": 128,
+        "minTrianglesScope": "asset",
+        "preset": "balanced",
+        "reasons": [
+          "material-unsupported"
+        ],
+        "runtime": {
+          "hysteresis": 0.15,
+          "maxPixelError": 1
+        },
+        "skipped": 1,
+        "trianglesAfter": 1094,
+        "trianglesBefore": 7576
+      },
+      "triangles": 14856,
+      "vertices": 20150
+    },
+    "trees/tree-37.glb": {
+      "bytes": 162892,
+      "kind": "model",
+      "output": "trees/tree-37.de538580.glb",
+      "passes": [
+        "audio",
+        "model"
+      ],
+      "extensions": [
+        "KHR_mesh_quantization",
+        "TN_discrete_lod"
+      ],
+      "bytesAfter": 162892,
+      "bytesBefore": 235364,
+      "compact": {
+        "flatten": {
+          "enabled": true,
+          "reparented": 2
+        },
+        "instance": {
+          "batches": 0,
+          "enabled": true,
+          "instances": 0,
+          "reason": "no mesh was shared by >=2 nodes"
+        },
+        "join": {
+          "enabled": true,
+          "primitivesAfter": 2,
+          "primitivesBefore": 2
+        },
+        "nodesAfter": 3,
+        "nodesBefore": 3,
+        "primitivesAfter": 2,
+        "primitivesBefore": 2,
+        "removed": [
+          "Tree"
+        ],
+        "protected": []
+      },
+      "lod": {
+        "byteOverhead": 16656,
+        "diagnostics": [],
+        "errorTargets": [
+          0.002,
+          0.006,
+          0.02,
+          0.06
+        ],
+        "fingerprint": "c272cb6f7ca5f044",
+        "generated": 1,
+        "join": false,
+        "levels": 2,
+        "maxLevels": 4,
+        "minSaving": 0.2,
+        "minTriangles": 128,
+        "minTrianglesScope": "asset",
+        "preset": "balanced",
+        "reasons": [
+          "material-unsupported"
+        ],
+        "runtime": {
+          "hysteresis": 0.15,
+          "maxPixelError": 1
+        },
+        "skipped": 1,
+        "trianglesAfter": 454,
+        "trianglesBefore": 2976
+      },
+      "triangles": 4796,
+      "vertices": 5673
+    },
+    "trees/tree-51.glb": {
+      "bytes": 586624,
+      "kind": "model",
+      "output": "trees/tree-51.d938cdff.glb",
+      "passes": [
+        "audio",
+        "model"
+      ],
+      "extensions": [
+        "KHR_mesh_quantization",
+        "TN_discrete_lod"
+      ],
+      "bytesAfter": 586624,
+      "bytesBefore": 816900,
+      "compact": {
+        "flatten": {
+          "enabled": true,
+          "reparented": 2
+        },
+        "instance": {
+          "batches": 0,
+          "enabled": true,
+          "instances": 0,
+          "reason": "no mesh was shared by >=2 nodes"
+        },
+        "join": {
+          "enabled": true,
+          "primitivesAfter": 2,
+          "primitivesBefore": 2
+        },
+        "nodesAfter": 3,
+        "nodesBefore": 3,
+        "primitivesAfter": 2,
+        "primitivesBefore": 2,
+        "removed": [
+          "Tree"
+        ],
+        "protected": []
+      },
+      "lod": {
+        "byteOverhead": 90336,
+        "diagnostics": [],
+        "errorTargets": [
+          0.002,
+          0.006,
+          0.02,
+          0.06
+        ],
+        "fingerprint": "c272cb6f7ca5f044",
+        "generated": 1,
+        "join": false,
+        "levels": 3,
+        "maxLevels": 4,
+        "minSaving": 0.2,
+        "minTriangles": 128,
+        "minTrianglesScope": "asset",
+        "preset": "balanced",
+        "reasons": [
+          "material-unsupported"
+        ],
+        "runtime": {
+          "hysteresis": 0.15,
+          "maxPixelError": 1
+        },
+        "skipped": 1,
+        "trianglesAfter": 1082,
+        "trianglesBefore": 7576
+      },
+      "triangles": 14856,
+      "vertices": 20150
+    }
+  }
+}

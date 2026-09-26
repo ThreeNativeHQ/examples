@@ -1,0 +1,87 @@
+{
+  "name": "grove-lod",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 60,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "near framing, wind runs",
+      "waitTicks": 60,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "KeyF starts the sweep out",
+      "press": "KeyF",
+      "holdTicks": 2,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "sweep at mid distance",
+      "waitTicks": 150,
+      "release": true,
+      "screenshot": "grove-lod-mid"
+    },
+    {
+      "kind": "wait",
+      "label": "sweep reaches the far end",
+      "waitTicks": 1000,
+      "release": true,
+      "screenshot": "grove-lod-far"
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "lodBarkCoarse",
+        "gte": 1
+      },
+      {
+        "id": "state",
+        "path": "lodBarkGeometries",
+        "equals": 14,
+        "allowTrivial": "Held once the sweep has passed every level: 4 authored bases plus the 2+2+3+3 bark levels the cook bakes for seeds 11, 37, 23, 51 (build log `lod trees/tree-<seed>.glb`). Fewer means a baked level was never drawn."
+      },
+      {
+        "id": "state",
+        "path": "lodLeafCoarse",
+        "equals": 0,
+        "allowTrivial": "Held by design at both framings: an alpha-masked primitive is not eligible for the bake, so no leaf chain is ever baked and every leaf mesh draws its own authored LOD0."
+      },
+      {
+        "id": "state",
+        "path": "windTime",
+        "changed": true
+      }
+    ],
+    "visual": [
+      {
+        "frameDiff": {
+          "minChangedPixelRatio": 0.002
+        },
+        "region": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "minNonblankPixelRatio": 0.5
+        }
+      }
+    ],
+    "performance": {
+      "maxDrawCalls": 300
+    }
+  }
+}

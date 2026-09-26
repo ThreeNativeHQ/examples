@@ -1,0 +1,42 @@
+{
+  "name": "grove-desktop",
+  "target": "desktop",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 60,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "wind runs",
+      "waitTicks": 240,
+      "release": true
+    }
+  ],
+  "assert": {
+    "resources": [
+      {
+        "id": "state",
+        "path": "treeCount",
+        "equals": 22,
+        "allowTrivial": "The grove is placed once when the scene is entered and nothing in this scene adds or removes a tree, so the count is a held invariant by design."
+      },
+      {
+        "id": "state",
+        "path": "treeVertices",
+        "gte": 1,
+        "allowTrivial": "The four variants are generated in enter() and never regenerated, so their summed vertex count is held for the life of the scene."
+      },
+      {
+        "id": "state",
+        "path": "windTime",
+        "changed": true
+      }
+    ],
+    "performance": {
+      "maxDrawCalls": 200
+    }
+  }
+}

@@ -11,19 +11,22 @@
     "build:desktop": "threenative build --target desktop",
     "build:android": "threenative build --target android",
     "build:ios": "threenative build --target ios",
+    "trees": "esbuild scripts/author-trees.ts --bundle --platform=node --format=esm --alias:ez-tree-source/lib=./node_modules/ez-tree-source/src/lib/index.js --external:three --external:@gltf-transform/* --outfile=.cache/author-trees.mjs && node .cache/author-trees.mjs",
+    "check:no-generator": "node scripts/check-no-generator.mjs",
     "pretest": "playwright install chromium",
     "test": "pnpm build:web && threenative-playtest --scenario \"playtests/*.playtest.json\" --browser-recipe webgpu --headed --server-command \"pnpm exec vite preview --host 127.0.0.1 --port $PORT --strictPort\"",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/core": "0.3.3",
+    "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/grove/threenative-core-0.3.3-veg-79088f2a03c4.tgz",
     "@threenative/physics": "0.3.3",
     "ez-tree-source": "github:dgreenheck/ez-tree#dcf309bd86bd521083d9c70f01f2de45fdc7c457",
     "three": "0.185.1"
   },
   "devDependencies": {
     "@gltf-transform/cli": "4.4.2",
-    "@threenative/assets": "0.3.3",
+    "@gltf-transform/core": "4.4.2",
+    "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/grove/threenative-assets-0.3.4-veg-d55e3498a39d.tgz",
     "@threenative/playtest": "0.3.3",
     "@types/three": "0.185.3",
     "create-threenative": "0.2.6",
@@ -36,6 +39,10 @@
     "@threenative/runtime-native": "0.3.3"
   },
   "pnpm": {
+    "overrides": {
+      "@threenative/core": "file:/home/joao/projects/threenative/sandbox/.packages/grove/threenative-core-0.3.3-veg-79088f2a03c4.tgz",
+      "@threenative/assets": "file:/home/joao/projects/threenative/sandbox/.packages/grove/threenative-assets-0.3.4-veg-d55e3498a39d.tgz"
+    },
     "onlyBuiltDependencies": [
       "@threenative/core",
       "@threenative/runtime-native"

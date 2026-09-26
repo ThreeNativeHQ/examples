@@ -1,45 +1,40 @@
 import {
   Atmosphere,
+  baseGeometryOf,
   type ICtx,
+  loadAll,
   Scene,
   type SceneFrame,
   isMobile,
   solarPosition,
 } from "@threenative/core";
 import { CollisionShape3D, type IPhysicsContext, RigidBody3D } from "@threenative/physics";
-import { BoxGeometry, Group, Mesh, type PerspectiveCamera, Vector3 } from "three";
-import { setupCamera } from "../render/camera.js";
+import {
+  BoxGeometry,
+  type BufferGeometry,
+  type Group,
+  Mesh,
+  type PerspectiveCamera,
+  Vector3,
+} from "three";
+import { frameGrove, setupCamera } from "../render/camera.js";
 import { setupLighting } from "../render/lighting.js";
 import { createLoadingScreen } from "../render/loading.js";
 import { floorMaterial } from "../render/materials.js";
 import { setupPost } from "../render/postprocessing.js";
 import { setupSky } from "../render/sky.js";
-import { barkMaterial, type TreeWind, leafMaterial, windVariant } from "../render/trees.js";
+import { dressVariant, type TreeVariant, type TreeWind } from "../render/trees.js";
 import type { GameState } from "../state.js";
-import { generateTree, type TreeOptions } from "../vegetation/tree.js";
 
 export type GameCtx = ICtx<GameState, IPhysicsContext>;
 
-/** Four generated variants; every tree in the grove is a clone of one of them. */
+/** The four cooked variants; every tree in the grove is a clone of one of them. */
 const VARIANT_SEEDS = [11, 23, 37, 51] as const;
 const TREE_COUNT = 22;
 
-/**
- * A deciduous tree at grove scale, in metres. The donor's own defaults are a 20 m trunk with 20 m
- * primary branches, so only the fields that set size are touched: length, radius and leaf size.
- * Everything else — branch angle, gnarliness, taper, leaf placement — stays at the donor's values,
- * which already describe a believable broadleaf tree.
- */
-function configureDeciduous(options: TreeOptions, levels: number): void {
-  options.branch.levels = levels;
-  options.branch.length = { 0: 5.4, 1: 4.2, 2: 2.6, 3: 1.2 };
-  options.branch.radius = { 0: 0.42, 1: 0.24, 2: 0.13, 3: 0.07 };
-  options.branch.children = { 0: 6, 1: 4, 2: 3 };
-  options.branch.sections = { 0: 10, 1: 8, 2: 6, 3: 4 };
-  options.branch.segments = { 0: 8, 1: 6, 2: 4, 3: 3 };
-  options.leaves.count = 12;
-  options.leaves.size = 1.15;
-  options.leaves.sizeVariance = 0.6;
+/** What `ctx.assets.model` hands back for a glTF; its default scene is the one the cook resolved. */
+interface ICookedModel {
+  readonly scene: Group;
 }
 
 export class Play extends Scene<GameState, IPhysicsContext> {
@@ -50,10 +45,30 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     sunAzimuth: 0,
     sunElevation: 0,
     sunTransmittanceRed: 0,
+    lodBarkCoarse: 0,
+    lodLeafCoarse: 0,
+    lodBarkGeometries: 0,
   };
 
-  private winds: TreeWind[] = [];
-  private variants: ReturnType<typeof generateTree>[] = [];
+  private variants: TreeVariant[] = [];
+  private bark: Mesh[] = [];
+  private leaf: Mesh[] = [];
+  /** Every bark geometry drawn so far: the four authored bases plus each baked level selected. */
+  private readonly barkGeometries = new Set<BufferGeometry>();
+  private far = false;
+  private sweep = 0;
+
+  /**
+   * The trees are cooked data, not generated code: four GLBs from `pnpm trees`, fetched here so the
+   * loop never blocks on bytes. `loadAll` writes results to each item's own index, so a seed's
+   * variant is always at its own slot whatever order the bytes arrive in.
+   */
+  override async load(ctx: GameCtx): Promise<void> {
+    const models = await loadAll(VARIANT_SEEDS, (seed) =>
+      ctx.assets.model<ICookedModel>(`trees/tree-${seed}.glb`),
+    );
+    this.variants = models.map((model, index) => dressVariant(model.scene, index * 1.7));
+  }
 
   override enter(ctx: GameCtx): SceneFrame<GameState, IPhysicsContext> {
     const useAtmosphere = ctx.renderer.kind === "webgpu";
@@ -107,7 +122,9 @@ export class Play extends Scene<GameState, IPhysicsContext> {
     const loading = createLoadingScreen(ctx);
     ctx.add(ctx.camera);
 
-    const ground = new Mesh(new BoxGeometry(400, 0.2, 400), floorMaterial);
+    // 1200 m, not 400: the far (LOD) framing stands at z=170 and would otherwise look over the
+    // edge of its own ground. The near framing never sees past 60 m of it.
+    const ground = new Mesh(new BoxGeometry(1200, 0.2, 1200), floorMaterial);
     ground.position.y = -0.1;
     ground.receiveShadow = true;
     ctx.add(ground);
@@ -118,19 +135,24 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       type: "fixed",
     });
 
-    const grove = this.buildGrove(ctx);
-    this.winds = grove.winds;
-    this.variants = grove.variants;
+    const { trees, winds, vertices } = this.buildGrove(ctx);
+    const camera = ctx.camera as PerspectiveCamera;
 
     let elapsed = 0;
     const statePatch: Partial<GameState> = {
-      treeCount: grove.trees.length,
-      treeVertices: grove.vertices,
+      treeCount: trees.length,
+      treeVertices: vertices,
     };
     return (frameCtx, dt) => {
       loading.update();
       elapsed += dt;
-      for (const wind of this.winds) wind.updateTime(elapsed);
+      for (const wind of winds) wind.updateTime(elapsed);
+      // A toggle, not a hold: one keypress starts a sixteen-second sweep out to the far end, so a
+      // scenario holds nothing while the engine's chain walks through every level it baked.
+      if (frameCtx.input.justPressed("far")) this.far = !this.far;
+      this.sweep = this.far ? Math.min(1, this.sweep + dt / 16) : 0;
+      frameGrove(camera, this.sweep);
+      this.observeLod(statePatch);
       statePatch.windTime = elapsed;
       statePatch.sunAzimuth = sun.azimuth;
       statePatch.sunElevation = sun.elevation;
@@ -146,43 +168,59 @@ export class Play extends Scene<GameState, IPhysicsContext> {
   }
 
   override exit(): void {
-    for (const wind of this.winds) wind.dispose();
-    for (const variant of this.variants) variant.dispose();
-    this.winds = [];
+    for (const variant of this.variants) for (const wind of variant.winds) wind.dispose();
     this.variants = [];
+    this.bark = [];
+    this.leaf = [];
+    this.barkGeometries.clear();
   }
 
   /**
-   * Generate the variants once, then place `TREE_COUNT` clones of them in an irregular clump. A
-   * clone shares its variant's geometry and materials, so the whole grove costs four generations
-   * and eight materials.
+   * What the engine's baked discrete chain is drawing right now. Selection belongs to the engine
+   * and happens every frame, so this only reads `mesh.geometry` against the authored LOD0: a mesh
+   * on anything else is coarse. The frame function runs before the render, so the level counted is
+   * the one the last presented frame actually drew.
+   */
+  private observeLod(statePatch: Partial<GameState>): void {
+    let barkCoarse = 0;
+    let leafCoarse = 0;
+    for (const mesh of this.bark) {
+      this.barkGeometries.add(mesh.geometry);
+      if (mesh.geometry !== baseGeometryOf(mesh)) barkCoarse += 1;
+    }
+    for (const mesh of this.leaf)
+      if (mesh.geometry !== baseGeometryOf(mesh)) leafCoarse += 1;
+    statePatch.lodBarkCoarse = barkCoarse;
+    statePatch.lodLeafCoarse = leafCoarse;
+    statePatch.lodBarkGeometries = this.barkGeometries.size;
+  }
+
+  /**
+   * Place `TREE_COUNT` clones of the dressed variants in an irregular clump. A clone shares its
+   * variant's geometry and materials, so the whole grove costs four cooked files and eight
+   * materials — and the placement is what declares how small a world scale the wind's own bounds
+   * have to cover, which is why `expandBounds` runs last, once per variant geometry.
    */
   private buildGrove(ctx: GameCtx): {
     trees: Group[];
     winds: TreeWind[];
-    variants: ReturnType<typeof generateTree>[];
     vertices: number;
   } {
-    const variants: ReturnType<typeof generateTree>[] = [];
+    const variants = this.variants;
     const winds: TreeWind[] = [];
     let vertices = 0;
-    VARIANT_SEEDS.forEach((seed, index) => {
-      const variant = generateTree({
-        seed,
-        trunkMaterial: barkMaterial,
-        leafMaterial,
-        maxVertices: 120_000,
-        configure: (options) => configureDeciduous(options, index % 2 === 0 ? 2 : 3),
-      });
-      variants.push(variant);
+    for (const variant of variants) {
+      winds.push(...variant.winds);
       vertices += variant.vertices;
-      // One phase per variant, so neighbouring trees never sway in lockstep.
-      winds.push(...windVariant(variant, index * 1.7));
-    });
+    }
 
     const groveRandom = lcg(7_317_051);
     const trees: Group[] = [];
     const spacing = 5;
+    const worldScale = new Vector3();
+    // The smallest world scale each variant is drawn at: the sway is world metres, so the smallest
+    // clone needs the largest local pad.
+    const minWorldScale = new Map<TreeVariant, number>();
     for (let attempt = 0; trees.length < TREE_COUNT && attempt < 2_000; attempt += 1) {
       const angle = groveRandom() * Math.PI * 2;
       // Square-root radius: dense at the middle of the clump, thinning outward, never a ring.
@@ -200,16 +238,32 @@ export class Play extends Scene<GameState, IPhysicsContext> {
       tree.rotation.y = groveRandom() * Math.PI * 2;
       const scale = 0.8 + groveRandom() * 0.45;
       tree.scale.setScalar(scale);
+      const barkWind = variant.winds[0]?.material;
       tree.traverse((object) => {
-        if (object instanceof Mesh) {
-          object.castShadow = true;
-          object.receiveShadow = true;
-        }
+        if (!(object instanceof Mesh)) return;
+        object.castShadow = true;
+        object.receiveShadow = true;
+        if (object.material === barkWind) this.bark.push(object);
+        else this.leaf.push(object);
+        object.getWorldScale(worldScale);
+        const smallest = Math.min(worldScale.x, worldScale.y, worldScale.z);
+        minWorldScale.set(variant, Math.min(minWorldScale.get(variant) ?? smallest, smallest));
       });
       ctx.add(tree);
       trees.push(tree);
     }
-    return { trees, winds, variants, vertices };
+
+    const padded = new Set<BufferGeometry>();
+    for (const variant of variants) {
+      const smallest = minWorldScale.get(variant);
+      if (smallest === undefined) continue;
+      for (const mesh of [...variant.bark, ...variant.leaf]) {
+        if (padded.has(mesh.geometry)) continue;
+        padded.add(mesh.geometry);
+        for (const wind of variant.winds) wind.expandBounds(mesh.geometry, smallest);
+      }
+    }
+    return { trees, winds, vertices };
   }
 }
 

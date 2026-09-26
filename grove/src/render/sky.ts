@@ -36,6 +36,10 @@ export function setupSky(scene: Scene, atmosphere?: AtmosphereLike): void {
   dome.matrixAutoUpdate = false;
   dome.frustumCulled = false;
   scene.background = null;
-  scene.fog = new Fog(palette.skyLow, 45, 170);
+  // Near 45 m is where the treeline starts to dissolve; far 600 m is far enough that the whole
+  // grove still reads from the far (LOD) framing at z=170, which would otherwise stand deep inside
+  // a 170 m fog and erase the very trees the view exists to show. Nothing in the near framing
+  // reaches 60 m, so its aerial perspective is unchanged by the difference.
+  scene.fog = new Fog(palette.skyLow, 45, 600);
   scene.add(dome);
 }

@@ -16,6 +16,9 @@ const game = defineGame<GameState, IPhysicsContext>({
       right: ["ArrowRight", "KeyD"],
       up: ["ArrowUp", "KeyW"],
     },
+    // Toggles the far framing, the one place the baked LOD chain is far enough to coarsen. A
+    // button (`keys`), not an axis direction, and read with `justPressed`, not `pressed`.
+    far: { keys: ["KeyF"] },
   },
   // `playtest()` installs the bridge a scenario needs to observe entities and state. Without
   // it, semantic assertions fail closed with TN_PLAYTEST_BRIDGE_MISSING rather than passing.

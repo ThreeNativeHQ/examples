@@ -1,0 +1,29 @@
+{
+  "outputs": [
+    {
+      "bytes": 163872,
+      "path": "trees/tree-11.40e975fb.glb",
+      "producer": "audio+model",
+      "source": "trees/tree-11.glb"
+    },
+    {
+      "bytes": 591980,
+      "path": "trees/tree-23.c052a903.glb",
+      "producer": "audio+model",
+      "source": "trees/tree-23.glb"
+    },
+    {
+      "bytes": 162892,
+      "path": "trees/tree-37.de538580.glb",
+      "producer": "audio+model",
+      "source": "trees/tree-37.glb"
+    },
+    {
+      "bytes": 586624,
+      "path": "trees/tree-51.d938cdff.glb",
+      "producer": "audio+model",
+      "source": "trees/tree-51.glb"
+    }
+  ],
+  "pipelineVersion": 10
+}

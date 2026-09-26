@@ -1,5 +1,6 @@
 # ThreeNative local authoring state and dependency secrets
 .dream-loop/
+.cache/
 node_modules/
 .env
 .env.*

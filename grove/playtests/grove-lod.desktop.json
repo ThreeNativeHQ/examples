@@ -1,0 +1,60 @@
+{
+  "name": "grove-lod-desktop",
+  "target": "desktop",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 60,
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "near framing, wind runs",
+      "waitTicks": 60,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "KeyF starts the sweep out",
+      "press": "KeyF",
+      "holdTicks": 2,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "sweep at mid distance",
+      "waitTicks": 150,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "sweep reaches the far end",
+      "waitTicks": 1000,
+      "release": true
+    }
+  ],
+  "assert": {
+    "resources": [
+      {
+        "id": "state",
+        "path": "lodBarkCoarse",
+        "gte": 1
+      },
+      {
+        "id": "state",
+        "path": "lodLeafCoarse",
+        "equals": 0,
+        "allowTrivial": "Held by design at both framings: an alpha-masked primitive is not eligible for the bake, so no leaf chain is ever baked and every leaf mesh draws its own authored LOD0."
+      },
+      {
+        "id": "state",
+        "path": "windTime",
+        "changed": true
+      }
+    ],
+    "performance": {
+      "maxDrawCalls": 300
+    }
+  }
+}

@@ -26,6 +26,22 @@ const config: IThreeNativeConfig = {
     backgroundColor: "#0d1b2a",
   },
   nativeEntry: "src/game.ts",
+  assets: {
+    // Opt in to the engine's automatic discrete LOD. `{}` resolves to enabled/balanced: the `model`
+    // pass bakes a `TN_discrete_lod` chain into eligible primitives, the loader registers the
+    // reader, and the engine picks a level every frame before it renders. Nothing is called here.
+    lod: {},
+    models: {
+      passes: {
+        // `prune` drops every attribute the glTF material does not declare, and a tree's glTF
+        // materials are the exporter's neutral placeholders: they declare no texture, so the
+        // game's procedural leaf cut-out would lose the `TEXCOORD_0` it reads `uv()` from and every
+        // leaf quad would be discarded whole. The engine owns the choice; a game with a material
+        // that reads an attribute its glTF material never declared can decline this one pass.
+        prune: false,
+      },
+    },
+  },
   ui: { renderer: "native" }, // This template draws its HUD in the scene and has no src/ui/.
   renderer: {
     preferWebGPU: true, // Use WebGPU when the host exposes it.

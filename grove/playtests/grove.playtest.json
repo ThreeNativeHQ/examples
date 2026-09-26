@@ -4,7 +4,9 @@
   "schemaVersion": 1,
   "viewport": { "width": 1280, "height": 720 },
   "warmupFrames": 60,
-  "steps": [{ "kind": "wait", "label": "wind runs", "waitTicks": 240, "release": true }],
+  "steps": [
+    { "kind": "wait", "label": "wind runs", "waitTicks": 240, "release": true, "screenshot": "grove-near" }
+  ],
   "assert": {
     "diagnostics": {
       "noConsoleErrors": true,
@@ -24,7 +26,13 @@
         "gte": 1,
         "allowTrivial": "The four variants are generated in enter() and never regenerated, so their summed vertex count is held for the life of the scene."
       },
-      { "id": "state", "path": "windTime", "changed": true }
+      { "id": "state", "path": "windTime", "changed": true },
+      {
+        "id": "state",
+        "path": "lodLeafCoarse",
+        "equals": 0,
+        "allowTrivial": "Held by design at both framings: the asset pipeline's LOD bake refuses an alpha-masked primitive, so no leaf chain is ever baked and every leaf mesh draws its own authored LOD0. See FRICTION.md 6; a non-zero value here would mean a leaf silently lost detail."
+      }
     ],
     "visual": [
       {
