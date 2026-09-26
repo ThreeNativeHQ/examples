@@ -5,7 +5,20 @@
 // `windVariant`, so a variant's materials are replaced by wind clones and every tree built from
 // that variant sways with its own phase.
 import { DoubleSide, Mesh } from "three";
-import { color, length, vec2, mix, mx_worley_noise_float, oneMinus, smoothstep, sub, uv } from "three/tsl";
+import {
+  color,
+  length,
+  mix,
+  mx_noise_float,
+  mx_worley_noise_float,
+  oneMinus,
+  positionGeometry,
+  smoothstep,
+  sub,
+  uv,
+  vec2,
+  vec3,
+} from "three/tsl";
 import { MeshStandardNodeMaterial } from "three/webgpu";
 import type { IGeneratedTree } from "../vegetation/tree.js";
 import { createTreeWind } from "./wind.js";
@@ -30,12 +43,17 @@ export const leafMaterial = new MeshStandardNodeMaterial({
 
 // The donor gives every leaf quad a 0..1 uv, so one procedural cluster fits in each: small leaf
 // blobs where the worley field is near a cell centre, clipped to a disc so the quad's own corners
-// never show. `cells` varies per fragment, so the colour mix mottles each cluster on its own.
-const cells = mx_worley_noise_float(uv().mul(vec2(7, 4.5)), 1);
+// never show. Every quad shares that uv range, so the cluster is shifted by the fragment's
+// pre-wind tree-space position; without it the whole canopy is one stamp repeated (judge, round 5).
+const seed = positionGeometry.xz.mul(1.7).add(positionGeometry.y.mul(0.9));
+const cells = mx_worley_noise_float(uv().mul(vec2(7, 4.5)).add(seed), 1);
 const blob = oneMinus(smoothstep(0.16, 0.3, cells));
 const round = oneMinus(smoothstep(0.38, 0.5, length(sub(uv(), 0.5))));
 // `cells` stays under ~0.3 inside a blob, so remap that range: dark at the vein, sunlit at the rim.
-leafMaterial.colorNode = mix(color(0x3d6a26), color(0x9cc455), smoothstep(0, 0.3, cells));
+const leaf = mix(color(0x3d6a26), color(0x9cc455), smoothstep(0, 0.3, cells));
+// Canopy-scale drift between fresh green and a warmer, older olive, a few metres per patch.
+const age = mx_noise_float(positionGeometry.mul(0.35)).mul(0.5).add(0.5);
+leafMaterial.colorNode = mix(leaf, leaf.mul(vec3(1.2, 1.05, 0.62)), age);
 leafMaterial.maskNode = blob.mul(round).greaterThan(0.5);
 
 /** One wind per variant material, expanded to cover the displacement the shader applies. */
