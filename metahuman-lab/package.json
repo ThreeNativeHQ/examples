@@ -24,7 +24,7 @@
     "react-dom": "19.2.0",
     "react-reconciler": "0.33.0",
     "three": "0.185.1",
-    "@threenative/metahuman": "file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-metahuman-0.1.0-b430d5ff1a7e.tgz"
+    "@threenative/metahuman": "file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-metahuman-0.1.0-3dcb09c72136.tgz"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
@@ -43,7 +43,7 @@
     "@gltf-transform/cli": "4.4.2"
   },
   "optionalDependencies": {
-    "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-runtime-native-0.3.4-5555b3f67d38.tgz"
+    "@threenative/runtime-native": "file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-runtime-native-0.3.4-afd049c5e338.tgz"
   },
   "overrides": {
     "sharp": ">=0.35.4"

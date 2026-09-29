@@ -1,0 +1,1020 @@
+{
+  "name": "presets-replay-lod-desktop",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "label": "the-specimen-is-bound-and-ready",
+      "release": true,
+      "timeoutMs": 120000,
+      "waitForResource": {
+        "id": "state",
+        "path": "phase",
+        "equals": "ready"
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "neutral-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "neutral-settled",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "neutral"
+    },
+    {
+      "kind": "input",
+      "label": "surprise-preset",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.90703,
+        "y": 0.0625,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
+      "label": "smile-left-to-full",
+      "waitTicks": 2,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.86641,
+        "y": 0.39722,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "combined-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "combined-settled",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "combined-expression"
+    },
+    {
+      "kind": "input",
+      "label": "open-the-performance-panel",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.95859,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "open-the-performance-panel-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "intensity-down",
+      "waitTicks": 2,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.875,
+        "y": 0.09306,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "intensity-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "intensity-settled",
+      "waitFrames": 8,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "back-to-the-controls-panel",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.89687,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "back-to-the-controls-panel-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "reset",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.91875,
+        "y": 0.10972,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "neutral-restored-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "lte": 0.0005
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "neutral-restored",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "after-reset"
+    },
+    {
+      "kind": "input",
+      "label": "open-the-performance-panel-again",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.95859,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "open-the-performance-panel-again-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "play-the-demo",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.78906,
+        "y": 0.2375,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "playback-advanced-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "playback-advanced",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "demo-playing"
+    },
+    {
+      "kind": "input",
+      "label": "pause-the-demo",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.88516,
+        "y": 0.2375,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "playback-held-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "playback-held",
+      "waitFrames": 8,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "scrub-to-1-5s-first-history",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.84375,
+        "y": 0.27222,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "scrub-settled-a-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "demoSample.jawMorph",
+        "lte": 0.101
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "scrub-settled-a",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "scrubbed-1.5s"
+    },
+    {
+      "kind": "input",
+      "label": "back-to-the-controls-panel-for-a-new-history",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.89687,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "back-to-the-controls-panel-for-a-new-history-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "anger-preset",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.95625,
+        "y": 0.0625,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "second-history-applied-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "second-history-applied",
+      "waitFrames": 8,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "back-to-the-performance-panel",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.95859,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "back-to-the-performance-panel-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "scrub-away-from-1.5s",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.80859,
+        "y": 0.27222,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "away-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "away-settled",
+      "waitFrames": 8,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "scrub-to-1-5s-second-history",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.84375,
+        "y": 0.27222,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "scrub-settled-b-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "demoSample.smileMorphLeft",
+        "gte": 0.899
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "scrub-settled-b",
+      "waitFrames": 8,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "controls-panel-for-the-lod-expression",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.89687,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "controls-panel-for-the-lod-expression-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "lod0-surprise",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.90703,
+        "y": 0.0625,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
+      "label": "lod0-smile-left-to-full",
+      "waitTicks": 2,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.86562,
+        "y": 0.39722,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "lod0-expression-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "gte": 0.999
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "lod0-expression",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "lod0-expression"
+    },
+    {
+      "kind": "input",
+      "label": "performance-panel-for-the-lod-switch",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.95859,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "performance-panel-for-the-lod-switch-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "switch-to-lod1",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.91797,
+        "y": 0.33472,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "lod1-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "lte": 0.0005
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "lod1-settled",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "lod1-expression"
+    },
+    {
+      "kind": "input",
+      "label": "switch-back-to-lod0",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.84141,
+        "y": 0.33472,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "lod0-restored-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "gte": 0.999
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "lod0-restored",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "lod0-restored"
+    },
+    {
+      "kind": "input",
+      "label": "controls-panel-for-the-precedence-steps",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.89687,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "controls-panel-for-the-precedence-steps-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "performance-panel-for-the-automations",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.95859,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "performance-panel-for-the-automations-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "play-again-for-the-precedence-steps",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.78906,
+        "y": 0.2375,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
+      "label": "gaze-automation-on",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.86875,
+        "y": 0.17361,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
+      "label": "blink-automation-on",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.74609,
+        "y": 0.17361,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "automation-running-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "automation-running",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "automation-running"
+    },
+    {
+      "kind": "input",
+      "label": "controls-panel-for-the-manual-edit",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.89687,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "controls-panel-for-the-manual-edit-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "manual-blink-edit",
+      "waitTicks": 2,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.83594,
+        "y": 0.86389,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "precedence-after-manual-edit-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "precedence-after-manual-edit",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "after-manual-blink-edit"
+    },
+    {
+      "kind": "input",
+      "label": "performance-panel-for-the-pose-file",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.95859,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "performance-panel-for-the-pose-file-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "gaze-automation-off-so-the-saved-pose-is-manual-only",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.86875,
+        "y": 0.17361,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
+      "label": "save-the-pose",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.78125,
+        "y": 0.57222,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "pose-saved-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "pose-saved",
+      "waitFrames": 8,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "controls-panel-to-clear-the-face",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.89687,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "controls-panel-to-clear-the-face-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "reset-before-loading-the-pose",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.91875,
+        "y": 0.10972,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "cleared-again-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "cleared-again",
+      "waitFrames": 8,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "performance-panel-to-load-the-pose",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.95859,
+        "y": 0.025,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "performance-panel-to-load-the-pose-drawn",
+      "waitFrames": 3,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "load-the-pose",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.8625,
+        "y": 0.57222,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "pose-restored-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "pose-restored",
+      "waitFrames": 8,
+      "release": true,
+      "screenshot": "pose-restored"
+    }
+  ],
+  "artifacts": {
+    "screenshots": "after"
+  },
+  "assert": {
+    "resources": [
+      {
+        "id": "state",
+        "path": "phase",
+        "equals": "ready",
+        "allowTrivial": "Readiness is the precondition this run waits for, so the value is already 'ready' at the first sample; the wait is the assertion that it arrives."
+      },
+      {
+        "id": "state",
+        "path": "frames",
+        "gte": 10
+      },
+      {
+        "id": "state",
+        "path": "controls.jawOpen",
+        "atSteps": [
+          {
+            "label": "combined-settled",
+            "equals": 0.7
+          },
+          {
+            "label": "neutral-restored",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "intensity",
+        "atSteps": [
+          {
+            "label": "intensity-settled",
+            "equals": 0.5
+          }
+        ],
+        "allowTrivial": "The recipe's intensity, at the step right after a real pointer press on its slider drove it (the browser scenario's extra key press is not in the desktop variant: the playtest's synthetic keys reach the game, not the focused overlay control). 1 at the first sample and restored to 1 by reset, so the value that survives is the one taken while the recipe was live."
+      },
+      {
+        "id": "state",
+        "path": "probeJawJoint",
+        "atSteps": [
+          {
+            "label": "neutral-restored",
+            "equals": 0
+          },
+          {
+            "label": "lod1-settled",
+            "equals": 0.131542
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "atSteps": [
+          {
+            "label": "neutral-restored",
+            "equals": 0
+          },
+          {
+            "label": "lod0-expression",
+            "equals": 1
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "demoSample",
+        "atSteps": [
+          {
+            "label": "scrub-settled-a",
+            "equals": {
+              "t": 1.5,
+              "jawJoint": 0.019292,
+              "jawMorph": 0.1,
+              "smileMorphLeft": 0.9,
+              "blinkMorphLeft": 0
+            }
+          },
+          {
+            "label": "scrub-settled-b",
+            "equals": {
+              "t": 1.5,
+              "jawJoint": 0.019292,
+              "jawMorph": 0.1,
+              "smileMorphLeft": 0.9,
+              "blinkMorphLeft": 0
+            }
+          }
+        ],
+        "allowTrivial": "A4's whole claim, and the two expected values are the same one on purpose: the same demo time reached through playback and then through an anger preset must sample the same rig output. The probe is read off the Three.js objects after the update, so it is the face and not the transport. Each sample is gated by a wait-for-state on a field of the sample itself, because the probes are published once per drawn frame and a tick-only settle can leave the previous pose standing."
+      },
+      {
+        "id": "state",
+        "path": "lod",
+        "atSteps": [
+          {
+            "label": "lod1-settled",
+            "equals": 1
+          },
+          {
+            "label": "lod0-restored",
+            "equals": 0
+          }
+        ]
+      },
+      {
+        "id": "state",
+        "path": "lodVertices",
+        "atSteps": [
+          {
+            "label": "lod0-expression",
+            "equals": 38911
+          },
+          {
+            "label": "lod1-settled",
+            "equals": 19269
+          },
+          {
+            "label": "lod0-restored",
+            "equals": 38911
+          }
+        ],
+        "allowTrivial": "Counted off the visible skinned meshes rather than read from a constant, so the three numbers say which level is on screen: LOD0's welded head and brow cards, LOD1's 19 269, and LOD0 again."
+      },
+      {
+        "id": "state",
+        "path": "probeJawJoint",
+        "atSteps": [
+          {
+            "label": "lod0-expression",
+            "equals": 0.131542
+          },
+          {
+            "label": "lod1-settled",
+            "equals": 0.131542
+          }
+        ],
+        "allowTrivial": "A5's expression half: the jaw joint the rig applied is the same number on both levels, which is what 'the expression survives the switch' means for a level that has no blend shapes to apply it to."
+      },
+      {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "atSteps": [
+          {
+            "label": "lod0-expression",
+            "equals": 1
+          },
+          {
+            "label": "lod1-settled",
+            "equals": 0
+          }
+        ],
+        "allowTrivial": "The other half of A5: the smile is a blend shape, LOD1 carries no morph targets, and the applied influence goes to 0 rather than being left stale at 1 on a mesh that is no longer drawn. Both samples are gated by a wait-for-state on this field, so neither can be the LOD0 frame published before the switch."
+      },
+      {
+        "id": "state",
+        "path": "controls.smileL",
+        "atSteps": [
+          {
+            "label": "lod0-expression",
+            "equals": 1
+          },
+          {
+            "label": "lod1-settled",
+            "equals": 1
+          }
+        ],
+        "allowTrivial": "The controls themselves are untouched by the LOD switch \u2014 the rig is given the same vector on both levels, and it is the mesh set and the evaluator that change."
+      },
+      {
+        "id": "state",
+        "path": "blinkAuto",
+        "atSteps": [
+          {
+            "label": "automation-running",
+            "equals": true
+          },
+          {
+            "label": "precedence-after-manual-edit",
+            "equals": false
+          }
+        ],
+        "allowTrivial": "The PRD's precedence, on the one half of it a click can decide: a manual edit to a channel an automation owns switches that automation off."
+      },
+      {
+        "id": "state",
+        "path": "gazeAuto",
+        "atSteps": [
+          {
+            "label": "automation-running",
+            "equals": true
+          },
+          {
+            "label": "precedence-after-manual-edit",
+            "equals": true
+          }
+        ],
+        "allowTrivial": "Automation only ever gives up the channels it owns, so the blink edit one step earlier must leave gaze automation exactly as it was. It is false at the first sample, so the assertion that survives is that it turned on and stayed on."
+      },
+      {
+        "id": "state",
+        "path": "playing",
+        "atSteps": [
+          {
+            "label": "automation-running",
+            "equals": true
+          },
+          {
+            "label": "precedence-after-manual-edit",
+            "equals": false
+          }
+        ],
+        "allowTrivial": "A manual edit stops playback: the demo supplied a base vector one step before this, and a slider is the PRD's definition of taking the face back."
+      },
+      {
+        "id": "state",
+        "path": "controls.gazeHorizontalL",
+        "changed": true,
+        "allowTrivial": "The enabled automation is driving its own channels, so the gaze channels have to be moving on their own with no slider touched."
+      },
+      {
+        "id": "state",
+        "path": "poseStatus",
+        "textIncludes": "loaded"
+      },
+      {
+        "id": "state",
+        "path": "controls.blinkL",
+        "atSteps": [
+          {
+            "label": "pose-restored",
+            "equals": 0.5
+          }
+        ],
+        "allowTrivial": "The saved pose's blink channel, after the round trip: the automations were switched off before the save so the file carries the manual 0.5 and nothing else, and loading it back has to put that exact 0.5 on the face."
+      },
+      {
+        "id": "state",
+        "path": "controls.smileL",
+        "gte": 0.9
+      },
+      {
+        "id": "state",
+        "path": "preset",
+        "equals": "neutral",
+        "allowTrivial": "Neutral at the first sample because the lab boots neutral, which is exactly the value the run has to end on: reset is what puts it back, and a scenario that ended on a recipe would say so."
+      }
+    ]
+  }
+}

@@ -1,0 +1,288 @@
+{
+  "name": "face-controls-desktop",
+  "target": "web",
+  "schemaVersion": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 0,
+  "steps": [
+    {
+      "label": "the-specimen-is-bound-and-ready",
+      "release": true,
+      "timeoutMs": 120000,
+      "waitForResource": {
+        "id": "state",
+        "path": "phase",
+        "equals": "ready"
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "neutral-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "neutral-settled",
+      "waitFrames": 3,
+      "release": true,
+      "screenshot": "neutral"
+    },
+    {
+      "kind": "input",
+      "label": "press-the-jaw-thumb-at-its-zero",
+      "pointerPosition": {
+        "x": 0.8062,
+        "y": 0.2417,
+        "buttons": 1
+      },
+      "waitTicks": 2,
+      "release": false
+    },
+    {
+      "kind": "input",
+      "label": "drag-the-thumb-to-0-6",
+      "pointerPosition": {
+        "x": 0.8469,
+        "y": 0.2417,
+        "buttons": 1
+      },
+      "waitTicks": 3,
+      "release": false
+    },
+    {
+      "kind": "input",
+      "label": "drag-onward-to-0-6",
+      "pointerPosition": {
+        "x": 0.8828,
+        "y": 0.2417,
+        "buttons": 1
+      },
+      "waitTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "jaw-dragged-to-0-6-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeJawMorph",
+        "gte": 0.599
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "jaw-dragged-to-0-6",
+      "waitFrames": 3,
+      "release": true,
+      "screenshot": "jaw-dragged"
+    },
+    {
+      "kind": "input",
+      "label": "focus-the-eyes-blink-left-slider-at-1070-622",
+      "waitTicks": 2,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.83594,
+        "y": 0.86389,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
+      "label": "blink-left-to-half-with-a-real-click",
+      "waitTicks": 2,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.86953,
+        "y": 0.86389,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "blink-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "blink-settled",
+      "waitFrames": 3,
+      "release": true,
+      "screenshot": "left-blink"
+    },
+    {
+      "kind": "input",
+      "label": "smile-preset",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.82578,
+        "y": 0.0625,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
+      "label": "inner-brow-raise-left-with-a-real-click",
+      "waitTicks": 2,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.86406,
+        "y": 0.71528,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
+      "label": "inner-brow-raise-right-with-a-real-click",
+      "waitTicks": 4,
+      "release": true,
+      "pointerPosition": {
+        "x": 0.93125,
+        "y": 0.71528,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "combined-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "gte": 0.8
+      }
+    },
+    {
+      "kind": "wait",
+      "label": "combined-settled",
+      "waitFrames": 3,
+      "release": true,
+      "screenshot": "smile-brow"
+    }
+  ],
+  "artifacts": {
+    "screenshots": "after"
+  },
+  "assert": {
+    "resources": [
+      {
+        "id": "state",
+        "path": "probeJawJoint",
+        "atSteps": [
+          {
+            "label": "jaw-dragged-to-0-6",
+            "equals": 0.113291
+          }
+        ],
+        "allowTrivial": "The drag's own claim, sampled at the step the drag ended and before any other control is touched: a real pointer drag on the slider thumb has to reach the rig. Read off the FACIAL_C_Jaw node's local transform against its exported rest transform, after the update."
+      },
+      {
+        "id": "state",
+        "path": "probeJawMorph",
+        "atSteps": [
+          {
+            "label": "jaw-dragged-to-0-6",
+            "equals": 0.6
+          }
+        ],
+        "allowTrivial": "The morph half of the drag's claim, at the same step: the applied influence of the DNA's jaw_open blend shape, read off the face mesh after the update. 0 at the first sample because the run starts from the declared neutral. The sample is gated by a wait-for-state on this field, because a morph is published once per drawn frame and a tick-only settle can leave the pre-drag value standing."
+      },
+      {
+        "id": "state",
+        "path": "controls.jawOpen",
+        "atSteps": [
+          {
+            "label": "jaw-dragged-to-0-6",
+            "equals": 0.6
+          }
+        ],
+        "allowTrivial": "The control the drag asked for, published back from the rig. 0 at the first sample because the run starts from the declared neutral, so what survives is that the drag moved it."
+      },
+      {
+        "id": "state",
+        "path": "phase",
+        "equals": "ready",
+        "allowTrivial": "Readiness is the precondition this run waits for, so the value is already 'ready' at the first sample; the wait is the assertion that it arrives."
+      },
+      {
+        "id": "state",
+        "path": "frames",
+        "changed": true,
+        "allowTrivial": "The scene kept presenting frames for the whole run. A floor of 10 was already satisfied by the time the first sample was taken, so the check that survives is that the counter moved."
+      },
+      {
+        "id": "state",
+        "path": "controls.jawOpen",
+        "gte": 0.4
+      },
+      {
+        "id": "state",
+        "path": "controls.blinkL",
+        "gte": 0.4
+      },
+      {
+        "id": "state",
+        "path": "controls.blinkR",
+        "equals": 0,
+        "allowTrivial": "The right eyelid must not move when only the left blink slider was driven. The value is 0 at the first sample because the run starts from the declared neutral, so the check that survives is that it never left 0."
+      },
+      {
+        "id": "state",
+        "path": "controls.smileL",
+        "gte": 0.7
+      },
+      {
+        "id": "state",
+        "path": "controls.browRaiseInnerL",
+        "gte": 0.6
+      },
+      {
+        "id": "state",
+        "path": "probeJawJoint",
+        "gte": 0.05,
+        "allowTrivial": "Sampled from the rig's joint output as applied to the FACIAL_C_Jaw node's local transform against its exported rest transform. 0 at the first sample because the run starts at the declared neutral."
+      },
+      {
+        "id": "state",
+        "path": "probeJawMorph",
+        "gte": 0.4,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "probeBlinkMorphLeft",
+        "gte": 0.4,
+        "changed": true
+      },
+      {
+        "id": "state",
+        "path": "probeBlinkMorphRight",
+        "equals": 0,
+        "allowTrivial": "The unilateral proof: the right eyelid's applied morph influence. 0 at the first sample because the run starts at the declared neutral; the assertion is that the left blink left it there."
+      },
+      {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "gte": 0.7,
+        "changed": true
+      }
+    ]
+  }
+}

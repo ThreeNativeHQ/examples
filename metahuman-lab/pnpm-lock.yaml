@@ -21,8 +21,8 @@ importers:
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-core-0.3.4-61125a18c77c.tgz
         version: file:../.packages/prd-465/threenative-core-0.3.4-61125a18c77c.tgz(@threenative/playtest@file:../.packages/prd-465/threenative-playtest-0.3.4-7898ce5d23f7.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=987eb3547d4f28c03a4a8ef1b3900d4158c805821e61e23572fdb248995c4d91)))(@types/node@26.6.3)(@types/react@19.2.0)(react-reconciler@0.33.0(react@19.2.0))(react@19.2.0)
       '@threenative/metahuman':
-        specifier: file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-metahuman-0.1.0-b430d5ff1a7e.tgz
-        version: file:../.packages/prd-465/threenative-metahuman-0.1.0-b430d5ff1a7e.tgz(three@0.185.1(patch_hash=987eb3547d4f28c03a4a8ef1b3900d4158c805821e61e23572fdb248995c4d91))
+        specifier: file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-metahuman-0.1.0-3dcb09c72136.tgz
+        version: file:../.packages/prd-465/threenative-metahuman-0.1.0-3dcb09c72136.tgz(three@0.185.1(patch_hash=987eb3547d4f28c03a4a8ef1b3900d4158c805821e61e23572fdb248995c4d91))
       '@threenative/ui':
         specifier: file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-ui-0.3.4-9012185f0e6a.tgz
         version: file:../.packages/prd-465/threenative-ui-0.3.4-9012185f0e6a.tgz(@threenative/core@file:../.packages/prd-465/threenative-core-0.3.4-61125a18c77c.tgz(@threenative/playtest@file:../.packages/prd-465/threenative-playtest-0.3.4-7898ce5d23f7.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=987eb3547d4f28c03a4a8ef1b3900d4158c805821e61e23572fdb248995c4d91)))(@types/node@26.6.3)(@types/react@19.2.0)(react-reconciler@0.33.0(react@19.2.0))(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -83,8 +83,8 @@ importers:
         version: 8.2.0(@types/node@26.6.3)(esbuild@0.27.0)(jiti@2.7.0)
     optionalDependencies:
       '@threenative/runtime-native':
-        specifier: file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-runtime-native-0.3.4-5555b3f67d38.tgz
-        version: file:../.packages/prd-465/threenative-runtime-native-0.3.4-5555b3f67d38.tgz
+        specifier: file:/home/joao/projects/threenative/sandbox/.packages/prd-465/threenative-runtime-native-0.3.4-afd049c5e338.tgz
+        version: file:../.packages/prd-465/threenative-runtime-native-0.3.4-afd049c5e338.tgz
 
 packages:
 
@@ -696,8 +696,8 @@ packages:
       react-reconciler:
         optional: true
 
-  '@threenative/metahuman@file:../.packages/prd-465/threenative-metahuman-0.1.0-b430d5ff1a7e.tgz':
-    resolution: {integrity: sha512-RlAmVXMX2det0eLvDw4PWqnSLjh53l4swpgGDXmHy9wMHT00ko6durQ59zmM9CO0HAv53mP52OwRuTug/XnpjA==, tarball: file:../.packages/prd-465/threenative-metahuman-0.1.0-b430d5ff1a7e.tgz}
+  '@threenative/metahuman@file:../.packages/prd-465/threenative-metahuman-0.1.0-3dcb09c72136.tgz':
+    resolution: {integrity: sha512-6C3HbSQI3Gy8nuB9uSpHSr+k5hRa5yBMmYtDoDfINrfbao3f2cT+HPkpLuFg1rPEUyns91wpv4Z5JyBf+32UsQ==, tarball: file:../.packages/prd-465/threenative-metahuman-0.1.0-3dcb09c72136.tgz}
     version: 0.1.0
     peerDependencies:
       three: '>=0.185.0 <0.186.0'
@@ -727,8 +727,8 @@ packages:
       three:
         optional: true
 
-  '@threenative/runtime-native@file:../.packages/prd-465/threenative-runtime-native-0.3.4-5555b3f67d38.tgz':
-    resolution: {integrity: sha512-48Z0wdoi3Ub2nYLeecUEjNpVwY+FXLFIi6wwt7xnwktTj+HrICgpMgKfz/9YWQFmdzfsZdzBxUYMGb0EmZebdA==, tarball: file:../.packages/prd-465/threenative-runtime-native-0.3.4-5555b3f67d38.tgz}
+  '@threenative/runtime-native@file:../.packages/prd-465/threenative-runtime-native-0.3.4-afd049c5e338.tgz':
+    resolution: {integrity: sha512-5NXCdjJj8FaOGlIcsqXzDftoVDPQBZYu6K2pfWal/qkPSeP4NNO2wIUT0wuO3ByaZmr2xerMvbDm8+Fjd8LUuw==, tarball: file:../.packages/prd-465/threenative-runtime-native-0.3.4-afd049c5e338.tgz}
     version: 0.3.4
 
   '@threenative/ui@file:../.packages/prd-465/threenative-ui-0.3.4-9012185f0e6a.tgz':
@@ -2589,7 +2589,7 @@ snapshots:
       - supports-color
       - use-sync-external-store
 
-  '@threenative/metahuman@file:../.packages/prd-465/threenative-metahuman-0.1.0-b430d5ff1a7e.tgz(three@0.185.1(patch_hash=987eb3547d4f28c03a4a8ef1b3900d4158c805821e61e23572fdb248995c4d91))':
+  '@threenative/metahuman@file:../.packages/prd-465/threenative-metahuman-0.1.0-3dcb09c72136.tgz(three@0.185.1(patch_hash=987eb3547d4f28c03a4a8ef1b3900d4158c805821e61e23572fdb248995c4d91))':
     dependencies:
       three: 0.185.1(patch_hash=987eb3547d4f28c03a4a8ef1b3900d4158c805821e61e23572fdb248995c4d91)
 
@@ -2607,7 +2607,7 @@ snapshots:
       playwright: 1.62.1
       three: 0.185.1(patch_hash=987eb3547d4f28c03a4a8ef1b3900d4158c805821e61e23572fdb248995c4d91)
 
-  '@threenative/runtime-native@file:../.packages/prd-465/threenative-runtime-native-0.3.4-5555b3f67d38.tgz':
+  '@threenative/runtime-native@file:../.packages/prd-465/threenative-runtime-native-0.3.4-afd049c5e338.tgz':
     dependencies:
       pngjs: 7.0.0
     optional: true
