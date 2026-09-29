@@ -731,8 +731,9 @@ export class Lab extends Scene<GameState> {
         probeBlinkMorphRight: round(this.#readMorph(PROBES.blinkRight)),
         probeSmileMorphLeft: smileLeft,
         probeWrinkles: this.#wrinklesApplied().map(round),
+        // Built as one literal, every time: the sample's key order is what a playtest's JSON
+        // comparison reads, and a spread would leave that order inherited rather than stated.
         demoSample: (this.#demoSample = {
-          ...this.#demoSample,
           t: Math.round(this.#demoTime * 1000) / 1000,
           jawJoint: jawDelta,
           jawMorph,

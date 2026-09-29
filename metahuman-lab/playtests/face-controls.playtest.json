@@ -71,6 +71,15 @@
       "release": true
     },
     {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeJawMorph",
+        "gte": 0.599
+      }
+    },
+    {
       "kind": "wait",
       "label": "jaw-dragged-to-0-6",
       "waitFrames": 3,
@@ -161,6 +170,15 @@
       "release": true
     },
     {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "gte": 0.8
+      }
+    },
+    {
       "kind": "wait",
       "label": "combined-settled",
       "waitFrames": 3,
@@ -198,7 +216,7 @@
             "equals": 0.6
           }
         ],
-        "allowTrivial": "The morph half of the drag's claim, at the same step: the applied influence of the DNA's jaw_open blend shape, read off the face mesh after the update. 0 at the first sample because the run starts from the declared neutral."
+        "allowTrivial": "The morph half of the drag's claim, at the same step: the applied influence of the DNA's jaw_open blend shape, read off the face mesh after the update. 0 at the first sample because the run starts from the declared neutral. The sample is gated by a wait-for-state on this field, because a morph is published once per drawn frame and a tick-only settle can leave the pre-drag value standing."
       },
       {
         "id": "state",

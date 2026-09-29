@@ -149,6 +149,15 @@
       "release": true
     },
     {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "lte": 0.0005
+      }
+    },
+    {
       "kind": "wait",
       "label": "neutral-restored",
       "waitFrames": 8,
@@ -231,6 +240,15 @@
       "label": "scrub-settled-a-advanced",
       "waitTicks": 120,
       "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "demoSample.jawMorph",
+        "lte": 0.101
+      }
     },
     {
       "kind": "wait",
@@ -332,6 +350,15 @@
       "release": true
     },
     {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "demoSample.smileMorphLeft",
+        "gte": 0.899
+      }
+    },
+    {
       "kind": "wait",
       "label": "scrub-settled-b",
       "waitFrames": 8,
@@ -380,6 +407,15 @@
       "release": true
     },
     {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "gte": 0.999
+      }
+    },
+    {
       "kind": "wait",
       "label": "lod0-expression",
       "waitFrames": 8,
@@ -419,6 +455,15 @@
       "release": true
     },
     {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "lte": 0.0005
+      }
+    },
+    {
       "kind": "wait",
       "label": "lod1-settled",
       "waitFrames": 8,
@@ -440,6 +485,15 @@
       "label": "lod0-restored-advanced",
       "waitTicks": 120,
       "release": true
+    },
+    {
+      "release": true,
+      "timeoutMs": 30000,
+      "waitForResource": {
+        "id": "state",
+        "path": "probeSmileMorphLeft",
+        "gte": 0.999
+      }
     },
     {
       "kind": "wait",
@@ -787,7 +841,7 @@
             }
           }
         ],
-        "allowTrivial": "A4's whole claim, and the two expected values are the same one on purpose: the same demo time reached through playback and then through an anger preset must sample the same rig output. The probe is read off the Three.js objects after the update, so it is the face and not the transport."
+        "allowTrivial": "A4's whole claim, and the two expected values are the same one on purpose: the same demo time reached through playback and then through an anger preset must sample the same rig output. The probe is read off the Three.js objects after the update, so it is the face and not the transport. Each sample is gated by a wait-for-state on a field of the sample itself, because the probes are published once per drawn frame and a tick-only settle can leave the previous pose standing."
       },
       {
         "id": "state",
@@ -850,7 +904,7 @@
             "equals": 0
           }
         ],
-        "allowTrivial": "The other half of A5: the smile is a blend shape, LOD1 carries no morph targets, and the applied influence goes to 0 rather than being left stale at 1 on a mesh that is no longer drawn."
+        "allowTrivial": "The other half of A5: the smile is a blend shape, LOD1 carries no morph targets, and the applied influence goes to 0 rather than being left stale at 1 on a mesh that is no longer drawn. Both samples are gated by a wait-for-state on this field, so neither can be the LOD0 frame published before the switch."
       },
       {
         "id": "state",
