@@ -17,12 +17,26 @@ const reactRoot = appRoot.__threenativeRoot ?? createRoot(appRoot);
 appRoot.__threenativeRoot = reactRoot;
 reactRoot.render(createElement(App, { game }));
 
-/** Which face each vantage wears. Anything unlisted is the declared neutral. */
-const RECIPE_FOR: Readonly<Record<string, string>> = {
-  expression: "expression",
-  "expression-3q": "expression",
-  "brow-raise": "brow",
-  smile: "smile",
+/**
+ * Which face each vantage wears: a preset, and any direct channels on top of it.
+ *
+ * Anything unlisted is the declared neutral. `brow-raise` is the reason the second half exists —
+ * it is a brow shot, and none of the five recipes is brows alone.
+ */
+const POSE_FOR: Readonly<Record<string, readonly [string, Readonly<Record<string, number>>]>> = {
+  expression: ["surprise", {}],
+  "expression-3q": ["surprise", {}],
+  smile: ["smile", {}],
+  "brow-raise": [
+    "neutral",
+    { browRaiseInnerL: 0.7, browRaiseInnerR: 0.7, browRaiseOuterL: 0.5, browRaiseOuterR: 0.5 },
+  ],
+  /** The mouth interior only exists when there is an opening to see it through. */
+  mouth: ["neutral", { jawOpen: 0.6 }],
+  "mouth-front": ["neutral", { jawOpen: 0.6 }],
+  /** A smile is the pose the cheek close-up is for; a neutral cheek has no fold to look at. */
+  "smile-cheek": ["smile", {}],
+  neck: ["neutral", {}],
 };
 
 /**
@@ -40,11 +54,19 @@ function pose(name: string): void {
   if (scene === undefined || !(vantage in VANTAGES)) return;
   // A pose is the whole state of the shot, face included: a capture named after a pose that shows a
   // neutral is a lie in the file name, and the brow shot is the only proof the brow strands ride the skin.
-  scene.applyRecipe(RECIPE_FOR[vantage] ?? "neutral");
+  const [preset, channels] = POSE_FOR[vantage] ?? ["neutral", {}];
+  // From the declared neutral, every time: a recipe is a partial overlay on the base vector, so a
+  // capture that inherited the previous capture's base would photograph a face nobody posed.
+  scene.resetControls();
+  scene.setPreset(preset);
+  for (const [alias, value] of Object.entries(channels)) scene.setControl(alias, value);
   scene.look(vantage as VantageName);
 }
 
+// `configurable`, because a hot update re-runs this module: a second non-configurable define throws
+// "Cannot redefine property" and vite reports the whole update as failed.
 Object.defineProperty(globalThis, "__LOOK_VANTAGES__", {
+  configurable: true,
   value: new Proxy(
     {},
     {

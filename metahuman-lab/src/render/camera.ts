@@ -72,9 +72,12 @@ export class FaceCamera {
   frame(): void {
     this.#goal.yaw = this.#vantage.yaw;
     this.#goal.pitch = this.#vantage.pitch;
-    this.#goal.zoom = 1;
+    // The vantage's own dolly and aim, which is what makes a close-up a close-up rather than a
+    // portrait with a longer lens: `zoom` is the dolly the vantage asked for, and `panY` is its
+    // share of the frame converted into the frame plane's own metres at that dolly.
+    this.#goal.zoom = this.#vantage.dolly;
     this.#goal.panX = 0;
-    this.#goal.panY = 0;
+    this.#goal.panY = (this.#vantage.panY ?? 0) * this.#framing.visible * this.#vantage.dolly;
     // The opening pose is placed outright rather than sprung in from the origin: a lab that fades its
     // camera in from somewhere else on entry is a lab whose first frame is a transition, not a shot.
     Object.assign(this.#current, this.#goal);

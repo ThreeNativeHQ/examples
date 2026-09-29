@@ -1,5 +1,5 @@
 import type { IAssetLoader } from "@threenative/core";
-import { eyeMaterial, skinMaterial } from "./look.js";
+import { eyeMaterial, type IWrinkles, skinMaterial, teethMaterial } from "./look.js";
 import {
   Color,
   DoubleSide,
@@ -57,6 +57,13 @@ const MAPS: Readonly<Record<string, boolean>> = {
   "Eyelashes_L_SlightCurl_Coverage.png": true,
   // Where the groom's roots are, derived by `tools/prepare.mjs --strands`: a mask, so data.
   "HairScalp_Mask.png": true,
+  // The brow's painted density and Ada's wrinkle maps with their region strip, all derived or
+  // imported by `tools/prepare.mjs` (`--strands`, `--wrinkles`): data, every one.
+  "BrowDensity_Mask.png": true,
+  "FaceNormal_WM1.png": true,
+  "FaceNormal_WM2.png": true,
+  "FaceNormal_WM3.png": true,
+  "WrinkleMasks.png": true,
   "f_top_shirt_Mask.png": true,
   "f_top_shirt_N.png": true,
   "f_top_shirt_AO.png": true,
@@ -81,6 +88,14 @@ export async function loadSpecimenMaps(assets: IAssetLoader): Promise<SpecimenMa
       // against these UVs the face atlas is upside down — measured, the glabella at uv v 0.43
       // reads row 1167, which is the lips, and the head wears a red patch across the nose bridge.
       texture.flipY = false;
+      // **Anisotropic mip filtering, and it is the cure for the grain the report is about.** Every one
+      // of these maps is minified hard: a 4096² face atlas over a head 0.30 m tall is 13 texels per
+      // millimetre, and a cheek turned away from the camera is a surface at a grazing angle, where
+      // the mip an axis-aligned footprint picks is the *blurred* one and every pore survives as noise
+      // on top of it. The engine's image loader hands back a `Texture` with three's defaults —
+      // mipmaps on, `anisotropy = 1` — so the mips were there and nothing was using them well.
+      // Sixteen is the floor of what a modern desktop adapter reports and costs one sampler setting.
+      texture.anisotropy = 16;
       return [name, texture] as const;
     }),
   );
@@ -100,8 +115,10 @@ function map(maps: SpecimenMaps, name: string): Texture {
 }
 
 /** Skin: the specimen's own four maps, shaded by this sample's TSL graph. See `look.ts`. */
-function skin(maps: SpecimenMaps): Material {
+function skin(maps: SpecimenMaps, wrinkles: IWrinkles | undefined): Material {
   return skinMaterial({
+    brow: map(maps, "BrowDensity_Mask.png"),
+    wrinkles,
     colour: map(maps, "FaceColor_MAIN.png"),
     normal: map(maps, "FaceNormal_MAIN.png"),
     roughness: map(maps, "FaceRoughness_MAIN.png"),
@@ -142,6 +159,8 @@ const SHIRT_COLLAR = "#cfc4b2";
 /** The oxford weave repeats far tighter than the fabric's own UVs; 14 is a measured-looking guess. */
 const SHIRT_MICRO_TILE = 14;
 const SHIRT_MICRO_WEIGHT = 0.4;
+/** The indirect term the collar's inner face needs to read as cloth rather than as a hole. */
+const SHIRT_INDIRECT = 0.2;
 
 export function shirtLook(maps: SpecimenMaps): Material {
   const material = new MeshPhysicalNodeMaterial();
@@ -157,8 +176,17 @@ export function shirtLook(maps: SpecimenMaps): Material {
     fabric.y.add(micro.y.mul(SHIRT_MICRO_WEIGHT)),
     fabric.z,
   ).normalize();
-  material.colorNode = mix(color(SHIRT_PLUM).rgb, color(SHIRT_COLLAR).rgb, collar)
-    .mul(mix(float(0.45), float(1), saturate(ao)));
+  const cloth = mix(color(SHIRT_PLUM).rgb, color(SHIRT_COLLAR).rgb, collar)
+    .mul(mix(float(0.55), float(1), saturate(ao)));
+  material.colorNode = cloth;
+  // **The collar's inner face, and why it was a hole in the picture.** The collar is a folded band of
+  // two sheets of cloth and the shot is half its *inside*, standing between the neck and the light:
+  // the key is at 4.2 from the front-left, an inward-facing sheet gets nearly none of it, and the
+  // measured result was a near-black wedge that read as a gap between the skin and the shirt rather
+  // than as fabric. A fraction of the albedo as emission is the stand-in for the indirect light this
+  // stage's 0.08 ambient cannot supply — it lifts the inside of the collar to a dark plum that is
+  // still obviously cloth, and on the lit outer faces it is a fifth of a stop against a key of 4.2.
+  material.emissiveNode = cloth.mul(SHIRT_INDIRECT);
   // Re-encoded, because `normalMap` decodes whatever node it is handed as `x*2-1`.
   material.normalNode = normalMap(weave.mul(0.5).add(0.5), vec2(1, -1));
   material.metalness = 0;
@@ -175,19 +203,6 @@ export function shirtLook(maps: SpecimenMaps): Material {
 /** `MeshPhysicalMaterial` for this sample: metal-free, and never the import's vertex colours. */
 function phys(options: MeshPhysicalMaterialParameters): MeshPhysicalMaterial {
   return new MeshPhysicalMaterial({ metalness: 0, ...options });
-}
-
-/** Teeth: the same two maps, the same green flip, and the clearcoat enamel actually has. */
-function teeth(maps: SpecimenMaps): Material {
-  return phys({
-    map: map(maps, "teeth_color_map_001.png"),
-    normalMap: map(maps, "teeth_normal_map.png"),
-    normalScale: DIRECTX_TO_THREE,
-    roughness: 0.34,
-    clearcoat: 0.6,
-    clearcoatRoughness: 0.2,
-    vertexColors: false,
-  });
 }
 
 /**
@@ -239,20 +254,21 @@ function overlay(): Material {
 }
 
 /** The one material per primitive this sample ships, by the name the export gave it. */
-function forPrimitive(name: string, maps: SpecimenMaps): Material {
+function forPrimitive(name: string, maps: SpecimenMaps, wrinkles: IWrinkles | undefined): Material {
   // The brow cards stay welded into the specimen (the rig binds their morphs) and are not drawn:
   // the brows are strands now, in `strands.ts`, riding the same skin.
   if (/brow/i.test(name)) return overlay();
   if (/eyelash/i.test(name)) return lashes(maps);
   if (/eyerefractive/i.test(name)) return eye(maps, /_L\b/.test(name) ? "L" : "R");
   if (/eyeocclusion|lacrimal|fluid|saliva/i.test(name)) return overlay();
-  if (/teeth/i.test(name)) return teeth(maps);
+  if (/teeth/i.test(name))
+    return teethMaterial({ colour: map(maps, "teeth_color_map_001.png"), normal: map(maps, "teeth_normal_map.png") });
   // The head, and the cartilage, which shares the head's atlas and so must share its look.
-  if (name === "" || /head|cartilage/i.test(name)) return skin(maps);
+  if (name === "" || /head|cartilage/i.test(name)) return skin(maps, wrinkles);
   // A primitive this file has never heard of is the sample's problem, not a reason to fail the
   // load: it still gets skin, and says so once, in the console the diagnostics panel reads.
   console.warn(`metahuman-lab: no material for '${name}'; drawing it as skin`);
-  return skin(maps);
+  return skin(maps, wrinkles);
 }
 
 /** Every material name on a mesh, which is how a card mesh is told apart from a solid one. */
@@ -263,13 +279,13 @@ function materialNames(mesh: Mesh): string {
 }
 
 /** Replace every mesh's materials with this sample's look, one group at a time. */
-export function applySpecimenMaterials(root: Object3D, maps: SpecimenMaps): void {
+export function applySpecimenMaterials(root: Object3D, maps: SpecimenMaps, wrinkles?: IWrinkles): void {
   root.traverse((object) => {
     const mesh = object as Mesh;
     if (mesh.isMesh !== true) return;
     const draw = (material: Material) => {
       const name = material.name ?? "";
-      const replacement = forPrimitive(name, maps);
+      const replacement = forPrimitive(name, maps, wrinkles);
       // The name is load-bearing, not decoration: the stage finds the two eyeballs by theirs, and
       // a fresh MeshPhysicalMaterial is unnamed, so replacing without this makes the whole head one
       // anonymous material and every later question about the graph unanswerable.
@@ -286,4 +302,12 @@ export function applySpecimenMaterials(root: Object3D, maps: SpecimenMaps): void
     mesh.castShadow = !card;
     mesh.receiveShadow = !card;
   });
+}
+
+/** The wrinkle maps and the region strip, from the loaded set. */
+export function wrinkleTextures(maps: SpecimenMaps) {
+  return {
+    normals: [map(maps, "FaceNormal_WM1.png"), map(maps, "FaceNormal_WM2.png"), map(maps, "FaceNormal_WM3.png")] as const,
+    masks: map(maps, "WrinkleMasks.png"),
+  };
 }

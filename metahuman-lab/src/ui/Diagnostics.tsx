@@ -42,7 +42,12 @@ export function Diagnostics() {
 
   const rows: readonly (readonly [string, string])[] = [
     ["rig", `${state.backend} · OpenRigLogic ${state.openRigLogic.slice(0, 7)}`],
-    ["lod", `${state.lod} · pinned: source LOD0, the inspection override`],
+    [
+      "lod",
+      state.lod === 0
+        ? `0 · ${state.lodVertices.toLocaleString()} verts · source LOD0, pinned`
+        : `1 · ${state.lodVertices.toLocaleString()} verts · preview, no morphs here`,
+    ],
     ["counts", `${state.joints} joints · ${state.blendShapes} shapes · ${state.animatedMaps} maps`],
     ["cost", `${state.evaluationMs.toFixed(2)} ms/eval · ${state.fps.toFixed(0)} fps · frame ${state.frames}`],
   ];

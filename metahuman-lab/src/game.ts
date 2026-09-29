@@ -53,12 +53,35 @@ export default game;
 game.ui.onIntent((intent, payload) => {
   const lab = game.scene instanceof Lab ? game.scene : undefined;
   if (lab === undefined) return;
-  const value = payload as { alias?: string; value?: number; group?: string; recipe?: string } | null;
+  const value = payload as {
+    action?: string;
+    alias?: string;
+    group?: string;
+    name?: string;
+    text?: string;
+    value?: number;
+    which?: string;
+  } | null;
   try {
     if (intent === "control" && value?.alias !== undefined) lab.setControl(value.alias, value.value ?? 0);
     if (intent === "link" && value?.group !== undefined) lab.setLinked(value.group, value.value === 1);
     if (intent === "reset") lab.resetControls();
-    if (intent === "recipe" && value?.recipe !== undefined) lab.applyRecipe(value.recipe);
+    if (intent === "preset" && value?.name !== undefined) lab.setPreset(value.name, value.value);
+    if (intent === "intensity") lab.setIntensity(value?.value ?? 0);
+    if (intent === "transition") lab.setTransition(value?.value ?? 0);
+    if (intent === "automation" && value?.which !== undefined)
+      lab.setAutomation(value.which as "blink" | "gaze", value.value === 1);
+    if (intent === "demo") {
+      if (value?.action === "play") lab.playDemo();
+      else if (value?.action === "pause") lab.pauseDemo();
+      else lab.scrubDemo(value?.value ?? 0);
+    }
+    if (intent === "lod") lab.setLod(value?.value ?? 0);
+    if (intent === "pose") {
+      if (value?.action === "save") lab.savePose();
+      else if (value?.action === "load") lab.loadPose(value?.text ?? "");
+      else lab.clearPose();
+    }
     if (intent === "frame") lab.frameFace();
   } catch (error) {
     // A control the specimen does not declare is the UI's bug, not a crash: say so in the state

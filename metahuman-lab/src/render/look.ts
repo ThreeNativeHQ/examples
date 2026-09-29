@@ -13,10 +13,12 @@ import {
   normalWorld,
   normalize,
   oneMinus,
+  positionGeometry,
   positionWorld,
   pow,
   saturate,
   smoothstep,
+  step,
   sqrt,
   texture,
   uniform,
@@ -70,6 +72,9 @@ export const HAIR_LOOK = {
   secondary: [0.008, 90],
   shift: 0.12,
   ambient: 1,
+  // Round 12: back down from 4. The reference's brow is a *thin* tapered arch, and at 4x the fibres
+  // made a bushy black band; the density now lives in the painted stain under them (`skinMaterial`),
+  // so the fibres only have to read as hair, not carry the whole brow.
   widthScale: 2.2,
 } as const;
 
@@ -97,22 +102,72 @@ export const HAIR_LOOK = {
  */
 export const BROW_LOOK = {
   ...HAIR_LOOK,
-  albedo: new Color(0.007, 0.0045, 0.003),
-  sheen: new Color(0.5, 0.4, 0.34),
-  rootShade: 0.6,
+  // **Round 12: a brown fibre, not a black one.** Side by side at 2x, the reference's brow is a soft
+  // brown arch barely a stop under the skin around it, and ours was a black band of hard fibres —
+  // which is the "artificial" report in one picture. Linear 0.02/0.008/0.0042 is a deep warm brown
+  // that sits *on* this skin's hue instead of cutting a hole in it.
+  albedo: new Color(0.02, 0.008, 0.0042),
+  sheen: new Color(0.35, 0.25, 0.18),
+  rootShade: 0.75,
   depthShade: 1,
-  widthScale: 4,
-  primary: [0.004, 400],
-  secondary: [0.003, 90],
-  // 0.55 is what turns the coverage mass back into fibres: without it the 4x brow is one flat
-  // black slab with a silhouette, because every fibre in a brow shares a normal, a depth and a key
-  // and the only terms that separate a groom's fibres are volume terms a brow does not have. The
-  // seed is per fibre and stable, so this is the per-fibre separation for free.
-  seedVary: 0.55,
+  // Back down from 4 to 1.5. The reference's brow is a *thin* tapered arch, and at 4x the fibres made
+  // a bushy band; the density now lives in the painted stain under them (`skinMaterial`), so the
+  // fibres only have to read as hair, not carry the whole brow.
+  widthScale: 1.5,
+  primary: [0.003, 400],
+  secondary: [0.002, 90],
+  // Per-fibre brightness from the fibre's own stable seed, so fibres that share a normal, a depth and
+  // a key still read as separate hairs rather than one flat slab.
+  seedVary: 0.4,
 } as const;
 
-/** Unreal writes tangent-space normals green-up; three reads them green-down. */
+/**
+ * Unreal writes tangent-space normals green-up; three reads them green-down.
+ */
 const DIRECTX_TO_THREE = vec2(1, -1);
+
+/**
+ * How hard the pore map is allowed to bend the surface.
+ *
+ * The specimen's `FaceNormal_MAIN` is 4096² of *pores* over a head 0.30 m tall, so one pore is about
+ * a fifth of a millimetre — a third of a pixel at portrait framing, and a sixth of one on a cheek
+ * turned away. At the map's own strength that is not detail, it is a per-pixel normal, and a
+ * sub-pixel normal is what reads as the grainy, sandy surface the round-12 report is about: it
+ * sparkles along the terminator and it crawls under a smile, because the surface is being rewritten
+ * by 782 morph targets while the camera holds still.
+ *
+ * Round 12 moved the cure: the base layer now reads this map two mips down (`DIFFUSION_MIPS`), where
+ * the pores are already averaged away, and the pores live only in the clearcoat lobe at `PORE_SCALE`.
+ * So the base keeps the map's own strength — 0.5 there made the wrinkles and the face's own folds
+ * invisible (measured: forcing wrinkle map 1 on at full weight changed 52 pixels of a brow shot).
+ */
+const NORMAL_STRENGTH = 1;
+/** The same flip and the strength in one node, because `normalMap` decodes whatever scale it is given. */
+const NORMAL_SCALE = vec2(NORMAL_STRENGTH, -NORMAL_STRENGTH);
+
+/**
+ * The mouth interior, found by where the atlas puts it rather than by planes through the face.
+ *
+ * The head primitive is one mesh carrying the lips, the mouth sock, the palate and the throat, and
+ * MetaHuman unwraps the sock as its own UV island: the two pink ovals in the top corners of
+ * `FaceColor_MAIN` (u < 0.12 or u > 0.88, v < 0.14). Every vertex behind the lips in this specimen —
+ * 371 of them, measured by plotting the sock's UVs over the atlas — lands on those two islands, and
+ * no surface of the face does. The plane test this replaced (a y band, a z window, an |x| limit and a
+ * normal gate) also caught the commissure: the cheek beside a mouth corner curves back behind the lip
+ * plane and faces sideways, so it drew as a grey smudge beside the lips at every angle.
+ *
+ * Inside the island the darkening is a ramp on the *bind* depth: 9.5 cm (just behind the lips) keeps
+ * a little of the atlas's own wet red, and the throat at 2 cm is close to black. Bind, never skinned —
+ * the lower sock rides the jaw, and a skinned depth would re-light it as the mouth opens.
+ */
+const MOUTH = {
+  island: vec2(0.12, 0.14),
+  front: 0.095,
+  back: 0.02,
+  /** How much of its own colour the sock keeps just behind the lips, and at the back of the throat. */
+  keepFront: 0.4,
+  keepBack: 0.04,
+} as const;
 
 /**
  * Both tints as plain `vec3`, because they multiply and add rather than being an output colour: a
@@ -196,6 +251,20 @@ const CAVITY_GAMMA = 2;
  */
 const SKIN_SPECULAR = 0.34;
 
+/** Mips of blur on the base layer's normal: 2 is a 4x footprint, enough to take the pores (1–2 texels) out. */
+const DIFFUSION_MIPS = 2;
+/** The pores in the oily film keep the map's full strength: a tight lobe is where they belong. */
+const PORE_SCALE = vec2(0.45, -0.45);
+/** The clearcoat's share: the oily film's glint, which the reference carries on forehead, nose and lips. */
+const OIL_WEIGHT = 0.35;
+/**
+ * The brow's stain: a *darkening of the skin's own colour*, a little warmer, and how far the densest
+ * skin goes. A fixed brown was the first try and it drew a grey halo, because this skin's albedo is
+ * far redder than any neutral brown — the stain has to keep the hue it sits on.
+ */
+const BROW_STAIN = vec3(0.34, 0.3, 0.28);
+const BROW_STAIN_WEIGHT = 0.5;
+
 /**
  * Skin: the specimen's own maps, plus the two things a PBR material does not have.
  *
@@ -226,6 +295,8 @@ export function skinMaterial(maps: {
   readonly roughness: Texture;
   readonly cavity: Texture;
   readonly scalp: Texture;
+  readonly brow: Texture;
+  readonly wrinkles?: IWrinkles;
 }): MeshPhysicalNodeMaterial {
   const material = new MeshPhysicalNodeMaterial();
   const cavity = texture(maps.cavity, uv()).r;
@@ -239,11 +310,49 @@ export function skinMaterial(maps: {
   // gap over lit skin reads as a bald scalp. The mask is where the groom's roots are, read off the
   // groom by `tools/prepare.mjs` — it feathers exactly as raggedly as the hairline does.
   const scalp = texture(maps.scalp, uv()).r;
+  // **The mouth cavity, so the gums and the throat stop being lit like a cheek.** The interior is
+  // part of the head's own primitive and carries the face atlas, so before this it was tinted and lit
+  // exactly as the face was: a bright salmon band above the teeth, which is what the report calls odd
+  // gums. The key physically cannot reach into a closed mouth, and a cavity in shadow is a *darkening
+  // of the albedo* rather than a light that is switched off — the hue stays the map's own, which is
+  // what keeps a gum a gum instead of a brown hole.
+  const inside = insideMouth();
   const skin = texture(maps.colour, uv())
     .rgb.mul(mix(float(CAVITY_FLOOR), float(1), pow(saturate(cavity), float(CAVITY_GAMMA))))
-    .mul(SKIN_TINT);
-  material.colorNode = mix(skin, SCALP_TINT, scalp);
-  material.normalNode = normalMap(texture(maps.normal, uv()), DIRECTX_TO_THREE);
+    .mul(SKIN_TINT)
+    .mul(mix(float(1), mouthKeep(), inside));
+  // **The brow's stain under its strands.** A real brow is not fibres on bare skin: the skin under it
+  // is darkened by the density of hair rooted there, and that stain is what makes the reference's
+  // brow one soft full arch. The mask is the groom's own density (`tools/prepare.mjs`); read from a
+  // blurred mip so it has no edge of its own, and it only ever *darkens* toward the fibre's colour.
+  const brow = pow(saturate(texture(maps.brow, uv()).bias(float(2)).r), float(1.6)).mul(BROW_STAIN_WEIGHT);
+  material.colorNode = mix(mix(skin, skin.mul(BROW_STAIN), brow), SCALP_TINT, scalp);
+
+  // **Two normals, because skin has two surfaces.** Light that enters skin leaves it a few millimetres
+  // away, so the *diffuse* never sees a pore: it sees the surface blurred by its own scattering
+  // distance. The oily film on top is what carries the pores, as a tight specular. So the base layer
+  // — diffuse, the broad sheen and the terminator scatter below — is shaded with the pore map read
+  // two mips down (a 4x footprint, which takes the 1–2-texel pores out and keeps the wrinkles), and the
+  // clearcoat layer is the second specular lobe with the full-resolution pores. That split is the cure
+  // for "grainy on smile": a sub-pixel pore bending the *diffuse* is noise that crawls as 782 morph
+  // targets rewrite the surface, while the same pore in a tight lobe is a sparkle only where the
+  // surface actually mirrors the key.
+  const pores = texture(maps.normal, uv());
+  const diffused = texture(maps.normal, uv()).bias(float(DIFFUSION_MIPS));
+  material.normalNode = normalMap(wrinkled(diffused, maps), NORMAL_SCALE);
+  material.clearcoatNormalNode = normalMap(pores, PORE_SCALE);
+  // **Specular anti-aliasing from the normal's own variance** (Toksvig plus a screen-space kernel).
+  // A mip-filtered normal map averages pores into a *shorter* vector: `1 − |n|` is exactly how much
+  // normal spread one pixel is hiding, and a lobe that does not widen by it sparkles. The screen-space
+  // term catches what the mips cannot — the same pore swimming under a morph — from the pixel-to-pixel
+  // change of the decoded normal. Both widen the lobe; neither touches the diffuse.
+  const decoded = pores.xyz.mul(2).sub(1);
+  const length = decoded.length().max(1e-4);
+  const toksvig = oneMinus(length).div(length);
+  const kernel = dot(dFdx(decoded.xy), dFdx(decoded.xy)).add(dot(dFdy(decoded.xy), dFdy(decoded.xy))).mul(0.25).min(0.18);
+  // biome-ignore lint/suspicious/noExplicitAny: TSL node arithmetic has no useful static type here.
+  const widen = (roughness: any) =>
+    sqrt(roughness.mul(roughness).add(toksvig.mul(2)).add(kernel.mul(2))).min(1);
   // **Everything that makes skin look like skin is switched off under the groom, not just its
   // colour.** A near-black albedo under a key at 4.2 still rendered 57/36/28 at the crown with the
   // colour alone, because what was left was the specular and the scatter: the broad lobe lands on
@@ -251,10 +360,15 @@ export function skinMaterial(maps: {
   // roughness of 1 and no dielectric term, so the scalp takes both, and the terminator scatter —
   // which is the whole point of the graph on a cheek — is multiplied out of it.
   const face = oneMinus(scalp);
-  material.roughnessNode = mix(rough.mul(0.55).add(0.18), float(1), scalp);
+  const wet = face.mul(oneMinus(inside)).mul(cavity);
+  // Lobe one, the base GGX: broad, from the diffused normal — the soft sheen across a cheekbone.
+  material.roughnessNode = mix(widen(rough.mul(0.35).add(0.42)), float(1), scalp);
   material.metalness = 0;
   material.specularIntensity = SKIN_SPECULAR;
-  material.specularIntensityNode = float(SKIN_SPECULAR).mul(face);
+  material.specularIntensityNode = float(SKIN_SPECULAR).mul(wet);
+  // Lobe two, the clearcoat: tight, from the pores — the oily glint on the forehead, nose and lips.
+  material.clearcoatNode = float(OIL_WEIGHT).mul(wet).mul(smoothstep(float(0.95), float(0.55), rough));
+  material.clearcoatRoughnessNode = widen(rough.mul(0.3).add(0.28));
 
   const view = normalize(cameraPosition.sub(positionWorld));
   const light = KEY_DIRECTION;
@@ -267,11 +381,194 @@ export function skinMaterial(maps: {
     .mul(BROAD_WEIGHT);
 
   material.emissiveNode = SCATTER_TINT
-    .mul(KEY_TINT)
+    .rgb.mul(KEY_TINT)
     .mul(scattered.mul(SCATTER_STRENGTH).add(through.mul(0.4)))
     .add(KEY_TINT.mul(broad.mul(cavity)))
     .mul(cavity)
-    .mul(face);
+    .mul(face)
+    .mul(oneMinus(inside));
+  return material;
+}
+
+/**
+ * Ada's wrinkle maps, weighted per region by the rig's animated-map outputs.
+ *
+ * `normals` are `FaceNormal_WM1..3`; `masks` is the 37 region masks packed three to an RGB tile and
+ * stacked (`tools/prepare.mjs --wrinkles`); `weights[k][tile]` is one `vec3` per tile per wrinkle map,
+ * holding that map's weight for each of the tile's three regions — zero for a region the map does not
+ * own. The game writes them from `human.animatedMaps()` after every evaluation (`bindWrinkles`).
+ */
+type UniformVec3 = ReturnType<typeof uniform> & { value: Vector3 };
+
+export interface IWrinkles {
+  readonly normals: readonly [Texture, Texture, Texture];
+  readonly masks: Texture;
+  readonly tiles: number;
+  readonly weights: readonly (readonly UniformVec3[])[];
+  /** Tiles each wrinkle map owns any region in, so a map never samples a tile that cannot weigh it. */
+  readonly owned: readonly (readonly number[])[];
+}
+
+/** The region table `tools/prepare.mjs` writes beside the strip. */
+export interface IWrinkleTable {
+  readonly tiles: number;
+  readonly regions: readonly { readonly region: string; readonly tile: number; readonly channel: number }[];
+}
+
+/**
+ * Build the wrinkle binding, and the per-frame writer that feeds it from the rig.
+ *
+ * The rig names each output `head_wm<k>_normal.<region>`; `k` picks the map and the region picks the
+ * tile and channel. An output whose region is not in the table is a sidecar the table was not written
+ * for, and the build throws rather than dropping a wrinkle silently.
+ */
+export function bindWrinkles(
+  textures: { readonly normals: readonly [Texture, Texture, Texture]; readonly masks: Texture },
+  table: IWrinkleTable,
+  names: readonly string[],
+): {
+  readonly wrinkles: IWrinkles;
+  readonly write: (values: ArrayLike<number>) => void;
+  /** The strongest weight each wrinkle map was given, read back off the uniforms the shader reads. */
+  readonly applied: () => readonly [number, number, number];
+} {
+  const where = new Map(table.regions.map((entry) => [entry.region, entry] as const));
+  const weights = [0, 1, 2].map(() => Array.from({ length: table.tiles }, () => uniform(new Vector3()) as UniformVec3));
+  const owned = [new Set<number>(), new Set<number>(), new Set<number>()];
+  const route: { index: number; map: number; tile: number; channel: number }[] = [];
+  names.forEach((name, index) => {
+    const match = /^head_wm([123])_normal\.(.+)$/.exec(name);
+    if (match === null) return;
+    const entry = where.get(match[2] as string);
+    if (entry === undefined) throw new Error(`wrinkle region '${match[2]}' is not in content/wrinkles.json`);
+    const map = Number(match[1]) - 1;
+    owned[map]?.add(entry.tile);
+    route.push({ index, map, tile: entry.tile, channel: entry.channel });
+  });
+  return {
+    wrinkles: { ...textures, tiles: table.tiles, weights, owned: owned.map((set) => [...set].sort((a, b) => a - b)) },
+    write: (values) => {
+      for (const { index, map, tile, channel } of route)
+        weights[map]?.[tile]?.value.setComponent(channel, values[index] ?? 0);
+    },
+    applied: () => {
+      const strongest = (k: number) =>
+        Math.max(0, ...(weights[k] ?? []).map(({ value }) => Math.max(value.x, value.y, value.z)));
+      return [strongest(0), strongest(1), strongest(2)];
+    },
+  };
+}
+
+/** The base normal with each wrinkle map blended in where, and as far as, the rig says it is active. */
+function wrinkled(base: ReturnType<typeof texture>, maps: { readonly wrinkles?: IWrinkles }) {
+  const wrinkles = maps.wrinkles;
+  if (wrinkles === undefined) return base;
+  const at = uv();
+  const tiles = new Map<number, ReturnType<typeof texture>>();
+  const tile = (index: number) => {
+    let node = tiles.get(index);
+    if (node === undefined) {
+      node = texture(wrinkles.masks, vec2(at.x, at.y.add(index).div(wrinkles.tiles)));
+      tiles.set(index, node);
+    }
+    return node;
+  };
+  // biome-ignore lint/suspicious/noExplicitAny: see above.
+  let normal: any = base.xyz;
+  wrinkles.normals.forEach((map, k) => {
+    const owned = wrinkles.owned[k] ?? [];
+    if (owned.length === 0) return;
+    // biome-ignore lint/suspicious/noExplicitAny: an accumulating TSL sum changes node type per add.
+    let weight: any = float(0);
+    for (const index of owned) weight = weight.add(dot(tile(index).rgb, wrinkles.weights[k]?.[index] as never));
+    normal = mix(normal, texture(map, at).bias(float(DIFFUSION_MIPS - 1)).xyz, saturate(weight));
+  });
+  return normal;
+}
+
+/** 1 on the mouth sock's UV island, 0 on the face. */
+function insideMouth() {
+  const at = uv();
+  const corner = oneMinus(step(MOUTH.island.x, at.x)).max(step(float(1).sub(MOUTH.island.x), at.x));
+  return corner.mul(oneMinus(step(MOUTH.island.y, at.y)));
+}
+
+/** What the sock keeps of its albedo: most of it just behind the lips, almost none at the throat. */
+function mouthKeep() {
+  return mix(float(MOUTH.keepBack), float(MOUTH.keepFront), smoothstep(float(MOUTH.back), float(MOUTH.front), positionGeometry.z));
+}
+
+/**
+ * The teeth: the specimen's own colour and normal map, plus the occlusion Unreal ships separately as
+ * `T_Teeth_mouthOcc` and this export has no slot for.
+ *
+ * **Depth *is* the occlusion**, and the specimen's own geometry says so: 73 mm from the last molar to
+ * the incisors, with the arch's corners — the part the report calls a white glitchy shape at the
+ * mouth corner — sitting at 0.046..0.083, i.e. deeper than the midpoint of the ramp. A molar drawn at
+ * an incisor's brightness is a white sliver; a real corner of a real mouth is a shadow, and this is
+ * that shadow. The roughness rides the same ramp, because a wet highlight on a back molar is the
+ * other half of the same wrongness.
+ *
+ * A dim red bounce is added on top, keyed to the same depth: light off the gums is what keeps the
+ * lower arch from being a void, and the report's "lower teeth barely visible" is a *value* problem,
+ * not a geometry one — both arches' front teeth stand equally far forward, so the ramp leaves them
+ * alone and it is the bounce, not the ramp, that lifts the lower row.
+ */
+const ENAMEL_BOUNCE = 0.12;
+/** The teeth primitive's own z extent, measured: 0.0302 at the last molar, 0.1033 at the incisors. */
+const TEETH = { back: 0.03, front: 0.1033, bite: 1.426 } as const;
+
+export function teethMaterial(maps: {
+  readonly colour: Texture;
+  readonly normal: Texture;
+}): MeshPhysicalNodeMaterial {
+  const material = new MeshPhysicalNodeMaterial();
+  // The teeth's own extent, which is its own ramp: the incisors stand 73 mm in front of the last
+  // molar, and that distance is the occlusion Unreal ships separately as `T_Teeth_mouthOcc`.
+  // **Occlusion runs along the arch as well as into it.** An incisor is at the front of the arch and
+  // a molar at the end of it, and both ends are *farther from the light that gets into a mouth* than
+  // the front-centre is — so the ramp is the depth into the mouth and the arch's own half-width, not
+  // the depth alone. This is the report's "flat white strip": a band whose every tooth is drawn at an
+  // incisor's value, which is why the corners of the arch read as two bright slivers and the middle
+  // as one flat plate.
+  // Depth alone, and steep: the incisors (z 0.103) and canines (0.095) are the teeth light reaches;
+  // the premolars fall to half and the molars to the floor. The arch-width term this used to add made
+  // the *corners* brighter, which is exactly backwards — it is what lit the last upper molar as a white
+  // sliver through the corner of the lips.
+  const along = smoothstep(float(0.062), float(TEETH.front), positionGeometry.z);
+  // **The gum line is darker than the biting edge.** Both arches meet at y 1.426; enamel near the
+  // gums sits under the lip and between the teeth's own curvature, the edge catches the light.
+  const edge = oneMinus(smoothstep(float(0.004), float(0.015), positionGeometry.y.sub(TEETH.bite).abs()));
+  // **And toward the corners of the mouth.** Past the canines (|x| 0.011) the arch runs back under the
+  // cheek, where the lip corner shadows it — the bright sliver the owner saw at the mouth corner was
+  // a premolar drawn at an incisor's value.
+  const lateral = smoothstep(float(0.011), float(0.024), positionGeometry.x.abs());
+  // **Enamel against everything else, read off the atlas's own colour.** The teeth primitive is
+  // MetaHuman's whole mouth kit — both arches, the gums and the tongue — on one 2048² map: the teeth
+  // rows along the top, the tongue bottom-left, the gum and palate shells bottom-right. Enamel is the
+  // one surface in it that is not red: measured, 212/191/162 (r−g 0.08) against the gums' 174/95/88
+  // and the tongue's 180/101/94 (r−g 0.31). A height band was the old separator and it cut through
+  // the lower incisors as the jaw swung; the colour moves with the UVs, so it never does.
+  const enamel = texture(maps.colour, uv()).rgb;
+  const redness = enamel.r.sub(enamel.g);
+  const tooth = oneMinus(smoothstep(float(0.13), float(0.21), redness));
+  // Soft tissue is a wet, darker red — the atlas is painted for a mouth under Unreal's own occlusion.
+  const albedo = mix(
+    enamel.mul(vec3(0.42, 0.22, 0.2)),
+    enamel.mul(vec3(0.62, 0.58, 0.52)).mul(mix(float(0.55), float(1), edge)),
+    tooth,
+  );
+  material.colorNode = albedo.mul(mix(float(0.03), float(1), pow(along, float(1.5)))).mul(mix(float(1), float(0.3), lateral));
+  material.normalNode = normalMap(texture(maps.normal, uv()), DIRECTX_TO_THREE);
+  // Enamel is glossy, the tongue and gums wet; both lose their highlight at the back of the mouth.
+  material.roughnessNode = mix(float(0.8), mix(float(0.5), float(0.28), tooth), along);
+  material.specularIntensityNode = mix(float(0.05), mix(float(0.2), float(0.6), tooth), along).mul(
+    mix(float(1), float(0.3), lateral),
+  );
+  material.clearcoatNode = tooth.mul(along).mul(0.35);
+  material.clearcoatRoughness = 0.2;
+  material.metalness = 0;
+  material.emissiveNode = color("#7a2f24").rgb.mul(ENAMEL_BOUNCE).mul(along).mul(tooth);
   return material;
 }
 

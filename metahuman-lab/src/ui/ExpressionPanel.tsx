@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import { useUiIntent, useUiState } from "@threenative/ui";
 import type { GameState } from "../state.js";
+import { PRESETS, type PresetName } from "../expression.js";
 import { CONTROL_GROUPS, type IControlGroup } from "./groups.js";
+import { PerformancePanel } from "./PerformancePanel.js";
 
 /**
  * The keyboard's step on a pose channel, as a fraction of the declared 0..1 domain.
@@ -184,6 +186,7 @@ function Group({ group, state, set, link }: {
 export function ExpressionPanel() {
   const send = useUiIntent();
   const state = useUiState<GameState>();
+  const [panel, setPanel] = useState<"controls" | "performance">("controls");
   if (state === undefined || state.phase !== "ready") return null;
   const set = (alias: string, value: number) => send("control", { alias, value });
 
@@ -192,21 +195,46 @@ export function ExpressionPanel() {
       <header className="flex flex-col gap-1.5 px-0.5">
         <div className="flex items-baseline justify-between">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.22em] text-text">expression</h2>
-          <span className="text-[9px] tracking-[0.1em] text-dim/70">
-            {Object.values(state.controls).filter((value) => value !== 0).length}/
-            {Object.keys(state.controls).length} active
-          </span>
+          {/* Two panels, one header row: `controls` is the sliders and `performance` is everything
+              that acts on the face as a whole. They share this row rather than adding one, so the
+              rows below keep the positions a playtest and a reader already know. */}
+          <div className="flex gap-1">
+            {(["controls", "performance"] as const).map((tab) => (
+              <button
+                aria-pressed={tab === panel}
+                className={`pointer-events-auto rounded-[4px] border px-1.5 py-0 text-[9px] uppercase leading-[1.1] tracking-[0.1em] transition-colors focus:border-lume ${
+                  tab === panel
+                    ? "border-lume/70 bg-lume/15 text-lume"
+                    : "border-line/50 text-dim hover:border-lume hover:text-text"
+                }`}
+                data-tn-interactive
+                key={tab}
+                onClick={() => setPanel(tab)}
+                type="button"
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-4 gap-1">
-          {(["neutral", "smile", "brow", "expression"] as const).map((recipe) => (
+        {panel === "performance" ? <PerformancePanel /> : null}
+        {panel === "controls" ? (
+        <>
+        <div className="grid grid-cols-5 gap-1">
+          {(Object.keys(PRESETS) as PresetName[]).map((preset) => (
             <button
-              className="pointer-events-auto rounded-[4px] border border-line/50 bg-ink/50 px-1 py-1.5 text-[9px] uppercase tracking-[0.1em] text-dim transition-colors hover:border-lume hover:text-text focus:border-lume focus:text-text"
+              aria-pressed={preset === state.preset}
+              className={`pointer-events-auto rounded-[4px] border px-0.5 py-1.5 text-[9px] uppercase tracking-[0.06em] transition-colors focus:border-lume focus:text-text ${
+                preset === state.preset
+                  ? "border-lume/70 bg-lume/15 text-lume"
+                  : "border-line/50 bg-ink/50 text-dim hover:border-lume hover:text-text"
+              }`}
               data-tn-interactive
-              key={recipe}
-              onClick={() => send("recipe", { recipe })}
+              key={preset}
+              onClick={() => send("preset", { name: preset })}
               type="button"
             >
-              {recipe}
+              {preset}
             </button>
           ))}
         </div>
@@ -231,17 +259,21 @@ export function ExpressionPanel() {
         <p className="text-[9px] leading-[1.35] tracking-[0.02em] text-dim/60">
           drag the face to orbit · wheel to zoom · right-drag or shift-drag to pan · F to reframe
         </p>
+        </>
+        ) : null}
       </header>
 
-      {CONTROL_GROUPS.map((group) => (
-        <Group
-          group={group}
-          key={group.id}
-          link={(id, value) => send("link", { group: id, value: value ? 1 : 0 })}
-          set={set}
-          state={state}
-        />
-      ))}
+      {panel === "controls"
+        ? CONTROL_GROUPS.map((group) => (
+            <Group
+              group={group}
+              key={group.id}
+              link={(id, value) => send("link", { group: id, value: value ? 1 : 0 })}
+              set={set}
+              state={state}
+            />
+          ))
+        : null}
     </div>
   );
 }

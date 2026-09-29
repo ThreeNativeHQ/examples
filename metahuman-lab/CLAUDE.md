@@ -95,11 +95,12 @@ not carry `content/`** — use `pnpm dev`, or `vite build && vite preview`, to r
   expanded from a storage buffer, kept per strand in proportion to its true width, resolved by the
   TRAA. The hair hangs off the `head` joint; each brow strand rides its root's skin (`browFollow`).
   Unreal's own shading is **not** reproduced, and the diagnostics panel says so permanently.
-  Animated-map outputs are bound and observable through `human.animatedMaps()`; no wrinkle
-  material is wired to them.
+  Animated-map outputs drive Ada's wrinkle maps (`FaceNormal_WM1..3`, `node tools/prepare.mjs
+  --wrinkles`) through `bindWrinkles` in `src/render/look.ts`; the channel-to-region table is this
+  sample's reading of the masks, and `state.probeWrinkles` reports the weights the shader was given.
 
-LOD0 is pinned as the inspection override and reported as such. This import exported no LOD1, so
-`human.setLod(1)` throws `TN_MH_BAD_LOD` and the UI says so rather than offering a dead toggle.
+LOD0 is the default; `tools/prepare.mjs` welds the export's LOD1 (no morph targets) into the
+specimen so the performance panel can switch to it and back.
 
 `playtests/face-controls.playtest.json` is the whole proof: it waits for `ready`, drives the jaw
 and left-blink sliders through real clicks and key presses, asserts the sampled joint and morph

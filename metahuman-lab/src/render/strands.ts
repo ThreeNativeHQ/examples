@@ -35,6 +35,7 @@ import {
   pow,
   saturate,
   select,
+  smoothstep,
   sqrt,
   storage,
   uniform,
@@ -135,6 +136,13 @@ export interface IStrandOptions {
   readonly widthScale?: number;
   /** Multiplies the minimum pixel width along the strand: 1 keeps it flat, 0 follows the taper. Default 1. */
   readonly tipTaper?: number;
+  /**
+   * How far along the strand (0..1) the ribbon takes to reach full width from its root. Default 0,
+   * a root drawn at full width. A brow fibre leaves the skin at a shallow angle through its own stain,
+   * so a root that starts as a hairline and swells reads as hair growing out of skin; a full-width
+   * root reads as a fibre laid on top of it.
+   */
+  readonly rootFade?: number;
 }
 
 export class StrandMesh extends Mesh<InstancedBufferGeometry, MeshBasicNodeMaterial> {
@@ -207,7 +215,9 @@ export class StrandMesh extends Mesh<InstancedBufferGeometry, MeshBasicNodeMater
     const floor = pixel
       .mul(minPixels)
       .mul(mix(float(1), oneMinus(pow(alongHere, float(2))), float(tipTaper)));
-    const drawn = max(width, floor);
+    const rootFade = options.rootFade ?? 0;
+    const emerge = rootFade > 0 ? smoothstep(float(0), float(rootFade), alongHere).mul(0.85).add(0.15) : float(1);
+    const drawn = max(width, floor).mul(emerge);
     const across = normalize(cross(tangent, toCamera));
     const expanded = centre.add(across.mul(side.mul(drawn).mul(0.5)));
     const material = this.material;

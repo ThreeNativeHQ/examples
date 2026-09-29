@@ -13,7 +13,8 @@
  *   joints   exact DNA joint name == glTF node name
  *   morphs   glTF morph target named `<dnaMesh>__<DNA channel>`, and only where that target
  *            actually carries delta data for that primitive
- *   lods     the mesh sets the GLB actually contains (LOD0 only for this import)
+ *   lods     the two authored mesh sets in the container — LOD0, and the LOD1 the same package
+ *            exports, welded onto the same skin so a switch needs no second file
  *   controls the PRD's 20 semantic faceboard aliases, resolved against the rig's real
  *            `RigEvaluator.names("gui")`, one alias per GUI channel and grouped in the UI
  *
@@ -56,6 +57,16 @@ const PROJECT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = process.env.METAHUMAN_SOURCE_DIR ?? join(homedir(), ".cache/threenative/metahuman");
 
 const DEFAULT_SPECIMEN = join(SOURCE, "ada-face/Models/Ada_FaceMesh.glb");
+/**
+ * The LOD1 of the same export, welded into `specimen.glb` as a second mesh set.
+ *
+ * `loadMetaHuman` builds its handle from one `loader.scene`, and its LOD bindings are glTF mesh
+ * indices in that container — so a second LOD has to be inside the same file rather than beside it.
+ * This level carries no morph targets at all (19 269 vertices against LOD0's 34 615), which is what
+ * makes it worth previewing: whatever the face was doing through blend shapes alone would simply
+ * not be there, and the joints would have to carry the expression by themselves.
+ */
+const DEFAULT_LOD1 = join(SOURCE, "ada-face/Models/Ada_FaceMesh_LOD1.glb");
 const DEFAULT_DNA = join(SOURCE, "ada-face/dna/Ada_FaceMesh.dna");
 const DEFAULT_TEXTURES = join(SOURCE, "ada-textures2/textures/Content/MetaHumans");
 
@@ -765,12 +776,6 @@ function nearestHeadVertices(head, brow, cell) {
 }
 
 /**
- * Append raw buffers to the container's BIN chunk, four-byte aligned, and describe them as views.
- *
- * `views` come back in the order they were pushed, so the caller numbers its own accessors off the
- * first index rather than re-deriving where anything landed.
- */
-/**
  * Transfer one channel's deltas onto the cards, from the head vertices that actually carry them.
  *
  * Nearest-vertex transfer is the obvious move and it is wrong here, in a way that reads as a working
@@ -836,29 +841,42 @@ function transferDeltas(headPosition, headDeltas, browPosition) {
 }
 
 /**
- * Append raw buffers to the container's BIN chunk, four-byte aligned, and describe them as views.
+ * Successive appends into the container's one BIN chunk, four-byte aligned.
  *
- * `views` come back in the order they were pushed, so the caller numbers its own accessors off the
- * first index rather than re-deriving where anything landed.
+ * The welded file is built by adding to the export rather than by rewriting it: existing buffer
+ * views keep their offsets and every append lands after them. A writer rather than a function
+ * because the brows and the LOD1 mesh are welded in sequence, and the second must not be able to
+ * overwrite the first.
  */
-function appendBin(json, headBytes, buffers) {
-  const binStart = 20 + headBytes.readUInt32LE(12) + 8;
-  const existing = Buffer.from(headBytes.subarray(binStart, binStart + json.buffers[0].byteLength));
-  const chunks = [existing];
-  const views = [];
-  for (const values of buffers) {
-    const padding = Buffer.alloc((4 - (json.buffers[0].byteLength % 4)) % 4);
-    if (padding.length > 0) {
-      chunks.push(padding);
-      json.buffers[0].byteLength += padding.length;
-    }
-    const bytes = Buffer.from(values.buffer, values.byteOffset, values.byteLength);
-    json.bufferViews.push({ buffer: 0, byteOffset: json.buffers[0].byteLength, byteLength: bytes.length });
-    views.push(json.bufferViews.length - 1);
-    chunks.push(bytes);
-    json.buffers[0].byteLength += bytes.length;
-  }
-  return { bin: Buffer.concat(chunks), views };
+function binWriter(json, glbBytes) {
+  const binStart = 20 + glbBytes.readUInt32LE(12) + 8;
+  const chunks = [Buffer.from(glbBytes.subarray(binStart, binStart + json.buffers[0].byteLength))];
+  return {
+    /** Append one buffer's bytes as one buffer view, and hand back its index. */
+    view(bytes) {
+      const raw = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const padding = Buffer.alloc((4 - (json.buffers[0].byteLength % 4)) % 4);
+      if (padding.length > 0) {
+        chunks.push(padding);
+        json.buffers[0].byteLength += padding.length;
+      }
+      json.bufferViews.push({ buffer: 0, byteOffset: json.buffers[0].byteLength, byteLength: raw.length });
+      chunks.push(raw);
+      json.buffers[0].byteLength += raw.length;
+      return json.bufferViews.length - 1;
+    },
+    bytes() {
+      return Buffer.concat(chunks);
+    },
+  };
+}
+
+/** The raw bytes of one buffer view in another container, unaligned and exactly as stored. */
+function viewBytes(glbBytes, json, at) {
+  const view = json.bufferViews[at];
+  if (view === undefined) throw new Error(`glTF buffer view ${at} is not in this container`);
+  const start = 20 + glbBytes.readUInt32LE(12) + 8 + (view.byteOffset ?? 0);
+  return new Uint8Array(glbBytes.buffer, glbBytes.byteOffset + start, view.byteLength);
 }
 
 /** A dense float accessor over an appended view, with the min/max glTF demands of a VEC3. */
@@ -898,7 +916,7 @@ function jointAccessor(json, viewIndex, count) {
  * container on skin 0, at identity, which is the only placement where the head's inverse bind
  * matrices mean the right thing and the cards land where the exporter put them.
  */
-function weldBrows(headBytes, json, browBytes) {
+function weldBrows(headBytes, json, browBytes, bin) {
   const browJson = gltfJson(browBytes, "brows");
   const browPrim = browJson.meshes[0].primitives[0];
   const browPosition = readAccessor(browBytes, browJson, browPrim.attributes.POSITION);
@@ -934,15 +952,15 @@ function weldBrows(headBytes, json, browBytes) {
   const sampled = Math.max(...transferred.map((entry) => entry.sampled));
   const blended = Math.max(...transferred.map((entry) => entry.blended));
 
-  const { bin, views } = appendBin(json, headBytes, [
-    Float32Array.from(browPosition),
-    Float32Array.from(browNormal),
-    Float32Array.from(browUv),
-    Uint16Array.from(browIndex),
-    joints,
-    weights,
-    ...deltas,
-  ]);
+  const views = [
+    bin.view(Float32Array.from(browPosition)),
+    bin.view(Float32Array.from(browNormal)),
+    bin.view(Float32Array.from(browUv)),
+    bin.view(Uint16Array.from(browIndex)),
+    bin.view(joints),
+    bin.view(weights),
+    ...deltas.map((delta) => bin.view(delta)),
+  ];
   const attributes = {
     POSITION: floatAccessor(json, views[0], "VEC3", count, browPosition),
     NORMAL: floatAccessor(json, views[1], "VEC3", count, browNormal),
@@ -981,12 +999,90 @@ function weldBrows(headBytes, json, browBytes) {
   json.scenes[0].nodes.push(json.nodes.length - 1);
 
   return {
-    bytes: repack(json, bin),
+    mesh: meshIndex,
     morphs: channels.map((entry, target) => ({ channel: entry.channel, mesh: meshIndex, primitive: 0, target })),
     vertices: count,
     sampled,
     blended,
   };
+}
+
+/**
+ * Weld the LOD1 mesh in beside LOD0, on the same skin, so `setLod(1)` is a visibility switch rather
+ * than a second load.
+ *
+ * The two exports were measured against each other before this was written: identical node names
+ * (875 joints, in the same order), identical local transforms on every joint, an identical
+ * hierarchy bar one root's *name* (`Ada_FaceMesh.ao` against `Ada_FaceMesh.ao_LOD1`, neither of
+ * which is a DNA joint), and a byte-identical 875×16 block of inverse bind matrices. So the bind
+ * pose is the same pose, and skin 0 — with the LOD0 inverse bind matrices — is the right skin for
+ * these vertices. Each of those is re-checked here rather than assumed, because a re-prepare of a
+ * different export must fail loudly instead of welding a head that moves wrongly.
+ *
+ * No morph targets come across: this level declares none, which is the entire point of the preview.
+ */
+function weldLod1(headBytes, json, lod1Bytes, bin) {
+  const source = gltfJson(lod1Bytes, "LOD1");
+
+  const jointsOf = (doc) => doc.skins[0].joints.map((at) => doc.nodes[at].name);
+  const a = jointsOf(json);
+  const b = jointsOf(source);
+  if (a.length !== b.length || a.some((name, at) => name !== b[at]))
+    throw new Error("the LOD1 export's skeleton is not this head's skeleton, so it cannot be welded in");
+
+  const place = (doc) => doc.nodes.map((node) => `${node.translation ?? ""}|${node.rotation ?? ""}|${node.scale ?? ""}`);
+  // Compared over the LOD1 export's own length only: the container already carries the welded brow
+  // node after the last joint, and that extra node is not a disagreement about the bind pose.
+  const from = place(json).slice(0, source.nodes.length);
+  const to = place(source);
+  for (let at = 0; at < to.length; at += 1)
+    if (from[at] !== to[at])
+      throw new Error(`the LOD1 export places '${source.nodes[at].name ?? at}' differently from LOD0`);
+
+  // Materials are matched by name rather than by index: both exports carry the same eight, in the
+  // same order today, and an index would silently paint a LOD1 eye with the wrong map if that stopped
+  // being true. This level adds none of its own.
+  const materialOf = new Map(json.materials.map((material, at) => [material.name, at]));
+  const remapped = new Map();
+  const viewOf = (at) => {
+    const known = remapped.get(at);
+    if (known !== undefined) return known;
+    const next = bin.view(viewBytes(lod1Bytes, source, at));
+    remapped.set(at, next);
+    return next;
+  };
+  const accessorOf = (at) => {
+    const accessor = source.accessors[at];
+    if (accessor === undefined) throw new Error(`the LOD1 export's accessor ${at} does not exist`);
+    // Copied as declared: byte offset, stride and sparsity all survive, because a re-read accessor
+    // that dropped the stride would read LOD1's joints as floats.
+    const copy = { ...accessor, bufferView: viewOf(accessor.bufferView) };
+    json.accessors.push(copy);
+    return json.accessors.length - 1;
+  };
+
+  const primitives = source.meshes[0].primitives.map((prim) => {
+    const attributes = {};
+    for (const [name, at] of Object.entries(prim.attributes)) attributes[name] = accessorOf(at);
+    const name = source.materials[prim.material ?? -1]?.name;
+    const material = name === undefined ? undefined : materialOf.get(name);
+    if (material === undefined)
+      throw new Error(`the LOD1 export's material '${String(name)}' is not one LOD0 already carries`);
+    return { attributes, indices: prim.indices === undefined ? undefined : accessorOf(prim.indices), material, mode: prim.mode ?? 4 };
+  });
+  const vertices = primitives.reduce((total, prim) => total + json.accessors[prim.attributes.POSITION].count, 0);
+  const triangles = primitives.reduce(
+    (total, prim) => total + (prim.indices === undefined ? 0 : json.accessors[prim.indices].count / 3),
+    0,
+  );
+
+  const meshIndex = json.meshes.length;
+  json.meshes.push({ name: "Ada_FaceMesh_LOD1", primitives });
+  // Skin 0 and at identity, which is the only placement where LOD0's inverse bind matrices mean the
+  // right thing — the same argument the brow cards are welded on, and the same answer.
+  json.nodes.push({ mesh: meshIndex, name: "Ada_FaceMesh_LOD1", skin: 0 });
+  json.scenes[0].nodes.push(json.nodes.length - 1);
+  return { mesh: meshIndex, vertices, triangles, primitives: primitives.length };
 }
 
 /* ------------------------------------------------- the groom, as strands ----------------------- */
@@ -1208,34 +1304,160 @@ function browSkin(headBytes, json, converted) {
  * nearest head vertex, and the density saturates, so the hairline is exactly as soft and as ragged
  * as the groom's own. Written as a greyscale PNG through magick (a PGM on the way).
  */
-async function scalpMask(headBytes, json, converted, out) {
-  const SIZE = 1024;
-  const SIGMA = 5;
-  const headPrim = json.meshes[0].primitives[0];
-  const headPosition = readAccessor(headBytes, json, headPrim.attributes.POSITION);
-  const headUv = readAccessor(headBytes, json, headPrim.attributes.TEXCOORD_0);
+function scalpMask(headBytes, json, converted, out) {
   const { first, points } = converted;
   const roots = [];
   for (let s = 0; s + 1 < first.length; s += 1)
     for (let axis = 0; axis < 3; axis += 1) roots.push(points[first[s] * 4 + axis]);
-  const nearest = nearestHeadVertices(headPosition, roots, 0.008);
+  return splatMask(headBytes, json, roots, undefined, { file: "HairScalp_Mask", sigma: 5, knee: 2 }, out);
+}
+
+/**
+ * The brow's painted density under its strands: the stain a real brow leaves on the skin, which is
+ * what makes the reference's brow read as one soft full arch rather than as fibres on bare skin.
+ *
+ * Every *point* of every brow strand splats, not only the root, weighted down towards the tip — so
+ * the mask is the groom's own shape, densest along the roots and feathering out where the fibres
+ * thin, and it follows any groom this sample is prepared from.
+ */
+function browMask(headBytes, json, converted, out) {
+  const { first, points } = converted;
+  const at = [];
+  const weights = [];
+  for (let s = 0; s + 1 < first.length; s += 1) {
+    const span = Math.max(1, first[s + 1] - first[s] - 1);
+    for (let p = first[s]; p < first[s + 1]; p += 1) {
+      for (let axis = 0; axis < 3; axis += 1) at.push(points[p * 4 + axis]);
+      weights.push(1 - 0.7 * ((p - first[s]) / span));
+    }
+  }
+  return splatMask(headBytes, json, at, weights, { file: "BrowDensity_Mask", sigma: 3, knee: 6 }, out);
+}
+
+async function splatMask(headBytes, json, at, weights, { file, sigma, knee }, out) {
+  const SIZE = 1024;
+  const headPrim = json.meshes[0].primitives[0];
+  const headPosition = readAccessor(headBytes, json, headPrim.attributes.POSITION);
+  const headUv = readAccessor(headBytes, json, headPrim.attributes.TEXCOORD_0);
+  const nearest = nearestHeadVertices(headPosition, at, 0.008);
   const density = new Float32Array(SIZE * SIZE);
-  const reach = Math.ceil(SIGMA * 2.5);
-  for (const vertex of nearest) {
+  const reach = Math.ceil(sigma * 2.5);
+  nearest.forEach((vertex, index) => {
+    const weight = weights?.[index] ?? 1;
     const cx = headUv[vertex * 2] * SIZE;
     const cy = headUv[vertex * 2 + 1] * SIZE;
     for (let y = Math.max(0, Math.floor(cy - reach)); y <= Math.min(SIZE - 1, Math.ceil(cy + reach)); y += 1)
       for (let x = Math.max(0, Math.floor(cx - reach)); x <= Math.min(SIZE - 1, Math.ceil(cx + reach)); x += 1)
-        density[y * SIZE + x] += Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * SIGMA * SIGMA));
-  }
+        density[y * SIZE + x] += weight * Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * sigma * sigma));
+  });
   const pixels = Buffer.alloc(SIZE * SIZE);
-  // Saturates at about two roots' worth of overlap: the inside of the groom is solid, its edge fades.
-  for (let i = 0; i < pixels.length; i += 1) pixels[i] = Math.round(255 * (1 - Math.exp(-density[i] / 2)));
-  const pgm = join(out, "textures", "HairScalp_Mask.pgm");
+  // `knee` is how many overlapping splats it takes to saturate: the inside is solid, the edge fades.
+  for (let i = 0; i < pixels.length; i += 1) pixels[i] = Math.round(255 * (1 - Math.exp(-density[i] / knee)));
+  const pgm = join(out, "textures", `${file}.pgm`);
   await mkdir(join(out, "textures"), { recursive: true });
   await writeFile(pgm, Buffer.concat([Buffer.from(`P5 ${SIZE} ${SIZE} 255\n`), pixels]));
-  await magick([pgm, join(out, "textures", "HairScalp_Mask.png")]);
+  await magick([pgm, join(out, "textures", `${file}.png`)]);
   await rm(pgm);
+}
+
+/**
+ * Ada's wrinkle maps and the regions they belong to, for the skin's animated-map binding.
+ *
+ * MetaHuman's face material blends three extra normal maps (`FaceNormal_WM1..3`) over the main one,
+ * each only inside the regions whose rig outputs are active — 37 of them, one per animated map
+ * (`head_wm1_browsRaiseInner_L`, `head_wm3_smile_R`, …), painted into the RGBA channels of twelve
+ * shared `T_head_wm*_msk_*` textures. Both come from the licensed sample through the asset importer
+ * (`importUnrealDirectory` with `onlyPackages`), into `ada-wrinkles` and `ada-wrinkle-masks`.
+ *
+ * **The channel-to-region table is this sample's reading, not Epic's.** The material graph that
+ * names each channel is not in the export, so every channel was matched by where it lands on the
+ * atlas: side from u (u > 0.5 is the character's left — the left eye's vertices sit there), region
+ * from the anatomy under it, and the count checks out exactly — 15 wm1 regions, 10 wm2, 8 wm3 and 4
+ * wm13 against the channels those masks carry. The masks are repacked three regions to an RGB tile
+ * (no alpha: a browser premultiplies an image's colour by its alpha on upload) and stacked into one
+ * 512 × 512·n strip, so the shader binds one texture for all 37 instead of twelve.
+ */
+const WRINKLE_NORMALS = ["FaceNormal_WM1", "FaceNormal_WM2", "FaceNormal_WM3"];
+const WRINKLE_MASK_DIR = "ada-wrinkle-masks/textures/Content/MetaHumans/Common/Face/Textures/Utilities/AnimMasks";
+const WRINKLE_REGIONS = [
+  ["wm1_msk_01", "R", "head_wm1_blink_L"],
+  ["wm1_msk_01", "G", "head_wm1_blink_R"],
+  ["wm1_msk_01", "B", "head_wm1_browsRaiseInner_L"],
+  ["wm1_msk_01", "A", "head_wm1_browsRaiseInner_R"],
+  ["wm1_msk_02", "R", "head_wm1_browsRaiseOuter_L"],
+  ["wm1_msk_02", "G", "head_wm1_browsRaiseOuter_R"],
+  ["wm1_msk_02", "B", "head_wm1_chinRaise_L"],
+  ["wm1_msk_02", "A", "head_wm1_chinRaise_R"],
+  ["wm1_msk_03", "R", "head_wm1_jawOpen"],
+  ["wm1_msk_03", "G", "head_wm1_purse_DL"],
+  ["wm1_msk_03", "B", "head_wm1_purse_DR"],
+  ["wm1_msk_03", "A", "head_wm1_purse_UL"],
+  ["wm1_msk_04", "R", "head_wm1_purse_UR"],
+  ["wm1_msk_04", "G", "head_wm1_squintInner_L"],
+  ["wm1_msk_04", "B", "head_wm1_squintInner_R"],
+  ["wm2_msk_01", "R", "head_wm2_browsLateral_L"],
+  ["wm2_msk_01", "G", "head_wm2_browsLateral_R"],
+  ["wm2_msk_01", "B", "head_wm2_browsDown_L"],
+  ["wm2_msk_01", "A", "head_wm2_browsDown_R"],
+  ["wm2_msk_02", "R", "head_wm2_mouthStretch_L"],
+  ["wm2_msk_02", "G", "head_wm2_mouthStretch_R"],
+  ["wm2_msk_02", "B", "head_wm2_neckStretch_L"],
+  ["wm2_msk_02", "A", "head_wm2_neckStretch_R"],
+  ["wm2_msk_03", "R", "head_wm2_noseWrinkler_L"],
+  ["wm2_msk_03", "G", "head_wm2_noseWrinkler_R"],
+  ["wm3_msk_01", "R", "head_wm3_cheekRaiseInner_L"],
+  ["wm3_msk_01", "G", "head_wm3_cheekRaiseInner_R"],
+  ["wm3_msk_01", "B", "head_wm3_cheekRaiseOuter_L"],
+  ["wm3_msk_01", "A", "head_wm3_cheekRaiseOuter_R"],
+  ["wm3_msk_02", "R", "head_wm3_cheekRaiseUpper_L"],
+  ["wm3_msk_02", "G", "head_wm3_cheekRaiseUpper_R"],
+  ["wm3_msk_02", "B", "head_wm3_smile_L"],
+  ["wm3_msk_02", "A", "head_wm3_smile_R"],
+  ["wm13_msk_01", "R", "head_wm13_lips_DL"],
+  ["wm13_msk_01", "G", "head_wm13_lips_DR"],
+  ["wm13_msk_01", "B", "head_wm13_lips_UL"],
+  ["wm13_msk_01", "A", "head_wm13_lips_UR"],
+];
+const WRINKLE_TILE = 512;
+
+async function prepareWrinkles(out) {
+  const textures = join(out, "textures");
+  await mkdir(textures, { recursive: true });
+  const written = [];
+  for (const name of WRINKLE_NORMALS) {
+    const target = join(textures, `${name}.png`);
+    // 2048: a wrinkle is a fold several millimetres wide, and the pores stay on the main map.
+    await magick([join(SOURCE, "ada-wrinkles/textures/Content/MetaHumans/Ada/Face", `${name}.png`), "-alpha", "off", "-resize", "2048x2048", target]);
+    written.push(`${name}.png`);
+  }
+  const scratch = join(out, "textures", ".wrinkle-scratch");
+  await mkdir(scratch, { recursive: true });
+  const greys = [];
+  for (const [file, channel, region] of WRINKLE_REGIONS) {
+    const grey = join(scratch, `${region}.png`);
+    await magick([join(SOURCE, WRINKLE_MASK_DIR, `T_head_${file}.png`), "-alpha", "on", "-channel", channel, "-separate", "-resize", `${WRINKLE_TILE}x${WRINKLE_TILE}`, grey]);
+    greys.push(grey);
+  }
+  const black = join(scratch, "black.png");
+  await magick(["-size", `${WRINKLE_TILE}x${WRINKLE_TILE}`, "xc:black", "-colorspace", "gray", black]);
+  const tiles = [];
+  for (let at = 0; at < greys.length; at += 3) {
+    const tile = join(scratch, `tile-${tiles.length}.png`);
+    const three = [0, 1, 2].map((offset) => greys[at + offset] ?? black);
+    await magick([...three, "-combine", "-colorspace", "sRGB", "-type", "TrueColor", tile]);
+    tiles.push(tile);
+  }
+  await magick([...tiles, "-append", "+repage", join(textures, "WrinkleMasks.png")]);
+  await rm(scratch, { recursive: true, force: true });
+  await writeFile(
+    join(out, "wrinkles.json"),
+    JSON.stringify({
+      tiles: tiles.length,
+      regions: WRINKLE_REGIONS.map(([, , region], index) => ({ region, tile: Math.floor(index / 3), channel: index % 3 })),
+    }),
+  );
+  written.push(`WrinkleMasks.png (${tiles.length} tiles)`, "wrinkles.json");
+  return written;
 }
 
 async function prepareStrands(headBytes, json, out) {
@@ -1269,8 +1491,10 @@ async function prepareStrands(headBytes, json, out) {
           : `; ${lifted.moved} points lifted to ${set.lift * 1000} mm off the skin (largest move ${(lifted.largest * 1000).toFixed(2)} mm)`),
     );
     if (set.to === "hair.strands.bin") await scalpMask(headBytes, json, converted, out);
-    if (set.to === "brows.strands.bin")
+    if (set.to === "brows.strands.bin") {
       await writeFile(join(out, "brows.skin.json"), JSON.stringify(browSkin(headBytes, json, converted)));
+      await browMask(headBytes, json, converted, out);
+    }
   }
   return report;
 }
@@ -1304,24 +1528,32 @@ async function main() {
   let out = join(PROJECT, "content");
   let quiet = false;
   let strandsOnly = false;
+  let wrinklesOnly = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--out") out = resolve(PROJECT, argv[(index += 1)] ?? "content");
     else if (arg === "--quiet") quiet = true;
     else if (arg === "--strands") strandsOnly = true;
+    else if (arg === "--wrinkles") wrinklesOnly = true;
     else positional.push(arg);
   }
   const glbPath = resolve(positional[0] ?? DEFAULT_SPECIMEN);
   const dnaPath = resolve(positional[1] ?? DEFAULT_DNA);
 
-  const [glbBytes, dnaBytes, browBytes] = await Promise.all([
+  const [glbBytes, dnaBytes, browBytes, lod1Bytes] = await Promise.all([
     readFile(glbPath),
     readFile(dnaPath),
     readFile(join(DEFAULT_HAIR, BROW_SOURCE)),
+    readFile(DEFAULT_LOD1),
   ]);
   const glbSha256 = sha256(glbBytes);
   const dnaSha256 = sha256(dnaBytes);
   const json = gltfJson(glbBytes, glbPath);
+  // `--wrinkles` rewrites only the wrinkle maps and their region strip.
+  if (wrinklesOnly) {
+    process.stdout.write(`${(await prepareWrinkles(out)).join("\n")}\n`);
+    return;
+  }
   // `--strands` rewrites only the groom, which is the step a look iteration re-runs.
   if (strandsOnly) {
     await mkdir(out, { recursive: true });
@@ -1345,7 +1577,8 @@ async function main() {
 
     // The brow cards are welded in *first*, so every index below — mesh, target, node — is read off
     // the container the game actually loads rather than the export it came from.
-    const brows = weldBrows(glbBytes, json, browBytes);
+    const bin = binWriter(json, glbBytes);
+    const brows = weldBrows(glbBytes, json, browBytes, bin);
 
     // joints: an exact DNA joint name that is also a node name in the exported graph.
     const joints = [];
@@ -1378,9 +1611,6 @@ async function main() {
       }
     }
 
-    // lods: whatever mesh sets the GLB carries. This import wrote LOD0 only.
-    const lods = [{ lod: 0, meshes: (json.meshes ?? []).map((_, index) => index) }];
-
     // controls: the PRD's semantic channels, resolved against the rig's real GUI names.
     const controls = [];
     for (const channel of SEMANTIC_CHANNELS) {
@@ -1395,11 +1625,29 @@ async function main() {
       }
     }
 
+    const meshCount = json.meshes.length;
+    // The look reads the *exported* head: the iris placement is a property of the eyeball's own
+    // UVs, and welding the brows changed no head accessor. LOD1 is welded after it for the same
+    // kind of reason — it is a mesh the look has nothing to say about, and `json` must still be the
+    // LOD0-only container when these two read accessors out of `glbBytes` by index.
+    const look = await prepareTextures(glbBytes, json, out);
+    const strands = await prepareStrands(glbBytes, json, out);
+
+    // lods: the two authored mesh sets in the container. LOD1 goes in after the morph scan because
+    // it declares no targets at all, and a mesh with no targets is not a mesh whose
+    // `extras.targetNames` is missing.
+    const lod1 = weldLod1(glbBytes, json, lod1Bytes, bin);
+    const specimenBytes = repack(json, bin.bytes());
+    const lods = [
+      { lod: 0, meshes: [0, brows.mesh] },
+      { lod: 1, meshes: [lod1.mesh] },
+    ];
+
     const bindings = {
       schemaVersion: 1,
       specimen: PROVENANCE,
       // The hash is of the *welded* container, because that is the file the loader checksum-checks.
-      hashes: { dna: dnaSha256, glb: sha256(brows.bytes) },
+      hashes: { dna: dnaSha256, glb: sha256(specimenBytes) },
       coordinates: COORDINATES,
       joints,
       morphs,
@@ -1417,16 +1665,12 @@ async function main() {
     });
 
     await mkdir(out, { recursive: true });
-    await writeFile(join(out, "specimen.glb"), brows.bytes);
+    await writeFile(join(out, "specimen.glb"), specimenBytes);
     await copyFile(dnaPath, join(out, "head.dna"));
     for (const model of MODELS)
       await copyFile(join(model.root ?? DEFAULT_HAIR, model.from), join(out, model.to));
     const bindingsBytes = Buffer.from(`${JSON.stringify(bindings, null, 2)}\n`);
     await writeFile(join(out, "bindings.json"), bindingsBytes);
-    // The texture step reads the *exported* head: the iris placement is a property of the eyeball's
-    // own UVs, and welding the brows changed no head accessor.
-    const look = await prepareTextures(glbBytes, json, out);
-    const strands = await prepareStrands(glbBytes, json, out);
 
     if (quiet) return;
     const meshStats = json.meshes.map((mesh, index) => ({
@@ -1456,10 +1700,12 @@ async function main() {
         `(${facts.joints.length - prepared.joints.length} DNA joints the export does not carry a node for)`,
       "  morph targets    " +
         `${prepared.morphs.length} mapped / ${declaredTargets.length} declared across ` +
-        `${json.meshes.length} mesh(es), covering ${exportedChannels.size} of ${facts.blendShapes.length} DNA blend shapes`,
+        `${meshCount} mesh(es) with targets, covering ${exportedChannels.size} of ${facts.blendShapes.length} DNA blend shapes`,
       "  lods             " +
-        `${prepared.lods.length} (LOD0 only — this import exported no LOD1, so setLod(1) throws ` +
-        `TN_MH_BAD_LOD; the rig itself reports ${facts.lodCount} LODs)`,
+        `${prepared.lods.length} prepared (LOD0 ${brows.mesh === 1 ? "and its welded brow cards" : ""}, ` +
+        `LOD1 welded in as mesh ${lod1.mesh}: ${lod1.vertices} vertices, ${lod1.triangles} triangles, ` +
+        `${lod1.primitives} primitives, on the same skin and with no morph targets — so setLod(1) ` +
+        `carries the expression through the joints alone; the rig itself reports ${facts.lodCount} LODs)`,
       "  controls         " +
         `${prepared.controls.length} aliases resolved against ${facts.gui.length} GUI controls ` +
         `the DNA carries — the PRD's 20 semantic channels (${SEMANTIC_CHANNELS.length} labels, ` +
@@ -1503,7 +1749,7 @@ async function main() {
           `${stats.primitives} primitives, ${stats.targets} morph targets per primitive`,
       ),
       "",
-      `  sha256 glb       ${bindings.hashes.glb}  (the welded container)`,
+      `  sha256 glb       ${bindings.hashes.glb}  (the welded container, LOD0 + brows + LOD1)`,
       `  sha256 source    ${glbSha256}  (the export, before the brows were welded in)`,
       `  sha256 dna       ${dnaSha256}`,
       `  sha256 bindings  ${sha256(bindingsBytes)}`,

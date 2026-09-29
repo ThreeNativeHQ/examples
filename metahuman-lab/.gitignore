@@ -17,3 +17,4 @@ content/
 artifacts/
 dist/
 dist.build-report.json
+.probe/

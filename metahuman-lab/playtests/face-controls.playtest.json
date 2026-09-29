@@ -20,30 +20,62 @@
     },
     {
       "kind": "wait",
+      "label": "neutral-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
       "label": "neutral-settled",
-      "waitTicks": 60,
+      "waitFrames": 3,
       "release": true,
       "screenshot": "neutral"
     },
     {
-      "kind": "click",
-      "label": "focus-the-jaw-open-slider-at-1113-174",
-      "at": {
-        "x": 1113,
-        "y": 174
+      "kind": "input",
+      "label": "press-the-jaw-thumb-at-its-zero",
+      "pointerPosition": {
+        "x": 0.8062,
+        "y": 0.2417,
+        "buttons": 1
       },
       "waitTicks": 2,
+      "release": false
+    },
+    {
+      "kind": "input",
+      "label": "drag-the-thumb-to-0-6",
+      "pointerPosition": {
+        "x": 0.8469,
+        "y": 0.2417,
+        "buttons": 1
+      },
+      "waitTicks": 3,
+      "release": false
+    },
+    {
+      "kind": "input",
+      "label": "drag-onward-to-0-6",
+      "pointerPosition": {
+        "x": 0.8828,
+        "y": 0.2417,
+        "buttons": 1
+      },
+      "waitTicks": 30,
       "release": true
     },
     {
-      "kind": "click",
-      "label": "jaw-open-to-half-with-a-real-click",
-      "at": {
-        "x": 1113,
-        "y": 174
-      },
-      "waitTicks": 2,
+      "kind": "wait",
+      "label": "jaw-dragged-to-0-6-advanced",
+      "waitTicks": 120,
       "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "jaw-dragged-to-0-6",
+      "waitFrames": 3,
+      "release": true,
+      "screenshot": "jaw-dragged"
     },
     {
       "kind": "input",
@@ -51,13 +83,6 @@
       "press": "ArrowRight",
       "holdTicks": 8,
       "release": true
-    },
-    {
-      "kind": "wait",
-      "label": "jaw-settled",
-      "waitTicks": 30,
-      "release": true,
-      "screenshot": "jaw-open"
     },
     {
       "kind": "click",
@@ -88,14 +113,20 @@
     },
     {
       "kind": "wait",
+      "label": "blink-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
       "label": "blink-settled",
-      "waitTicks": 30,
+      "waitFrames": 3,
       "release": true,
       "screenshot": "left-blink"
     },
     {
       "kind": "click",
-      "label": "smile-recipe",
+      "label": "smile-preset",
       "at": {
         "x": 1057,
         "y": 45
@@ -105,18 +136,34 @@
     },
     {
       "kind": "click",
-      "label": "brow-recipe",
+      "label": "inner-brow-raise-left-with-a-real-click",
       "at": {
-        "x": 1136,
-        "y": 45
+        "x": 1106,
+        "y": 515
+      },
+      "waitTicks": 2,
+      "release": true
+    },
+    {
+      "kind": "click",
+      "label": "inner-brow-raise-right-with-a-real-click",
+      "at": {
+        "x": 1192,
+        "y": 515
       },
       "waitTicks": 4,
       "release": true
     },
     {
       "kind": "wait",
+      "label": "combined-settled-advanced",
+      "waitTicks": 120,
+      "release": true
+    },
+    {
+      "kind": "wait",
       "label": "combined-settled",
-      "waitTicks": 40,
+      "waitFrames": 3,
       "release": true,
       "screenshot": "smile-brow"
     }
@@ -133,6 +180,39 @@
     "resources": [
       {
         "id": "state",
+        "path": "probeJawJoint",
+        "atSteps": [
+          {
+            "label": "jaw-dragged-to-0-6",
+            "equals": 0.113291
+          }
+        ],
+        "allowTrivial": "The drag's own claim, sampled at the step the drag ended and before any other control is touched: a real pointer drag on the slider thumb has to reach the rig. Read off the FACIAL_C_Jaw node's local transform against its exported rest transform, after the update."
+      },
+      {
+        "id": "state",
+        "path": "probeJawMorph",
+        "atSteps": [
+          {
+            "label": "jaw-dragged-to-0-6",
+            "equals": 0.6
+          }
+        ],
+        "allowTrivial": "The morph half of the drag's claim, at the same step: the applied influence of the DNA's jaw_open blend shape, read off the face mesh after the update. 0 at the first sample because the run starts from the declared neutral."
+      },
+      {
+        "id": "state",
+        "path": "controls.jawOpen",
+        "atSteps": [
+          {
+            "label": "jaw-dragged-to-0-6",
+            "equals": 0.6
+          }
+        ],
+        "allowTrivial": "The control the drag asked for, published back from the rig. 0 at the first sample because the run starts from the declared neutral, so what survives is that the drag moved it."
+      },
+      {
+        "id": "state",
         "path": "phase",
         "equals": "ready",
         "allowTrivial": "Readiness is the precondition this run waits for, so the value is already 'ready' at the first sample; the wait is the assertion that it arrives."
@@ -140,7 +220,8 @@
       {
         "id": "state",
         "path": "frames",
-        "gte": 10
+        "changed": true,
+        "allowTrivial": "The scene kept presenting frames for the whole run. A floor of 10 was already satisfied by the time the first sample was taken, so the check that survives is that the counter moved."
       },
       {
         "id": "state",

@@ -11,6 +11,15 @@
  */
 export type LabPhase = "error" | "loading" | "missing-content" | "ready";
 
+/** One sampled frame of the rig, rounded so a JSON comparison is readable in a failure report. */
+export interface IDemoSample {
+  readonly t: number;
+  readonly jawJoint: number;
+  readonly jawMorph: number;
+  readonly smileMorphLeft: number;
+  readonly blinkMorphLeft: number;
+}
+
 export type GameState = {
   /** `loading` until the rig is bound, then `ready`, or one of the two refusals. */
   phase: LabPhase;
@@ -27,10 +36,35 @@ export type GameState = {
   domains: Record<string, readonly [number, number]>;
   /** One link flag per group, so a left/right pair can be driven together or apart. */
   linked: Record<string, boolean>;
+  /** The recipe the panel last chose, or `""` for none. */
+  preset: string;
+  /** 0..1, how far the chosen recipe reaches. */
+  intensity: number;
+  /** Seconds a change takes to arrive. Zero is a cut. */
+  transition: number;
+  /** Procedural blinking and procedural gaze, each owning only the channels it names. */
+  blinkAuto: boolean;
+  gazeAuto: boolean;
+  /** Whether the demonstration sequence is running, and where it is. */
+  playing: boolean;
+  /** Whether it still owns the base vector — true while paused, false once anything takes over. */
+  demoEngaged: boolean;
+  demoTime: number;
+  demoDuration: number;
+  /**
+   * What the rig was actually given and produced at the current demo time, read off the Three.js
+   * objects like every other probe. This is the value A4 compares across two pose histories.
+   */
+  demoSample: IDemoSample;
+  /** The pose text panel, and what the last save or load said. */
+  pose: string;
+  poseStatus: string;
   /** `diagnostics()` from the handle, published verbatim once the rig is live. */
   backend: string;
   openRigLogic: string;
   lod: number;
+  /** Vertices in the visible LOD's mesh set, so a switch is a measurement rather than a flag. */
+  lodVertices: number;
   joints: number;
   blendShapes: number;
   animatedMaps: number;
@@ -51,6 +85,11 @@ export type GameState = {
   probeBlinkMorphRight: number;
   /** Sampled from the applied morph influence of `mouth_cornerPull_left`. */
   probeSmileMorphLeft: number;
+  /**
+   * The strongest weight each wrinkle map (WM1..3) was given this frame, read back off the skin
+   * shader's own uniforms after the rig's animated maps were written into them.
+   */
+  probeWrinkles: number[];
   /** True once the UI layer has rendered and published its interactive rectangles. */
   uiReady: boolean;
 };

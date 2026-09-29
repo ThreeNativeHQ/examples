@@ -80,7 +80,10 @@ const KEY_OFFSET = new Vector3(-1.0, 0.7, 2.4);
  * flattens the very detail the texture set exists to show.
  */
 export function setupStage(scene: Object3D, radius: number, at: Vector3): void {
-  const key = new DirectionalLight(0xfff0dc, 4.2);
+  // Round 12 against the reference at matched points: its lit cheek is 134/90/72 and its shadow cheek
+  // 85/47/31, where 4.2 and a 0.28 fill gave 101/65/52 and 97/57/44 — the same face with half the
+  // contrast across it. More key, less fill, and the terminator does the rest.
+  const key = new DirectionalLight(0xfff0dc, 5.2);
   key.name = "key";
   // Well round to the front rather than off to the side: a portrait lit from 45° loses half the
   // face to shadow, and this rig's whole subject is the middle of that face.
@@ -115,8 +118,16 @@ export function setupStage(scene: Object3D, radius: number, at: Vector3): void {
   key.shadow.camera.near = 0.05;
   key.shadow.camera.far = radius * 8;
   key.shadow.bias = -0.0004;
+  // **A soft edge, because skin has one.** The dark wedge under the jaw above the collar was this
+  // shadow: measured by toggling it, the wedge is the key's cast shadow of the mandible on the neck,
+  // and nothing else — hiding the shirt leaves it, switching the cast shadow off removes it. What made
+  // it read as a *gap* rather than a shadow was its edge: three's PCF defaults to a one-texel kernel,
+  // a razor line at 0.27 mm per texel, where light scattering under skin and the key's own size give
+  // the reference's jaw shadow a penumbra of several millimetres. `radius` is the Vogel-disk kernel in
+  // shadow texels (≈0.27 mm each); its per-pixel rotation is noise TRAA resolves into a smooth ramp.
+  key.shadow.radius = 18;
   key.shadow.normalBias = radius * 0.03;
-  const fill = new DirectionalLight(0xd8d2cc, 0.28);
+  const fill = new DirectionalLight(0xd8d2cc, 0.16);
   fill.name = "fill";
   fill.position.copy(at).add(new Vector3(1.9, 0.2, 1.5).multiplyScalar(radius));
   fill.target.position.copy(at);
@@ -147,12 +158,17 @@ const KEY_DIRECTION = new Vector3();
  * Where the camera stands relative to the face, as angles off the head's own forward axis.
  *
  * `dolly` scales the framing distance, so a close-up is the same pose pulled in rather than a
- * second pose that drifts the moment the specimen changes.
+ * second pose that drifts the moment the specimen changes. `panY` is a slide of the *look* point
+ * down the frame plane, as a fraction of the frame's own height, so a close-up of the mouth is a
+ * portrait pulled in and aimed at the mouth — the only way to see one at all, since the framing is
+ * built around the eye line.
  */
 export interface Vantage {
   readonly yaw: number;
   readonly pitch: number;
   readonly dolly: number;
+  /** Look lower (or higher) by this share of the frame's height. Negative is down. */
+  readonly panY?: number;
 }
 
 const DEG = Math.PI / 180;
@@ -189,12 +205,31 @@ export const VANTAGES = {
   expression: { yaw: 0, pitch: -2 * DEG, dolly: 1 },
   /** The same pose from the turn, which is where a jaw seam shows itself first. */
   "expression-3q": TURN,
+  /** The portrait with the smile recipe on it: the owner's "grainy on smile" shot, at the reference's framing. */
+  smile: { yaw: 0, pitch: 0, dolly: 1 },
   /**
    * Up and in on the brow, because the brow is the one part of this face a second look has to
    * check: the cards are welded to the skin, and the only way to see that they are is a shot where
    * the skin underneath is visibly moving.
    */
   "brow-raise": { yaw: 0, pitch: 9 * DEG, dolly: 0.88 },
+  /**
+   * The three close-ups the round-12 report is about, and every one of them is the portrait pulled
+   * in and aimed lower, because the framing is built around the eye line and the mouth, the cheek
+   * and the collar are all below it.
+   *
+   * **The numbers are the specimen's own measurements, not a guess.** The eye pair measures an
+   * interpupillary distance of 0.061 m, so the frame is 0.259 m tall; the mouth line is 0.065 m
+   * below the eye centre and the collar 0.126 m below it, which at each dolly is the `panY` written
+   * here. `mouth` is pulled to 0.42, a 0.11 m frame — close enough that a tooth is thirty pixels.
+   */
+  mouth: { yaw: 0, pitch: -7 * DEG, dolly: 0.42, panY: -0.28 },
+  /** The open mouth at portrait height and nearly level, which is how the owner looked into it. */
+  "mouth-front": { yaw: 0, pitch: -4 * DEG, dolly: 0.7, panY: -0.12 },
+  /** The lit cheek under a smile: the fold the report calls grainy, at twice the pixels. */
+  "smile-cheek": { yaw: -25 * DEG, pitch: 5 * DEG, dolly: 0.6, panY: -0.16 },
+  /** From below the jaw, which is the only angle that sees *into* the gap over the collar. */
+  neck: { yaw: 16 * DEG, pitch: -24 * DEG, dolly: 0.78, panY: -0.42 },
 } as const satisfies Readonly<Record<string, Vantage>>;
 
 export type VantageName = keyof typeof VANTAGES;
