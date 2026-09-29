@@ -57,7 +57,7 @@
       "kind": "input",
       "label": "drag-onward-to-0-6",
       "pointerPosition": {
-        "x": 0.8828,
+        "x": 0.8883,
         "y": 0.2417,
         "buttons": 1
       },
@@ -103,7 +103,7 @@
       "waitTicks": 2,
       "release": true,
       "pointerPosition": {
-        "x": 0.86953,
+        "x": 0.83906,
         "y": 0.86389,
         "buttons": 1
       }
@@ -139,7 +139,7 @@
       "release": true,
       "pointerPosition": {
         "x": 0.86406,
-        "y": 0.71528,
+        "y": 0.70694,
         "buttons": 1
       }
     },
@@ -150,7 +150,7 @@
       "release": true,
       "pointerPosition": {
         "x": 0.93125,
-        "y": 0.71528,
+        "y": 0.70694,
         "buttons": 1
       }
     },

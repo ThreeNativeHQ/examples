@@ -44,11 +44,22 @@
     },
     {
       "kind": "input",
+      "label": "smile-left-to-full-press",
+      "waitTicks": 2,
+      "release": false,
+      "pointerPosition": {
+        "x": 0.86641,
+        "y": 0.39722,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
       "label": "smile-left-to-full",
       "waitTicks": 2,
       "release": true,
       "pointerPosition": {
-        "x": 0.86641,
+        "x": 0.87891,
         "y": 0.39722,
         "buttons": 1
       }
@@ -80,8 +91,8 @@
     {
       "kind": "wait",
       "label": "open-the-performance-panel-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -120,8 +131,8 @@
     {
       "kind": "wait",
       "label": "back-to-the-controls-panel-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -170,8 +181,8 @@
     {
       "kind": "wait",
       "label": "open-the-performance-panel-again-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -267,8 +278,8 @@
     {
       "kind": "wait",
       "label": "back-to-the-controls-panel-for-a-new-history-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -307,8 +318,8 @@
     {
       "kind": "wait",
       "label": "back-to-the-performance-panel-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -379,8 +390,8 @@
     {
       "kind": "wait",
       "label": "controls-panel-for-the-lod-expression-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -395,11 +406,22 @@
     },
     {
       "kind": "input",
+      "label": "lod0-smile-left-to-full-press",
+      "waitTicks": 2,
+      "release": false,
+      "pointerPosition": {
+        "x": 0.86562,
+        "y": 0.39722,
+        "buttons": 1
+      }
+    },
+    {
+      "kind": "input",
       "label": "lod0-smile-left-to-full",
       "waitTicks": 2,
       "release": true,
       "pointerPosition": {
-        "x": 0.86562,
+        "x": 0.87891,
         "y": 0.39722,
         "buttons": 1
       }
@@ -440,8 +462,8 @@
     {
       "kind": "wait",
       "label": "performance-panel-for-the-lod-switch-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -523,8 +545,8 @@
     {
       "kind": "wait",
       "label": "controls-panel-for-the-precedence-steps-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -540,8 +562,8 @@
     {
       "kind": "wait",
       "label": "performance-panel-for-the-automations-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -603,8 +625,8 @@
     {
       "kind": "wait",
       "label": "controls-panel-for-the-manual-edit-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -612,7 +634,7 @@
       "waitTicks": 2,
       "release": true,
       "pointerPosition": {
-        "x": 0.83594,
+        "x": 0.83906,
         "y": 0.86389,
         "buttons": 1
       }
@@ -644,8 +666,8 @@
     {
       "kind": "wait",
       "label": "performance-panel-for-the-pose-file-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -695,8 +717,8 @@
     {
       "kind": "wait",
       "label": "controls-panel-to-clear-the-face-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
@@ -735,8 +757,8 @@
     {
       "kind": "wait",
       "label": "performance-panel-to-load-the-pose-drawn",
-      "waitFrames": 3,
-      "release": true
+      "release": true,
+      "waitTicks": 30
     },
     {
       "kind": "input",
