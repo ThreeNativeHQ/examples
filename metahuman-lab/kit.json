@@ -1,0 +1,7 @@
+{
+  "name": "metahuman-lab",
+  "title": "MetaHuman Expression Lab",
+  "blurb": "Drive a real MetaHuman head's DNA rig from sliders: OpenRigLogic in the browser, 33 faceboard channels, live joint and morph output.",
+  "genre": "starter",
+  "kit": false
+}
