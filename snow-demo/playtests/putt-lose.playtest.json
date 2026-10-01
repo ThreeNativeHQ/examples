@@ -1,0 +1,117 @@
+{
+  "name": "putt-lose",
+  "schemaVersion": 1,
+  "target": "web",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 40,
+  "subject": "player",
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "boot",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "caddie-off",
+      "press": "KeyP",
+      "holdTicks": 2,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "open",
+      "waitTicks": 60,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "out",
+      "waitTicks": 5460,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "again",
+      "press": "KeyR",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "fresh",
+      "waitTicks": 30,
+      "release": true
+    }
+  ],
+  "assert": {
+    "components": [
+      {
+        "entity": "putt",
+        "component": "lost",
+        "atSteps": [
+          {
+            "label": "open",
+            "equals": false
+          },
+          {
+            "label": "out",
+            "equals": true
+          },
+          {
+            "label": "fresh",
+            "equals": false
+          }
+        ],
+        "allowTrivial": "Left alone, the round runs out its 90 s clock and is lost; R opens a fresh one."
+      },
+      {
+        "entity": "putt",
+        "component": "reasonTime",
+        "atSteps": [
+          {
+            "label": "open",
+            "equals": false
+          },
+          {
+            "label": "out",
+            "equals": true
+          }
+        ],
+        "allowTrivial": "The loss is the clock running out (the cup snowing in), not a push count."
+      },
+      {
+        "entity": "putt",
+        "component": "timeLeft",
+        "atSteps": [
+          {
+            "label": "out",
+            "equals": 0
+          }
+        ],
+        "allowTrivial": "The clock reads zero when the round is lost to time."
+      },
+      {
+        "entity": "putt",
+        "component": "timeLeft",
+        "gte": 0,
+        "lte": 90,
+        "allowTrivial": "The clock never runs outside its 90 s round."
+      },
+      {
+        "entity": "putt",
+        "component": "won",
+        "equals": false,
+        "allowTrivial": "An untouched ball never wins the round."
+      }
+    ],
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "runtimeReady": true
+    }
+  }
+}

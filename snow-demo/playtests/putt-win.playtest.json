@@ -1,0 +1,212 @@
+{
+  "name": "putt-win",
+  "schemaVersion": 1,
+  "target": "web",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "warmupFrames": 40,
+  "subject": "player",
+  "steps": [
+    {
+      "kind": "wait",
+      "label": "boot",
+      "waitTicks": 20,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "address",
+      "waitTicks": 240,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "push1",
+      "press": "KeyG",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "roll1",
+      "waitTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "push2",
+      "press": "KeyG",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "roll2",
+      "waitTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "push3",
+      "press": "KeyG",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "roll3",
+      "waitTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "push4",
+      "press": "KeyG",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "roll4",
+      "waitTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "push5",
+      "press": "KeyG",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "roll5",
+      "waitTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "push6",
+      "press": "KeyG",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "roll6",
+      "waitTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "push7",
+      "press": "KeyG",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "roll7",
+      "waitTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "push8",
+      "press": "KeyG",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "roll8",
+      "waitTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "label": "push9",
+      "press": "KeyG",
+      "holdTicks": 1,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "roll9",
+      "waitTicks": 300,
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "label": "holed",
+      "waitTicks": 60,
+      "release": true
+    }
+  ],
+  "assert": {
+    "components": [
+      {
+        "entity": "putt",
+        "component": "won",
+        "atSteps": [
+          {
+            "label": "address",
+            "equals": false
+          },
+          {
+            "label": "holed",
+            "equals": true
+          }
+        ],
+        "allowTrivial": "The round starts open and ends with the ball resting in the cup pressed into the snow."
+      },
+      {
+        "entity": "putt",
+        "component": "pushes",
+        "lte": 6,
+        "allowTrivial": "Holed within par: six counted pushes or fewer, never a ball walked in."
+      },
+      {
+        "entity": "putt",
+        "component": "pushes",
+        "atSteps": [
+          {
+            "label": "address",
+            "equals": 0
+          }
+        ],
+        "allowTrivial": "Walking up to the ball is not a push; the counter starts at zero."
+      },
+      {
+        "entity": "putt",
+        "component": "cupDepth",
+        "gte": 0.05,
+        "allowTrivial": "The cup is a real depression in the SnowField, at least five centimetres deep."
+      },
+      {
+        "entity": "snow",
+        "component": "colliderError",
+        "lte": 0.001,
+        "allowTrivial": "The ball rolls on the canonical snow surface within a millimetre."
+      },
+      {
+        "entity": "snow",
+        "component": "loadProvenance",
+        "equals": "solver-impulse-per-step",
+        "allowTrivial": "Snow load is a solver estimate and must say so."
+      },
+      {
+        "entity": "snow",
+        "component": "renderError",
+        "lte": 0.001,
+        "allowTrivial": "The drawn snow is the canonical surface within a millimetre."
+      }
+    ],
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "runtimeReady": true
+    }
+  }
+}
