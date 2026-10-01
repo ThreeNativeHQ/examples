@@ -1,0 +1,125 @@
+{
+  "name": "storm-chaser-reaches-the-field-station",
+  "schemaVersion": 1,
+  "target": "web",
+  "subject": "player",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "warmupFrames": 30,
+  "artifacts": {
+    "screenshots": "before-after"
+  },
+  "steps": [
+    {
+      "kind": "input",
+      "press": [
+        "KeyW",
+        "KeyA",
+        "ShiftLeft"
+      ],
+      "holdTicks": 30,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "press": [
+        "KeyW",
+        "ShiftLeft"
+      ],
+      "holdTicks": 54,
+      "label": "lamp-1",
+      "release": true
+    },
+    {
+      "kind": "input",
+      "press": [
+        "KeyW",
+        "ShiftLeft"
+      ],
+      "holdTicks": 99,
+      "label": "lamp-2",
+      "screenshot": "en-route",
+      "release": true
+    },
+    {
+      "kind": "input",
+      "press": [
+        "KeyW",
+        "ShiftLeft"
+      ],
+      "holdTicks": 46,
+      "release": true
+    },
+    {
+      "kind": "input",
+      "press": [
+        "KeyA",
+        "ShiftLeft"
+      ],
+      "holdTicks": 6,
+      "label": "station",
+      "release": true
+    },
+    {
+      "kind": "wait",
+      "waitTicks": 20,
+      "release": true
+    }
+  ],
+  "assert": {
+    "diagnostics": {
+      "noConsoleErrors": true,
+      "noNetworkErrors": true,
+      "noRuntimeDiagnostics": true,
+      "runtimeReady": true
+    },
+    "resources": [
+      {
+        "id": "state",
+        "path": "chase.next",
+        "atSteps": [
+          {
+            "equals": 1,
+            "label": "lamp-1"
+          },
+          {
+            "equals": 2,
+            "label": "lamp-2"
+          },
+          {
+            "equals": 3,
+            "label": "station"
+          }
+        ],
+        "equals": 3
+      },
+      {
+        "id": "state",
+        "path": "chase.phase",
+        "atSteps": [
+          {
+            "equals": "playing",
+            "label": "lamp-2"
+          },
+          {
+            "equals": "won",
+            "label": "station"
+          }
+        ],
+        "equals": "won"
+      },
+      {
+        "id": "state",
+        "path": "chase.timeLeft",
+        "gte": 60,
+        "allowTrivial": "the round starts with 75 s; this bounds the time left at the win, which the clock freezes at"
+      }
+    ],
+    "movement": {
+      "entity": "player",
+      "minDistance": 80
+    }
+  }
+}

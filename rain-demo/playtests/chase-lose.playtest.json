@@ -1,0 +1,23 @@
+{
+  "name": "storm-chaser-loses-its-nerve-in-the-open-and-runs-again",
+  "schemaVersion": 1,
+  "target": "web",
+  "viewport": { "width": 1440, "height": 900 },
+  "warmupFrames": 30,
+  "artifacts": { "screenshots": "after" },
+  "steps": [
+    { "kind": "input", "press": "KeyL", "label": "struck-1", "waitTicks": 50, "release": true },
+    { "kind": "input", "press": "KeyL", "label": "struck-2", "waitTicks": 50, "release": true },
+    { "kind": "input", "press": "KeyL", "label": "struck-3", "waitTicks": 50, "screenshot": "lost", "release": true },
+    { "kind": "click", "at": { "x": 720, "y": 158 }, "label": "again", "waitTicks": 10, "release": true }
+  ],
+  "assert": {
+    "diagnostics": { "noConsoleErrors": true, "noNetworkErrors": true, "noRuntimeDiagnostics": true, "runtimeReady": true },
+    "resources": [
+      { "id": "state", "path": "chase.nerve", "atSteps": [{ "equals": 2, "label": "struck-1" }, { "equals": 1, "label": "struck-2" }, { "equals": 0, "label": "struck-3" }, { "equals": 3, "label": "again" }] },
+      { "id": "state", "path": "chase.phase", "atSteps": [{ "equals": "lost", "label": "struck-3" }, { "equals": "playing", "label": "again" }] },
+      { "id": "state", "path": "chase.reason", "atSteps": [{ "equals": "nerve", "label": "struck-3" }] },
+      { "id": "state", "path": "strikes", "equals": 3 }
+    ]
+  }
+}
