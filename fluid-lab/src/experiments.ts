@@ -408,8 +408,8 @@ const viscosity: IExperiment = {
     });
     parts.water.fill([-2.8, 2.6, -0.8], [-2.0, 3.4, 0.8]);
     const syrup = (on: boolean): void => {
-      parts.water.viscosity = on ? 0.9 : 0.075;
-      parts.water.cohesion = on ? 0.6 : 0.08;
+      parts.water.viscosity = on ? 0.9 : 0.008;
+      parts.water.cohesion = on ? 0.6 : 0.03;
     };
     let thick = false;
     return run(
