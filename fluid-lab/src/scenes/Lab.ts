@@ -59,6 +59,23 @@ export class Lab extends Scene<GameState, IPhysicsContext> {
         await device?.queue.onSubmittedWorkDone();
         return (performance.now() - begin) / count;
       };
+      // GPU-side cost of one fixed step from timestamp queries (needs the browser's
+      // `allow_unsafe_apis` dawn feature): only this game's compute passes, no host contention in
+      // the count. Query pool is 2,048, two per pass, so keep `count` under ~40 steps.
+      const raw = ctx.renderer.raw as {
+        backend?: { trackTimestamp?: boolean };
+        info?: { compute?: { timestamp?: number } };
+        resolveTimestampsAsync?: (type: string) => Promise<number>;
+      };
+      (globalThis as Record<string, unknown>).__fluidGpuMs = async (count: number) => {
+        if (raw.backend === undefined || raw.resolveTimestampsAsync === undefined) return -1;
+        raw.backend.trackTimestamp = true;
+        for (let step = 0; step < count; step += 1) run?.water?.process(ctx.renderer);
+        await device?.queue.onSubmittedWorkDone();
+        await raw.resolveTimestampsAsync("compute");
+        raw.backend.trackTimestamp = false;
+        return (raw.info?.compute?.timestamp ?? -1) / count;
+      };
     }
 
     return (frame, dt) => {
