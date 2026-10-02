@@ -7,7 +7,7 @@ settings:
 overrides:
   sharp: '>=0.35.4'
   '@threenative/assets': file:./.packages/threenative-assets-0.3.5-prd476-7f9569a2199b.tgz
-  '@threenative/core': file:./.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz
+  '@threenative/core': file:./.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz
   '@threenative/physics': file:./.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz
   '@threenative/playtest': file:./.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz
   create-threenative: file:./.packages/create-threenative-0.2.7-prd476-d96cd8f7227d.tgz
@@ -22,11 +22,11 @@ importers:
   .:
     dependencies:
       '@threenative/core':
-        specifier: file:.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz
-        version: file:.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4)
+        specifier: file:.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz
+        version: file:.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4)
       '@threenative/physics':
         specifier: file:.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz
-        version: file:.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz(@threenative/core@file:.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4))(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b))
+        version: file:.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz(@threenative/core@file:.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4))(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b))
       three:
         specifier: 0.185.1
         version: 0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)
@@ -560,8 +560,8 @@ packages:
     resolution: {integrity: sha512-K6ZSIWyapsRMXT+N9xtlbLNdmFTLmHLPSzIdE1plGPi3B+T+uyjbzmwQHdEGAz/Ys5pgKL0En9UiCoc0GZNYzQ==, tarball: file:.packages/threenative-assets-0.3.5-prd476-7f9569a2199b.tgz}
     version: 0.3.5
 
-  '@threenative/core@file:.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz':
-    resolution: {integrity: sha512-GeqT6ILWqYuYKAvIMPw6Hokf4WjLNTTLKNyYXTWgum+xXOr2qyHN8zmzq20KIlF/v2DTZZbVo+cRdzBnblgQkA==, tarball: file:.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz}
+  '@threenative/core@file:.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz':
+    resolution: {integrity: sha512-zSTYNNLTIE1PRHZpAcgISQXvtwpSqyCWKAng+rX4AKD9yX0NLGOPNFZJJ40n7B14lm0J/XUdXjCQjuzDKcrvcg==, tarball: file:.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz}
     version: 0.3.4
     peerDependencies:
       '@threenative/playtest': '>=0.3.4 <0.4.0'
@@ -2222,7 +2222,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@threenative/core@file:.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4)':
+  '@threenative/core@file:.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4)':
     dependencies:
       three: 0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)
       three-mesh-bvh: 0.9.14(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b))
@@ -2239,10 +2239,10 @@ snapshots:
       - supports-color
       - use-sync-external-store
 
-  '@threenative/physics@file:.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz(@threenative/core@file:.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4))(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b))':
+  '@threenative/physics@file:.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz(@threenative/core@file:.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4))(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b))':
     dependencies:
       '@dimforge/rapier3d-compat': 0.19.3
-      '@threenative/core': file:.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4)
+      '@threenative/core': file:.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz(@threenative/playtest@file:.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz(playwright@1.62.1)(three@0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)))(@types/node@26.6.4)
       recast-navigation: 0.43.1
       three: 0.185.1(patch_hash=dcbc51317e57b2a422fa4335d86722cd7789d322f215e5a8b00cd96e66c0f05b)
 

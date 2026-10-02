@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@threenative/core": "file:./.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz",
+    "@threenative/core": "file:./.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz",
     "@threenative/physics": "file:./.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz",
     "three": "0.185.1"
   },
@@ -41,7 +41,7 @@
     "overrides": {
       "sharp": ">=0.35.4",
       "@threenative/assets": "file:./.packages/threenative-assets-0.3.5-prd476-7f9569a2199b.tgz",
-      "@threenative/core": "file:./.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz",
+      "@threenative/core": "file:./.packages/threenative-core-0.3.4-prd476-5f11f2c8f6dc.tgz",
       "@threenative/physics": "file:./.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz",
       "@threenative/playtest": "file:./.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz",
       "create-threenative": "file:./.packages/create-threenative-0.2.7-prd476-d96cd8f7227d.tgz"

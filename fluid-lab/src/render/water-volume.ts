@@ -58,9 +58,11 @@ export function createWaterVolume(
   const bmax = vec3(...hi);
   const size = vec3(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
   const voxel = water.voxelSize;
+  // The density texture spans whole voxels, a little past the bounds on the long axes.
+  const extent = vec3(...water.volumeSize.map((count) => count * voxel));
   const volume = water.density;
 
-  const density = (p: N): N => texture3D(volume, p.sub(bmin).div(size).clamp(0, 1)).x;
+  const density = (p: N): N => texture3D(volume, p.sub(bmin).div(extent).clamp(0, 1)).x;
   const gradient = (p: N): N => {
     const e = voxel * 1.5;
     return vec3(
