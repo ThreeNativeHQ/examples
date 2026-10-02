@@ -21,6 +21,7 @@ import {
 } from "three";
 import { cross, dFdx, dFdy, dot, mix, normalize, positionWorld, pow, reflect, vec3 } from "three/tsl";
 import { MeshBasicNodeMaterial } from "three/webgpu";
+import { createSpray } from "./render/spray.js";
 import { createStage } from "./render/stage.js";
 import { createWaterVolume } from "./render/water-volume.js";
 import type { GameState } from "./state.js";
@@ -115,7 +116,8 @@ function tank(env: IEnv, spec: ITankSpec = {}) {
   const objects: Object3D[] = [water];
   const stage = ctx.add(createStage(bounds));
   const volume = ctx.add(createWaterVolume(water));
-  objects.push(stage, volume);
+  const spray = ctx.add(createSpray(water));
+  objects.push(stage, volume, spray);
   const [eye, target] = spec.camera ?? [
     [0, 2.4, 8.2],
     [0, 1.9, 0],
