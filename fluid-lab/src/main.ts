@@ -12,7 +12,8 @@ const QUALITY_NAMES = ["light", "balanced", "high"];
 const row = (label: string, value: string): string =>
   `<div><span>${label}</span><b>${value}</b></div>`;
 
-// The HUD is a plain DOM readout of the published state: four solver metrics and the keys.
+// The HUD is a plain DOM readout of the published state: four solver metrics and the keys,
+// repainted ten times a second so the DOM never competes with the frame.
 function paint(): void {
   const state = game.state.getPublishedState();
   const experiment = EXPERIMENTS[state.experiment - 1];
@@ -24,7 +25,6 @@ function paint(): void {
     row("fps", String(state.fps)),
     `<p>1-8 experiment · Space ${experiment?.action.toLowerCase() ?? ""} · V mode · Q quality (${QUALITY_NAMES[state.quality]})</p>`,
   ].join("");
-  requestAnimationFrame(paint);
 }
 
 import.meta.hot?.accept();
@@ -35,6 +35,7 @@ void game
     const canvas = game.ctx?.renderer.domElement;
     if (canvas !== undefined) app.prepend(canvas);
     paint();
+    setInterval(paint, 100);
   })
   .catch((error: unknown) => {
     const failure = document.createElement("div");
