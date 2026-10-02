@@ -1,0 +1,57 @@
+{
+  "name": "fluid-lab",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "studio": "threenative-studio",
+    "build": "threenative build",
+    "build:web": "threenative build --target web",
+    "build:desktop": "threenative build --target desktop",
+    "build:android": "threenative build --target android",
+    "build:ios": "threenative build --target ios",
+    "pretest": "playwright install chromium",
+    "test": "pnpm build:web && threenative-playtest --scenario \"playtests/*.playtest.json\" --browser-recipe webgpu --headed --server-command \"pnpm exec vite preview --host 127.0.0.1 --port $PORT --strictPort\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@threenative/core": "file:./.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz",
+    "@threenative/physics": "file:./.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "@threenative/assets": "file:./.packages/threenative-assets-0.3.5-prd476-7f9569a2199b.tgz",
+    "@threenative/playtest": "file:./.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz",
+    "@types/three": "0.185.3",
+    "create-threenative": "file:./.packages/create-threenative-0.2.7-prd476-d96cd8f7227d.tgz",
+    "esbuild": "0.27.0",
+    "playwright": "1.62.1",
+    "typescript": "5.9.3",
+    "vite": "8.2.0",
+    "@gltf-transform/cli": "4.4.2"
+  },
+  "optionalDependencies": {
+    "@threenative/runtime-native": "0.3.4"
+  },
+  "overrides": {
+    "sharp": ">=0.35.4"
+  },
+  "pnpm": {
+    "overrides": {
+      "sharp": ">=0.35.4",
+      "@threenative/assets": "file:./.packages/threenative-assets-0.3.5-prd476-7f9569a2199b.tgz",
+      "@threenative/core": "file:./.packages/threenative-core-0.3.4-prd476-693bfe1546ca.tgz",
+      "@threenative/physics": "file:./.packages/threenative-physics-0.3.4-prd476-e623e6b25866.tgz",
+      "@threenative/playtest": "file:./.packages/threenative-playtest-0.3.4-prd476-daa66024bcc4.tgz",
+      "create-threenative": "file:./.packages/create-threenative-0.2.7-prd476-d96cd8f7227d.tgz"
+    },
+    "onlyBuiltDependencies": [
+      "@threenative/core",
+      "@threenative/runtime-native"
+    ],
+    "patchedDependencies": {
+      "three@0.185.1": "patches/three@0.185.1.patch"
+    }
+  }
+}
